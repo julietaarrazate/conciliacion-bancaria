@@ -1,0 +1,65 @@
+# Backend - Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+env/
+.venv/
+.env
+*.log
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Frontend - Node
+node_modules/
+dist/
+build/
+.cache/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.production
+*.pem
+
+# Docker volumes
+postgres_data/
+redis_data/
+
+# Excel temporales
+~$*.xlsx
+*.tmp
+
+# Sistema operativo
+Thumbs.db
+desktop.ini
+
+# Uploads
+/tmp/uploads/
+uploads/
+
+# Logs
+logs/
+*.log

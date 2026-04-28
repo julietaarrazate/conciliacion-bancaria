@@ -1,0 +1,8 @@
+{
+  "fecha_acred": "hoy",
+  "extracto_path": "C:/Users/Tomas/Desktop/Extracto Macro/extracto macro abril.xlsx",
+  "inbox_path":   "C:/Users/Tomas/Desktop/INBOX",
+  "clientes_path": "C:/Users/Tomas/Desktop/clientes/tt",
+  "carpeta_mes": "26-4 ABR",
+  "comentario_fecha": "Opciones: 'hoy', 'ayer', o fecha fija como '2026-04-24'"
+}

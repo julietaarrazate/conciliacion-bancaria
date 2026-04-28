@@ -1,0 +1,35 @@
+from pydantic import BaseModel
+from datetime import datetime, date
+from typing import List, Optional
+
+class PlanillaRowBase(BaseModel):
+    monto: float
+    cuit: Optional[str] = None
+    titular: Optional[str] = None
+
+class PlanillaRowResponse(PlanillaRowBase):
+    id: int
+    status: str
+    orden_movimiento_acreditado: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+class PlanillaResponse(BaseModel):
+    id: int
+    nombre_archivo: str
+    cliente_id: int
+    extracto_id: int
+    fecha_carga: datetime
+    rows: List[PlanillaRowResponse]
+
+    class Config:
+        from_attributes = True
+
+class ConciliacionResultado(BaseModel):
+    planilla_id: int
+    filas_procesadas: int
+    acreditadas: int
+    no_encontradas: int
+    duplicadas: int
+    sin_datos: int
