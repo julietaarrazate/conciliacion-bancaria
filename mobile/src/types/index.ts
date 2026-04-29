@@ -62,3 +62,21 @@ export interface ConciliacionResultado {
   duplicadas: number;
   sin_datos: number;
 }
+
+export interface PlanillaHistorialItem {
+  id: number;
+  cliente_nombre: string;
+  nombre_archivo: string;
+  fecha_carga: string;
+  usuario_nombre: string;
+  total_filas: number;
+  acreditadas: number;
+  no_encontradas: number;
+  duplicadas: number;
+  sin_datos: number;
+}
+
+export interface PaginatedResponse<T> {
+  total: number;
+  items: T[];
+}

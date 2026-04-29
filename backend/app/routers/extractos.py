@@ -9,6 +9,7 @@ from app.models.extracto import ExtractoBancario, MovimientoBanco
 from app.models.user import User
 from app.schemas.extracto import ExtractoBancarioResponse
 from app.services.excel_parser import parsear_extracto_bancario
+from app.services.auditoria import registrar_log
 from app.middleware.auth import get_current_user
 
 router = APIRouter(prefix="/extractos", tags=["extractos"])
@@ -64,6 +65,15 @@ async def upload_extracto(
 
         db.commit()
         db.refresh(extracto)
+
+        registrar_log(
+            db=db,
+            usuario_id=current_user.id,
+            tabla="extractos_bancarios",
+            registro_id=extracto.id,
+            accion="INSERT",
+            cambios={"nombre_archivo": file.filename, "movimientos": len(parsed["movimientos"])}
+        )
 
         return extracto
 

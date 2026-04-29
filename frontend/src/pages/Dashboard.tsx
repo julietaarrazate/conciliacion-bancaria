@@ -1,6 +1,4 @@
 import React, { useState } from 'react'
-import { useAuthStore } from '@/store/auth'
-import { Button } from '@/components/Button'
 import { FileUpload } from '@/components/FileUpload'
 import { Input } from '@/components/Input'
 import { apiClient } from '@/services/api'
@@ -12,7 +10,6 @@ interface ConciliacionFormState {
 }
 
 export const Dashboard: React.FC = () => {
-  const { user, logout } = useAuthStore()
   const [form, setForm] = useState<ConciliacionFormState>({
     extractoFile: null,
     planillaFile: null,
@@ -68,22 +65,11 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-6xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Conciliación Bancaria</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">{user?.full_name}</span>
-            <Button variant="secondary" size="sm" onClick={logout}>
-              Salir
-            </Button>
-          </div>
-        </div>
-      </header>
+    <div className="p-8 max-w-5xl mx-auto">
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Nueva conciliación</h1>
+      <p className="text-gray-600 mb-6">Carga extracto + planilla y reconciliá automáticamente</p>
 
-      {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      <main>
         {error && (
           <div className="mb-6 p-4 bg-red-100 border border-red-400 rounded-lg text-red-700">
             {error}

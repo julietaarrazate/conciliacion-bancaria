@@ -19,6 +19,7 @@
     "react-native-screens": "~3.29.0",
     "@react-navigation/native": "^6.1.9",
     "@react-navigation/native-stack": "^6.9.17",
+    "@react-navigation/bottom-tabs": "^6.5.11",
     "axios": "^1.6.0",
     "zustand": "^4.4.0"
   },

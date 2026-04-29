@@ -6,7 +6,9 @@ import {
   AuthResponse,
   ExtractoBancario,
   Planilla,
-  ConciliacionResultado
+  ConciliacionResultado,
+  PlanillaHistorialItem,
+  PaginatedResponse
 } from '@/types';
 
 const API_BASE_URL =
@@ -110,6 +112,14 @@ class ApiClient {
 
   async getPlanilla(id: number): Promise<Planilla> {
     const res = await this.client.get(`/planillas/${id}`);
+    return res.data;
+  }
+
+  async getHistorialPlanillas(params?: {
+    cliente?: string;
+    limit?: number;
+  }): Promise<PaginatedResponse<PlanillaHistorialItem>> {
+    const res = await this.client.get('/historial/planillas', { params });
     return res.data;
   }
 }

@@ -11,6 +11,7 @@ from app.models.user import User
 from app.schemas.planilla import PlanillaResponse, ConciliacionResultado
 from app.services.excel_parser import parsear_planilla_cliente
 from app.services.conciliacion import conciliar_planilla
+from app.services.auditoria import registrar_log
 from app.middleware.auth import get_current_user, require_permission
 
 router = APIRouter(prefix="/planillas", tags=["planillas"])
@@ -88,6 +89,19 @@ async def upload_planilla(
         db.commit()
         db.refresh(planilla)
 
+        registrar_log(
+            db=db,
+            usuario_id=current_user.id,
+            tabla="planillas",
+            registro_id=planilla.id,
+            accion="INSERT",
+            cambios={
+                "cliente": cliente_nombre,
+                "extracto_id": extracto_id,
+                "filas": len(parsed["filas"])
+            }
+        )
+
         return planilla
 
     except Exception as e:
@@ -133,6 +147,15 @@ def conciliar(
             movimientos=movimientos,
             cliente_nombre=planilla.cliente.nombre,
             fecha_acred_str=fecha_acred
+        )
+
+        registrar_log(
+            db=db,
+            usuario_id=current_user.id,
+            tabla="planillas",
+            registro_id=planilla_id,
+            accion="CONCILIAR",
+            cambios=resultado
         )
 
         return {

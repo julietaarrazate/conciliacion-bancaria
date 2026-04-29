@@ -66,3 +66,41 @@ export interface ConciliacionResultado {
   duplicadas: number
   sin_datos: number
 }
+
+export interface PlanillaHistorialItem {
+  id: number
+  cliente_nombre: string
+  nombre_archivo: string
+  fecha_carga: string
+  usuario_nombre: string
+  total_filas: number
+  acreditadas: number
+  no_encontradas: number
+  duplicadas: number
+  sin_datos: number
+}
+
+export interface ExtractoHistorialItem {
+  id: number
+  nombre_archivo: string
+  fecha_creacion: string
+  usuario_nombre: string
+  total_movimientos: number
+}
+
+export interface AuditoriaLog {
+  id: number
+  usuario_id: number
+  usuario_nombre?: string
+  usuario_email?: string
+  tabla: string
+  registro_id: number
+  accion: string
+  cambios?: Record<string, unknown> | null
+  timestamp: string
+}
+
+export interface PaginatedResponse<T> {
+  total: number
+  items: T[]
+}

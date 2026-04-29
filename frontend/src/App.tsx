@@ -4,11 +4,22 @@ import { useAuthStore } from '@/store/auth'
 import { apiClient } from '@/services/api'
 import { Login } from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
+import { Historial } from '@/pages/Historial'
+import { Auditoria } from '@/pages/Auditoria'
+import { Usuarios } from '@/pages/Usuarios'
+import { Layout } from '@/components/Layout'
 import '@/styles/index.css'
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuthStore()
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" />
+const ProtectedRoute: React.FC<{
+  children: React.ReactNode
+  permission?: string
+}> = ({ children, permission }) => {
+  const { isAuthenticated, hasPermission } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (permission && !hasPermission(permission)) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return <>{children}</>
 }
 
 export function App() {
@@ -21,8 +32,7 @@ export function App() {
         try {
           const user = await apiClient.getCurrentUser()
           setUser(user)
-        } catch (err) {
-          // Token inválido
+        } catch {
           useAuthStore.setState({ token: null, isAuthenticated: false })
         }
       }
@@ -44,15 +54,36 @@ export function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+
         <Route
-          path="/dashboard"
           element={
             <ProtectedRoute>
-              <Dashboard />
+              <Layout />
             </ProtectedRoute>
           }
-        />
-        <Route path="/" element={<Navigate to="/dashboard" />} />
+        >
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/historial" element={<Historial />} />
+          <Route
+            path="/auditoria"
+            element={
+              <ProtectedRoute permission="view_audit">
+                <Auditoria />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/usuarios"
+            element={
+              <ProtectedRoute permission="manage_users">
+                <Usuarios />
+              </ProtectedRoute>
+            }
+          />
+        </Route>
+
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Router>
   )

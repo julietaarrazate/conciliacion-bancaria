@@ -4,7 +4,12 @@ import {
   AuthResponse,
   ExtractoBancario,
   Planilla,
-  ConciliacionResultado
+  ConciliacionResultado,
+  PlanillaHistorialItem,
+  ExtractoHistorialItem,
+  AuditoriaLog,
+  PaginatedResponse,
+  UserRole
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -121,6 +126,55 @@ class ApiClient {
       {},
       { params: { fecha_acred: fechaAcred } }
     )
+    return res.data
+  }
+
+  // Historial
+  async getHistorialPlanillas(params?: {
+    skip?: number
+    limit?: number
+    cliente?: string
+    desde?: string
+    hasta?: string
+  }): Promise<PaginatedResponse<PlanillaHistorialItem>> {
+    const res = await this.client.get('/historial/planillas', { params })
+    return res.data
+  }
+
+  async getHistorialExtractos(params?: {
+    skip?: number
+    limit?: number
+  }): Promise<PaginatedResponse<ExtractoHistorialItem>> {
+    const res = await this.client.get('/historial/extractos', { params })
+    return res.data
+  }
+
+  // Auditoría
+  async getAuditoria(params?: {
+    skip?: number
+    limit?: number
+    tabla?: string
+    accion?: string
+  }): Promise<PaginatedResponse<AuditoriaLog>> {
+    const res = await this.client.get('/auditoria', { params })
+    return res.data
+  }
+
+  // Admin / usuarios
+  async getUsers(params?: {
+    skip?: number
+    limit?: number
+    role?: UserRole
+  }): Promise<PaginatedResponse<User>> {
+    const res = await this.client.get('/admin/users', { params })
+    return res.data
+  }
+
+  async updateUser(
+    userId: number,
+    payload: { full_name?: string; role?: UserRole; is_active?: boolean }
+  ): Promise<User> {
+    const res = await this.client.patch(`/admin/users/${userId}`, payload)
     return res.data
   }
 }
