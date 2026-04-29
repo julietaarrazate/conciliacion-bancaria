@@ -3,7 +3,8 @@
     "allow": [
       "Bash(gh --version)",
       "Bash(gh auth *)",
-      "PowerShell(git config --global --list 2>$null)"
+      "PowerShell(git config --global --list 2>$null)",
+      "PowerShell($token = \"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\"; $headers = @{ \"Authorization\" = \"token $token\"; \"Accept\" = \"application/vnd.github+json\" }; $body = @{ name = \"conciliacion-bancaria\"; description = \"Sistema de conciliacion bancaria - Web + Mobile \\(FastAPI + React + PostgreSQL\\)\"; private = $true; auto_init = $false } | ConvertTo-Json; try { $response = Invoke-RestMethod -Uri \"https://api.github.com/user/repos\" -Method Post -Headers $headers -Body $body -ContentType \"application/json\"; Write-Output \"OK: Repo creado en $\\($response.html_url\\)\" } catch { Write-Output \"ERROR: $\\($_.Exception.Message\\)\"; if \\($_.ErrorDetails.Message\\) { Write-Output $_.ErrorDetails.Message } })"
     ]
   }
 }

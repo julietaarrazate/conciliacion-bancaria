@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Conciliación Bancaria",
+    "slug": "conciliacion-bancaria",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0369a1"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.canelandsa.conciliacion"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0369a1"
+      },
+      "package": "com.canelandsa.conciliacion"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "apiUrl": "http://localhost:8000"
+    }
+  }
+}
