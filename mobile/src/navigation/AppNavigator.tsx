@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/auth';
 import { LoginScreen } from '@/screens/LoginScreen';
 import { DashboardScreen } from '@/screens/DashboardScreen';
 import { HistorialScreen } from '@/screens/HistorialScreen';
+import { SettingsScreen } from '@/screens/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -34,16 +35,17 @@ const MainTabs: React.FC = () => (
     <Tab.Screen
       name="Conciliar"
       component={DashboardScreen}
-      options={{
-        tabBarIcon: ({ focused }) => <TabIcon label="📋" focused={focused} />
-      }}
+      options={{ tabBarIcon: ({ focused }) => <TabIcon label="📋" focused={focused} /> }}
     />
     <Tab.Screen
       name="Historial"
       component={HistorialScreen}
-      options={{
-        tabBarIcon: ({ focused }) => <TabIcon label="📊" focused={focused} />
-      }}
+      options={{ tabBarIcon: ({ focused }) => <TabIcon label="📊" focused={focused} /> }}
+    />
+    <Tab.Screen
+      name="Ajustes"
+      component={SettingsScreen}
+      options={{ tabBarIcon: ({ focused }) => <TabIcon label="⚙️" focused={focused} /> }}
     />
   </Tab.Navigator>
 );

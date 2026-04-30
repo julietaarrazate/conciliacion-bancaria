@@ -1,6 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import Constants from 'expo-constants';
 import {
   User,
   AuthResponse,
@@ -10,29 +9,53 @@ import {
   PlanillaHistorialItem,
   PaginatedResponse
 } from '@/types';
-
-const API_BASE_URL =
-  (Constants.expoConfig?.extra?.apiUrl as string) || 'http://localhost:8000';
+import { configService } from './config';
 
 const TOKEN_KEY = 'auth_token';
 
 class ApiClient {
   private client: AxiosInstance;
   private token: string | null = null;
+  private baseURL: string = '';
 
   constructor() {
     this.client = axios.create({
-      baseURL: API_BASE_URL,
       headers: { 'Content-Type': 'application/json' },
-      timeout: 30000
+      timeout: 60000
     });
 
-    this.client.interceptors.request.use((config) => {
+    this.client.interceptors.request.use(async (config) => {
+      // Cada request lee la URL actual de AsyncStorage
+      if (!config.baseURL) {
+        config.baseURL = await configService.getApiUrl();
+      }
       if (this.token) {
         config.headers.Authorization = `Bearer ${this.token}`;
       }
       return config;
     });
+  }
+
+  async setBaseUrl(url: string) {
+    this.baseURL = url;
+    await configService.setApiUrl(url);
+  }
+
+  async getBaseUrl(): Promise<string> {
+    if (!this.baseURL) {
+      this.baseURL = await configService.getApiUrl();
+    }
+    return this.baseURL;
+  }
+
+  async testConnection(url?: string): Promise<boolean> {
+    const target = url || (await this.getBaseUrl());
+    try {
+      const res = await axios.get(`${target}/health`, { timeout: 5000 });
+      return res.data.status === 'healthy';
+    } catch {
+      return false;
+    }
   }
 
   async loadToken(): Promise<string | null> {

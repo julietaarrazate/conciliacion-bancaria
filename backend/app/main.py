@@ -18,16 +18,16 @@ app = FastAPI(
     debug=settings.debug
 )
 
-# CORS middleware
+# CORS abierto para desarrollo (web local + celular en LAN + Expo Go)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Cambiar en producción
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Incluir routers
+# Routers
 app.include_router(auth.router)
 app.include_router(me.router)
 app.include_router(extractos.router)
@@ -36,17 +36,14 @@ app.include_router(historial.router)
 app.include_router(auditoria.router)
 app.include_router(admin.router)
 
+
 @app.get("/")
 def read_root():
-    """Health check"""
-    return {
-        "status": "ok",
-        "app": settings.app_name
-    }
+    return {"status": "ok", "app": settings.app_name}
+
 
 @app.get("/health")
 def health_check():
-    """Verifica que la BD está disponible"""
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
