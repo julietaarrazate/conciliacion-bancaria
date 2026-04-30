@@ -4,6 +4,7 @@ sqlalchemy
 psycopg[binary]
 python-jose[cryptography]
 bcrypt
+requests
 pydantic
 pydantic-settings
 python-multipart
