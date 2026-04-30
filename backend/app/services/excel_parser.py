@@ -46,32 +46,54 @@ def detectar_titular_col(ws, hdr_row) -> Optional[int]:
 
 def parsear_extracto_bancario(filepath: str) -> dict:
     """
-    Parsea un archivo Excel de extracto bancario.
-    Retorna dict con movimientos.
+    Parsea un archivo Excel de extracto bancario o de Ultimos Movimientos.
+
+    Detecta automaticamente la columna del importe buscando 'importe' o 'monto'
+    en filas 1-3 (igual que las planillas de cliente). Si no encuentra el
+    header, usa el layout default: B=orden, C=fecha, D=mes, E=titular,
+    F=importe, G=saldo.
     """
     wb = openpyxl.load_workbook(filepath, data_only=True)
     ws = wb.active
 
-    # Estructura esperada: fila 2 = headers, fila 3+ = datos
-    movimientos = []
-    for row in range(3, ws.max_row + 1):
-        orden = ws.cell(row, 2).value  # Col B
-        fecha = ws.cell(row, 3).value  # Col C
-        mes = ws.cell(row, 4).value    # Col D
-        titular = ws.cell(row, 5).value  # Col E
-        monto = ws.cell(row, 6).value  # Col F
-        saldo = ws.cell(row, 7).value  # Col G
+    # Buscar header en filas 1-3
+    hdr_row, imp_col = 2, 6  # default
+    for r in range(1, 4):
+        for c in range(1, ws.max_column + 1):
+            h = str(ws.cell(r, c).value or '').lower().strip()
+            if 'importe' in h or 'monto' in h:
+                # Verificar que la columna tenga datos numericos
+                hits = sum(
+                    1 for dr in range(r + 1, min(r + 6, ws.max_row + 1))
+                    if isinstance(ws.cell(dr, c).value, (int, float))
+                )
+                if hits >= 1:
+                    hdr_row, imp_col = r, c
+                    break
+        if hdr_row != 2 or imp_col != 6:
+            break
 
-        if monto is None:
+    movimientos = []
+    for row in range(hdr_row + 1, ws.max_row + 1):
+        # Layout estandar: -1 orden, +1 fecha, +2 mes, +3 titular, importe, +1 saldo
+        # Pero como no siempre coinciden las columnas, usamos offsets relativos al imp_col
+        orden = ws.cell(row, max(2, imp_col - 4)).value
+        fecha = ws.cell(row, max(3, imp_col - 3)).value
+        mes = ws.cell(row, max(4, imp_col - 2)).value
+        titular = ws.cell(row, max(5, imp_col - 1)).value
+        monto = ws.cell(row, imp_col).value
+        saldo = ws.cell(row, imp_col + 1).value
+
+        if monto is None or not isinstance(monto, (int, float)):
             continue
 
         movimientos.append({
-            "orden": orden,
+            "orden": orden if isinstance(orden, (int, float)) else None,
             "fecha": fecha,
             "mes": mes,
             "titular": titular,
             "monto": float(monto),
-            "saldo": saldo
+            "saldo": float(saldo) if isinstance(saldo, (int, float)) else None
         })
 
     wb.close()

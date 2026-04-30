@@ -104,3 +104,43 @@ export interface PaginatedResponse<T> {
   total: number
   items: T[]
 }
+
+export interface ExtractoListItem {
+  id: number
+  nombre_archivo: string
+  fecha_creacion: string
+  total_movimientos: number
+}
+
+export interface MovimientoFiltrado {
+  id: number
+  extracto_id: number
+  orden?: number
+  fecha?: string
+  mes?: string
+  titular?: string
+  monto: number
+  saldo?: number
+  cliente_acreditado?: string
+  fecha_acred?: string
+}
+
+export interface MergeUMResult {
+  extracto_id: number
+  agregados: number
+  duplicados: number
+  total_recibido: number
+}
+
+export interface MovimientosFiltros {
+  cliente?: string
+  cuit?: string
+  titular?: string
+  desde?: string
+  hasta?: string
+  fecha_desde?: string
+  fecha_hasta?: string
+  sin_acreditar?: boolean
+  skip?: number
+  limit?: number
+}

@@ -9,7 +9,11 @@ import {
   ExtractoHistorialItem,
   AuditoriaLog,
   PaginatedResponse,
-  UserRole
+  UserRole,
+  ExtractoListItem,
+  MovimientoFiltrado,
+  MergeUMResult,
+  MovimientosFiltros
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -175,6 +179,35 @@ class ApiClient {
     payload: { full_name?: string; role?: UserRole; is_active?: boolean }
   ): Promise<User> {
     const res = await this.client.patch(`/admin/users/${userId}`, payload)
+    return res.data
+  }
+
+  // Extractos: listar y filtrar movimientos, append UM
+  async listExtractos(): Promise<{ total: number; items: ExtractoListItem[] }> {
+    const res = await this.client.get('/extractos')
+    return res.data
+  }
+
+  async getMovimientos(
+    extractoId: number,
+    filters: MovimientosFiltros = {}
+  ): Promise<{ extracto_id: number; total: number; items: MovimientoFiltrado[] }> {
+    const params: Record<string, string | number | boolean> = {}
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') params[k] = v
+    })
+    const res = await this.client.get(`/extractos/${extractoId}/movimientos`, { params })
+    return res.data
+  }
+
+  async appendUM(extractoId: number, file: File): Promise<MergeUMResult> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await this.client.post(
+      `/extractos/${extractoId}/agregar-um`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    )
     return res.data
   }
 }

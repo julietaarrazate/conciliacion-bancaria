@@ -7,6 +7,7 @@ import { Dashboard } from '@/pages/Dashboard'
 import { Historial } from '@/pages/Historial'
 import { Auditoria } from '@/pages/Auditoria'
 import { Usuarios } from '@/pages/Usuarios'
+import { Movimientos } from '@/pages/Movimientos'
 import { Layout } from '@/components/Layout'
 import '@/styles/index.css'
 
@@ -63,6 +64,7 @@ export function App() {
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/movimientos" element={<Movimientos />} />
           <Route path="/historial" element={<Historial />} />
           <Route
             path="/auditoria"

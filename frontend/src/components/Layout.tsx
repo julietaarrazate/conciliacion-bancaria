@@ -12,6 +12,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { to: '/dashboard', label: 'Conciliar' },
+  { to: '/movimientos', label: 'Movimientos' },
   { to: '/historial', label: 'Historial' },
   { to: '/auditoria', label: 'Auditoría', permission: 'view_audit' },
   { to: '/usuarios', label: 'Usuarios', permission: 'manage_users' }
