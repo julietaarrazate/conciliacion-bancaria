@@ -1,5 +1,4 @@
 # Render Blueprint - https://render.com/docs/blueprint-spec
-# Conecta tu repo GitHub a Render y este archivo despliega backend + BD automatico
 
 databases:
   - name: conciliacion-db
@@ -13,8 +12,8 @@ services:
     runtime: python
     rootDir: backend
     plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "bash start.sh"
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "python -c \"from app.database import engine, Base; Base.metadata.create_all(bind=engine); print('[init] tables OK')\" && python seed.py || true; uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -27,3 +26,5 @@ services:
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: 60
+      - key: PYTHON_VERSION
+        value: 3.11.9
