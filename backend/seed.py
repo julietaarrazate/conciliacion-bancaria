@@ -51,7 +51,7 @@ def seed_users():
                 email=s["email"],
                 full_name=s["full_name"],
                 hashed_password=get_password_hash(s["password"]),
-                role=s["role"],
+                role=s["role"].value,
                 is_active=True
             )
             db.add(user)

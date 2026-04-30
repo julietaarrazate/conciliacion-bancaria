@@ -1,34 +1,49 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { FileUpload } from '@/components/FileUpload'
-import { Input } from '@/components/Input'
 import { apiClient } from '@/services/api'
-
-interface ConciliacionFormState {
-  extractoFile: File | null
-  planillaFile: File | null
-  clienteNombre: string
-}
+import {
+  ConciliacionResultado,
+  ExtractoListItem,
+  PlanillaHistorialItem
+} from '@/types'
 
 export const Dashboard: React.FC = () => {
-  const [form, setForm] = useState<ConciliacionFormState>({
-    extractoFile: null,
-    planillaFile: null,
-    clienteNombre: ''
-  })
+  const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
+  const [planillas, setPlanillas] = useState<PlanillaHistorialItem[]>([])
+  const [extractoId, setExtractoId] = useState<number | null>(null)
+  const [extractoNombre, setExtractoNombre] = useState<string>('')
+  const [clienteNombre, setClienteNombre] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [resultado, setResultado] = useState<any>(null)
-  const [extractoId, setExtratoId] = useState<number | null>(null)
+  const [resultado, setResultado] = useState<ConciliacionResultado | null>(null)
+
+  useEffect(() => {
+    apiClient.listExtractos().then((data) => {
+      setExtractos(data.items)
+      if (data.items.length > 0) {
+        setExtractoId(data.items[0].id)
+        setExtractoNombre(data.items[0].nombre_archivo)
+      }
+    })
+    apiClient.getHistorialPlanillas({ limit: 5 }).then((d) => setPlanillas(d.items))
+  }, [])
+
+  const refreshExtractos = async () => {
+    const data = await apiClient.listExtractos()
+    setExtractos(data.items)
+  }
 
   const handleUploadExtraco = async (file: File) => {
     setLoading(true)
     setError('')
+    setSuccess('')
     try {
       const data = await apiClient.uploadExtraco(file)
-      setExtratoId(data.id)
-      setSuccess(`Extracto cargado: ${data.nombre_archivo}`)
-      setForm({ ...form, extractoFile: file })
+      setExtractoId(data.id)
+      setExtractoNombre(data.nombre_archivo)
+      setSuccess(`Extracto cargado: ${data.movimientos.length} movimientos`)
+      await refreshExtractos()
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error al cargar extracto')
     } finally {
@@ -36,27 +51,45 @@ export const Dashboard: React.FC = () => {
     }
   }
 
-  const handleUploadPlanilla = async (file: File) => {
-    if (!extractoId || !form.clienteNombre) {
-      setError('Por favor carga primero un extracto e ingresa el nombre del cliente')
+  const handleUploadUM = async (file: File) => {
+    if (!extractoId) {
+      setError('Cargá primero un extracto')
       return
     }
-
     setLoading(true)
     setError('')
+    setSuccess('')
+    try {
+      const r = await apiClient.appendUM(extractoId, file)
+      setSuccess(
+        `UM procesado: ${r.agregados} nuevos · ${r.duplicados} duplicados ignorados`
+      )
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Error al cargar UM')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUploadPlanilla = async (file: File) => {
+    if (!extractoId || !clienteNombre.trim()) {
+      setError('Cargá primero un extracto e ingresá el cliente')
+      return
+    }
+    setLoading(true)
+    setError('')
+    setSuccess('')
+    setResultado(null)
     try {
       const planilla = await apiClient.uploadPlanilla(
-        form.clienteNombre,
+        clienteNombre,
         extractoId,
         file
       )
-      setForm({ ...form, planillaFile: file })
-      setSuccess('Planilla cargada. Iniciando conciliación...')
-
-      // Ejecutar conciliación automáticamente
-      const resultado = await apiClient.conciliarPlanilla(planilla.id)
-      setResultado(resultado)
-      setSuccess(`Conciliación completada: ${resultado.acreditadas} acreditadas`)
+      const r = await apiClient.conciliarPlanilla(planilla.id)
+      setResultado(r)
+      setSuccess(`Conciliación completa: ${r.acreditadas}/${r.filas_procesadas} acreditadas`)
+      apiClient.getHistorialPlanillas({ limit: 5 }).then((d) => setPlanillas(d.items))
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error en la conciliación')
     } finally {
@@ -64,96 +97,229 @@ export const Dashboard: React.FC = () => {
     }
   }
 
+  // Stats agregados de las últimas planillas
+  const totalAcreditadas = planillas.reduce((s, p) => s + p.acreditadas, 0)
+  const totalProcesadas = planillas.reduce((s, p) => s + p.total_filas, 0)
+  const accuracy = totalProcesadas > 0
+    ? Math.round((totalAcreditadas / totalProcesadas) * 100)
+    : 0
+
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Nueva conciliación</h1>
-      <p className="text-gray-600 mb-6">Carga extracto + planilla y reconciliá automáticamente</p>
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-ml-text">Conciliar transferencias</h1>
+        <p className="text-ml-text-soft text-sm mt-1">
+          Subí el extracto bancario y las planillas de cliente. El sistema concilia automáticamente.
+        </p>
+      </div>
 
-      <main>
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 border border-red-400 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
+      {/* KPIs estilo concilia.ar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="kpi">
+          <p className="kpi-label">Movimientos</p>
+          <p className="kpi-value">
+            {extractos.reduce((s, e) => s + e.total_movimientos, 0).toLocaleString('es-AR')}
+          </p>
+        </div>
+        <div className="kpi">
+          <p className="kpi-label">Acreditadas</p>
+          <p className="kpi-value text-green-600">{totalAcreditadas}</p>
+        </div>
+        <div className="kpi">
+          <p className="kpi-label">Precisión</p>
+          <p className="kpi-value text-ml-blue">{accuracy}%</p>
+        </div>
+        <div className="kpi">
+          <p className="kpi-label">Extractos cargados</p>
+          <p className="kpi-value">{extractos.length}</p>
+        </div>
+      </div>
 
-        {success && (
-          <div className="mb-6 p-4 bg-green-100 border border-green-400 rounded-lg text-green-700">
-            {success}
-          </div>
-        )}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-green-700 text-sm">
+          {success}
+        </div>
+      )}
 
-        {/* Formulario de Conciliación */}
-        <div className="card mb-8">
-          <h2 className="text-xl font-bold mb-6">Nueva Conciliación</h2>
-
-          <div className="space-y-6">
-            {/* Paso 1: Extracto */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Paso 1: Extracto */}
+        <div className="card">
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <h3 className="text-lg font-semibold mb-4">1. Carga el Extracto Bancario</h3>
-              <FileUpload
-                onFileSelected={handleUploadExtraco}
-                label="Selecciona el extracto bancario (XLSX)"
-                error={!extractoId && error ? 'Carga primero un extracto' : ''}
-              />
-              {extractoId && (
-                <p className="mt-2 text-sm text-green-600">✓ Extracto cargado correctamente</p>
-              )}
+              <span className="badge badge-info">PASO 1</span>
+              <h3 className="text-base font-semibold text-ml-text mt-2">
+                Extracto bancario
+              </h3>
             </div>
-
-            {/* Paso 2: Cliente */}
-            {extractoId && (
-              <div>
-                <h3 className="text-lg font-semibold mb-4">2. Información del Cliente</h3>
-                <Input
-                  label="Nombre del Cliente"
-                  placeholder="Ej: Green, Tucu, David..."
-                  value={form.clienteNombre}
-                  onChange={(e) => setForm({ ...form, clienteNombre: e.target.value })}
-                />
-              </div>
-            )}
-
-            {/* Paso 3: Planilla */}
-            {extractoId && form.clienteNombre && (
-              <div>
-                <h3 className="text-lg font-semibold mb-4">3. Carga la Planilla del Cliente</h3>
-                <FileUpload
-                  onFileSelected={handleUploadPlanilla}
-                  label="Selecciona la planilla del cliente (XLSX)"
-                />
-              </div>
-            )}
           </div>
+
+          {extractos.length > 0 && (
+            <select
+              className="input-field mb-3"
+              value={extractoId ?? ''}
+              onChange={(e) => {
+                const id = Number(e.target.value)
+                setExtractoId(id)
+                setExtractoNombre(
+                  extractos.find((x) => x.id === id)?.nombre_archivo || ''
+                )
+              }}
+            >
+              {extractos.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nombre_archivo} ({e.total_movimientos} movs)
+                </option>
+              ))}
+            </select>
+          )}
+
+          <FileUpload
+            onFileSelected={handleUploadExtraco}
+            label="Subir nuevo extracto (.xlsx)"
+          />
+
+          {extractoId && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-xs text-ml-text-soft mb-2">
+                ¿Tenés Últimos Movimientos del banco? Sumalos al extracto sin duplicar:
+              </p>
+              <FileUpload
+                onFileSelected={handleUploadUM}
+                label="+ Agregar UM al extracto actual"
+              />
+            </div>
+          )}
         </div>
 
-        {/* Resultados */}
-        {resultado && (
-          <div className="card">
-            <h2 className="text-xl font-bold mb-6">Resultado de Conciliación</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-green-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Acreditadas</p>
-                <p className="text-2xl font-bold text-green-600">{resultado.acreditadas}</p>
+        {/* Paso 2: Cliente + Planilla */}
+        <div className="card">
+          <div className="mb-3">
+            <span className="badge badge-info">PASO 2</span>
+            <h3 className="text-base font-semibold text-ml-text mt-2">
+              Cliente y planilla
+            </h3>
+          </div>
+
+          <div className="mb-3">
+            <label className="label">Nombre del cliente</label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Green, Tucu, David, Alojando..."
+              value={clienteNombre}
+              onChange={(e) => setClienteNombre(e.target.value)}
+              disabled={!extractoId}
+            />
+          </div>
+
+          <FileUpload
+            onFileSelected={handleUploadPlanilla}
+            label={
+              !extractoId
+                ? 'Cargá primero un extracto'
+                : !clienteNombre.trim()
+                ? 'Ingresá el cliente primero'
+                : 'Subir planilla del cliente (.xlsx)'
+            }
+          />
+        </div>
+
+        {/* Paso 3: Resultado */}
+        <div className="card">
+          <div className="mb-3">
+            <span className="badge badge-info">PASO 3</span>
+            <h3 className="text-base font-semibold text-ml-text mt-2">
+              Resultado
+            </h3>
+          </div>
+
+          {resultado ? (
+            <div className="space-y-2">
+              <div className="flex justify-between p-2 bg-green-50 rounded">
+                <span className="text-sm">Acreditadas</span>
+                <span className="font-bold text-green-700">{resultado.acreditadas}</span>
               </div>
-              <div className="bg-red-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">No Encontradas</p>
-                <p className="text-2xl font-bold text-red-600">{resultado.no_encontradas}</p>
+              <div className="flex justify-between p-2 bg-red-50 rounded">
+                <span className="text-sm">No encontradas</span>
+                <span className="font-bold text-red-700">{resultado.no_encontradas}</span>
               </div>
-              <div className="bg-yellow-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Duplicadas</p>
-                <p className="text-2xl font-bold text-yellow-600">{resultado.duplicadas}</p>
+              <div className="flex justify-between p-2 bg-yellow-50 rounded">
+                <span className="text-sm">Duplicadas</span>
+                <span className="font-bold text-yellow-700">{resultado.duplicadas}</span>
               </div>
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Sin Datos</p>
-                <p className="text-2xl font-bold text-blue-600">{resultado.sin_datos}</p>
+              <div className="flex justify-between p-2 bg-blue-50 rounded">
+                <span className="text-sm">Sin datos</span>
+                <span className="font-bold text-blue-700">{resultado.sin_datos}</span>
+              </div>
+              <div className="pt-2 border-t border-gray-100 text-xs text-ml-text-soft text-center">
+                Total procesadas: {resultado.filas_procesadas} filas
               </div>
             </div>
-            <p className="mt-4 text-sm text-gray-600">
-              Total: {resultado.filas_procesadas} filas procesadas
+          ) : (
+            <p className="text-sm text-ml-text-soft py-8 text-center">
+              Esperando carga de planilla...
             </p>
+          )}
+        </div>
+      </div>
+
+      {/* Reconciliaciones recientes */}
+      {planillas.length > 0 && (
+        <div className="card mt-6 p-0 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 bg-ml-gray-bg">
+            <h3 className="text-sm font-semibold text-ml-text">
+              Reconciliaciones recientes
+            </h3>
           </div>
-        )}
-      </main>
+          <table className="w-full text-sm">
+            <thead className="bg-white border-b border-gray-100">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-ml-text-soft uppercase">Cliente</th>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-ml-text-soft uppercase">Fecha</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-ml-text-soft uppercase">Total</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-ml-text-soft uppercase">OK</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-ml-text-soft uppercase">Errores</th>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-ml-text-soft uppercase">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {planillas.map((p) => {
+                const errores = p.no_encontradas + p.duplicadas + p.sin_datos
+                const acc = Math.round((p.acreditadas / p.total_filas) * 100)
+                return (
+                  <tr key={p.id} className="hover:bg-ml-gray-bg">
+                    <td className="px-4 py-2 font-medium text-ml-text">{p.cliente_nombre}</td>
+                    <td className="px-4 py-2 text-ml-text-soft">
+                      {new Date(p.fecha_carga).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}
+                    </td>
+                    <td className="px-4 py-2 text-center">{p.total_filas}</td>
+                    <td className="px-4 py-2 text-center text-green-700 font-semibold">
+                      {p.acreditadas}
+                    </td>
+                    <td className="px-4 py-2 text-center text-red-700 font-semibold">
+                      {errores || '—'}
+                    </td>
+                    <td className="px-4 py-2">
+                      {acc === 100 ? (
+                        <span className="badge-ok">Completo</span>
+                      ) : acc >= 80 ? (
+                        <span className="badge-warn">{acc}%</span>
+                      ) : (
+                        <span className="badge-error">{acc}%</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

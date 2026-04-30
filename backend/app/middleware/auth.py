@@ -40,15 +40,16 @@ async def get_current_user(
 def require_permission(permission: str):
     """Decorator para verificar permisos específicos"""
     async def check_permission(current_user: User = Depends(get_current_user)):
-        # Mapeo simple de permisos por rol
+        # Mapeo de permisos por rol (clave es el valor string del enum)
         permissions = {
-            RoleEnum.ADMIN: ["upload_files", "reconcile", "manage_users", "view_audit"],
-            RoleEnum.OPERADOR: ["upload_files", "reconcile"],
-            RoleEnum.REVISOR: ["view_results"],
-            RoleEnum.AUDITOR: ["view_audit"]
+            "admin": ["upload_files", "reconcile", "manage_users", "view_audit"],
+            "operador": ["upload_files", "reconcile"],
+            "revisor": ["view_results"],
+            "auditor": ["view_audit"]
         }
 
-        if permission not in permissions.get(current_user.role, []):
+        role_value = current_user.role if isinstance(current_user.role, str) else getattr(current_user.role, "value", None)
+        if permission not in permissions.get(role_value, []):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para esta acción"

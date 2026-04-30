@@ -65,14 +65,14 @@ def update_user(
 
     cambios_antes = {
         "full_name": user.full_name,
-        "role": user.role.value if user.role else None,
+        "role": user.role if user.role else None,
         "is_active": user.is_active
     }
 
     if payload.full_name is not None:
         user.full_name = payload.full_name
     if payload.role is not None:
-        user.role = RoleEnum(payload.role.value)
+        user.role = payload.role.value
     if payload.is_active is not None:
         user.is_active = payload.is_active
 
@@ -81,7 +81,7 @@ def update_user(
 
     cambios_despues = {
         "full_name": user.full_name,
-        "role": user.role.value if user.role else None,
+        "role": user.role if user.role else None,
         "is_active": user.is_active
     }
 

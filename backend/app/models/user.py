@@ -1,14 +1,16 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
 import enum
+
 
 class RoleEnum(str, enum.Enum):
     ADMIN = "admin"
     OPERADOR = "operador"
     REVISOR = "revisor"
     AUDITOR = "auditor"
+
 
 class User(Base):
     __tablename__ = "users"
@@ -17,7 +19,8 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
-    role = Column(Enum(RoleEnum), default=RoleEnum.OPERADOR)
+    # Guardar role como String simple para evitar problemas con Enum nativo en Postgres
+    role = Column(String, default=RoleEnum.OPERADOR.value, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

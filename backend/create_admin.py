@@ -22,7 +22,7 @@ else:
         email=email,
         full_name="Admin",
         hashed_password=get_password_hash(password),
-        role=RoleEnum.ADMIN,
+        role=RoleEnum.ADMIN.value,
         is_active=True
     )
     db.add(user)

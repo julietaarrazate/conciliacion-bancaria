@@ -2,29 +2,22 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
-import { Button } from '@/components/Button'
-import { Input } from '@/components/Input'
 
 export const Login: React.FC = () => {
   const navigate = useNavigate()
   const { setUser, setToken } = useAuthStore()
 
-  const [formData, setFormData] = useState({ email: '', password: '' })
+  const [formData, setFormData] = useState({
+    email: 'admin@caneland.com',
+    password: 'admin123'
+  })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    })
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
-
     try {
       const response = await apiClient.login(formData.email, formData.password)
       setUser(response.user)
@@ -38,52 +31,68 @@ export const Login: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-600 to-primary-900 flex items-center justify-center p-4">
-      <div className="card w-full max-w-md">
-        <h1 className="text-3xl font-bold mb-2 text-gray-800">Conciliación Bancaria</h1>
-        <p className="text-gray-600 mb-8">Ingresa tus credenciales</p>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-400 rounded text-red-700 text-sm">
-            {error}
+    <div className="min-h-screen bg-ml-gray-bg flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-ml-yellow mb-3">
+            <span className="text-2xl">💰</span>
           </div>
-        )}
+          <h1 className="text-2xl font-bold text-ml-text">Conciliación Bancaria</h1>
+          <p className="text-sm text-ml-text-soft mt-1">Caneland SA</p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Email"
-            type="email"
-            name="email"
-            placeholder="tu@email.com"
-            value={formData.email}
-            onChange={handleInputChange}
-            required
-          />
+        <div className="card">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+              {error}
+            </div>
+          )}
 
-          <Input
-            label="Contraseña"
-            type="password"
-            name="password"
-            placeholder="••••••••"
-            value={formData.password}
-            onChange={handleInputChange}
-            required
-          />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="label">Email</label>
+              <input
+                type="email"
+                className="input-field"
+                placeholder="tu@email.com"
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                required
+                autoComplete="email"
+              />
+            </div>
 
-          <Button
-            type="submit"
-            variant="primary"
-            loading={loading}
-            className="w-full"
-          >
-            Ingresar
-          </Button>
-        </form>
+            <div>
+              <label className="label">Contraseña</label>
+              <input
+                type="password"
+                className="input-field"
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={(e) =>
+                  setFormData({ ...formData, password: e.target.value })
+                }
+                required
+                autoComplete="current-password"
+              />
+            </div>
 
-        <div className="mt-6 pt-6 border-t">
-          <p className="text-sm text-gray-600 text-center">
-            ¿No tienes cuenta? <a href="/register" className="text-primary-600 hover:underline">Regístrate</a>
-          </p>
+            <button
+              type="submit"
+              className="btn-yellow w-full"
+              disabled={loading}
+            >
+              {loading ? 'Ingresando...' : 'Ingresar'}
+            </button>
+          </form>
+
+          <div className="mt-5 pt-5 border-t border-gray-100">
+            <p className="text-xs text-ml-text-soft text-center">
+              Demo: admin@caneland.com / admin123
+            </p>
+          </div>
         </div>
       </div>
     </div>
