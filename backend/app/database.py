@@ -1,21 +1,26 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from app.config import get_settings
 
-settings = get_settings()
+# Default: SQLite local (sin docker). Override con env var DATABASE_URL para Postgres.
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
+
+# SQLite necesita check_same_thread=False; Postgres no
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
 engine = create_engine(
-    settings.database_url,
-    echo=settings.debug,
+    DATABASE_URL,
+    connect_args=connect_args,
     pool_pre_ping=True
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 Base = declarative_base()
 
+
 def get_db():
-    """Dependency to get database session"""
+    """Dependency para inyectar sesión de BD"""
     db = SessionLocal()
     try:
         yield db

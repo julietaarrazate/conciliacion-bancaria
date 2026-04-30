@@ -1,21 +1,32 @@
 from datetime import datetime, timedelta
 from typing import Optional
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from app.models.user import User
-from app.schemas.user import UserRegister, UserLogin
+from app.schemas.user import UserRegister
 from app.config import get_settings
 
 settings = get_settings()
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _truncate(password: str) -> bytes:
+    """bcrypt solo soporta 72 bytes max"""
+    return password.encode("utf-8")[:72]
+
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hashea password con bcrypt directo (sin passlib)"""
+    hashed = bcrypt.hashpw(_truncate(password), bcrypt.gensalt())
+    return hashed.decode("utf-8")
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verifica password con bcrypt directo"""
+    try:
+        return bcrypt.checkpw(_truncate(plain_password), hashed_password.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()

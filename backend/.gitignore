@@ -1,0 +1,3 @@
+﻿test.db
+uvicorn.log
+uvicorn.err
