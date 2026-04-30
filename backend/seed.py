@@ -17,13 +17,18 @@ from app.services.auth import get_password_hash
 
 def init_db():
     """Crea todas las tablas"""
-    print("Creando tablas...")
-    Base.metadata.create_all(bind=engine)
-    print("OK tablas creadas.")
+    print("[seed] Creando tablas...")
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("[seed] OK tablas creadas.")
+    except Exception as e:
+        print(f"[seed] ERROR creando tablas: {e}")
+        raise
 
 
 def seed_users():
     """Crea usuarios iniciales si no existen"""
+    print("[seed] Creando usuarios iniciales...")
     db = SessionLocal()
     try:
         seeds = [
