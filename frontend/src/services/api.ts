@@ -16,7 +16,25 @@ import {
   MovimientosFiltros
 } from '@/types'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Detecta la URL del backend automaticamente:
+// 1) Si hay VITE_API_URL en build, usa eso (produccion)
+// 2) Si la web esta abierta desde una IP de LAN (ej. 192.168.x.x), usa la misma IP en :8000
+// 3) Si esta en localhost o algo desconocido, usa localhost:8000
+function detectApiUrl(): string {
+  const envUrl = import.meta.env.VITE_API_URL as string | undefined
+  if (envUrl) return envUrl
+
+  if (typeof window !== 'undefined' && window.location) {
+    const host = window.location.hostname
+    // Si la web esta en una IP LAN (no localhost), usar misma IP para el backend
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      return `${window.location.protocol}//${host}:8000`
+    }
+  }
+  return 'http://localhost:8000'
+}
+
+const API_BASE_URL = detectApiUrl()
 
 class ApiClient {
   private client: AxiosInstance

@@ -11,6 +11,7 @@ export const Login: React.FC = () => {
     email: 'admin@caneland.com',
     password: 'admin123'
   })
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -24,26 +25,41 @@ export const Login: React.FC = () => {
       setToken(response.access_token)
       navigate('/dashboard')
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error en autenticación')
+      const detail = err.response?.data?.detail
+      const code = err.response?.status
+      if (code === 401) {
+        setError('Email o contraseña incorrectos')
+      } else if (err.code === 'ERR_NETWORK' || !err.response) {
+        const apiUrl = err.config?.baseURL || 'desconocido'
+        setError(
+          `No se puede conectar al servidor (${apiUrl}). Verificá que el backend esté corriendo y que el celular esté en la misma red WiFi que la PC.`
+        )
+      } else {
+        setError(detail || 'Error en autenticación')
+      }
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-ml-gray-bg flex items-center justify-center p-4">
+    <div className="min-h-screen bg-ml-gray-bg dark:bg-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-ml-yellow mb-3">
             <span className="text-2xl">💰</span>
           </div>
-          <h1 className="text-2xl font-bold text-ml-text">Conciliación Bancaria</h1>
-          <p className="text-sm text-ml-text-soft mt-1">Caneland SA</p>
+          <h1 className="text-2xl font-bold text-ml-text dark:text-white">
+            Conciliación Bancaria
+          </h1>
+          <p className="text-sm text-ml-text-soft dark:text-gray-400 mt-1">
+            Caneland SA
+          </p>
         </div>
 
         <div className="card">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm dark:bg-red-900/20 dark:border-red-800 dark:text-red-300">
               {error}
             </div>
           )}
@@ -61,22 +77,34 @@ export const Login: React.FC = () => {
                 }
                 required
                 autoComplete="email"
+                inputMode="email"
               />
             </div>
 
             <div>
               <label className="label">Contraseña</label>
-              <input
-                type="password"
-                className="input-field"
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={(e) =>
-                  setFormData({ ...formData, password: e.target.value })
-                }
-                required
-                autoComplete="current-password"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="input-field pr-12"
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                  required
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-sm text-ml-text-soft hover:text-ml-text dark:text-gray-400 dark:hover:text-white"
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
             </div>
 
             <button
@@ -88,8 +116,8 @@ export const Login: React.FC = () => {
             </button>
           </form>
 
-          <div className="mt-5 pt-5 border-t border-gray-100">
-            <p className="text-xs text-ml-text-soft text-center">
+          <div className="mt-5 pt-5 border-t border-gray-100 dark:border-slate-700">
+            <p className="text-xs text-ml-text-soft dark:text-gray-400 text-center">
               Demo: admin@caneland.com / admin123
             </p>
           </div>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#FFE600"/>
+  <text x="256" y="320" font-family="system-ui, -apple-system, sans-serif" font-size="280" font-weight="bold" text-anchor="middle" fill="#3483FA">$</text>
+  <text x="256" y="430" font-family="system-ui, -apple-system, sans-serif" font-size="52" font-weight="600" text-anchor="middle" fill="#333">Conciliación</text>
+</svg>

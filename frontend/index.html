@@ -2,12 +2,37 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sistema Conciliación Bancaria</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+
+    <title>Conciliación Bancaria - Caneland SA</title>
+    <meta name="description" content="Sistema de conciliación bancaria multi-cliente con auditoría e historial." />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#FFE600" />
+    <meta name="application-name" content="Conciliación" />
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Conciliación" />
+    <link rel="apple-touch-icon" href="/icon-192.svg" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/icon-192.svg" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Registrar service worker para PWA instalable
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.warn('SW register failed:', err);
+          });
+        });
+      }
+    </script>
   </body>
 </html>
