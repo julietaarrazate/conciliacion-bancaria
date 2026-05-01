@@ -4,8 +4,18 @@
 
 body {
   font-family: 'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+/* Light mode (default) */
+body {
   background-color: #F5F5F5;
   color: #333333;
+}
+
+/* Dark mode */
+.dark body {
+  background-color: #0F1419;
+  color: #E5E7EB;
 }
 
 @layer components {
@@ -18,19 +28,21 @@ body {
   }
 
   .btn-secondary {
-    @apply px-5 py-2.5 bg-white text-ml-blue border border-ml-blue rounded-md font-medium hover:bg-ml-blue/5 disabled:opacity-50 transition-colors;
+    @apply px-5 py-2.5 bg-white text-ml-blue border border-ml-blue rounded-md font-medium hover:bg-ml-blue/5 disabled:opacity-50 transition-colors dark:bg-slate-800 dark:border-slate-600 dark:text-ml-blue dark:hover:bg-slate-700;
   }
 
   .card {
-    @apply bg-white rounded-lg p-6 shadow-sm border border-gray-100;
+    @apply bg-white rounded-lg p-6 shadow-sm border border-gray-100
+           dark:bg-slate-800 dark:border-slate-700 dark:shadow-none;
   }
 
   .input-field {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ml-blue focus:border-ml-blue transition-shadow;
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ml-blue focus:border-ml-blue transition-shadow
+           dark:bg-slate-900 dark:border-slate-600 dark:text-gray-100 dark:placeholder-gray-500;
   }
 
   .label {
-    @apply block text-sm font-medium text-ml-text mb-1.5;
+    @apply block text-sm font-medium text-ml-text mb-1.5 dark:text-gray-300;
   }
 
   .badge {
@@ -38,31 +50,31 @@ body {
   }
 
   .badge-ok {
-    @apply badge bg-green-100 text-green-800;
+    @apply badge bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300;
   }
 
   .badge-warn {
-    @apply badge bg-yellow-100 text-yellow-800;
+    @apply badge bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300;
   }
 
   .badge-error {
-    @apply badge bg-red-100 text-red-700;
+    @apply badge bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300;
   }
 
   .badge-info {
-    @apply badge bg-blue-100 text-blue-700;
+    @apply badge bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300;
   }
 
-  /* KPI card tipo concilia.ar */
   .kpi {
-    @apply bg-white rounded-xl p-5 shadow-sm border border-gray-100;
+    @apply bg-white rounded-xl p-5 shadow-sm border border-gray-100
+           dark:bg-slate-800 dark:border-slate-700 dark:shadow-none;
   }
 
   .kpi-value {
-    @apply text-3xl font-bold text-ml-text;
+    @apply text-3xl font-bold text-ml-text dark:text-white;
   }
 
   .kpi-label {
-    @apply text-xs uppercase tracking-wide text-ml-text-soft font-medium;
+    @apply text-xs uppercase tracking-wide text-ml-text-soft font-medium dark:text-gray-400;
   }
 }

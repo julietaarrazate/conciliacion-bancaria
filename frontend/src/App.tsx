@@ -9,6 +9,7 @@ import { Auditoria } from '@/pages/Auditoria'
 import { Usuarios } from '@/pages/Usuarios'
 import { Movimientos } from '@/pages/Movimientos'
 import { Layout } from '@/components/Layout'
+import { useThemeStore } from '@/store/theme'
 import '@/styles/index.css'
 
 const ProtectedRoute: React.FC<{
@@ -25,7 +26,13 @@ const ProtectedRoute: React.FC<{
 
 export function App() {
   const { setUser, token } = useAuthStore()
+  const applyTheme = useThemeStore((s) => s.applyToDocument)
   const [loading, setLoading] = useState(true)
+
+  // Aplicar tema (light/dark) al cargar
+  useEffect(() => {
+    applyTheme()
+  }, [applyTheme])
 
   useEffect(() => {
     const loadUser = async () => {
