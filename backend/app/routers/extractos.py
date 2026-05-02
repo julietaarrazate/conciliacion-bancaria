@@ -208,7 +208,7 @@ def _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fech
         q = q.filter(and_(MovimientoBanco.cliente_acreditado.isnot(None),
                           MovimientoBanco.cliente_acreditado != "",
                           ~MovimientoBanco.cliente_acreditado.ilike("no identificado")))
-    return q
+    return q.order_by(MovimientoBanco.orden.desc().nulls_last(), MovimientoBanco.id.desc())
 
 
 @router.get("/{extracto_id}/movimientos", response_model=MovimientosFiltradosResponse)

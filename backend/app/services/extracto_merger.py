@@ -1,16 +1,21 @@
 """
-Servicio para mergear Ultimos Movimientos (UM) con un extracto existente,
-detectando duplicados por (fecha, mes, importe, saldo).
+Mergea Ultimos Movimientos (UM) con el extracto existente.
+
+Clave de deduplicacion (por prioridad):
+  1. Si el movimiento tiene `orden` (numero secuencial del banco) -> usar (orden, monto)
+     Esto es lo mas confiable: el banco asigna numeros unicos por cuenta.
+  2. Si no tiene `orden` -> usar (fecha, importe) como fallback.
+
+Esto evita duplicados aunque el saldo calculado difiera por redondeo.
 """
 
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from datetime import date, datetime
 from sqlalchemy.orm import Session
 from app.models.extracto import MovimientoBanco
 
 
-def _normalizar_fecha(v):
-    """Convierte cualquier representacion de fecha a date para comparar"""
+def _normalizar_fecha(v) -> Optional[date]:
     if v is None:
         return None
     if isinstance(v, datetime):
@@ -20,61 +25,50 @@ def _normalizar_fecha(v):
     return v
 
 
-def _clave_movimiento(mov_dict: dict) -> Tuple:
+def _clave(orden, monto, fecha) -> Tuple:
     """
-    Clave unica de un movimiento para detectar duplicados.
-    Usa: fecha + mes + importe + saldo (los 4 que pidio Julieta).
+    Si tiene numero de orden del banco -> (orden, monto_redondeado).
+    Si no tiene orden               -> (None, fecha, monto_redondeado).
     """
-    return (
-        _normalizar_fecha(mov_dict.get("fecha")),
-        str(mov_dict.get("mes") or "").strip().lower(),
-        round(float(mov_dict.get("monto") or 0), 2),
-        round(float(mov_dict.get("saldo") or 0), 2) if mov_dict.get("saldo") is not None else None
-    )
+    monto_r = round(float(monto or 0), 2)
+    if orden is not None:
+        try:
+            return ("ord", int(orden), monto_r)
+        except (TypeError, ValueError):
+            pass
+    return ("fec", _normalizar_fecha(fecha), monto_r)
 
 
-def _clave_movimiento_db(mov: MovimientoBanco) -> Tuple:
-    """Misma clave pero a partir de un MovimientoBanco de la BD"""
-    return (
-        _normalizar_fecha(mov.fecha),
-        str(mov.mes or "").strip().lower(),
-        round(float(mov.monto or 0), 2),
-        round(float(mov.saldo or 0), 2) if mov.saldo is not None else None
-    )
+def _clave_db(mov: MovimientoBanco) -> Tuple:
+    return _clave(mov.orden, mov.monto, mov.fecha)
 
 
-def mergear_movimientos(
-    db: Session,
-    extracto_id: int,
-    movimientos_nuevos: List[dict]
-) -> dict:
+def _clave_dict(mov_data: dict) -> Tuple:
+    return _clave(mov_data.get("orden"), mov_data.get("monto"), mov_data.get("fecha"))
+
+
+def mergear_movimientos(db: Session, extracto_id: int, movimientos_nuevos: List[dict]) -> dict:
     """
-    Mergea una lista de movimientos nuevos contra el extracto existente.
-    Solo agrega los que no existen ya (por fecha+mes+importe+saldo).
-
-    Retorna stats:
-        - agregados: cuantos se sumaron
-        - duplicados: cuantos se ignoraron por estar ya
-        - total_recibido: total de filas en el archivo
+    Agrega solo los movimientos que no existan ya en el extracto.
+    Retorna: {agregados, duplicados, total_recibido}
     """
-    # Cargar movimientos existentes y armar set de claves
     existentes = (
         db.query(MovimientoBanco)
         .filter(MovimientoBanco.extracto_id == extracto_id)
         .all()
     )
-    claves_existentes = {_clave_movimiento_db(m) for m in existentes}
+    claves_existentes = {_clave_db(m) for m in existentes}
 
     agregados = 0
     duplicados = 0
 
     for mov_data in movimientos_nuevos:
-        clave = _clave_movimiento(mov_data)
+        clave = _clave_dict(mov_data)
         if clave in claves_existentes:
             duplicados += 1
             continue
 
-        nuevo = MovimientoBanco(
+        db.add(MovimientoBanco(
             extracto_id=extracto_id,
             orden=mov_data.get("orden"),
             fecha=_normalizar_fecha(mov_data.get("fecha")),
@@ -82,15 +76,9 @@ def mergear_movimientos(
             titular=mov_data.get("titular"),
             monto=mov_data.get("monto"),
             saldo=mov_data.get("saldo")
-        )
-        db.add(nuevo)
-        claves_existentes.add(clave)  # evita dup dentro del mismo archivo
+        ))
+        claves_existentes.add(clave)
         agregados += 1
 
     db.commit()
-
-    return {
-        "agregados": agregados,
-        "duplicados": duplicados,
-        "total_recibido": len(movimientos_nuevos)
-    }
+    return {"agregados": agregados, "duplicados": duplicados, "total_recibido": len(movimientos_nuevos)}

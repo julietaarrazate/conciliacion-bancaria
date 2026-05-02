@@ -243,6 +243,16 @@ class ApiClient {
   }
 
   // Exportar Excel
+  async downloadPlanillaConciliada(planillaId: number): Promise<void> {
+    const res = await this.client.get(`/planillas/${planillaId}/download`, { responseType: 'blob' })
+    const url = URL.createObjectURL(new Blob([res.data]))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `planilla_conciliada_${planillaId}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async exportMovimientos(extractoId: number, filters: MovimientosFiltros = {}): Promise<void> {
     const params: Record<string, string | number | boolean> = {}
     Object.entries(filters).forEach(([k, v]) => {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { PlanillaHistorialItem } from '@/types'
+import { PlanillaPanel } from '@/components/PlanillaPanel'
 
 export const Historial: React.FC = () => {
   const [items, setItems] = useState<PlanillaHistorialItem[]>([])
@@ -8,6 +9,14 @@ export const Historial: React.FC = () => {
   const [filter, setFilter] = useState('')
   const [exporting, setExporting] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [downloadingId, setDownloadingId] = useState<number | null>(null)
+  const [panelId, setPanelId] = useState<number | null>(null)
+
+  const handleDownload = async (id: number) => {
+    setDownloadingId(id)
+    try { await apiClient.downloadPlanillaConciliada(id) }
+    finally { setDownloadingId(null) }
+  }
 
   const handleDelete = async (id: number) => {
     if (!confirm('¿Borrar esta planilla? Se liberan los movimientos que había acreditado.')) return
@@ -45,6 +54,11 @@ export const Historial: React.FC = () => {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      <PlanillaPanel
+        planillaId={panelId}
+        onClose={() => setPanelId(null)}
+        onDelete={async id => { await apiClient.deletePlanilla(id); setPanelId(null); load(filter) }}
+      />
       <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-ml-text dark:text-white">Historial</h1>
@@ -109,14 +123,25 @@ export const Historial: React.FC = () => {
                         <span className={`badge ${acc === 100 ? 'badge-ok' : acc >= 80 ? 'badge-warn' : 'badge-error'}`}>{acc}%</span>
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <button
-                          onClick={() => handleDelete(it.id)}
-                          disabled={deletingId === it.id}
-                          className="text-ml-text-soft hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 disabled:opacity-30 text-sm"
-                          title="Borrar planilla"
-                        >
-                          🗑️
-                        </button>
+                        <div className="flex items-center gap-1 justify-center">
+                          <button
+                            onClick={() => setPanelId(it.id)}
+                            className="text-ml-blue hover:text-ml-blue-dark text-sm"
+                            title="Ver detalle"
+                          >👁️</button>
+                          <button
+                            onClick={() => handleDownload(it.id)}
+                            disabled={downloadingId === it.id}
+                            className="text-green-600 hover:text-green-700 disabled:opacity-30 text-sm"
+                            title="Descargar Excel (Hoja1: cliente, Hoja2: extracto)"
+                          >{downloadingId === it.id ? '⏳' : '⬇️'}</button>
+                          <button
+                            onClick={() => handleDelete(it.id)}
+                            disabled={deletingId === it.id}
+                            className="text-ml-text-soft hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 disabled:opacity-30 text-sm"
+                            title="Borrar planilla"
+                          >🗑️</button>
+                        </div>
                       </td>
                     </tr>
                   )

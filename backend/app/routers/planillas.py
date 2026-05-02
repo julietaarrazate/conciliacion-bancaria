@@ -8,10 +8,12 @@ from app.models.planilla import Planilla, PlanillaRow
 from app.models.cliente import Cliente
 from app.models.extracto import ExtractoBancario
 from app.models.user import User
+from fastapi.responses import StreamingResponse
 from app.schemas.planilla import PlanillaResponse, PlanillaDetalleResponse, ConciliacionResultado
 from app.services.excel_parser import parsear_planilla_cliente
 from app.services.conciliacion import conciliar_planilla
 from app.services.auditoria import registrar_log
+from app.services.excel_export import export_planilla_conciliada
 from app.middleware.auth import get_current_user, require_permission
 
 router = APIRouter(prefix="/planillas", tags=["planillas"])
@@ -169,6 +171,63 @@ def conciliar(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error en conciliación: {str(e)}"
         )
+
+@router.get("/{planilla_id}/download")
+def download_planilla_conciliada(
+    planilla_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    """Descarga xlsx con Hoja1=planilla+estado y Hoja2=movimientos acreditados"""
+    import io
+    from datetime import datetime
+    from app.models.extracto import MovimientoBanco
+
+    p = db.query(Planilla).filter(Planilla.id == planilla_id).first()
+    if not p:
+        raise HTTPException(404, "Planilla no encontrada")
+
+    # Enriquecer rows con datos del movimiento
+    mov_ids = [r.orden_movimiento_acreditado for r in p.rows if r.orden_movimiento_acreditado]
+    movs_map = {}
+    if mov_ids:
+        movs_map = {m.id: m for m in db.query(MovimientoBanco).filter(MovimientoBanco.id.in_(mov_ids)).all()}
+
+    rows_data = []
+    movimientos_acreditados = []
+    ids_acred_vistos = set()
+
+    for r in p.rows:
+        mov = movs_map.get(r.orden_movimiento_acreditado) if r.orden_movimiento_acreditado else None
+        rows_data.append({
+            "monto": r.monto, "cuit": r.cuit, "titular": r.titular, "status": r.status,
+            "orden_movimiento_acreditado": r.orden_movimiento_acreditado,
+            "mov_titular": mov.titular if mov else None,
+            "mov_fecha": mov.fecha if mov else None,
+            "mov_fecha_acred": mov.fecha_acred if mov else None,
+        })
+        if mov and mov.id not in ids_acred_vistos:
+            ids_acred_vistos.add(mov.id)
+            movimientos_acreditados.append({
+                "orden": mov.orden, "fecha": mov.fecha, "mes": mov.mes,
+                "titular": mov.titular, "monto": mov.monto, "saldo": mov.saldo,
+                "cliente_acreditado": mov.cliente_acreditado, "fecha_acred": mov.fecha_acred,
+            })
+
+    planilla_data = {
+        "cliente_nombre": p.cliente.nombre,
+        "nombre_archivo": p.nombre_archivo,
+        "rows": rows_data,
+    }
+
+    xlsx = export_planilla_conciliada(planilla_data, movimientos_acreditados)
+    fname = f"{p.cliente.nombre}_acreditado_{datetime.now().strftime('%d.%m')}.xlsx"
+    return StreamingResponse(
+        io.BytesIO(xlsx),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'}
+    )
+
 
 @router.delete("/{planilla_id}")
 def delete_planilla(
