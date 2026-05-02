@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
-# Startup script para Render con logs verbosos
-echo "================================"
-echo "[start.sh] python: $(python --version)"
-echo "[start.sh] pwd: $(pwd)"
-echo "[start.sh] DATABASE_URL set: $([ -n "$DATABASE_URL" ] && echo yes || echo no)"
-echo "[start.sh] PORT: ${PORT:-8000}"
-echo "================================"
+# Script de arranque para Render (y cualquier entorno Linux).
+# No usa '&&' para que un fallo en seed no impida que uvicorn arranque.
+set -e
 
-echo "[start.sh] Importing app to verify..."
-python -c "from app.main import app; print('[start.sh] app import OK')" 2>&1 || {
-    echo "[start.sh] FATAL: no se puede importar app.main"
-    exit 1
-}
+PORT="${PORT:-10000}"
 
-echo "[start.sh] Running seed (no aborta si falla)..."
-python seed.py 2>&1 || echo "[start.sh] seed fallo (continuando)"
+echo "==================================="
+echo " Conciliacion Bancaria - Backend"
+echo " Python: $(python --version)"
+echo " PORT: $PORT"
+echo " DATABASE_URL set: $([ -n "$DATABASE_URL" ] && echo 'SI' || echo 'NO (usando SQLite)')"
+echo "==================================="
 
-echo "[start.sh] Starting uvicorn on 0.0.0.0:${PORT:-8000}"
-exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+echo "[startup] Verificando importacion de app..."
+python -c "from app.main import app; print('[startup] app OK')"
+
+echo "[startup] Ejecutando seed (no aborta si falla)..."
+python seed.py 2>&1 || echo "[startup] seed saltado (puede ser que los usuarios ya existan)"
+
+echo "[startup] Iniciando uvicorn en 0.0.0.0:$PORT"
+exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT"

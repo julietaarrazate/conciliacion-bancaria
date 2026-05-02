@@ -1,11 +1,24 @@
+# Web framework
 fastapi==0.115.0
 uvicorn[standard]==0.32.0
+
+# Base de datos
 sqlalchemy==2.0.36
-psycopg2-binary==2.9.10
+psycopg2-binary==2.9.10          # PostgreSQL (Render/Railway)
+
+# Autenticacion JWT
 python-jose[cryptography]==3.3.0
+
+# Validacion y settings
 pydantic==2.9.2
 pydantic-settings==2.6.0
+
+# Upload de archivos (multipart/form-data)
 python-multipart==0.0.12
+
+# Excel
 openpyxl==3.1.5
+
+# Utilidades
 python-dotenv==1.0.1
 requests==2.32.3

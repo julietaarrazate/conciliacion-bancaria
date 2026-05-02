@@ -1,10 +1,11 @@
-# Render Blueprint - https://render.com/docs/blueprint-spec
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploy: New > Blueprint > seleccionar repo > Apply
 
 databases:
   - name: conciliacion-db
     databaseName: conciliacion
     user: conciliacion
-    plan: free
+    plan: free                # PostgreSQL gratis (expira 90 dias, actualizar a $7/mes para produccion)
 
 services:
   - type: web
@@ -13,7 +14,7 @@ services:
     rootDir: backend
     plan: free
     buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
-    startCommand: "python -c \"from app.database import engine, Base; Base.metadata.create_all(bind=engine); print('[init] tables OK')\" && python seed.py || true; uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    startCommand: "bash start.sh"
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -21,10 +22,10 @@ services:
           name: conciliacion-db
           property: connectionString
       - key: SECRET_KEY
-        generateValue: true
+        generateValue: true           # Render genera un string aleatorio seguro
       - key: ALGORITHM
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: 60
+        value: "480"                  # 8 horas = jornada laboral completa
       - key: PYTHON_VERSION
-        value: 3.11.9
+        value: "3.11.9"
