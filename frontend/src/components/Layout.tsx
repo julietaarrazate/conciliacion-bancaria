@@ -15,6 +15,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { to: '/dashboard', label: 'Conciliar', icon: '⚡' },
+  { to: '/bulk', label: 'Bulk', icon: '📦' },
   { to: '/movimientos', label: 'Movim.', icon: '📊' },
   { to: '/historial', label: 'Historial', icon: '📋' },
   { to: '/auditoria', label: 'Audit.', icon: '🔍', permission: 'view_audit' },

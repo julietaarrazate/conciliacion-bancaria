@@ -8,6 +8,7 @@ import { Historial } from '@/pages/Historial'
 import { Auditoria } from '@/pages/Auditoria'
 import { Usuarios } from '@/pages/Usuarios'
 import { Movimientos } from '@/pages/Movimientos'
+import { Bulk } from '@/pages/Bulk'
 import { Layout } from '@/components/Layout'
 import { useThemeStore } from '@/store/theme'
 import '@/styles/index.css'
@@ -71,6 +72,7 @@ export function App() {
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/bulk" element={<Bulk />} />
           <Route path="/movimientos" element={<Movimientos />} />
           <Route path="/historial" element={<Historial />} />
           <Route

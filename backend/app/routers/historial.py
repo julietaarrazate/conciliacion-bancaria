@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 from typing import Optional
 from datetime import datetime
+import io
 
 from app.database import get_db
 from app.models.user import User
@@ -15,6 +17,7 @@ from app.schemas.historial import (
     PlanillaHistorialItem,
     ExtractoHistorialItem
 )
+from app.services.excel_export import export_historial_planillas
 from app.middleware.auth import get_current_user
 
 router = APIRouter(prefix="/historial", tags=["historial"])
@@ -70,6 +73,53 @@ def list_planillas(
         )
 
     return {"total": total, "items": items}
+
+
+@router.get("/planillas/export")
+def export_historial_xlsx(
+    cliente: Optional[str] = Query(None),
+    desde: Optional[datetime] = Query(None),
+    hasta: Optional[datetime] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    """Descarga xlsx con el historial de planillas reconciliadas"""
+    q = db.query(Planilla).join(Cliente, Planilla.cliente_id == Cliente.id)
+
+    if cliente:
+        q = q.filter(Cliente.nombre.ilike(f"%{cliente}%"))
+    if desde:
+        q = q.filter(Planilla.fecha_carga >= desde)
+    if hasta:
+        q = q.filter(Planilla.fecha_carga <= hasta)
+
+    planillas = q.order_by(desc(Planilla.fecha_carga)).all()
+
+    items = []
+    for p in planillas:
+        statuses = [r.status for r in p.rows]
+        items.append({
+            "cliente_nombre": p.cliente.nombre,
+            "nombre_archivo": p.nombre_archivo,
+            "fecha_carga": p.fecha_carga,
+            "usuario_nombre": p.usuario.full_name,
+            "total_filas": len(statuses),
+            "acreditadas": sum(1 for s in statuses if s == "ok"),
+            "no_encontradas": sum(1 for s in statuses if s == "no está"),
+            "duplicadas": sum(
+                1 for s in statuses
+                if s == "duplicado" or (isinstance(s, str) and s.startswith("acreditado"))
+            ),
+            "sin_datos": sum(1 for s in statuses if s == "faltan datos")
+        })
+
+    xlsx_bytes = export_historial_planillas(items)
+    filename = f"historial_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return StreamingResponse(
+        io.BytesIO(xlsx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 @router.get("/extractos", response_model=HistorialExtractosResponse)

@@ -228,6 +228,49 @@ class ApiClient {
     )
     return res.data
   }
+
+  // Exportar Excel
+  async exportMovimientos(extractoId: number, filters: MovimientosFiltros = {}): Promise<void> {
+    const params: Record<string, string | number | boolean> = {}
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') params[k] = v as string | number | boolean
+    })
+    const res = await this.client.get(`/extractos/${extractoId}/movimientos/export`, {
+      params, responseType: 'blob'
+    })
+    const url = URL.createObjectURL(new Blob([res.data]))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `movimientos_${new Date().toISOString().slice(0,10)}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async exportHistorial(params?: { cliente?: string }): Promise<void> {
+    const res = await this.client.get('/historial/planillas/export', {
+      params, responseType: 'blob'
+    })
+    const url = URL.createObjectURL(new Blob([res.data]))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `historial_${new Date().toISOString().slice(0,10)}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // Bulk reconciliar: multiples planillas de un mismo extracto
+  async bulkConciliar(
+    extractoId: number,
+    planillas: { file: File; clienteNombre: string }[]
+  ): Promise<ConciliacionResultado[]> {
+    const resultados: ConciliacionResultado[] = []
+    for (const p of planillas) {
+      const planilla = await this.uploadPlanilla(p.clienteNombre, extractoId, p.file)
+      const r = await this.conciliarPlanilla(planilla.id)
+      resultados.push(r)
+    }
+    return resultados
+  }
 }
 
 export const apiClient = new ApiClient()

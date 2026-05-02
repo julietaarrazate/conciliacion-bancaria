@@ -6,6 +6,18 @@ import {
   MovimientosFiltros
 } from '@/types'
 
+function ExportBtn({ onClick, loading }: { onClick: () => void; loading: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+    >
+      {loading ? '⏳' : '⬇️'} {loading ? 'Exportando...' : 'Exportar Excel'}
+    </button>
+  )
+}
+
 export const Movimientos: React.FC = () => {
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [extractoId, setExtractoId] = useState<number | null>(null)
@@ -15,6 +27,17 @@ export const Movimientos: React.FC = () => {
   const [filters, setFilters] = useState<MovimientosFiltros>({ limit: 500 })
   const [umLoading, setUmLoading] = useState(false)
   const [umMsg, setUmMsg] = useState('')
+  const [exporting, setExporting] = useState(false)
+
+  const handleExport = async () => {
+    if (!extractoId) return
+    setExporting(true)
+    try {
+      await apiClient.exportMovimientos(extractoId, filters)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   // cargar lista de extractos
   useEffect(() => {
@@ -107,6 +130,12 @@ export const Movimientos: React.FC = () => {
               ))}
             </select>
           </div>
+
+          {extractoId && (
+            <div className="self-end">
+              <ExportBtn onClick={handleExport} loading={exporting} />
+            </div>
+          )}
 
           {extractoId && (
             <div>
