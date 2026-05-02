@@ -11,7 +11,9 @@ python-jose[cryptography]==3.3.0
 
 # Validacion y settings
 pydantic==2.9.2
+pydantic[email]==2.9.2
 pydantic-settings==2.6.0
+email-validator==2.2.0
 
 # Upload de archivos (multipart/form-data)
 python-multipart==0.0.12
