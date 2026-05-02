@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import {
   ExtractoListItem,
@@ -19,6 +20,7 @@ function ExportBtn({ onClick, loading }: { onClick: () => void; loading: boolean
 }
 
 export const Movimientos: React.FC = () => {
+  const [searchParams] = useSearchParams()
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [movimientos, setMovimientos] = useState<MovimientoFiltrado[]>([])
@@ -43,7 +45,11 @@ export const Movimientos: React.FC = () => {
   useEffect(() => {
     apiClient.listExtractos().then((data) => {
       setExtractos(data.items)
-      if (data.items.length > 0 && !extractoId) {
+      // Si viene ?extracto=ID desde Dashboard, pre-seleccionar
+      const paramId = searchParams.get('extracto')
+      if (paramId) {
+        setExtractoId(Number(paramId))
+      } else if (data.items.length > 0 && !extractoId) {
         setExtractoId(data.items[0].id)
       }
     })

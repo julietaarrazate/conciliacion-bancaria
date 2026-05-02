@@ -96,21 +96,46 @@ async def upload_extracto(file: UploadFile = File(...),
 @router.delete("/{extracto_id}")
 def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
                     current_user: User = Depends(get_current_user)):
-    """Elimina un extracto y todos sus movimientos. Si tiene planillas conciliadas, también se borran."""
+    """Elimina un extracto, planillas y movimientos. Maneja FKs correctamente."""
     extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
     nombre = extracto.nombre_archivo
     n_movs = len(extracto.movimientos)
-    # Borrar planillas relacionadas y sus rows
-    for p in extracto.planillas:
-        db.delete(p)
-    db.flush()
-    db.delete(extracto)
-    db.commit()
-    registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "DELETE",
-                  {"nombre": nombre, "movimientos": n_movs})
-    return {"ok": True, "mensaje": f"Extracto #{extracto_id} eliminado"}
+    ids_movs = [m.id for m in extracto.movimientos]
+
+    try:
+        # 1. Nullificar FK planilla_rows -> movimientos (para evitar violacion FK)
+        if ids_movs:
+            db.execute(
+                text("UPDATE planilla_rows SET orden_movimiento_acreditado = NULL WHERE orden_movimiento_acreditado IN :ids"),
+                {"ids": tuple(ids_movs) if len(ids_movs) > 1 else (ids_movs[0], ids_movs[0])}
+            )
+            db.flush()
+
+        # 2. Borrar planillas y sus rows
+        for p in list(extracto.planillas):
+            for row in list(p.rows):
+                db.delete(row)
+            db.flush()
+            db.delete(p)
+        db.flush()
+
+        # 3. Borrar movimientos
+        for m in list(extracto.movimientos):
+            db.delete(m)
+        db.flush()
+
+        # 4. Borrar extracto
+        db.delete(extracto)
+        db.commit()
+
+        registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "DELETE",
+                      {"nombre": nombre, "movimientos": n_movs})
+        return {"ok": True, "mensaje": f"Extracto #{extracto_id} eliminado"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Error al eliminar: {str(e)}")
 
 
 @router.post("/{extracto_id}/agregar-um", response_model=MergeUMResponse)

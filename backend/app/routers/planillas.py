@@ -8,7 +8,7 @@ from app.models.planilla import Planilla, PlanillaRow
 from app.models.cliente import Cliente
 from app.models.extracto import ExtractoBancario
 from app.models.user import User
-from app.schemas.planilla import PlanillaResponse, ConciliacionResultado
+from app.schemas.planilla import PlanillaResponse, PlanillaDetalleResponse, ConciliacionResultado
 from app.services.excel_parser import parsear_planilla_cliente
 from app.services.conciliacion import conciliar_planilla
 from app.services.auditoria import registrar_log
@@ -200,6 +200,33 @@ def delete_planilla(
     registrar_log(db, current_user.id, "planillas", planilla_id, "DELETE",
                   {"cliente": cliente, "archivo": nombre_archivo})
     return {"ok": True, "mensaje": f"Planilla #{planilla_id} eliminada y movimientos liberados"}
+
+
+@router.get("/{planilla_id}/detalle", response_model=PlanillaDetalleResponse)
+def get_planilla_detalle(
+    planilla_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    """Retorna planilla con stats y nombre de cliente/extracto para el panel de detalles"""
+    p = db.query(Planilla).filter(Planilla.id == planilla_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Planilla no encontrada")
+    statuses = [r.status for r in p.rows]
+    return {
+        "id": p.id,
+        "nombre_archivo": p.nombre_archivo,
+        "cliente_nombre": p.cliente.nombre,
+        "extracto_nombre": p.extracto.nombre_archivo,
+        "fecha_carga": p.fecha_carga,
+        "usuario_nombre": p.usuario.full_name,
+        "rows": p.rows,
+        "total": len(statuses),
+        "acreditadas": sum(1 for s in statuses if s == "ok"),
+        "no_encontradas": sum(1 for s in statuses if s == "no está"),
+        "duplicadas": sum(1 for s in statuses if s == "duplicado" or (isinstance(s,str) and s.startswith("acreditado"))),
+        "sin_datos": sum(1 for s in statuses if s == "faltan datos"),
+    }
 
 
 @router.get("/{planilla_id}", response_model=PlanillaResponse)

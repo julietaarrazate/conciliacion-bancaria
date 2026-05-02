@@ -37,7 +37,7 @@ function detectApiUrl(): string {
 const API_BASE_URL = detectApiUrl()
 
 class ApiClient {
-  private client: AxiosInstance
+  client: AxiosInstance   // público para endpoints puntuales
   private token: string | null = null
 
   constructor() {

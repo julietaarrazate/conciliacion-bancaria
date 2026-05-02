@@ -26,6 +26,24 @@ class PlanillaResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class PlanillaDetalleResponse(BaseModel):
+    id: int
+    nombre_archivo: str
+    cliente_nombre: str
+    extracto_nombre: str
+    fecha_carga: datetime
+    usuario_nombre: str
+    rows: List[PlanillaRowResponse]
+    total: int
+    acreditadas: int
+    no_encontradas: int
+    duplicadas: int
+    sin_datos: int
+
+    class Config:
+        from_attributes = True
+
 class ConciliacionResultado(BaseModel):
     planilla_id: int
     filas_procesadas: int

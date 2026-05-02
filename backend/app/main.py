@@ -10,6 +10,21 @@ from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planill
 # Crear todas las tablas
 Base.metadata.create_all(bind=engine)
 
+# Migraciones manuales de columnas nuevas (idempotentes)
+def _run_migrations():
+    migrations = [
+        "ALTER TABLE extractos_bancarios ADD COLUMN fingerprint VARCHAR",
+    ]
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception:
+                pass  # columna ya existe
+
+_run_migrations()
+
 settings = get_settings()
 
 app = FastAPI(
