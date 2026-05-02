@@ -5,12 +5,12 @@ class Settings(BaseSettings):
     """Application configuration from environment variables"""
 
     # Database
-    database_url: str = "postgresql://postgres:postgres@localhost:5432/conciliacion_db"
+    database_url: str = "sqlite:///./test.db"
 
     # JWT
     secret_key: str = "your-secret-key-change-in-production"
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = 480  # 8 horas - una jornada laboral completa
 
     # App
     app_name: str = "Sistema Conciliación Bancaria"
