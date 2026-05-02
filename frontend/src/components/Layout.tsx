@@ -15,11 +15,13 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { to: '/dashboard', label: 'Conciliar', icon: '⚡' },
+  { to: '/clientes', label: 'Clientes', icon: '📁' },
   { to: '/bulk', label: 'Bulk', icon: '📦' },
   { to: '/movimientos', label: 'Movim.', icon: '📊' },
   { to: '/historial', label: 'Historial', icon: '📋' },
   { to: '/auditoria', label: 'Audit.', icon: '🔍', permission: 'view_audit' },
-  { to: '/usuarios', label: 'Users', icon: '👥', permission: 'manage_users' }
+  { to: '/usuarios', label: 'Usuarios', icon: '👥', permission: 'manage_users' },
+  { to: '/perfil', label: 'Mi perfil', icon: '👤' }
 ]
 
 export const Layout: React.FC = () => {

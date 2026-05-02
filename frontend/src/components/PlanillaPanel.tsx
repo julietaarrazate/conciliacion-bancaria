@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { apiClient } from '@/services/api'
 
 interface Row {
@@ -111,6 +111,16 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     return [...new Set(detalle.rows.map(r => r.status))].sort()
   }, [detalle])
 
+  // Swipe para cerrar (izquierda = cerrar, derecha = cerrar)
+  const touchStartX = useRef(0)
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+  }, [])
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    if (dx > 60) onClose() // swipe derecha = cerrar
+  }, [onClose])
+
   if (!planillaId) return null
 
   const FilterInput = ({ field, placeholder }: { field: keyof Filters; placeholder: string }) => (
@@ -126,7 +136,11 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     <>
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
 
-      <div className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white dark:bg-slate-800 shadow-2xl z-50 flex flex-col">
+      <div
+        className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white dark:bg-slate-800 shadow-2xl z-50 flex flex-col"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {/* Header */}
         <div className="flex items-start justify-between px-4 py-3 bg-ml-yellow border-b">
           <div className="flex-1 min-w-0">

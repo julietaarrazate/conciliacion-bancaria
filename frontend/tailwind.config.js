@@ -1,12 +1,11 @@
-/** Theme MercadoLibre + Dark Mode */
+
 export default {
   darkMode: 'class',
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
-        // MercadoLibre brand
-        ml: {
+                ml: {
           yellow: '#FFE600',
           'yellow-dark': '#FFDB15',
           blue: '#3483FA',

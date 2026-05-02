@@ -131,5 +131,46 @@ def guardar_planilla_en_carpeta(
 
 @router.get("/estructura")
 def get_estructura(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    """Devuelve los nombres de clientes configurados"""
     return {"clientes": CLIENTES_NOMBRES}
+
+
+@router.get("/archivos")
+def get_archivos_por_cliente(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """
+    Devuelve todos los archivos conciliados agrupados por cliente y mes.
+    Estructura: { cliente: { 'Abril 2026': [ {id, nombre, fecha, acreditadas, total} ] } }
+    """
+    from app.models.planilla import Planilla, PlanillaRow
+    from app.models.cliente import Cliente
+    from collections import defaultdict
+
+    MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+             'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
+    planillas = (db.query(Planilla)
+                 .join(Cliente)
+                 .order_by(Planilla.fecha_carga.desc())
+                 .all())
+
+    resultado: dict = defaultdict(lambda: defaultdict(list))
+
+    for p in planillas:
+        mes_anio = f"{MESES[p.fecha_carga.month - 1]} {p.fecha_carga.year}"
+        statuses = [r.status for r in p.rows]
+        resultado[p.cliente.nombre][mes_anio].append({
+            "id": p.id,
+            "nombre_archivo": p.nombre_archivo,
+            "fecha_carga": p.fecha_carga.isoformat(),
+            "total": len(statuses),
+            "acreditadas": sum(1 for s in statuses if s == "ok"),
+        })
+
+    # Convertir a lista ordenada
+    clientes_lista = []
+    for cliente_nombre in sorted(resultado.keys()):
+        meses = []
+        for mes_nombre, archivos in resultado[cliente_nombre].items():
+            meses.append({"mes": mes_nombre, "archivos": archivos})
+        clientes_lista.append({"nombre": cliente_nombre, "meses": meses})
+
+    return {"clientes": clientes_lista}
