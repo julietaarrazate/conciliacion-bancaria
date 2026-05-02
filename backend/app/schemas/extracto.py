@@ -14,6 +14,7 @@ class MovimientoBancoResponse(BaseModel):
     saldo: Optional[float] = None
     cliente_acreditado: Optional[str] = None
     fecha_acred: Optional[date] = None
+    source: Optional[str] = 'extracto'  # 'extracto' | 'um'
 
     class Config:
         from_attributes = True

@@ -2,79 +2,137 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Base ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
 body {
   font-family: 'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-}
-
-/* Light mode (default) */
-body {
   background-color: #F5F5F5;
   color: #333333;
+  overflow-x: hidden;
+  /* Evita que el teclado virtual desplace el layout en móvil */
+  min-height: 100dvh;
 }
 
-/* Dark mode */
 .dark body {
   background-color: #0F1419;
   color: #E5E7EB;
 }
 
+/* ─── Scrollables en móvil ──────────────────────────────────── */
+.overflow-x-auto { -webkit-overflow-scrolling: touch; }
+
+/* ─── Componentes ────────────────────────────────────────────── */
 @layer components {
   .btn-primary {
-    @apply px-5 py-2.5 bg-ml-blue text-white rounded-md font-medium hover:bg-ml-blue-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+    @apply px-4 py-2.5 bg-ml-blue text-white rounded-md font-medium text-sm
+           hover:bg-ml-blue-dark active:bg-ml-blue-darker
+           disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
   }
 
   .btn-yellow {
-    @apply px-5 py-2.5 bg-ml-yellow text-ml-text rounded-md font-semibold hover:bg-ml-yellow-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+    @apply px-4 py-2.5 bg-ml-yellow text-ml-text rounded-md font-semibold text-sm
+           hover:bg-ml-yellow-dark active:scale-95
+           disabled:opacity-50 disabled:cursor-not-allowed transition-all;
   }
 
   .btn-secondary {
-    @apply px-5 py-2.5 bg-white text-ml-blue border border-ml-blue rounded-md font-medium hover:bg-ml-blue/5 disabled:opacity-50 transition-colors dark:bg-slate-800 dark:border-slate-600 dark:text-ml-blue dark:hover:bg-slate-700;
+    @apply px-4 py-2.5 bg-white text-ml-blue border border-ml-blue rounded-md font-medium text-sm
+           hover:bg-ml-blue/5 disabled:opacity-50 transition-colors
+           dark:bg-slate-800 dark:border-slate-500 dark:text-blue-400 dark:hover:bg-slate-700;
   }
 
   .card {
-    @apply bg-white rounded-lg p-6 shadow-sm border border-gray-100
-           dark:bg-slate-800 dark:border-slate-700 dark:shadow-none;
+    @apply bg-white rounded-lg p-4 md:p-6 shadow-sm border border-gray-100
+           dark:bg-slate-800 dark:border-slate-700;
   }
 
   .input-field {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ml-blue focus:border-ml-blue transition-shadow
-           dark:bg-slate-900 dark:border-slate-600 dark:text-gray-100 dark:placeholder-gray-500;
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md text-sm
+           focus:outline-none focus:ring-2 focus:ring-ml-blue/40 focus:border-ml-blue
+           transition-shadow bg-white text-gray-900
+           dark:bg-slate-900 dark:border-slate-600 dark:text-gray-100
+           dark:placeholder-gray-500 dark:focus:border-blue-500;
   }
 
   .label {
-    @apply block text-sm font-medium text-ml-text mb-1.5 dark:text-gray-300;
+    @apply block text-sm font-medium mb-1.5
+           text-gray-700 dark:text-gray-200;
   }
 
-  .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold;
-  }
+  /* Badges */
+  .badge { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold; }
+  .badge-ok    { @apply badge bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300; }
+  .badge-warn  { @apply badge bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300; }
+  .badge-error { @apply badge bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300; }
+  .badge-info  { @apply badge bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300; }
 
-  .badge-ok {
-    @apply badge bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300;
-  }
-
-  .badge-warn {
-    @apply badge bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300;
-  }
-
-  .badge-error {
-    @apply badge bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300;
-  }
-
-  .badge-info {
-    @apply badge bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300;
-  }
-
+  /* KPI cards */
   .kpi {
-    @apply bg-white rounded-xl p-5 shadow-sm border border-gray-100
-           dark:bg-slate-800 dark:border-slate-700 dark:shadow-none;
+    @apply bg-white rounded-xl p-4 shadow-sm border border-gray-100
+           dark:bg-slate-800 dark:border-slate-700;
+  }
+  .kpi-value { @apply text-2xl md:text-3xl font-bold text-gray-900 dark:text-white; }
+  .kpi-label { @apply text-[11px] uppercase tracking-wide font-medium text-gray-500 dark:text-gray-400; }
+
+  /* Tabla header azul banco Macro */
+  .th-macro {
+    @apply px-2 py-2.5 text-left text-xs font-bold text-white bg-ml-blue
+           border-r border-blue-400 last:border-r-0 whitespace-nowrap select-none;
   }
 
-  .kpi-value {
-    @apply text-3xl font-bold text-ml-text dark:text-white;
+  /* Fila UM marcada en verde claro */
+  .row-um {
+    @apply bg-emerald-50/60 dark:bg-emerald-900/20;
+  }
+  .row-um:hover {
+    @apply bg-emerald-100/60 dark:bg-emerald-900/30;
+  }
+}
+
+/* ─── Dark mode: texto con contraste suficiente ──────────────── */
+.dark {
+  color-scheme: dark;
+}
+.dark h1, .dark h2, .dark h3 { color: #F3F4F6; }
+.dark p, .dark span, .dark td, .dark th { color: inherit; }
+
+/* Subtextos en dark deben tener contraste mínimo AA */
+.dark .text-ml-text-soft,
+.dark .text-gray-500,
+.dark .text-gray-400 { color: #9CA3AF !important; }
+
+.dark .text-ml-text,
+.dark .text-gray-700,
+.dark .text-gray-800,
+.dark .text-gray-900 { color: #F3F4F6 !important; }
+
+/* Inputs y select en dark */
+.dark select option { background-color: #1e293b; color: #f1f5f9; }
+
+/* ─── Mobile helpers ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Evita scroll horizontal en páginas */
+  .page-container {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
   }
 
-  .kpi-label {
-    @apply text-xs uppercase tracking-wide text-ml-text-soft font-medium dark:text-gray-400;
+  /* Tablas scrolleables */
+  .table-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 0.5rem;
   }
+
+  /* Cards más compactas en móvil */
+  .card {
+    padding: 0.875rem;
+    border-radius: 0.625rem;
+  }
+
+  /* KPI más pequeñas en móvil */
+  .kpi-value { font-size: 1.5rem; }
 }

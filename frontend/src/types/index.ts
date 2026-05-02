@@ -123,6 +123,7 @@ export interface MovimientoFiltrado {
   saldo?: number
   cliente_acreditado?: string
   fecha_acred?: string
+  source?: string  // 'extracto' | 'um'
 }
 
 export interface MergeUMResult {

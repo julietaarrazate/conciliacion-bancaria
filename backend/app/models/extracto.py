@@ -34,8 +34,10 @@ class MovimientoBanco(Base):
     saldo = Column(Float, nullable=True)
 
     # Acreditación
-    cliente_acreditado = Column(String, nullable=True)  # Nombre del cliente acreditado
-    fecha_acred = Column(Date, nullable=True)  # Fecha de acreditación
+    cliente_acreditado = Column(String, nullable=True)
+    fecha_acred = Column(Date, nullable=True)
+    # Origen: 'extracto' (cargado originalmente) o 'um' (agregado via Últimos Movimientos)
+    source = Column(String, nullable=True, default='extracto')
 
     # Relationships
     extracto = relationship("ExtractoBancario", back_populates="movimientos")

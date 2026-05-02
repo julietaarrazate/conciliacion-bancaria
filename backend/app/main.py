@@ -26,13 +26,17 @@ def _init_db():
         print(f"[db] Warning tablas: {e}")
         return
 
-    # 2. Migrar columna fingerprint
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE extractos_bancarios ADD COLUMN fingerprint VARCHAR"))
-            conn.commit()
-    except Exception:
-        pass  # ya existe
+    # 2. Migraciones de columnas nuevas
+    for migration_sql in [
+        "ALTER TABLE extractos_bancarios ADD COLUMN fingerprint VARCHAR",
+        "ALTER TABLE movimientos_banco ADD COLUMN source VARCHAR DEFAULT 'extracto'",
+    ]:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(migration_sql))
+                conn.commit()
+        except Exception:
+            pass  # columna ya existe
 
     # 3. Backfill fingerprints
     try:

@@ -1,29 +1,9 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { ExtractoListItem, MovimientoFiltrado, MovimientosFiltros } from '@/types'
 
-// ── Filtros inline en header (estilo Excel) ──────────────────────────────────
-interface ColFilter { cliente: string; cuit: string; titular: string; desde: string; hasta: string; fecha_desde: string; fecha_hasta: string; sin_acreditar: string }
-const EMPTY_COL: ColFilter = { cliente: '', cuit: '', titular: '', desde: '', hasta: '', fecha_desde: '', fecha_hasta: '', sin_acreditar: '' }
-
-type FilterKey = keyof ColFilter
-
-function ColFilterInput({ field, placeholder, value, onChange, type = 'text' }: {
-  field: FilterKey; placeholder: string; value: string
-  onChange: (k: FilterKey, v: string) => void; type?: string
-}) {
-  return (
-    <input
-      type={type}
-      className="w-full mt-1 px-1.5 py-0.5 text-[11px] border border-blue-300 rounded bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-100 focus:outline-none focus:border-ml-blue placeholder:text-blue-300"
-      placeholder={placeholder}
-      value={value}
-      onChange={e => onChange(field, e.target.value)}
-    />
-  )
-}
-
+// ── Utilidades ────────────────────────────────────────────────
 function fmtARS(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 }
@@ -33,6 +13,56 @@ function fmtDate(d?: string | null) {
   catch { return d }
 }
 
+// ── Componente de filtro desplegable tipo Excel ───────────────
+interface ExcelFilterProps {
+  label: string
+  active: boolean
+  children: React.ReactNode
+  align?: 'left' | 'right'
+}
+const ExcelFilter: React.FC<ExcelFilterProps> = ({ label, active, children, align = 'left' }) => {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative inline-flex items-center gap-1 cursor-pointer select-none w-full" onClick={() => setOpen(o => !o)}>
+      <span className="truncate">{label}</span>
+      <span className={`text-[10px] ml-auto flex-shrink-0 ${active ? 'text-ml-yellow' : 'text-blue-200'}`}>
+        {active ? '▼●' : '▼'}
+      </span>
+      {open && (
+        <div
+          className={`absolute top-full mt-1 z-50 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-xl p-3 min-w-[200px] ${align === 'right' ? 'right-0' : 'left-0'}`}
+          onClick={e => e.stopPropagation()}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Estado filtros ────────────────────────────────────────────
+interface ColFilter {
+  cliente: string
+  cuit: string
+  titular: string
+  desde: string
+  hasta: string
+  fecha_desde: string
+  fecha_hasta: string
+  sin_acreditar: string
+  importe_min: string
+  importe_max: string
+}
+const EMPTY: ColFilter = { cliente:'', cuit:'', titular:'', desde:'', hasta:'', fecha_desde:'', fecha_hasta:'', sin_acreditar:'', importe_min:'', importe_max:'' }
+
 export const Movimientos: React.FC = () => {
   const [searchParams] = useSearchParams()
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
@@ -40,63 +70,64 @@ export const Movimientos: React.FC = () => {
   const [movimientos, setMovimientos] = useState<MovimientoFiltrado[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
-  const [colFilters, setColFilters] = useState<ColFilter>(EMPTY_COL)
+  const [filters, setFilters] = useState<ColFilter>(EMPTY)
   const [umLoading, setUmLoading] = useState(false)
   const [umMsg, setUmMsg] = useState('')
   const [exporting, setExporting] = useState(false)
   const umRef = useRef<HTMLInputElement>(null)
 
-  // Cargar lista de extractos
   useEffect(() => {
     apiClient.listExtractos().then(data => {
       setExtractos(data.items)
-      const paramId = searchParams.get('extracto')
-      if (paramId) setExtractoId(Number(paramId))
-      else if (data.items.length > 0) setExtractoId(data.items[0].id)
+      const p = searchParams.get('extracto')
+      setExtractoId(p ? Number(p) : data.items[0]?.id ?? null)
     })
   }, [])
 
-  const buildFilters = (): MovimientosFiltros => {
-    const f: MovimientosFiltros = { limit: 1000 }
-    if (colFilters.cliente) f.cliente = colFilters.cliente
-    if (colFilters.cuit) f.cuit = colFilters.cuit
-    if (colFilters.titular) f.titular = colFilters.titular
-    if (colFilters.desde) f.desde = colFilters.desde
-    if (colFilters.hasta) f.hasta = colFilters.hasta
-    if (colFilters.fecha_desde) f.fecha_desde = colFilters.fecha_desde
-    if (colFilters.fecha_hasta) f.fecha_hasta = colFilters.fecha_hasta
-    if (colFilters.sin_acreditar === 'no') f.sin_acreditar = true
-    if (colFilters.sin_acreditar === 'si') f.sin_acreditar = false
+  const buildApiFilters = useCallback((): MovimientosFiltros => {
+    const f: MovimientosFiltros = { limit: 2000 }
+    if (filters.cliente) f.cliente = filters.cliente
+    if (filters.cuit) f.cuit = filters.cuit
+    if (filters.titular) f.titular = filters.titular
+    if (filters.desde) f.desde = filters.desde
+    if (filters.hasta) f.hasta = filters.hasta
+    if (filters.fecha_desde) f.fecha_desde = filters.fecha_desde
+    if (filters.fecha_hasta) f.fecha_hasta = filters.fecha_hasta
+    if (filters.sin_acreditar === 'no') f.sin_acreditar = true
+    if (filters.sin_acreditar === 'si') f.sin_acreditar = false
     return f
-  }
+  }, [filters])
+
+  // Filtro de importe se hace client-side (más rápido, ya tenemos todos los datos)
+  const filteredMovs = useMemo(() => {
+    let m = movimientos
+    if (filters.importe_min) {
+      const min = parseFloat(filters.importe_min.replace(/\./g,'').replace(',','.'))
+      if (!isNaN(min)) m = m.filter(x => x.monto >= min)
+    }
+    if (filters.importe_max) {
+      const max = parseFloat(filters.importe_max.replace(/\./g,'').replace(',','.'))
+      if (!isNaN(max)) m = m.filter(x => x.monto <= max)
+    }
+    return m
+  }, [movimientos, filters.importe_min, filters.importe_max])
 
   const load = useCallback(async () => {
     if (!extractoId) return
     setLoading(true)
     try {
-      const data = await apiClient.getMovimientos(extractoId, buildFilters())
+      const data = await apiClient.getMovimientos(extractoId, buildApiFilters())
       setMovimientos(data.items)
       setTotal(data.total)
     } catch { setMovimientos([]); setTotal(0) }
     finally { setLoading(false) }
-  }, [extractoId, colFilters])
+  }, [extractoId, buildApiFilters])
 
   useEffect(() => { load() }, [load])
 
-  // Actualizar lista de extractos al volver a la página
-  const refreshExtractos = async () => {
-    const data = await apiClient.listExtractos()
-    setExtractos(data.items)
-    if (data.items.length > 0 && !extractoId) setExtractoId(data.items[0].id)
-    // Actualizar el total del extracto activo
-    const activo = data.items.find(e => e.id === extractoId)
-    if (activo) setTotal(prev => prev) // refresh happens via load()
-    load()
-  }
-
-  const setColFilter = (k: FilterKey, v: string) => setColFilters(prev => ({ ...prev, [k]: v }))
-  const clearFilters = () => setColFilters(EMPTY_COL)
-  const hasFilters = Object.values(colFilters).some(Boolean)
+  const set = (k: keyof ColFilter, v: string) => setFilters(p => ({ ...p, [k]: v }))
+  const hasFilters = Object.values(filters).some(Boolean)
+  const clearAll = () => setFilters(EMPTY)
 
   const handleAppendUM = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -104,10 +135,13 @@ export const Movimientos: React.FC = () => {
     setUmLoading(true); setUmMsg('')
     try {
       const r = await apiClient.appendUM(extractoId, file)
-      setUmMsg(`✓ UM: ${r.agregados} nuevos · ${r.duplicados} duplicados ignorados`)
-      await refreshExtractos()
+      setUmMsg(`✓ ${r.agregados} nuevos desde el corte · ${r.duplicados} ya existían (ignorados)`)
+      // Refrescar extracto y movimientos
+      const data = await apiClient.listExtractos()
+      setExtractos(data.items)
+      load()
     } catch (err: any) {
-      setUmMsg(`✗ ${err.response?.data?.detail || 'Error'}`)
+      setUmMsg(`✗ ${err.response?.data?.detail || 'Error al agregar UM'}`)
     } finally {
       setUmLoading(false)
       if (umRef.current) umRef.current.value = ''
@@ -117,145 +151,172 @@ export const Movimientos: React.FC = () => {
   const handleExport = async () => {
     if (!extractoId) return
     setExporting(true)
-    try { await apiClient.exportMovimientos(extractoId, buildFilters()) }
+    try { await apiClient.exportMovimientos(extractoId, buildApiFilters()) }
     finally { setExporting(false) }
   }
 
   const extractoActivo = extractos.find(e => e.id === extractoId)
-
-  // Encabezado azul tipo extracto Macro
-  const TH = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-    <th className={`px-2 py-2 text-left text-xs font-bold text-white bg-ml-blue border-r border-blue-500 last:border-r-0 ${className}`}>
-      {children}
-    </th>
-  )
+  const umCount = filteredMovs.filter(m => m.source === 'um').length
 
   return (
-    <div className="p-4 max-w-full">
-      <div className="flex flex-wrap items-start gap-3 mb-3">
-        <div className="flex-1 min-w-[300px]">
-          <h1 className="text-xl font-bold text-ml-text dark:text-white mb-1">Movimientos del extracto</h1>
+    <div className="p-3 md:p-6 max-w-full">
+      {/* Header */}
+      <div className="flex flex-wrap items-start gap-2 mb-3">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg md:text-xl font-bold dark:text-white">Movimientos del extracto</h1>
           {extractoActivo && (
-            <p className="text-xs text-ml-text-soft dark:text-gray-400">
-              {extractoActivo.nombre_archivo} · <strong>{extractoActivo.total_movimientos}</strong> movimientos totales
-              {hasFilters && ` · mostrando ${movimientos.length} (filtrado)`}
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {extractoActivo.nombre_archivo} · <b>{extractoActivo.total_movimientos}</b> movimientos
+              {umCount > 0 && <span className="ml-2 text-emerald-600 dark:text-emerald-400 font-medium">· {umCount} de UM</span>}
+              {hasFilters && <span className="ml-2 text-ml-blue font-medium">· {filteredMovs.length} filtrados</span>}
             </p>
           )}
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <button onClick={handleExport} disabled={exporting || movimientos.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+        <div className="flex gap-1.5 flex-wrap">
+          {hasFilters && (
+            <button onClick={clearAll} className="px-3 py-1.5 text-xs text-red-600 border border-red-300 rounded-md hover:bg-red-50 dark:text-red-400 dark:border-red-700">
+              ✕ Limpiar filtros
+            </button>
+          )}
+          <button onClick={handleExport} disabled={exporting || filteredMovs.length === 0}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
             {exporting ? '⏳' : '⬇️'} Excel
           </button>
         </div>
       </div>
 
-      {/* Selector extracto + UM */}
-      <div className="card mb-3 flex flex-wrap gap-3 items-end py-3">
-        <div className="flex-1 min-w-[280px]">
-          <label className="label">Extracto</label>
+      {/* Selector + UM */}
+      <div className="flex flex-wrap gap-2 mb-3 items-end">
+        <div className="flex-1 min-w-[220px]">
           <select className="input-field" value={extractoId ?? ''} onChange={e => setExtractoId(Number(e.target.value))}>
-            {extractos.map(e => <option key={e.id} value={e.id}>#{e.id} · {e.nombre_archivo} ({e.total_movimientos} movs)</option>)}
+            {extractos.map(e => (
+              <option key={e.id} value={e.id}>#{e.id} · {e.nombre_archivo} ({e.total_movimientos})</option>
+            ))}
           </select>
         </div>
-        <div>
-          <label className="label">+ Agregar UM</label>
-          <label className={`flex items-center gap-2 px-3 py-2 rounded border cursor-pointer text-sm font-medium transition-colors ${umLoading ? 'opacity-50' : 'bg-ml-blue text-white hover:bg-ml-blue-dark border-ml-blue'}`}>
-            {umLoading ? '⏳ Procesando...' : '📎 Subir UM'}
-            <input ref={umRef} type="file" accept=".xlsx" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
-          </label>
-        </div>
-        {hasFilters && (
-          <button onClick={clearFilters} className="px-3 py-2 text-sm text-red-600 border border-red-300 rounded hover:bg-red-50 dark:text-red-400 dark:border-red-700">
-            ✕ Limpiar filtros
-          </button>
-        )}
+        <label className={`flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium cursor-pointer transition-colors ${umLoading ? 'opacity-50' : 'bg-ml-blue text-white border-ml-blue hover:bg-ml-blue-dark'}`}>
+          {umLoading ? '⏳' : '📎'} {umLoading ? 'Procesando...' : 'Agregar UM'}
+          <input ref={umRef} type="file" accept=".xlsx" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
+        </label>
       </div>
 
       {umMsg && (
-        <div className={`mb-3 p-2.5 rounded text-sm ${umMsg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-700'}`}>
+        <div className={`mb-3 px-3 py-2 rounded-md text-sm ${umMsg.startsWith('✓') ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'}`}>
           {umMsg}
         </div>
       )}
 
-      {/* Tabla con headers azules + filtros inline */}
-      <div className="card overflow-hidden p-0 shadow-sm">
-        <div className="px-3 py-2 bg-ml-gray-bg dark:bg-slate-900 border-b dark:border-slate-700 text-xs text-ml-text-soft">
-          <strong>{total}</strong> movimiento{total !== 1 ? 's' : ''}
-          {movimientos.length < total && ` · mostrando ${movimientos.length}`}
-          {hasFilters && <span className="ml-2 text-ml-blue font-medium">· filtros activos</span>}
+      {/* Leyenda UM */}
+      {umCount > 0 && (
+        <div className="mb-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+          <span className="inline-block w-3 h-3 rounded bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300"></span>
+          Filas en verde = agregadas desde Últimos Movimientos
+        </div>
+      )}
+
+      {/* Tabla */}
+      <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-100 dark:border-slate-700 overflow-hidden shadow-sm">
+        <div className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border-b dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400">
+          <b>{filteredMovs.length}</b> de {total} movimientos
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-ml-text-soft">Cargando...</div>
+          <div className="p-8 text-center text-gray-400">Cargando...</div>
         ) : (
-          <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
-            <table className="w-full text-sm border-collapse">
-              <thead className="sticky top-0 z-10">
+          <div className="overflow-x-auto max-h-[calc(100dvh-240px)]" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <table className="w-full text-xs border-collapse min-w-[640px]">
+              <thead className="sticky top-0 z-20">
                 <tr>
-                  <TH className="w-14">Orden</TH>
-                  <TH className="w-24">Fecha</TH>
-                  <TH className="w-20">Mes</TH>
-                  <TH>Titular / CUIT</TH>
-                  <TH className="w-28 text-right">Importe</TH>
-                  <TH className="w-28 text-right">Saldo</TH>
-                  <TH className="w-28">Cliente</TH>
-                  <TH className="w-24">Acred.</TH>
-                </tr>
-                {/* Fila de filtros inline */}
-                <tr className="bg-blue-50 dark:bg-blue-900/10 border-b-2 border-ml-blue">
-                  <td className="px-2 pb-2 pt-1">
-                    <input className="w-full px-1.5 py-0.5 text-[11px] border border-blue-300 rounded bg-white dark:bg-slate-800 dark:text-gray-200" placeholder="🔍" />
-                  </td>
-                  <td className="px-2 pb-2 pt-1">
-                    <ColFilterInput field="fecha_desde" placeholder="desde" value={colFilters.fecha_desde} onChange={setColFilter} type="date" />
-                    <ColFilterInput field="fecha_hasta" placeholder="hasta" value={colFilters.fecha_hasta} onChange={setColFilter} type="date" />
-                  </td>
-                  <td className="px-2 pb-2 pt-1"></td>
-                  <td className="px-2 pb-2 pt-1">
-                    <ColFilterInput field="titular" placeholder="🔍 titular / concepto" value={colFilters.titular} onChange={setColFilter} />
-                    <ColFilterInput field="cuit" placeholder="🔍 CUIT" value={colFilters.cuit} onChange={setColFilter} />
-                  </td>
-                  <td className="px-2 pb-2 pt-1"></td>
-                  <td className="px-2 pb-2 pt-1"></td>
-                  <td className="px-2 pb-2 pt-1">
-                    <ColFilterInput field="cliente" placeholder="🔍 cliente" value={colFilters.cliente} onChange={setColFilter} />
-                  </td>
-                  <td className="px-2 pb-2 pt-1">
-                    <select className="w-full mt-1 px-1.5 py-0.5 text-[11px] border border-blue-300 rounded bg-blue-50 dark:bg-blue-900/20 dark:text-blue-100"
-                      value={colFilters.sin_acreditar} onChange={e => setColFilter('sin_acreditar', e.target.value)}>
-                      <option value="">Todos</option>
-                      <option value="si">Acreditados</option>
-                      <option value="no">Sin acreditar</option>
-                    </select>
-                    <ColFilterInput field="desde" placeholder="acred desde" value={colFilters.desde} onChange={setColFilter} type="date" />
-                    <ColFilterInput field="hasta" placeholder="acred hasta" value={colFilters.hasta} onChange={setColFilter} type="date" />
-                  </td>
+                  {/* Orden */}
+                  <th className="th-macro w-12 text-center">Orden</th>
+
+                  {/* Fecha — con filtro de rango */}
+                  <th className="th-macro w-28">
+                    <ExcelFilter label="Fecha" active={!!(filters.fecha_desde || filters.fecha_hasta)}>
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">Fecha del movimiento</p>
+                      <label className="label text-xs">Desde</label>
+                      <input type="date" className="input-field text-xs mb-2" value={filters.fecha_desde} onChange={e => set('fecha_desde', e.target.value)} />
+                      <label className="label text-xs">Hasta</label>
+                      <input type="date" className="input-field text-xs" value={filters.fecha_hasta} onChange={e => set('fecha_hasta', e.target.value)} />
+                    </ExcelFilter>
+                  </th>
+
+                  {/* Mes */}
+                  <th className="th-macro w-16">Mes</th>
+
+                  {/* Titular/CUIT — con búsqueda */}
+                  <th className="th-macro">
+                    <ExcelFilter label="Titular / CUIT" active={!!(filters.titular || filters.cuit)}>
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">Buscar en Titular</p>
+                      <label className="label text-xs">Titular</label>
+                      <input className="input-field text-xs mb-2" placeholder="Buscar..." value={filters.titular} onChange={e => set('titular', e.target.value)} />
+                      <label className="label text-xs">CUIT</label>
+                      <input className="input-field text-xs" placeholder="20112233440" value={filters.cuit} onChange={e => set('cuit', e.target.value)} />
+                    </ExcelFilter>
+                  </th>
+
+                  {/* Importe — con rango min/max */}
+                  <th className="th-macro w-28 text-right">
+                    <ExcelFilter label="Importe" active={!!(filters.importe_min || filters.importe_max)} align="right">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">Rango de importe</p>
+                      <label className="label text-xs">Mínimo</label>
+                      <input className="input-field text-xs mb-2" placeholder="0" value={filters.importe_min} onChange={e => set('importe_min', e.target.value)} />
+                      <label className="label text-xs">Máximo</label>
+                      <input className="input-field text-xs" placeholder="999999999" value={filters.importe_max} onChange={e => set('importe_max', e.target.value)} />
+                    </ExcelFilter>
+                  </th>
+
+                  {/* Saldo */}
+                  <th className="th-macro w-28 text-right">Saldo</th>
+
+                  {/* Cliente */}
+                  <th className="th-macro w-28">
+                    <ExcelFilter label="Cliente" active={!!filters.cliente} align="right">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">Cliente acreditado</p>
+                      <input className="input-field text-xs" placeholder="Green, Tucu..." value={filters.cliente} onChange={e => set('cliente', e.target.value)} />
+                    </ExcelFilter>
+                  </th>
+
+                  {/* Acred. — con rango de fecha + estado */}
+                  <th className="th-macro w-32">
+                    <ExcelFilter label="Acred." active={!!(filters.desde || filters.hasta || filters.sin_acreditar)} align="right">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">Fecha acreditación</p>
+                      <label className="label text-xs">Desde</label>
+                      <input type="date" className="input-field text-xs mb-2" value={filters.desde} onChange={e => set('desde', e.target.value)} />
+                      <label className="label text-xs">Hasta</label>
+                      <input type="date" className="input-field text-xs mb-2" value={filters.hasta} onChange={e => set('hasta', e.target.value)} />
+                      <label className="label text-xs mt-1">Estado</label>
+                      <select className="input-field text-xs" value={filters.sin_acreditar} onChange={e => set('sin_acreditar', e.target.value)}>
+                        <option value="">Todos</option>
+                        <option value="si">Acreditados</option>
+                        <option value="no">Sin acreditar</option>
+                      </select>
+                    </ExcelFilter>
+                  </th>
                 </tr>
               </thead>
 
-              <tbody className="divide-y dark:divide-slate-700">
-                {movimientos.length === 0 ? (
-                  <tr><td colSpan={8} className="p-6 text-center text-ml-text-soft">Sin resultados</td></tr>
-                ) : movimientos.map(m => (
-                  <tr key={m.id} className={`hover:bg-ml-gray-bg dark:hover:bg-slate-700/50 ${m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado' ? 'bg-green-50/40 dark:bg-green-900/10' : ''}`}>
-                    <td className="px-2 py-1.5 text-center text-ml-text-soft dark:text-gray-400 font-mono text-xs">{m.orden ?? '—'}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap text-xs dark:text-gray-300">{fmtDate(m.fecha)}</td>
-                    <td className="px-2 py-1.5 text-xs text-ml-text-soft dark:text-gray-400">{m.mes || '—'}</td>
-                    <td className="px-2 py-1.5 max-w-xs">
-                      <p className="truncate text-xs dark:text-gray-200" title={m.titular || ''}>{m.titular || '—'}</p>
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
+                {filteredMovs.length === 0 ? (
+                  <tr><td colSpan={8} className="py-8 text-center text-gray-400">Sin resultados</td></tr>
+                ) : filteredMovs.map(m => (
+                  <tr key={m.id} className={`transition-colors ${m.source === 'um' ? 'row-um' : 'hover:bg-gray-50 dark:hover:bg-slate-700/40'}`}>
+                    <td className="px-2 py-1.5 text-center text-gray-400 dark:text-gray-500 font-mono">{m.orden ?? '—'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
+                    <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400">{m.mes || '—'}</td>
+                    <td className="px-2 py-1.5 max-w-[220px]">
+                      <p className="truncate dark:text-gray-200" title={m.titular || ''}>{m.titular || '—'}</p>
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono text-xs font-medium dark:text-white">{fmtARS(m.monto)}</td>
-                    <td className="px-2 py-1.5 text-right font-mono text-xs text-ml-text-soft dark:text-gray-400">
-                      {m.saldo !== undefined && m.saldo !== null ? fmtARS(m.saldo) : '—'}
+                    <td className="px-2 py-1.5 text-right font-mono font-semibold dark:text-white">{fmtARS(m.monto)}</td>
+                    <td className="px-2 py-1.5 text-right font-mono text-gray-400 dark:text-gray-500">
+                      {m.saldo != null ? fmtARS(m.saldo) : '—'}
                     </td>
                     <td className="px-2 py-1.5">
                       {m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
-                        ? <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[11px] font-medium">{m.cliente_acreditado}</span>
-                        : <span className="text-ml-text-soft text-[11px]">—</span>
-                      }
+                        ? <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium">{m.cliente_acreditado}</span>
+                        : <span className="text-gray-300 dark:text-gray-600 text-[10px]">—</span>}
                     </td>
-                    <td className="px-2 py-1.5 text-xs text-ml-text-soft dark:text-gray-400 whitespace-nowrap">{fmtDate(m.fecha_acred)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(m.fecha_acred)}</td>
                   </tr>
                 ))}
               </tbody>

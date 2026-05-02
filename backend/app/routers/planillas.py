@@ -221,7 +221,9 @@ def download_planilla_conciliada(
     }
 
     xlsx = export_planilla_conciliada(planilla_data, movimientos_acreditados)
-    fname = f"{p.cliente.nombre}_acreditado_{datetime.now().strftime('%d.%m')}.xlsx"
+    # Respetar nombre original del archivo + sufijo acreditado
+    nombre_base = p.nombre_archivo.replace('.xlsx','').replace('.XLSX','')
+    fname = f"{nombre_base}_acreditado_{datetime.now().strftime('%d.%m')}.xlsx"
     return StreamingResponse(
         io.BytesIO(xlsx),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

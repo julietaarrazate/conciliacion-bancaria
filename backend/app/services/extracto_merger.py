@@ -75,7 +75,8 @@ def mergear_movimientos(db: Session, extracto_id: int, movimientos_nuevos: List[
             mes=mov_data.get("mes"),
             titular=mov_data.get("titular"),
             monto=mov_data.get("monto"),
-            saldo=mov_data.get("saldo")
+            saldo=mov_data.get("saldo"),
+            source='um'  # marcado como Últimos Movimientos
         ))
         claves_existentes.add(clave)
         agregados += 1
