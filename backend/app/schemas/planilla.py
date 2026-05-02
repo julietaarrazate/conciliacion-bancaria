@@ -11,6 +11,10 @@ class PlanillaRowResponse(PlanillaRowBase):
     id: int
     status: str
     orden_movimiento_acreditado: Optional[int] = None
+    # Datos del movimiento bancario acreditado (para el panel de detalle)
+    mov_titular: Optional[str] = None
+    mov_fecha: Optional[date] = None
+    mov_fecha_acred: Optional[date] = None
 
     class Config:
         from_attributes = True

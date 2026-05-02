@@ -222,6 +222,11 @@ class ApiClient {
     await this.client.delete(`/extractos/${extractoId}`)
   }
 
+  async deleteTodosExtractos(): Promise<{ mensaje: string }> {
+    const res = await this.client.delete('/extractos')
+    return res.data
+  }
+
   async deletePlanilla(planillaId: number): Promise<void> {
     await this.client.delete(`/planillas/${planillaId}`)
   }

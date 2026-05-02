@@ -63,6 +63,21 @@ export const Dashboard: React.FC = () => {
     }
   }
 
+  const handleLimpiarTodo = async () => {
+    if (!confirm('⚠️ Esto borra TODOS los extractos, movimientos y planillas. ¿Confirmar?')) return
+    try {
+      const r = await apiClient.deleteTodosExtractos()
+      setExtractos([])
+      setExtractoId(null)
+      setExtractoNombre('')
+      setPlanillas([])
+      setResultado(null)
+      setSuccess(r.mensaje)
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Error al limpiar')
+    }
+  }
+
   const handleUploadExtraco = async (file: File) => {
     setLoading(true)
     setError('')
@@ -197,29 +212,37 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {extractos.length > 0 && (
-            <div className="flex gap-2 mb-3">
-              <select
-                className="input-field flex-1"
-                value={extractoId ?? ''}
-                onChange={(e) => {
-                  const id = Number(e.target.value)
-                  setExtractoId(id)
-                  setExtractoNombre(extractos.find((x) => x.id === id)?.nombre_archivo || '')
-                }}
-              >
-                {extractos.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    #{e.id} · {e.nombre_archivo} ({e.total_movimientos} movs)
-                  </option>
-                ))}
-              </select>
-              {extractoId && (
-                <button
-                  onClick={() => handleDeleteExtracto(extractoId)}
-                  className="px-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-                  title="Borrar este extracto"
+            <div className="mb-3">
+              <div className="flex gap-2">
+                <select
+                  className="input-field flex-1"
+                  value={extractoId ?? ''}
+                  onChange={(e) => {
+                    const id = Number(e.target.value)
+                    setExtractoId(id)
+                    setExtractoNombre(extractos.find((x) => x.id === id)?.nombre_archivo || '')
+                  }}
                 >
-                  🗑️
+                  {extractos.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      #{e.id} · {e.nombre_archivo} ({e.total_movimientos} movs)
+                    </option>
+                  ))}
+                </select>
+                {extractoId && (
+                  <button
+                    onClick={() => handleDeleteExtracto(extractoId)}
+                    className="px-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                    title="Borrar este extracto"
+                  >🗑️</button>
+                )}
+              </div>
+              {extractos.length > 1 && (
+                <button
+                  onClick={handleLimpiarTodo}
+                  className="mt-1.5 text-xs text-red-600 dark:text-red-400 hover:underline"
+                >
+                  🗑️ Limpiar todo ({extractos.length} extractos)
                 </button>
               )}
             </div>

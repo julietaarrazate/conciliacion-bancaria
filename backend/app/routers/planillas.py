@@ -208,10 +208,35 @@ def get_planilla_detalle(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
-    """Retorna planilla con stats y nombre de cliente/extracto para el panel de detalles"""
+    """Retorna planilla con stats + datos del movimiento bancario para filtrar en el panel"""
+    from app.models.extracto import MovimientoBanco
+
     p = db.query(Planilla).filter(Planilla.id == planilla_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Planilla no encontrada")
+
+    # Pre-cargar movimientos del extracto en un dict por id para el JOIN manual
+    mov_ids = [r.orden_movimiento_acreditado for r in p.rows if r.orden_movimiento_acreditado]
+    movs_map = {}
+    if mov_ids:
+        movs = db.query(MovimientoBanco).filter(MovimientoBanco.id.in_(mov_ids)).all()
+        movs_map = {m.id: m for m in movs}
+
+    rows_enriched = []
+    for r in p.rows:
+        mov = movs_map.get(r.orden_movimiento_acreditado) if r.orden_movimiento_acreditado else None
+        rows_enriched.append({
+            "id": r.id,
+            "monto": r.monto,
+            "cuit": r.cuit,
+            "titular": r.titular,
+            "status": r.status,
+            "orden_movimiento_acreditado": r.orden_movimiento_acreditado,
+            "mov_titular": mov.titular if mov else None,
+            "mov_fecha": mov.fecha if mov else None,
+            "mov_fecha_acred": mov.fecha_acred if mov else None,
+        })
+
     statuses = [r.status for r in p.rows]
     return {
         "id": p.id,
@@ -220,11 +245,11 @@ def get_planilla_detalle(
         "extracto_nombre": p.extracto.nombre_archivo,
         "fecha_carga": p.fecha_carga,
         "usuario_nombre": p.usuario.full_name,
-        "rows": p.rows,
+        "rows": rows_enriched,
         "total": len(statuses),
         "acreditadas": sum(1 for s in statuses if s == "ok"),
         "no_encontradas": sum(1 for s in statuses if s == "no está"),
-        "duplicadas": sum(1 for s in statuses if s == "duplicado" or (isinstance(s,str) and s.startswith("acreditado"))),
+        "duplicadas": sum(1 for s in statuses if s == "duplicado" or (isinstance(s, str) and s.startswith("acreditado"))),
         "sin_datos": sum(1 for s in statuses if s == "faltan datos"),
     }
 

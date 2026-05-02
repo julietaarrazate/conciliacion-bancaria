@@ -96,28 +96,27 @@ async def upload_extracto(file: UploadFile = File(...),
 @router.delete("/{extracto_id}")
 def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
                     current_user: User = Depends(get_current_user)):
-    """Elimina un extracto, planillas y movimientos. Maneja FKs correctamente."""
+    """Elimina extracto, sus planillas y movimientos usando ORM (compatible SQLite+Postgres)."""
+    from app.models.planilla import PlanillaRow
+
     extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
-    nombre = extracto.nombre_archivo
-    n_movs = len(extracto.movimientos)
+
+    nombre  = extracto.nombre_archivo
+    n_movs  = len(extracto.movimientos)
     ids_movs = [m.id for m in extracto.movimientos]
 
     try:
-        # 1. Nullificar FK planilla_rows -> movimientos (para evitar violacion FK)
+        # 1. Nullificar FK planilla_rows.orden_movimiento_acreditado usando ORM
         if ids_movs:
-            db.execute(
-                text("UPDATE planilla_rows SET orden_movimiento_acreditado = NULL WHERE orden_movimiento_acreditado IN :ids"),
-                {"ids": tuple(ids_movs) if len(ids_movs) > 1 else (ids_movs[0], ids_movs[0])}
-            )
+            db.query(PlanillaRow)\
+              .filter(PlanillaRow.orden_movimiento_acreditado.in_(ids_movs))\
+              .update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
             db.flush()
 
-        # 2. Borrar planillas y sus rows
+        # 2. Borrar planillas y sus rows (cascade)
         for p in list(extracto.planillas):
-            for row in list(p.rows):
-                db.delete(row)
-            db.flush()
             db.delete(p)
         db.flush()
 
@@ -132,10 +131,35 @@ def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
 
         registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "DELETE",
                       {"nombre": nombre, "movimientos": n_movs})
-        return {"ok": True, "mensaje": f"Extracto #{extracto_id} eliminado"}
+        return {"ok": True, "mensaje": f"Extracto #{extracto_id} eliminado ({nombre})"}
     except Exception as e:
         db.rollback()
         raise HTTPException(500, f"Error al eliminar: {str(e)}")
+
+
+@router.delete("")
+def delete_todos_extractos(db: Session = Depends(get_db),
+                           current_user: User = Depends(get_current_user)):
+    """Elimina TODOS los extractos, planillas y movimientos. Limpia la BD para empezar de cero."""
+    from app.models.planilla import PlanillaRow, Planilla
+
+    try:
+        # Borrar en orden correcto para respetar FKs
+        db.query(PlanillaRow).update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
+        db.flush()
+        n_planillas = db.query(Planilla).delete(synchronize_session="fetch")
+        db.flush()
+        n_movs = db.query(MovimientoBanco).delete(synchronize_session="fetch")
+        db.flush()
+        n_extractos = db.query(ExtractoBancario).delete(synchronize_session="fetch")
+        db.commit()
+
+        registrar_log(db, current_user.id, "extractos_bancarios", 0, "DELETE_ALL",
+                      {"extractos": n_extractos, "movimientos": n_movs, "planillas": n_planillas})
+        return {"ok": True, "mensaje": f"Limpieza completa: {n_extractos} extractos, {n_planillas} planillas, {n_movs} movimientos eliminados"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Error al limpiar: {str(e)}")
 
 
 @router.post("/{extracto_id}/agregar-um", response_model=MergeUMResponse)

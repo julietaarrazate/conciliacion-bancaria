@@ -23,6 +23,42 @@ def _run_migrations():
             except Exception:
                 pass  # columna ya existe
 
+    # Calcular fingerprint para extractos que no lo tienen
+    _backfill_fingerprints()
+
+def _backfill_fingerprints():
+    """Calcula fingerprint para extractos existentes que tienen fingerprint NULL"""
+    import hashlib
+    from app.database import SessionLocal
+    from app.models.extracto import ExtractoBancario, MovimientoBanco
+
+    db = SessionLocal()
+    try:
+        extractos_sin_fp = db.query(ExtractoBancario).filter(
+            ExtractoBancario.fingerprint.is_(None)
+        ).all()
+
+        for e in extractos_sin_fp:
+            movs = sorted(e.movimientos, key=lambda m: m.id)
+            total = len(movs)
+            if total == 0:
+                e.fingerprint = "empty"
+                continue
+            primer_orden = movs[0].orden or 0
+            ultimo_orden = movs[-1].orden or 0
+            suma = round(sum(m.monto for m in movs), 2)
+            raw = f"{total}|{primer_orden}|{ultimo_orden}|{suma}"
+            e.fingerprint = hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+        if extractos_sin_fp:
+            db.commit()
+            print(f"[init] fingerprint calculado para {len(extractos_sin_fp)} extracto(s) existente(s)")
+    except Exception as ex:
+        db.rollback()
+        print(f"[init] backfill fingerprint fallo: {ex}")
+    finally:
+        db.close()
+
 _run_migrations()
 
 settings = get_settings()
