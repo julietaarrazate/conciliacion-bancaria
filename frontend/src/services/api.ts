@@ -224,6 +224,16 @@ class ApiClient {
     return res.data
   }
 
+  async updateMovimiento(extractoId: number, movId: number, payload: Record<string, unknown>): Promise<void> {
+    await this.client.patch(`/extractos/${extractoId}/movimientos/${movId}`, payload)
+  }
+
+  async guardarEnCarpeta(planillaId: number): Promise<{ path?: string; blob: Blob }> {
+    const res = await this.client.post(`/clientes/planillas/${planillaId}/guardar`, {}, { responseType: 'blob' })
+    const savedPath = res.headers['x-saved-path'] as string | undefined
+    return { path: savedPath, blob: new Blob([res.data]) }
+  }
+
   async deleteExtracto(extractoId: number): Promise<void> {
     await this.client.delete(`/extractos/${extractoId}`)
   }

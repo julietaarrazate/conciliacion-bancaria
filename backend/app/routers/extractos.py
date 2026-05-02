@@ -249,6 +249,34 @@ def export_movimientos_xlsx(extracto_id: int,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
+@router.patch("/{extracto_id}/movimientos/{mov_id}")
+def update_movimiento(
+    extracto_id: int,
+    mov_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Edita un movimiento bancario (titular, monto, fecha, etc.) — para correcciones manuales."""
+    mov = db.query(MovimientoBanco).filter(
+        MovimientoBanco.id == mov_id,
+        MovimientoBanco.extracto_id == extracto_id
+    ).first()
+    if not mov:
+        raise HTTPException(404, "Movimiento no encontrado")
+
+    campos_editables = {"titular", "monto", "fecha", "mes", "saldo", "orden"}
+    for campo, valor in payload.items():
+        if campo in campos_editables and valor is not None:
+            setattr(mov, campo, valor)
+
+    db.commit()
+    db.refresh(mov)
+    registrar_log(db, current_user.id, "movimientos_banco", mov_id, "UPDATE",
+                  {"campos": list(payload.keys())})
+    return {"ok": True, "id": mov_id}
+
+
 @router.get("/{extracto_id}", response_model=ExtractoBancarioResponse)
 def get_extracto(extracto_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()

@@ -74,6 +74,9 @@ export const Movimientos: React.FC = () => {
   const [umLoading, setUmLoading] = useState(false)
   const [umMsg, setUmMsg] = useState('')
   const [exporting, setExporting] = useState(false)
+  const [tab, setTab] = useState<'todos' | 'um'>('todos')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editValues, setEditValues] = useState<Record<string, string>>({})
   const umRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -98,9 +101,8 @@ export const Movimientos: React.FC = () => {
     return f
   }, [filters])
 
-  // Filtro de importe se hace client-side (más rápido, ya tenemos todos los datos)
   const filteredMovs = useMemo(() => {
-    let m = movimientos
+    let m = tab === 'um' ? movimientos.filter(x => x.source === 'um') : movimientos
     if (filters.importe_min) {
       const min = parseFloat(filters.importe_min.replace(/\./g,'').replace(',','.'))
       if (!isNaN(min)) m = m.filter(x => x.monto >= min)
@@ -110,7 +112,27 @@ export const Movimientos: React.FC = () => {
       if (!isNaN(max)) m = m.filter(x => x.monto <= max)
     }
     return m
-  }, [movimientos, filters.importe_min, filters.importe_max])
+  }, [movimientos, filters.importe_min, filters.importe_max, tab])
+
+  const startEdit = (m: MovimientoFiltrado) => {
+    setEditingId(m.id)
+    setEditValues({ titular: m.titular || '', monto: String(m.monto) })
+  }
+
+  const saveEdit = async (m: MovimientoFiltrado) => {
+    if (!extractoId) return
+    try {
+      await apiClient.updateMovimiento(extractoId, m.id, {
+        titular: editValues.titular,
+        monto: parseFloat(editValues.monto)
+      })
+      setMovimientos(prev => prev.map(x => x.id === m.id
+        ? { ...x, titular: editValues.titular, monto: parseFloat(editValues.monto) }
+        : x
+      ))
+    } catch { /* silencioso */ }
+    setEditingId(null)
+  }
 
   const load = useCallback(async () => {
     if (!extractoId) return
@@ -214,8 +236,25 @@ export const Movimientos: React.FC = () => {
         </div>
       )}
 
+      {/* Tabs: Todos / UM */}
+      {umCount > 0 && (
+        <div className="flex gap-0 mb-0 border-b border-gray-200 dark:border-slate-700">
+          {([['todos', 'Todos'], ['um', `UM (${umCount})`]] as const).map(([t, label]) => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === t ? 'border-ml-blue text-ml-blue dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+              {label}
+            </button>
+          ))}
+          {tab === 'um' && (
+            <span className="ml-auto px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400 self-center">
+              ✏️ Hacé doble clic en una fila para editar
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Tabla */}
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-100 dark:border-slate-700 overflow-hidden shadow-sm">
+      <div className={`bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 overflow-hidden shadow-sm ${umCount > 0 ? 'rounded-b-lg' : 'rounded-lg'}`}>
         <div className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border-b dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400">
           <b>{filteredMovs.length}</b> de {total} movimientos
         </div>
@@ -299,26 +338,52 @@ export const Movimientos: React.FC = () => {
               <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
                 {filteredMovs.length === 0 ? (
                   <tr><td colSpan={8} className="py-8 text-center text-gray-400">Sin resultados</td></tr>
-                ) : filteredMovs.map(m => (
-                  <tr key={m.id} className={`transition-colors ${m.source === 'um' ? 'row-um' : 'hover:bg-gray-50 dark:hover:bg-slate-700/40'}`}>
-                    <td className="px-2 py-1.5 text-center text-gray-400 dark:text-gray-500 font-mono">{m.orden ?? '—'}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
-                    <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400">{m.mes || '—'}</td>
-                    <td className="px-2 py-1.5 max-w-[220px]">
-                      <p className="truncate dark:text-gray-200" title={m.titular || ''}>{m.titular || '—'}</p>
-                    </td>
-                    <td className="px-2 py-1.5 text-right font-mono font-semibold dark:text-white">{fmtARS(m.monto)}</td>
-                    <td className="px-2 py-1.5 text-right font-mono text-gray-400 dark:text-gray-500">
-                      {m.saldo != null ? fmtARS(m.saldo) : '—'}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      {m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
-                        ? <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium">{m.cliente_acreditado}</span>
-                        : <span className="text-gray-300 dark:text-gray-600 text-[10px]">—</span>}
-                    </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(m.fecha_acred)}</td>
-                  </tr>
-                ))}
+                ) : filteredMovs.map(m => {
+                  const isEditing = editingId === m.id && tab === 'um'
+                  return (
+                    <tr key={m.id}
+                      onDoubleClick={() => tab === 'um' && m.source === 'um' && startEdit(m)}
+                      className={`transition-colors ${m.source === 'um' ? 'row-um' : 'hover:bg-gray-50 dark:hover:bg-slate-700/40'} ${tab === 'um' && m.source === 'um' ? 'cursor-pointer' : ''}`}>
+                      <td className="px-2 py-1.5 text-center text-gray-400 dark:text-gray-500 font-mono">{m.orden ?? '—'}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
+                      <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400">{m.mes || '—'}</td>
+                      <td className="px-2 py-1.5 max-w-[220px]">
+                        {isEditing ? (
+                          <input className="input-field !py-0.5 text-xs w-full" value={editValues.titular}
+                            onChange={e => setEditValues(p => ({ ...p, titular: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') saveEdit(m); if (e.key === 'Escape') setEditingId(null) }}
+                            autoFocus />
+                        ) : (
+                          <p className="truncate dark:text-gray-200" title={m.titular || ''}>{m.titular || '—'}</p>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono font-semibold dark:text-white">
+                        {isEditing ? (
+                          <input className="input-field !py-0.5 text-xs text-right w-24" value={editValues.monto}
+                            onChange={e => setEditValues(p => ({ ...p, monto: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') saveEdit(m); if (e.key === 'Escape') setEditingId(null) }} />
+                        ) : fmtARS(m.monto)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono text-gray-400 dark:text-gray-500">
+                        {m.saldo != null ? fmtARS(m.saldo) : '—'}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        {m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
+                          ? <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium">{m.cliente_acreditado}</span>
+                          : <span className="text-gray-300 dark:text-gray-600 text-[10px]">—</span>}
+                      </td>
+                      <td className="px-2 py-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400">
+                        {fmtDate(m.fecha_acred)}
+                        {isEditing && (
+                          <div className="flex gap-1 mt-0.5">
+                            <button onClick={() => saveEdit(m)} className="text-[10px] text-green-600 hover:underline">✓ Guardar</button>
+                            <button onClick={() => setEditingId(null)} className="text-[10px] text-gray-400 hover:underline">✕</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.routers import auth, extractos, planillas, me, admin, auditoria, historial
+from app.routers import auth, extractos, planillas, me, admin, auditoria, historial, clientes_dir
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog
 
 settings = get_settings()
@@ -113,6 +113,7 @@ app.include_router(planillas.router)
 app.include_router(historial.router)
 app.include_router(auditoria.router)
 app.include_router(admin.router)
+app.include_router(clientes_dir.router)
 
 
 @app.get("/")

@@ -10,12 +10,34 @@ export const Historial: React.FC = () => {
   const [exporting, setExporting] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [downloadingId, setDownloadingId] = useState<number | null>(null)
+  const [savingId, setSavingId] = useState<number | null>(null)
+  const [savedMsg, setSavedMsg] = useState('')
   const [panelId, setPanelId] = useState<number | null>(null)
 
   const handleDownload = async (id: number) => {
     setDownloadingId(id)
     try { await apiClient.downloadPlanillaConciliada(id) }
     finally { setDownloadingId(null) }
+  }
+
+  const handleGuardar = async (id: number, clienteNombre: string) => {
+    setSavingId(id)
+    setSavedMsg('')
+    try {
+      const { path, blob } = await apiClient.guardarEnCarpeta(id)
+      if (path) {
+        setSavedMsg(`✓ Guardado en: clientes/${clienteNombre}/...`)
+      } else {
+        // En producción (Render) descarga el archivo normalmente
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${clienteNombre}_acreditado.xlsx`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch { setSavedMsg('✗ Error al guardar') }
+    finally { setSavingId(null) }
   }
 
   const handleDelete = async (id: number) => {
@@ -53,7 +75,12 @@ export const Historial: React.FC = () => {
   const pct = totalFilas > 0 ? Math.round((totalAcred / totalFilas) * 100) : 0
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto">
+      {savedMsg && (
+        <div className={`mb-3 px-3 py-2 rounded text-sm ${savedMsg.startsWith('✓') ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300' : 'bg-red-50 text-red-700'}`}>
+          {savedMsg}
+        </div>
+      )}
       <PlanillaPanel
         planillaId={panelId}
         onClose={() => setPanelId(null)}
@@ -124,23 +151,20 @@ export const Historial: React.FC = () => {
                       </td>
                       <td className="px-3 py-2 text-center">
                         <div className="flex items-center gap-1 justify-center">
-                          <button
-                            onClick={() => setPanelId(it.id)}
-                            className="text-ml-blue hover:text-ml-blue-dark text-sm"
-                            title="Ver detalle"
-                          >👁️</button>
-                          <button
-                            onClick={() => handleDownload(it.id)}
-                            disabled={downloadingId === it.id}
+                          <button onClick={() => setPanelId(it.id)} className="text-ml-blue hover:text-ml-blue-dark text-sm" title="Ver detalle">👁️</button>
+                          <button onClick={() => handleGuardar(it.id, it.cliente_nombre)} disabled={savingId === it.id}
+                            className="text-purple-600 hover:text-purple-700 dark:text-purple-400 disabled:opacity-30 text-sm"
+                            title="Guardar en carpeta clientes/Cliente/Mes/">
+                            {savingId === it.id ? '⏳' : '📁'}
+                          </button>
+                          <button onClick={() => handleDownload(it.id)} disabled={downloadingId === it.id}
                             className="text-green-600 hover:text-green-700 disabled:opacity-30 text-sm"
-                            title="Descargar Excel (Hoja1: cliente, Hoja2: extracto)"
-                          >{downloadingId === it.id ? '⏳' : '⬇️'}</button>
-                          <button
-                            onClick={() => handleDelete(it.id)}
-                            disabled={deletingId === it.id}
-                            className="text-ml-text-soft hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 disabled:opacity-30 text-sm"
-                            title="Borrar planilla"
-                          >🗑️</button>
+                            title="Descargar Excel">
+                            {downloadingId === it.id ? '⏳' : '⬇️'}
+                          </button>
+                          <button onClick={() => handleDelete(it.id)} disabled={deletingId === it.id}
+                            className="text-gray-400 hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 disabled:opacity-30 text-sm"
+                            title="Borrar planilla">🗑️</button>
                         </div>
                       </td>
                     </tr>
