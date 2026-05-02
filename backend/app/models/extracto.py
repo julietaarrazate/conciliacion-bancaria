@@ -11,6 +11,8 @@ class ExtractoBancario(Base):
     creado_por = Column(Integer, ForeignKey("users.id"), nullable=False)
     fecha_creacion = Column(DateTime, default=datetime.utcnow)
     fecha_extracto = Column(Date, nullable=True)
+    # Huella digital para detectar duplicados: hash de (total, primer_orden, ultimo_orden, suma_montos)
+    fingerprint = Column(String, nullable=True, index=True)
 
     # Relationships
     creado_por_user = relationship("User", back_populates="extractos")

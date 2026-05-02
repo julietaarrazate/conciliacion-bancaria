@@ -218,6 +218,14 @@ class ApiClient {
     return res.data
   }
 
+  async deleteExtracto(extractoId: number): Promise<void> {
+    await this.client.delete(`/extractos/${extractoId}`)
+  }
+
+  async deletePlanilla(planillaId: number): Promise<void> {
+    await this.client.delete(`/planillas/${planillaId}`)
+  }
+
   async appendUM(extractoId: number, file: File): Promise<MergeUMResult> {
     const formData = new FormData()
     formData.append('file', file)

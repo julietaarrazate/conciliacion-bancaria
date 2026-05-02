@@ -170,21 +170,45 @@ def conciliar(
             detail=f"Error en conciliación: {str(e)}"
         )
 
+@router.delete("/{planilla_id}")
+def delete_planilla(
+    planilla_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Elimina una planilla y sus filas. Libera los movimientos bancarios que había acreditado."""
+    planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
+    if not planilla:
+        raise HTTPException(status_code=404, detail="Planilla no encontrada")
+
+    # Liberar movimientos que estaban acreditados a esta planilla
+    from app.models.extracto import MovimientoBanco
+    for row in planilla.rows:
+        if row.orden_movimiento_acreditado:
+            mov = db.query(MovimientoBanco).filter(
+                MovimientoBanco.id == row.orden_movimiento_acreditado
+            ).first()
+            if mov and mov.cliente_acreditado == planilla.cliente.nombre:
+                mov.cliente_acreditado = None
+                mov.fecha_acred = None
+
+    cliente = planilla.cliente.nombre
+    nombre_archivo = planilla.nombre_archivo
+    db.delete(planilla)
+    db.commit()
+
+    registrar_log(db, current_user.id, "planillas", planilla_id, "DELETE",
+                  {"cliente": cliente, "archivo": nombre_archivo})
+    return {"ok": True, "mensaje": f"Planilla #{planilla_id} eliminada y movimientos liberados"}
+
+
 @router.get("/{planilla_id}", response_model=PlanillaResponse)
 def get_planilla(
     planilla_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Obtiene una planilla y su estado de conciliación"""
-    planilla = db.query(Planilla).filter(
-        Planilla.id == planilla_id
-    ).first()
-
+    planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
     if not planilla:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Planilla no encontrada"
-        )
-
+        raise HTTPException(status_code=404, detail="Planilla no encontrada")
     return planilla

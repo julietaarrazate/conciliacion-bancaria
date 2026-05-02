@@ -34,6 +34,22 @@ export const Dashboard: React.FC = () => {
     setExtractos(data.items)
   }
 
+  const handleDeleteExtracto = async (id: number) => {
+    if (!confirm('¿Borrar este extracto? También se borran las planillas conciliadas con él.')) return
+    try {
+      await apiClient.deleteExtracto(id)
+      const data = await apiClient.listExtractos()
+      setExtractos(data.items)
+      if (extractoId === id) {
+        setExtractoId(data.items[0]?.id ?? null)
+        setExtractoNombre(data.items[0]?.nombre_archivo ?? '')
+      }
+      setSuccess('Extracto eliminado')
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Error al eliminar')
+    }
+  }
+
   const handleUploadExtraco = async (file: File) => {
     setLoading(true)
     setError('')
@@ -45,7 +61,16 @@ export const Dashboard: React.FC = () => {
       setSuccess(`Extracto cargado: ${data.movimientos.length} movimientos`)
       await refreshExtractos()
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error al cargar extracto')
+      // Detectar duplicado (409)
+      if (err.response?.status === 409) {
+        const det = err.response.data?.detail
+        const msg = typeof det === 'object' ? det.message : det
+        const existId = typeof det === 'object' ? det.extracto_id : null
+        setError(msg || 'Extracto duplicado')
+        if (existId) { setExtractoId(existId); await refreshExtractos() }
+      } else {
+        setError(err.response?.data?.detail || 'Error al cargar extracto')
+      }
     } finally {
       setLoading(false)
     }
@@ -97,7 +122,9 @@ export const Dashboard: React.FC = () => {
     }
   }
 
-  // Stats agregados de las últimas planillas
+  // Stats — usa solo el extracto activo para movimientos (no sumar duplicados)
+  const extractoActivo = extractos.find(e => e.id === extractoId)
+  const totalMovimientos = extractoActivo?.total_movimientos ?? 0
   const totalAcreditadas = planillas.reduce((s, p) => s + p.acreditadas, 0)
   const totalProcesadas = planillas.reduce((s, p) => s + p.total_filas, 0)
   const accuracy = totalProcesadas > 0
@@ -113,13 +140,11 @@ export const Dashboard: React.FC = () => {
         </p>
       </div>
 
-      {/* KPIs estilo concilia.ar */}
+      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="kpi">
-          <p className="kpi-label">Movimientos</p>
-          <p className="kpi-value">
-            {extractos.reduce((s, e) => s + e.total_movimientos, 0).toLocaleString('es-AR')}
-          </p>
+          <p className="kpi-label">Movimientos (extracto activo)</p>
+          <p className="kpi-value">{totalMovimientos.toLocaleString('es-AR')}</p>
         </div>
         <div className="kpi">
           <p className="kpi-label">Acreditadas</p>
@@ -159,23 +184,32 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {extractos.length > 0 && (
-            <select
-              className="input-field mb-3"
-              value={extractoId ?? ''}
-              onChange={(e) => {
-                const id = Number(e.target.value)
-                setExtractoId(id)
-                setExtractoNombre(
-                  extractos.find((x) => x.id === id)?.nombre_archivo || ''
-                )
-              }}
-            >
-              {extractos.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.nombre_archivo} ({e.total_movimientos} movs)
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2 mb-3">
+              <select
+                className="input-field flex-1"
+                value={extractoId ?? ''}
+                onChange={(e) => {
+                  const id = Number(e.target.value)
+                  setExtractoId(id)
+                  setExtractoNombre(extractos.find((x) => x.id === id)?.nombre_archivo || '')
+                }}
+              >
+                {extractos.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    #{e.id} · {e.nombre_archivo} ({e.total_movimientos} movs)
+                  </option>
+                ))}
+              </select>
+              {extractoId && (
+                <button
+                  onClick={() => handleDeleteExtracto(extractoId)}
+                  className="px-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                  title="Borrar este extracto"
+                >
+                  🗑️
+                </button>
+              )}
+            </div>
           )}
 
           <FileUpload

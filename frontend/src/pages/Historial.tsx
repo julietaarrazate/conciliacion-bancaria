@@ -7,6 +7,20 @@ export const Historial: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
   const [exporting, setExporting] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('¿Borrar esta planilla? Se liberan los movimientos que había acreditado.')) return
+    setDeletingId(id)
+    try {
+      await apiClient.deletePlanilla(id)
+      setItems(prev => prev.filter(i => i.id !== id))
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Error al borrar')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const load = async (f = filter) => {
     setLoading(true)
@@ -72,7 +86,7 @@ export const Historial: React.FC = () => {
             <table className="w-full text-sm">
               <thead className="bg-ml-gray-bg dark:bg-slate-900 border-b dark:border-slate-700">
                 <tr>
-                  {['Cliente','Archivo','Fecha','Usuario','Total','OK','No está','Dup.','Datos','%'].map(h => (
+                  {['Cliente','Archivo','Fecha','Usuario','Total','OK','No está','Dup.','Datos','%',''].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-ml-text-soft uppercase dark:text-gray-400">{h}</th>
                   ))}
                 </tr>
@@ -93,6 +107,16 @@ export const Historial: React.FC = () => {
                       <td className="px-3 py-2 text-center font-bold text-blue-600 dark:text-blue-400">{it.sin_datos || '—'}</td>
                       <td className="px-3 py-2 text-center">
                         <span className={`badge ${acc === 100 ? 'badge-ok' : acc >= 80 ? 'badge-warn' : 'badge-error'}`}>{acc}%</span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          onClick={() => handleDelete(it.id)}
+                          disabled={deletingId === it.id}
+                          className="text-ml-text-soft hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 disabled:opacity-30 text-sm"
+                          title="Borrar planilla"
+                        >
+                          🗑️
+                        </button>
                       </td>
                     </tr>
                   )
