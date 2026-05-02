@@ -8,7 +8,7 @@ from app.services.auth import verify_token
 security = HTTPBearer()
 
 async def get_current_user(
-    credentials: HTTPAuthCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
     """Middleware para autenticación basada en JWT"""
