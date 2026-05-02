@@ -1,20 +1,19 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
-# Deploy: New > Blueprint > seleccionar repo > Apply
+# Usa Docker runtime (mas confiable que Python native en Render)
 
 databases:
   - name: conciliacion-db
     databaseName: conciliacion
     user: conciliacion
-    plan: free                # PostgreSQL gratis (expira 90 dias, actualizar a $7/mes para produccion)
+    plan: free
 
 services:
   - type: web
     name: conciliacion-api
-    runtime: python
+    runtime: docker
     rootDir: backend
+    dockerfilePath: ./Dockerfile
     plan: free
-    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
-    startCommand: "bash start.sh"
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -22,10 +21,8 @@ services:
           name: conciliacion-db
           property: connectionString
       - key: SECRET_KEY
-        generateValue: true           # Render genera un string aleatorio seguro
+        generateValue: true
       - key: ALGORITHM
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: "480"                  # 8 horas = jornada laboral completa
-      - key: PYTHON_VERSION
-        value: "3.11.9"
+        value: "480"

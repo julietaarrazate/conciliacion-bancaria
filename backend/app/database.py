@@ -1,30 +1,35 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Default: SQLite local (sin docker). Override con env var DATABASE_URL para Postgres.
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
+# Leer DATABASE_URL del entorno
+# Railway/Render inyectan postgres://... → normalizar a postgresql://
+_raw_url = os.getenv("DATABASE_URL", "sqlite:///./conciliacion.db")
 
-# Render/Heroku dan URL "postgres://..." pero SQLAlchemy 2.x quiere "postgresql://"
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+# Normalizar esquema (Render/Heroku dan "postgres://" pero SQLAlchemy 2.x pide "postgresql://")
+if _raw_url.startswith("postgres://"):
+    _raw_url = _raw_url.replace("postgres://", "postgresql://", 1)
 
-# SQLite necesita check_same_thread=False; Postgres no
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+DATABASE_URL = _raw_url
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args=connect_args,
-    pool_pre_ping=True
-)
+# Configuracion segun driver
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    # PostgreSQL: pool de conexiones para produccion
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,      # Reconecta si la conexion cayo
+        pool_recycle=300,         # Recicla conexiones cada 5 min
+        pool_size=5,
+        max_overflow=10,
+    )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-
 Base = declarative_base()
 
 
 def get_db():
-    """Dependency para inyectar sesión de BD"""
     db = SessionLocal()
     try:
         yield db

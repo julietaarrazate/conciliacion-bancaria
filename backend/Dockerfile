@@ -1,31 +1,27 @@
 FROM python:3.11-slim
 
-WORKDIR /app
-
-# Build deps + libpq para psycopg2
+# Dependencias del sistema para psycopg2 y compilacion
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
+
+# Instalar dependencias primero (cache de Docker)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Copiar codigo
 COPY . .
 
+# Puerto configurable (Railway y Render lo inyectan como $PORT)
 ENV PORT=8000
 EXPOSE 8000
 
-# Script startup que crea tablas, hace seed y arranca uvicorn
-RUN echo '#!/bin/sh' > /start.sh && \
-    echo 'set -e' >> /start.sh && \
-    echo 'echo "[start] Python: $(python --version)"' >> /start.sh && \
-    echo 'echo "[start] DATABASE_URL set: $([ -n \"$DATABASE_URL\" ] && echo yes || echo no)"' >> /start.sh && \
-    echo 'echo "[start] PORT: ${PORT:-8000}"' >> /start.sh && \
-    echo 'python -c "from app.database import engine, Base; Base.metadata.create_all(bind=engine); print(\"[init] tables OK\")" || echo "[init] FALLO crear tablas (no aborta)"' >> /start.sh && \
-    echo 'python seed.py 2>&1 || echo "[seed] FALLO (no aborta)"' >> /start.sh && \
-    echo 'echo "[start] uvicorn ON 0.0.0.0:${PORT:-8000}"' >> /start.sh && \
-    echo 'exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"' >> /start.sh && \
-    chmod +x /start.sh
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:$PORT/health || exit 1
 
-CMD ["/start.sh"]
+# Startup: seed (idempotente) + uvicorn
+CMD python seed.py 2>&1 || true; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
