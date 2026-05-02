@@ -99,9 +99,12 @@ def guardar_planilla_en_carpeta(
                      'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
             mes_anio = f"{MESES[fecha_hoy.month - 1]} {fecha_hoy.year}"
 
-            carpeta = os.path.join(get_clientes_base(), p.cliente.nombre, mes_anio)
+            anio = str(fecha_hoy.year)
+            carpeta = os.path.join(get_clientes_base(), p.cliente.nombre, anio, mes_anio)
             os.makedirs(carpeta, exist_ok=True)
 
+            # Nombre: "Green acreditado 02-05-2026.xlsx"
+            nombre_archivo = f"{p.cliente.nombre} acreditado {fecha_hoy.strftime('%d-%m-%Y')}.xlsx"
             ruta_final = os.path.join(carpeta, nombre_archivo)
             # Si ya existe, agregar sufijo (2), (3), etc.
             contador = 2
@@ -155,9 +158,10 @@ def get_archivos_por_cliente(db: Session = Depends(get_db), _: User = Depends(ge
     resultado: dict = defaultdict(lambda: defaultdict(list))
 
     for p in planillas:
-        mes_anio = f"{MESES[p.fecha_carga.month - 1]} {p.fecha_carga.year}"
+        anio_str = str(p.fecha_carga.year)
+        mes_anio = f"{MESES[p.fecha_carga.month - 1]}"
         statuses = [r.status for r in p.rows]
-        resultado[p.cliente.nombre][mes_anio].append({
+        resultado[p.cliente.nombre][f"{anio_str}/{mes_anio}"].append({
             "id": p.id,
             "nombre_archivo": p.nombre_archivo,
             "fecha_carga": p.fecha_carga.isoformat(),

@@ -1,183 +1,148 @@
-# Sistema de Conciliación Bancaria — Caneland SA
+# Sistema de Conciliacion Bancaria — Julieta Arrazate
 
-## Qué hace este sistema
+## Que es esto
 
-Concilia transferencias bancarias recibidas (extraídas del banco como "Últimos Movimientos") contra planillas de clientes. Para cada pago de cliente, busca la fila correspondiente en el extracto del banco y la "acredita" (marca con nombre del cliente y fecha).
-
----
-
-## Archivos principales
-
-| Archivo | Descripción |
-|---|---|
-| `watcher.py` | Script principal. Monitorea INBOX, concilia automáticamente al arrastrar archivos |
-| `bot.py` | Bot de Telegram para procesar desde el celular |
-| `config.json` | Rutas y configuración |
-| `start.bat` | Doble clic para arrancar el watcher |
-| `instalar.bat` | Instala dependencias (correr una sola vez) |
+Sistema web + app movil para conciliar transferencias bancarias contra planillas de clientes.
+Desarrollado por y para **Julieta Arrazate** que ofrece servicios contables a empresas.
+Empresa cliente actual: **Caneland SA** (y en el futuro otras).
 
 ---
 
-## Rutas del sistema
+## Arquitectura de produccion (100% gratuita)
 
-```
-Desktop/
-├── INBOX/                          ← arrastrar planillas de clientes acá
-│   ├── green/  tucu/  david/  smt/  gwinn/  innova/  camparo/  alojando/  pinares/  paraguay/
-│   └── procesados/                 ← archivos ya procesados (movidos automáticamente)
-├── Extracto Macro/
-│   └── extracto macro abril.xlsx   ← extracto bancario acumulado
-└── clientes/tt/
-    ├── Green/26-4 ABR/
-    ├── Tucu/26-4 ABR/
-    ├── Alojando/26-4 Abr/
-    └── ...
-```
+- Frontend (React + PWA): Vercel — https://conciliacion-bancaria-ten.vercel.app
+- Backend (FastAPI): Render — https://conciliacion-api.onrender.com
+- Base de datos: Neon PostgreSQL — ep-ancient-hall-anz4pezn.c-6.us-east-1.aws.neon.tech
+- Codigo: GitHub — julietaarrazate/conciliacion-bancaria
+
+Render free tier: duerme tras 15 min sin uso. Primera request del dia tarda ~30 seg.
+No requiere PC local para funcionar — todo corre en la nube.
 
 ---
 
-## Extracto bancario — estructura interna
+## Credenciales de produccion
 
-Archivo: `extracto macro abril.xlsx`
+- Admin real: coopagrofuturoadm@gmail.com / admin123 (cambiar password en Mi perfil)
+- Admin demo: admin@caneland.com / admin123
 
-- Fila 2: headers → `[None, Orden, Fecha, Mes, titular, Importe Pesos, Saldo, cliente, fecha acred]`
-- Fila 3+: datos en orden descendente (más reciente primero)
-
-Columnas:
-- **Col 2** `Orden`: número secuencial. Las filas nuevas (UM) usan fórmula `=+B{r-1}+1` — openpyxl lo guarda así. Al leer con `data_only=True` se obtiene el número evaluado.
-- **Col 5** `titular`: concepto de la transferencia. Suele incluir CUIT/CUIL del ordenante (11 dígitos).
-- **Col 6** `Importe Pesos`: monto, int/float
-- **Col 7** `Saldo`: saldo acumulado
-- **Col 8** `cliente`: `None` = libre, `"No identificado"` = también libre, cualquier otro valor = tomado
-- **Col 9** `fecha acred`: fecha en que se acreditó
-
-**⚠ CRÍTICO:** siempre cargar el extracto con `data_only=True`:
-```python
-wb = openpyxl.load_workbook(EXTRACTO, data_only=True)
-```
-Sin esto, col 2 devuelve strings `=+B562+1` en lugar de enteros, y la Hoja2 de los archivos de cliente queda con `(1)` en vez del número de orden real.
-
-**⚠ CRÍTICO:** NO filtrar filas por tipo de col 2. Solo filtrar por importe válido en col 6.
+API keys para deploy desde Claude Code:
+- Render API key: rnd_8Kqkb028Ochfw6eSOYZR3v2O7Cv2
+- Vercel token: vcp_5vau9jj3k4E9Pn9yI3m4BMaWBWJSv5mNh3mU9Yd1mkHxbFmFub03rpK8
+- Vercel project ID: prj_cVINkspVm6j3B1fxOrdU81B0ehWg
+- Render service ID: srv-d7pqt81j2pic73c0c6fg
 
 ---
 
-## Función es_libre()
+## Flujo de negocio
 
-```python
-def es_libre(cli):
-    if cli is None: return True
-    if isinstance(cli, str) and cli.strip().lower() in ('no identificado', ''): return True
-    return False
-```
-
-Tanto `None` como `"No identificado"` significan fila disponible para acreditar.
-
----
-
-## parse_importe — manejo de formatos
-
-```python
-def parse_importe(v):
-    if isinstance(v, (int, float)): return round(float(v), 2)
-    if isinstance(v, str):
-        s = v.strip().replace('$','').replace('\xa0','').replace(' ','')
-        if not s: return None
-        if ',' in s and '.' in s:
-            if s.rfind(',') > s.rfind('.'): s = s.replace('.','').replace(',','.')
-            else: s = s.replace(',','')
-        elif ',' in s: s = s.replace(',','.')
-        try: return round(float(s), 2)
-        except ValueError: pass
-    return None
-```
-
-Acepta: int, float, strings con `$`, espacios, `\xa0`, formato europeo `78.827,20` y anglosajón `78,827.20`.
+1. Julieta recibe el extracto bancario del mes (Excel .xlsx de Banco Macro)
+2. Diariamente el contador envia "Ultimos Movimientos" (UM) -> se agregan al extracto
+3. Los clientes (Green, Tucu, Alojando, etc.) envian sus planillas de pagos
+4. El sistema concilia: busca cada monto de la planilla en el extracto
+5. Si hay match -> acredita (guarda nombre cliente + fecha)
+6. Resultado: planilla con columna Estado + extracto actualizado
+7. Se descarga y guarda en: Desktop/clientes/{Cliente}/{Anio}/{Mes}/
 
 ---
 
-## Lógica de conciliación con CUIT
+## Estructura del repositorio
 
-### Extracción de CUIT del extracto
+/backend — FastAPI + SQLAlchemy + PostgreSQL
+  /app/models — User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog
+  /app/routers — auth, me, extractos, planillas, historial, auditoria, admin, clientes_dir
+  /app/services — conciliacion.py (algoritmo core), excel_parser, excel_export, extracto_merger
+  seed.py — Crea usuarios iniciales
+  requirements.txt
 
-```python
-def extraer_cuit_titular(titular):
-    """Extrae CUIT del campo titular del extracto (busca 10-11 dígitos consecutivos)."""
-    if not titular: return ''
-    nums = re.findall(r'\d{10,11}', str(titular))
-    return nums[0] if nums else ''
-```
-
-Cada fila del extracto carga su `cuit_ex` desde el campo titular.
-
-### Normalización de CUIT
-
-```python
-def norm_cuit(v):
-    if v is None: return ''
-    return re.sub(r'\D', '', str(v))
-```
-
-### UMBRAL_COMUN — cuando exigir CUIT
-
-```python
-UMBRAL_COMUN = 3
-```
-
-Si un monto aparece ≥ 3 veces en el extracto (es "común", ej: $500.000), **no se puede acreditar sin validar CUIT o titular**. Retorna `"faltan datos"` si no hay match de CUIT/titular.
-
-Si el monto aparece < 3 veces (es poco frecuente), se acredita directamente al primer libre.
-
-### buscar_match() — flujo completo
-
-```
-candidatos  = filas extracto con ese importe
-no_usados   = candidatos no usados en esta sesión
-libres      = no_usados donde es_libre(cliente)
-
-si no hay candidatos             → "no está"          (rojo)
-si hay libres:
-    si len(candidatos) < UMBRAL  → acreditar primera  → "ok"
-    si monto común (≥ UMBRAL):
-        buscar por CUIT exacto   → ok si encuentra
-        buscar por titular parcial (primeras 2 palabras) → ok si encuentra
-        si no hay match          → "faltan datos"      (rojo)
-si no hay libres:
-    si no hay no_usados          → "duplicado"         (rojo)
-    si hay no_usados (tomado)    → "acreditado DD/MM"  (verde oscuro)
-```
+/frontend — React 18 + TypeScript + Vite + TailwindCSS + PWA
+  /src/pages — Dashboard, Clientes, Movimientos, Historial, Bulk, Auditoria, Usuarios, Perfil, Login
+  /src/components — Layout, PlanillaPanel, FileUpload, ThemeToggle
+  /src/services/api.ts — Todos los endpoints
 
 ---
 
-## Detección automática de header en planillas de clientes
+## Algoritmo de conciliacion (services/conciliacion.py)
 
-`detectar_header(ws)` busca "monto" o "importe" en filas 1–5. Verifica que la columna detectada **o col+1** tenga valores numéricos reales en las primeras filas de datos. Esto resuelve el caso donde el header está corrido (el label "Importe" está en col 6 pero los datos están en col 7).
-
-`detectar_cuit_col(ws, hdr_row)` busca "cuit" en el header.
-`detectar_titular_col(ws, hdr_row)` busca "titular" o "nombre" en el header.
-
----
-
-## Formatos de planillas por cliente
-
-### Mayoría de clientes (alojando, tucu, green, etc.)
-- Hoja activa única
-- Header en fila 1 o 2 con "Importe" o "Monto"
-- Puede tener columna CUIT y/o titular
-
-### SMT
-- 60+ hojas, una por día hábil
-- Formato: `FECHA | IMPORTE | BANCO EMISOR | TITULAR CTA | CUIT/CUIL | CLIENTE | status`
-- **Solo se procesa la hoja activa** (la más reciente que el usuario dejó activa)
-- El watcher usa `wb.active` únicamente
+Para cada fila de la planilla del cliente:
+1. Buscar movimientos con monto == monto_planilla (tolerancia 0.01)
+2. Si monto aparece < 3 veces -> acreditar al primer libre (sin validar CUIT)
+3. Si monto aparece >= 3 veces (UMBRAL_COMUN = 3) -> requiere CUIT o titular:
+   - El CUIT puede estar en: columna CUIT de planilla, campo titular del extracto
+   - Buscar CUIT en campo titular del extracto (regex \d{10,11})
+   - Si hay match -> ok, si no -> "faltan datos"
+4. Sin movimientos libres -> "duplicado" o "acreditado DD/MM"
+5. Monto no existe -> "no esta"
 
 ---
 
-## Archivo de salida por planilla
+## Features implementadas
 
-Nombre: `{Cliente} acreditado DD.MM.xlsx` (si hay más de una planilla del mismo cliente/día: agrega ` (2)`, ` (3)`, etc.)
+Backend:
+- Auth JWT 8h con pbkdf2_sha256 (sin bcrypt)
+- Roles: admin, operador, revisor, auditor
+- Extracto bancario: upload, listar, filtrar, exportar Excel, borrar
+- Ultimos Movimientos (UM): agregar sin duplicar (clave: orden+monto), filas marcadas con source='um'
+- Planillas: upload, conciliar, detalle, download (Hoja1 cliente + Hoja2 extracto), borrar
+- Historial agrupado por cliente/mes
+- Auditoria automatica de todas las operaciones
+- Gestion de usuarios (crear, cambiar rol, activar/desactivar)
+- Change password / update profile
+- Guardar en carpetas locales: Desktop/clientes/{Cliente}/{Anio}/{Mes}/
 
-**Hoja1** = la planilla original del cliente con columna de status agregada (ok/no está/duplicado/faltan datos/acreditado DD/MM)
+Frontend:
+- PWA instalable como app en celular (Android + iOS)
+- Dashboard con KPIs + conciliaciones recientes
+- Seccion Clientes: arbol Anio -> Mes -> archivos
+- Movimientos con filtros Excel inline en headers + tab UM editable (doble clic para editar)
+- Historial con preview y descarga (Hoja1+Hoja2)
+- Bulk: multiples planillas a la vez
+- Dark mode con toggle persistido
+- Layout responsive (desktop sidebar / mobile bottom nav)
+- Swipe derecha para cerrar paneles
 
-**Hoja2** — solo las filas acreditadas en esa planilla:
+---
 
-| A Orden | B Fecha | C Mes | D titular | E Importe Pesos | F Saldo | G clien
+## Pendientes / Roadmap
+
+Alta prioridad:
+- Multi-tenant: cada empresa tiene datos aislados (model Organizacion, Julieta como super-admin)
+- Exportar extracto actualizado al contador al final del dia
+- Mejorar dark mode contraste en tablas y headers
+- Keep-alive de Render (ping cada 14 min para no dormir)
+
+Media prioridad:
+- Notificaciones cuando Render se despierta
+- Multiples formatos de extracto (otros bancos)
+- PDF de conciliacion mensual
+
+---
+
+## Para continuar en un nuevo chat
+
+Decirle a Claude: "Soy Julieta Arrazate. Continuamos el proyecto de conciliacion bancaria.
+Lee el CLAUDE.md del repo julietaarrazate/conciliacion-bancaria para entender el contexto."
+
+Comandos de deploy (Python):
+  Vercel: POST https://api.vercel.com/v13/deployments con gitSource github/julietaarrazate
+  Render: POST https://api.render.com/v1/services/srv-d7pqt81j2pic73c0c6fg/deploys
+
+Para push a GitHub:
+  git push "https://julietaarrazate:TOKEN@github.com/julietaarrazate/conciliacion-bancaria.git" main
+
+---
+
+## Clientes configurados
+
+Green, Tucu, David, Smt, Gwinn, Innova, Camparo, Alojando, Pinares, Paraguay
+
+---
+
+## Modelo multi-tenant futuro
+
+Cuando sumes otras empresas, el sistema necesita:
+- Model Organizacion (id, nombre, plan)
+- Usuario.organizacion_id (Julieta super-admin con acceso a todas)
+- Todos los modelos filtrados por organizacion_id
+- Por ahora todo bajo un unico tenant (Caneland)
+
+Generado — Proyecto iniciado Mayo 2026
