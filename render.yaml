@@ -1,11 +1,5 @@
-# Render Blueprint — https://render.com/docs/blueprint-spec
-# Usa Docker runtime (mas confiable que Python native en Render)
-
-databases:
-  - name: conciliacion-db
-    databaseName: conciliacion
-    user: conciliacion
-    plan: free
+# Render Blueprint — usa Neon (PostgreSQL externo, gratis para siempre)
+# No incluye Render DB (vence a 90 dias)
 
 services:
   - type: web
@@ -17,9 +11,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: conciliacion-db
-          property: connectionString
+        sync: false          # El usuario la pega manualmente en el dashboard (seguridad)
       - key: SECRET_KEY
         generateValue: true
       - key: ALGORITHM
