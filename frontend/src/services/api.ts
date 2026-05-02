@@ -17,20 +17,26 @@ import {
 } from '@/types'
 
 // Detecta la URL del backend automaticamente:
-// 1) Si hay VITE_API_URL en build, usa eso (produccion)
-// 2) Si la web esta abierta desde una IP de LAN (ej. 192.168.x.x), usa la misma IP en :8000
-// 3) Si esta en localhost o algo desconocido, usa localhost:8000
+// 1) VITE_API_URL (env var en build de Vercel/produccion)  → siempre tiene prioridad
+// 2) IP LAN (ej: 192.168.1.8) → solo cuando se accede desde la red local en dev
+// 3) localhost:8000 → fallback para desarrollo local
+//
+// IMPORTANTE: en produccion Vercel, el hostname es "*.vercel.app" (dominio, no IP).
+// Si no hay VITE_API_URL, caer a localhost (no usar el dominio como IP de backend).
 function detectApiUrl(): string {
+  // Produccion: Vite reemplaza esto en build time con el valor real
   const envUrl = import.meta.env.VITE_API_URL as string | undefined
-  if (envUrl) return envUrl
+  if (envUrl && envUrl.trim() !== '') return envUrl.trim()
 
+  // Desarrollo LAN: solo si el hostname es una IP privada (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
   if (typeof window !== 'undefined' && window.location) {
     const host = window.location.hostname
-    // Si la web esta en una IP LAN (no localhost), usar misma IP para el backend
-    if (host && host !== 'localhost' && host !== '127.0.0.1') {
-      return `${window.location.protocol}//${host}:8000`
+    const isLanIp = /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)
+    if (isLanIp) {
+      return `http://${host}:8000`
     }
   }
+
   return 'http://localhost:8000'
 }
 
