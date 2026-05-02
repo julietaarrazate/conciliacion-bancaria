@@ -115,7 +115,9 @@ export const Dashboard: React.FC = () => {
     try {
       const r = await apiClient.appendUM(extractoId, file)
       setSuccess(
-        `UM procesado: ${r.agregados} nuevos · ${r.duplicados} duplicados ignorados`
+        r.agregados > 0
+          ? `UM agregado: ${r.agregados} movimientos nuevos sumados al extracto · ${r.duplicados} ya existían (corte de solapamiento detectado)`
+          : `UM procesado: no había movimientos nuevos — los ${r.duplicados} del archivo ya estaban en el extracto`
       )
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error al cargar UM')
@@ -294,14 +296,13 @@ export const Dashboard: React.FC = () => {
 
           <FileUpload
             onFileSelected={handleUploadPlanilla}
-            label={
-              !extractoId
-                ? 'Cargá primero un extracto'
-                : !clienteNombre.trim()
-                ? 'Ingresá el cliente primero'
-                : 'Subir planilla del cliente (.xlsx)'
-            }
+            label={!extractoId ? 'Cargá primero un extracto (Paso 1)' : 'Subir planilla del cliente (.xlsx)'}
           />
+          {!clienteNombre.trim() && extractoId && (
+            <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
+              ⚠ Completá el nombre del cliente antes de subir
+            </p>
+          )}
         </div>
 
         {/* Paso 3: Resultado */}
@@ -315,24 +316,19 @@ export const Dashboard: React.FC = () => {
 
           {resultado ? (
             <div className="space-y-2">
-              <div className="flex justify-between p-2 bg-green-50 rounded">
-                <span className="text-sm">Acreditadas</span>
-                <span className="font-bold text-green-700">{resultado.acreditadas}</span>
-              </div>
-              <div className="flex justify-between p-2 bg-red-50 rounded">
-                <span className="text-sm">No encontradas</span>
-                <span className="font-bold text-red-700">{resultado.no_encontradas}</span>
-              </div>
-              <div className="flex justify-between p-2 bg-yellow-50 rounded">
-                <span className="text-sm">Duplicadas</span>
-                <span className="font-bold text-yellow-700">{resultado.duplicadas}</span>
-              </div>
-              <div className="flex justify-between p-2 bg-blue-50 rounded">
-                <span className="text-sm">Sin datos</span>
-                <span className="font-bold text-blue-700">{resultado.sin_datos}</span>
-              </div>
-              <div className="pt-2 border-t border-gray-100 text-xs text-ml-text-soft text-center">
-                Total procesadas: {resultado.filas_procesadas} filas
+              {[
+                { label: 'Acreditadas', val: resultado.acreditadas, cls: 'bg-green-50 dark:bg-green-900/30', txt: 'text-green-700 dark:text-green-300' },
+                { label: 'No encontradas', val: resultado.no_encontradas, cls: 'bg-red-50 dark:bg-red-900/30', txt: 'text-red-700 dark:text-red-300' },
+                { label: 'Ya acreditadas', val: resultado.duplicadas, cls: 'bg-amber-50 dark:bg-amber-900/30', txt: 'text-amber-700 dark:text-amber-300' },
+                { label: 'Faltan datos', val: resultado.sin_datos, cls: 'bg-blue-50 dark:bg-blue-900/30', txt: 'text-blue-700 dark:text-blue-300' },
+              ].map(r => (
+                <div key={r.label} className={`flex justify-between items-center px-3 py-2 rounded-lg ${r.cls}`}>
+                  <span className={`text-sm font-medium ${r.txt}`}>{r.label}</span>
+                  <span className={`text-lg font-bold ${r.txt}`}>{r.val}</span>
+                </div>
+              ))}
+              <div className="pt-2 border-t border-gray-100 dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400 text-center">
+                Total: {resultado.filas_procesadas} filas procesadas
               </div>
             </div>
           ) : (
@@ -343,12 +339,12 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Reconciliaciones recientes */}
+      {/* Conciliaciones recientes */}
       {planillas.length > 0 && (
         <div className="card mt-6 p-0 overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 bg-ml-gray-bg dark:bg-slate-900 flex justify-between items-center">
             <h3 className="text-sm font-semibold text-ml-text dark:text-white">
-              Reconciliaciones recientes
+              Conciliaciones recientes
             </h3>
             <span className="text-xs text-ml-text-soft dark:text-gray-400">
               Hacé clic en una fila para ver el detalle

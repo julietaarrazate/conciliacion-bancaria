@@ -95,7 +95,8 @@ def export_planilla_conciliada(planilla_data: dict, movimientos_acreditados: Lis
     ws1.cell(row=2, column=1, value=f"Archivo: {planilla_data['nombre_archivo']}").font = Font(italic=True, color="666666")
     ws1.cell(row=3, column=1, value=f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}").font = Font(italic=True, color="666666")
 
-    h1 = ["#", "Importe", "CUIT", "Titular", "Estado", "Orden mov.", "Titular extracto", "Fecha mov.", "Fecha acred."]
+    # Hoja 1: columnas del cliente + movimiento del extracto + Estado AL FINAL
+    h1 = ["#", "Importe", "CUIT", "Titular planilla", "Orden mov.", "Titular extracto", "Fecha mov.", "Fecha acred.", "Estado"]
     _hdr(ws1, 5, h1)
 
     STATUS_COLORS = {
@@ -110,18 +111,19 @@ def export_planilla_conciliada(planilla_data: dict, movimientos_acreditados: Lis
         ws1.cell(row=i, column=2, value=row["monto"]).number_format = '"$"#,##0.00'
         ws1.cell(row=i, column=3, value=row.get("cuit") or "")
         ws1.cell(row=i, column=4, value=row.get("titular") or "")
-        status_cell = ws1.cell(row=i, column=5, value=row["status"])
-        # Color de fondo segun status
-        color = STATUS_COLORS.get(row["status"], "FFFFFF")
-        if any(row["status"].startswith(p) for p in ["acreditado"]):
+        ws1.cell(row=i, column=5, value=row.get("orden_movimiento_acreditado"))
+        ws1.cell(row=i, column=6, value=row.get("mov_titular") or "")
+        f = row.get("mov_fecha")
+        ws1.cell(row=i, column=7, value=f).number_format = "DD/MM/YYYY"
+        fa = row.get("mov_fecha_acred")
+        ws1.cell(row=i, column=8, value=fa).number_format = "DD/MM/YYYY"
+        # Estado ULTIMA columna con color
+        st = row["status"]
+        status_cell = ws1.cell(row=i, column=9, value=st)
+        color = STATUS_COLORS.get(st, "FFFFFF")
+        if isinstance(st, str) and st.startswith("acreditado"):
             color = STATUS_COLORS["duplicado"]
         status_cell.fill = PatternFill("solid", fgColor=color)
-        ws1.cell(row=i, column=6, value=row.get("orden_movimiento_acreditado"))
-        ws1.cell(row=i, column=7, value=row.get("mov_titular") or "")
-        f = row.get("mov_fecha")
-        ws1.cell(row=i, column=8, value=f).number_format = "DD/MM/YYYY"
-        fa = row.get("mov_fecha_acred")
-        ws1.cell(row=i, column=9, value=fa).number_format = "DD/MM/YYYY"
         for col in range(1, 10):
             ws1.cell(row=i, column=col).border = BORDER
 

@@ -191,36 +191,32 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
 
         {detalle && (
           <div className="flex-1 overflow-auto">
-            <table className="w-full text-xs min-w-[600px]">
+            <table className="w-full text-xs min-w-[780px]">
               <thead className="sticky top-0 z-10">
-                {/* Cabecera de columnas */}
-                <tr className="bg-ml-gray-bg dark:bg-slate-900 border-b dark:border-slate-700">
-                  <th className="px-2 py-2 text-left font-semibold text-ml-text-soft uppercase w-8">#</th>
-                  <th className="px-2 py-2 text-right font-semibold text-ml-text-soft uppercase">Importe</th>
-                  <th className="px-2 py-2 text-left font-semibold text-ml-text-soft uppercase">CUIT planilla</th>
-                  <th className="px-2 py-2 text-left font-semibold text-ml-text-soft uppercase">Titular planilla</th>
-                  <th className="px-2 py-2 text-left font-semibold text-ml-text-soft uppercase">Titular extracto</th>
-                  <th className="px-2 py-2 text-left font-semibold text-ml-text-soft uppercase">Fecha mov.</th>
-                  <th className="px-2 py-2 text-left font-semibold text-ml-text-soft uppercase">Fecha acred.</th>
-                  <th className="px-2 py-2 text-left font-semibold text-ml-text-soft uppercase">Estado</th>
+                {/* Headers azul banco Macro — con Estado al FINAL */}
+                <tr>
+                  {['#','Importe','CUIT','Titular planilla','Titular extracto','Fecha mov.','Saldo','Cliente acred.','Fecha acred.','Estado'].map(h => (
+                    <th key={h} className="px-2 py-2.5 text-left font-bold text-white bg-ml-blue border-r border-blue-400 last:border-r-0 whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
 
                 {/* Fila de filtros (se muestra/oculta) */}
                 {showFilters && (
-                  <tr className="bg-white dark:bg-slate-800 border-b border-ml-blue/30">
+                  <tr className="bg-blue-50 dark:bg-blue-900/10 border-b border-ml-blue/30">
                     <td className="px-1 py-1"></td>
-                    <td className="px-1 py-1"><FilterInput field="importe" placeholder="🔍 importe" /></td>
+                    <td className="px-1 py-1"><FilterInput field="importe" placeholder="🔍" /></td>
                     <td className="px-1 py-1"><FilterInput field="cuit" placeholder="🔍 CUIT" /></td>
                     <td className="px-1 py-1"><FilterInput field="titular" placeholder="🔍 titular" /></td>
-                    <td className="px-1 py-1"><FilterInput field="mov_titular" placeholder="🔍 titular extracto" /></td>
-                    <td className="px-1 py-1"><FilterInput field="mov_fecha" placeholder="🔍 YYYY-MM-DD" /></td>
-                    <td className="px-1 py-1"><FilterInput field="mov_fecha_acred" placeholder="🔍 YYYY-MM-DD" /></td>
+                    <td className="px-1 py-1"><FilterInput field="mov_titular" placeholder="🔍 extracto" /></td>
+                    <td className="px-1 py-1"><FilterInput field="mov_fecha" placeholder="🔍 fecha" /></td>
+                    <td className="px-1 py-1"></td>
+                    <td className="px-1 py-1"></td>
+                    <td className="px-1 py-1"><FilterInput field="mov_fecha_acred" placeholder="🔍 acred." /></td>
                     <td className="px-1 py-1">
-                      <select
-                        className="w-full px-1.5 py-0.5 text-xs border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-gray-200"
-                        value={filters.status}
-                        onChange={e => setFilter('status', e.target.value)}
-                      >
+                      <select className="w-full px-1.5 py-0.5 text-xs border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-gray-200"
+                        value={filters.status} onChange={e => setFilter('status', e.target.value)}>
                         <option value="">Todos</option>
                         {uniqueStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -238,30 +234,20 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                   </tr>
                 ) : (
                   filteredRows.map((row, i) => (
-                    <tr key={row.id} className="hover:bg-ml-gray-bg dark:hover:bg-slate-700/50">
-                      <td className="px-2 py-2 text-ml-text-soft dark:text-gray-500">{i + 1}</td>
-                      <td className="px-2 py-2 text-right font-mono font-semibold dark:text-white">
-                        {fmtARS(row.monto)}
+                    <tr key={row.id} className="hover:bg-ml-gray-bg dark:hover:bg-slate-700/50 divide-x divide-gray-100 dark:divide-slate-700">
+                      <td className="px-2 py-1.5 text-gray-400 dark:text-gray-500">{i + 1}</td>
+                      <td className="px-2 py-1.5 text-right font-mono font-semibold dark:text-white whitespace-nowrap">{fmtARS(row.monto)}</td>
+                      <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400 font-mono text-[10px]">{row.cuit || '—'}</td>
+                      <td className="px-2 py-1.5 dark:text-gray-300 max-w-[130px] truncate" title={row.titular || ''}>{row.titular || '—'}</td>
+                      <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400 max-w-[180px] truncate" title={row.mov_titular || ''}>{row.mov_titular || '—'}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(row.mov_fecha)}</td>
+                      <td className="px-2 py-1.5 text-right font-mono text-gray-400 dark:text-gray-500">—</td>
+                      <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                        {row.status === 'ok' ? <span className="text-green-600 dark:text-green-400 text-[10px] font-medium">{row.mov_titular?.split(' ').slice(0,2).join(' ') || '—'}</span> : '—'}
                       </td>
-                      <td className="px-2 py-2 text-ml-text-soft dark:text-gray-400 font-mono">
-                        {row.cuit || '—'}
-                      </td>
-                      <td className="px-2 py-2 text-ml-text dark:text-gray-300 max-w-[120px] truncate" title={row.titular || ''}>
-                        {row.titular || '—'}
-                      </td>
-                      <td className="px-2 py-2 text-ml-text-soft dark:text-gray-400 max-w-[160px] truncate" title={row.mov_titular || ''}>
-                        {row.mov_titular || '—'}
-                      </td>
-                      <td className="px-2 py-2 text-ml-text-soft dark:text-gray-400 whitespace-nowrap">
-                        {fmtDate(row.mov_fecha)}
-                      </td>
-                      <td className="px-2 py-2 text-ml-text-soft dark:text-gray-400 whitespace-nowrap">
-                        {fmtDate(row.mov_fecha_acred)}
-                      </td>
-                      <td className="px-2 py-2">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusStyle(row.status)}`}>
-                          {row.status}
-                        </span>
+                      <td className="px-2 py-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(row.mov_fecha_acred)}</td>
+                      <td className="px-2 py-1.5">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusStyle(row.status)}`}>{row.status}</span>
                       </td>
                     </tr>
                   ))
