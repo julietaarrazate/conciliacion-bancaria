@@ -1,17 +1,15 @@
-# Render Blueprint — usa Neon (PostgreSQL externo, gratis para siempre)
-# No incluye Render DB (vence a 90 dias)
-
 services:
   - type: web
     name: conciliacion-api
-    runtime: docker
+    runtime: python
     rootDir: backend
-    dockerfilePath: ./Dockerfile
     plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python seed.py; uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        sync: false          # El usuario la pega manualmente en el dashboard (seguridad)
+        sync: false
       - key: SECRET_KEY
         generateValue: true
       - key: ALGORITHM
