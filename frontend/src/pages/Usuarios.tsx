@@ -78,7 +78,7 @@ export const Usuarios: React.FC = () => {
       <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div>
           <h1 className="text-xl md:text-2xl font-bold dark:text-white">Gestión de usuarios</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Administradora: María Julieta Arrázate</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Administradora: Julieta Arrazate</p>
         </div>
         <button onClick={() => setShowForm(s => !s)} className="btn-yellow">
           {showForm ? '✕ Cancelar' : '+ Nuevo usuario'}

@@ -68,7 +68,7 @@ export const Layout: React.FC = () => {
       <aside className="hidden md:flex w-60 bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 flex-col">
         <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-700 bg-ml-yellow">
           <h1 className="text-base font-bold text-ml-text">Conciliación</h1>
-          <p className="text-xs text-ml-text-soft">Caneland SA · Julieta Arrázate</p>
+          <p className="text-xs text-ml-text-soft">Julieta Arrazate</p>
         </div>
 
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
