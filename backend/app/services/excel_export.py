@@ -169,6 +169,131 @@ def export_planilla_conciliada(planilla_data: dict, movimientos_acreditados: Lis
     return buf.getvalue()
 
 
+def export_extracto_contador(extracto_nombre: str, movimientos: List[dict]) -> bytes:
+    """
+    Export profesional para el contador.
+    - Hoja 1: todos los movimientos con estado de acreditación coloreado
+    - Hoja 2: resumen estadístico
+    """
+    GREEN_FILL  = PatternFill("solid", fgColor="D4EDDA")
+    GREY_FILL   = PatternFill("solid", fgColor="F8F9FA")
+    GREEN_FONT  = Font(color="155724", bold=False)
+    GREY_FONT   = Font(color="888888")
+    TOTAL_FONT  = Font(bold=True, size=11)
+    TOTAL_FILL  = PatternFill("solid", fgColor="E9ECEF")
+
+    wb = openpyxl.Workbook()
+
+    # ── Hoja 1: movimientos ───────────────────────────────────────────────────
+    ws = wb.active
+    ws.title = "Extracto conciliado"
+
+    now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
+    ws.merge_cells("A1:H1")
+    title_cell = ws.cell(row=1, column=1, value=f"Extracto conciliado — {extracto_nombre}")
+    title_cell.font = Font(bold=True, size=13, color="1B3F73")
+    title_cell.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[1].height = 22
+
+    ws.cell(row=2, column=1, value=f"Generado: {now_str}").font = Font(italic=True, size=9, color="888888")
+    ws.merge_cells("A2:H2")
+
+    acreditados = [m for m in movimientos if m.get("cliente_acreditado")]
+    libres      = [m for m in movimientos if not m.get("cliente_acreditado")]
+    ws.cell(row=3, column=1,
+            value=f"{len(acreditados)} acreditados · {len(libres)} libres · {len(movimientos)} total").font = Font(italic=True, size=9, color="3483FA")
+    ws.merge_cells("A3:H3")
+
+    headers = ["Orden", "Fecha", "Mes", "Titular / Concepto", "Importe", "Saldo", "Cliente acreditado", "Fecha acred."]
+    _hdr(ws, 5, headers)
+    ws.row_dimensions[5].height = 18
+    ws.freeze_panes = "A6"
+
+    for i, m in enumerate(movimientos, start=6):
+        acred = bool(m.get("cliente_acreditado"))
+        fill  = GREEN_FILL if acred else None
+        ffont = GREEN_FONT if acred else GREY_FONT
+
+        def cell(col, value, fmt=None):
+            c = ws.cell(row=i, column=col, value=value)
+            if fill:
+                c.fill = fill
+            c.border = BORDER
+            if fmt:
+                c.number_format = fmt
+            return c
+
+        cell(1, m.get("orden"))
+        cell(2, m.get("fecha"), "DD/MM/YYYY")
+        cell(3, m.get("mes"))
+        cell(4, m.get("titular"))
+        monto_cell = cell(5, m.get("monto"), '"$"#,##0.00')
+        monto_cell.alignment = Alignment(horizontal="right")
+        saldo = m.get("saldo")
+        if saldo is not None:
+            cell(6, saldo, '"$"#,##0.00').alignment = Alignment(horizontal="right")
+        else:
+            cell(6, None)
+        acred_cell = cell(7, m.get("cliente_acreditado") or "")
+        acred_cell.font = ffont
+        fa = m.get("fecha_acred")
+        cell(8, fa, "DD/MM/YYYY")
+
+    # Fila de totales
+    tot_row = len(movimientos) + 6
+    ws.cell(row=tot_row, column=4, value="TOTAL ACREDITADO").font = TOTAL_FONT
+    total_acred = sum(m.get("monto", 0) for m in acreditados)
+    tc = ws.cell(row=tot_row, column=5, value=total_acred)
+    tc.font = TOTAL_FONT; tc.number_format = '"$"#,##0.00'; tc.fill = TOTAL_FILL
+    tc.alignment = Alignment(horizontal="right")
+    ws.cell(row=tot_row, column=6, value=f"{len(acreditados)}/{len(movimientos)} mov.").font = Font(italic=True, color="555555")
+    for col in range(4, 9):
+        ws.cell(row=tot_row, column=col).fill = TOTAL_FILL
+
+    _autosize(ws, 8)
+    ws.column_dimensions["D"].width = 35  # titular más ancho
+
+    # ── Hoja 2: resumen ───────────────────────────────────────────────────────
+    ws2 = wb.create_sheet("Resumen")
+    ws2.column_dimensions["A"].width = 28
+    ws2.column_dimensions["B"].width = 18
+
+    ws2.cell(row=1, column=1, value="Resumen del extracto").font = Font(bold=True, size=13, color="1B3F73")
+    ws2.cell(row=2, column=1, value=f"Extracto: {extracto_nombre}").font = Font(italic=True, color="666666")
+    ws2.cell(row=3, column=1, value=f"Generado: {now_str}").font = Font(italic=True, color="666666")
+
+    stats = [
+        ("Total movimientos", len(movimientos)),
+        ("Movimientos acreditados", len(acreditados)),
+        ("Movimientos libres", len(libres)),
+        ("% acreditado", f"{round(len(acreditados)/len(movimientos)*100, 1) if movimientos else 0}%"),
+        ("", ""),
+        ("Total $ acreditado", total_acred),
+        ("Total $ libre", sum(m.get("monto", 0) for m in libres)),
+    ]
+    for j, (label, val) in enumerate(stats, start=5):
+        ws2.cell(row=j, column=1, value=label).font = Font(bold=bool(label))
+        c = ws2.cell(row=j, column=2, value=val)
+        if isinstance(val, float) and label.startswith("Total $"):
+            c.number_format = '"$"#,##0.00'
+            c.font = TOTAL_FONT
+
+    # Clientes acreditados únicos
+    ws2.cell(row=13, column=1, value="Detalle por cliente").font = Font(bold=True, size=11, color="3483FA")
+    clientes: dict = {}
+    for m in acreditados:
+        cl = m.get("cliente_acreditado", "")
+        clientes[cl] = clientes.get(cl, 0) + 1
+    for k, (cl, cnt) in enumerate(sorted(clientes.items()), start=14):
+        ws2.cell(row=k, column=1, value=cl)
+        ws2.cell(row=k, column=2, value=f"{cnt} movimiento{'s' if cnt > 1 else ''}")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
 def export_historial_planillas(planillas: List[dict]) -> bytes:
     """Genera xlsx con el historial de planillas reconciliadas"""
     wb = openpyxl.Workbook()

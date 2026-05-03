@@ -293,6 +293,17 @@ class ApiClient {
     URL.revokeObjectURL(url)
   }
 
+  async exportExtractoContador(extractoId: number): Promise<void> {
+    const res = await this.client.get(`/extractos/${extractoId}/export-contador`, { responseType: 'blob' })
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    const cd = res.headers['content-disposition'] || ''
+    const match = cd.match(/filename="([^"]+)"/)
+    a.download = match ? match[1] : `extracto_conciliado.xlsx`
+    a.href = url; a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async exportHistorial(params?: { cliente?: string }): Promise<void> {
     const res = await this.client.get('/historial/planillas/export', {
       params, responseType: 'blob'

@@ -17,7 +17,7 @@ from app.schemas.extracto import (
 from app.services.excel_parser import parsear_extracto_bancario
 from app.services.extracto_merger import mergear_movimientos
 from app.services.auditoria import registrar_log
-from app.services.excel_export import export_movimientos
+from app.services.excel_export import export_movimientos, export_extracto_contador
 from app.middleware.auth import get_current_user
 
 router = APIRouter(prefix="/extractos", tags=["extractos"])
@@ -247,6 +247,48 @@ def export_movimientos_xlsx(extracto_id: int,
     return StreamingResponse(io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/{extracto_id}/export-contador")
+def export_para_contador(
+    extracto_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    """
+    Descarga el extracto completo conciliado en Excel profesional para el contador.
+    Hoja 1: todos los movimientos con acreditaciones coloreadas en verde.
+    Hoja 2: resumen estadístico y detalle por cliente.
+    """
+    extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
+    if not extracto:
+        raise HTTPException(404, "Extracto no encontrado")
+
+    movs = sorted(extracto.movimientos, key=lambda m: (m.fecha or "", m.orden or 0))
+    data = [
+        {
+            "orden": m.orden,
+            "fecha": m.fecha,
+            "mes": m.mes,
+            "titular": m.titular,
+            "monto": m.monto,
+            "saldo": m.saldo,
+            "cliente_acreditado": m.cliente_acreditado,
+            "fecha_acred": m.fecha_acred,
+        }
+        for m in movs
+    ]
+
+    xlsx = export_extracto_contador(extracto.nombre_archivo, data)
+    fecha_str = datetime.now().strftime('%Y%m%d')
+    nombre_base = extracto.nombre_archivo.replace('.xlsx', '').replace('.XLSX', '')
+    filename = f"{nombre_base}_conciliado_{fecha_str}.xlsx"
+
+    return StreamingResponse(
+        io.BytesIO(xlsx),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 @router.patch("/{extracto_id}/movimientos/{mov_id}")
