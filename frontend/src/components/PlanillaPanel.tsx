@@ -93,20 +93,34 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
       .finally(() => setLoading(false))
   }, [planillaId])
 
-  // Bloquear swipe-back del navegador mientras el panel está abierto
+  // Bloquear swipe-back del navegador (Android + iOS) mientras el panel está abierto
   useEffect(() => {
     if (!planillaId) return
-    const prevent = (e: TouchEvent) => {
-      if (e.touches.length === 1) {
-        const touch = e.touches[0]
-        // Bloquear si el gesto empieza cerca del borde izquierdo o es claramente horizontal
-        if (touch.clientX < 30) e.preventDefault()
+
+    let startX = 0
+    let startY = 0
+
+    const onTouchStart = (e: TouchEvent) => {
+      startX = e.touches[0].clientX
+      startY = e.touches[0].clientY
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      const dx = e.touches[0].clientX - startX
+      const dy = e.touches[0].clientY - startY
+      // Si el movimiento es más horizontal que vertical → bloquear
+      if (Math.abs(dx) > Math.abs(dy)) {
+        e.preventDefault()
       }
     }
-    document.addEventListener('touchstart', prevent, { passive: false })
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchmove', onTouchMove, { passive: false })
     document.body.style.overscrollBehaviorX = 'none'
+
     return () => {
-      document.removeEventListener('touchstart', prevent)
+      document.removeEventListener('touchstart', onTouchStart)
+      document.removeEventListener('touchmove', onTouchMove)
       document.body.style.overscrollBehaviorX = ''
     }
   }, [planillaId])
