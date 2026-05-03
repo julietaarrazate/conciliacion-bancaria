@@ -9,7 +9,7 @@ from app.schemas.admin import (
     UserAdminUpdate,
     UserListResponse
 )
-from app.middleware.auth import get_current_user, require_permission
+from app.middleware.auth import get_current_user, require_superadmin
 from app.services.auditoria import registrar_log
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -21,9 +21,9 @@ def list_users(
     limit: int = 50,
     role: Optional[RoleEnum] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("manage_users"))
+    current_user: User = Depends(require_superadmin)
 ):
-    """Lista todos los usuarios. Requiere permiso 'manage_users' (admin)."""
+    """Lista todos los usuarios. Solo superadmin (Julieta)."""
     q = db.query(User)
     if role is not None:
         q = q.filter(User.role == role)
@@ -36,15 +36,11 @@ def list_users(
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("manage_users"))
+    _: User = Depends(require_superadmin)
 ):
-    """Obtiene un usuario específico"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
     return user
 
 
@@ -53,21 +49,18 @@ def update_user(
     user_id: int,
     payload: UserAdminUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_users"))
+    current_user: User = Depends(require_superadmin)
 ):
-    """Actualiza datos de un usuario (rol, nombre, activo). Solo admin."""
+    """Edita nombre, rol o estado de un usuario. Solo superadmin."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
 
-    cambios_antes = {
-        "full_name": user.full_name,
-        "role": user.role if user.role else None,
-        "is_active": user.is_active
-    }
+    # No permitir modificar la propia cuenta de superadmin por esta vía
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Usá 'Mi Perfil' para editar tu propia cuenta")
+
+    antes = {"full_name": user.full_name, "role": user.role, "is_active": user.is_active}
 
     if payload.full_name is not None:
         user.full_name = payload.full_name
@@ -79,19 +72,44 @@ def update_user(
     db.commit()
     db.refresh(user)
 
-    cambios_despues = {
-        "full_name": user.full_name,
-        "role": user.role if user.role else None,
-        "is_active": user.is_active
-    }
-
     registrar_log(
         db=db,
         usuario_id=current_user.id,
         tabla="users",
         registro_id=user.id,
         accion="UPDATE",
-        cambios={"antes": cambios_antes, "despues": cambios_despues}
+        cambios={"antes": antes, "despues": {"full_name": user.full_name, "role": user.role, "is_active": user.is_active}}
     )
 
     return user
+
+
+@router.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_superadmin)
+):
+    """Elimina un usuario permanentemente. Solo superadmin."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="No podés eliminar tu propia cuenta")
+
+    email = user.email
+    nombre = user.full_name
+    db.delete(user)
+    db.commit()
+
+    registrar_log(
+        db=db,
+        usuario_id=current_user.id,
+        tabla="users",
+        registro_id=user_id,
+        accion="DELETE",
+        cambios={"email": email, "full_name": nombre}
+    )
+
+    return {"ok": True, "mensaje": f"Usuario {email} eliminado"}
