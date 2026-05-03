@@ -23,6 +23,8 @@ class UserResponse(BaseModel):
     full_name: str
     role: RoleEnum
     is_active: bool
+    is_superadmin: bool = False
+    organizacion_id: int | None = None
     created_at: datetime
 
     class Config:
