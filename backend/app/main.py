@@ -137,10 +137,17 @@ def _init_db():
         elif not julieta_pwd:
             print("[db] AVISO: variable SUPERADMIN_PASSWORD no definida — cuenta superadmin no creada")
 
-        # Usuarios demo Caneland (backward compat)
+        # Migrar admin@caneland.com → admin@julieta.com si existe el viejo
+        old = db.query(U).filter(U.email == "admin@caneland.com").first()
+        if old and not db.query(U).filter(U.email == "admin@julieta.com").first():
+            old.email = "admin@julieta.com"
+            old.full_name = "Administrador"
+            db.commit()
+            print("[db] admin@caneland.com → admin@julieta.com")
+
+        # Usuarios demo
         seeds_demo = [
-            ("admin@caneland.com", "admin123", "Administrador", RoleEnum.ADMIN, False),
-            ("operador@caneland.com", "operador123", "Operador", RoleEnum.OPERADOR, False),
+            ("admin@julieta.com", "admin123", "Administrador", RoleEnum.ADMIN, False),
         ]
         created = 0
         for email, pwd, name, role, superadmin in seeds_demo:
