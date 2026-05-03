@@ -33,6 +33,7 @@ export const Layout: React.FC = () => {
   const { theme, toggle } = useThemeStore()
   const { activeOrgId, activeOrgNombre, setActiveOrg, clearActiveOrg } = useOrgStore()
   const [orgs, setOrgs] = useState<{ id: number; nombre: string }[]>([])
+  const [showMore, setShowMore] = useState(false)
 
   useEffect(() => {
     if (user?.is_superadmin) {
@@ -157,7 +158,7 @@ export const Layout: React.FC = () => {
 
       {/* Bottom nav mobile */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 flex z-30">
-        {visibleItems.slice(0, 5).map((item) => (
+        {visibleItems.slice(0, 4).map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -173,6 +174,49 @@ export const Layout: React.FC = () => {
             <span className="text-[10px] mt-0.5 font-medium">{item.label}</span>
           </NavLink>
         ))}
+
+        {/* Botón Más — muestra el resto de items */}
+        <div className="flex-1 relative">
+          <button
+            onClick={() => setShowMore(s => !s)}
+            className="w-full h-full flex flex-col items-center justify-center py-2 text-ml-text-soft dark:text-gray-400"
+          >
+            <span className="text-lg">⋯</span>
+            <span className="text-[10px] mt-0.5 font-medium">Más</span>
+          </button>
+
+          {showMore && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowMore(false)} />
+              <div className="absolute bottom-full right-0 mb-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                {visibleItems.slice(4).map(item => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setShowMore(false)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-4 py-3 text-sm ${
+                        isActive
+                          ? 'text-ml-blue dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                          : 'text-ml-text dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700'
+                      }`
+                    }
+                  >
+                    <span>{item.icon}</span>
+                    <span className="font-medium">{item.label}</span>
+                  </NavLink>
+                ))}
+                <button
+                  onClick={() => { setShowMore(false); handleLogout() }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 border-t border-gray-100 dark:border-slate-700"
+                >
+                  <span>⏻</span>
+                  <span className="font-medium">Cerrar sesión</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </nav>
     </div>
   )
