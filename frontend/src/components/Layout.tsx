@@ -43,6 +43,20 @@ export const Layout: React.FC = () => {
   const { activeOrgId, activeOrgNombre, setActiveOrg, clearActiveOrg } = useOrgStore()
   const [orgs, setOrgs] = useState<{ id: number; nombre: string }[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const drawerTouchStartX = React.useRef(0)
+  const drawerTouchStartY = React.useRef(0)
+
+  const handleDrawerTouchStart = (e: React.TouchEvent) => {
+    drawerTouchStartX.current = e.touches[0].clientX
+    drawerTouchStartY.current = e.touches[0].clientY
+  }
+
+  const handleDrawerTouchEnd = (e: React.TouchEvent) => {
+    const dx = e.changedTouches[0].clientX - drawerTouchStartX.current
+    const dy = Math.abs(e.changedTouches[0].clientY - drawerTouchStartY.current)
+    // Swipe izquierda > 60px y mas horizontal que vertical → cerrar
+    if (dx < -60 && Math.abs(dx) > dy) setDrawerOpen(false)
+  }
 
   useEffect(() => {
     if (user?.is_superadmin) {
@@ -187,7 +201,11 @@ export const Layout: React.FC = () => {
             className="md:hidden fixed inset-0 bg-black/40 dark:bg-black/60 z-40 backdrop-blur-[2px]"
             onClick={() => setDrawerOpen(false)}
           />
-          <div className="md:hidden fixed left-0 top-0 h-full w-64 bg-white dark:bg-ml-dark-surface z-50 shadow-2xl drawer-enter flex flex-col">
+          <div
+            className="md:hidden fixed left-0 top-0 h-full w-64 bg-white dark:bg-ml-dark-surface z-50 shadow-2xl drawer-enter flex flex-col"
+            onTouchStart={handleDrawerTouchStart}
+            onTouchEnd={handleDrawerTouchEnd}
+          >
             {/* Header del drawer */}
             <div className="flex items-center justify-between px-4 h-12 bg-ml-yellow dark:bg-ml-dark-card border-b border-ml-yellow-dark dark:border-ml-dark-border shrink-0">
               <span className="font-bold text-sm font-mono app-title">Conciliación</span>
