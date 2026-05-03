@@ -88,7 +88,7 @@ export const Movimientos: React.FC = () => {
   }, [])
 
   const buildApiFilters = useCallback((): MovimientosFiltros => {
-    const f: MovimientosFiltros = { limit: 2000 }
+    const f: MovimientosFiltros = { limit: 10000 }
     if (filters.cliente) f.cliente = filters.cliente
     if (filters.cuit) f.cuit = filters.cuit
     if (filters.titular) f.titular = filters.titular

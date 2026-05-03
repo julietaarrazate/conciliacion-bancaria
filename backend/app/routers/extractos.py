@@ -217,7 +217,7 @@ def listar_movimientos(extracto_id: int,
                        titular: Optional[str] = Query(None), desde: Optional[date] = Query(None),
                        hasta: Optional[date] = Query(None), fecha_desde: Optional[date] = Query(None),
                        fecha_hasta: Optional[date] = Query(None), sin_acreditar: Optional[bool] = Query(None),
-                       skip: int = 0, limit: int = 500,
+                       skip: int = 0, limit: int = 10000,
                        db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     if not db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first():
         raise HTTPException(404, "Extracto no encontrado")

@@ -65,11 +65,13 @@ def export_movimientos(extracto_nombre: str, movimientos: List[dict]) -> bytes:
             ws.cell(row=i, column=6, value=s).number_format = '"$"#,##0.00'
         ws.cell(row=i, column=7, value=m.get("cliente_acreditado"))
         fa = m.get("fecha_acred")
-        ws.cell(row=i, column=8, value=fa).number_format = "DD/MM/YYYY"
+        if fa:
+            ws.cell(row=i, column=8, value=fa).number_format = "DD/MM/YYYY"
 
         for col in range(1, 9):
             ws.cell(row=i, column=col).border = BORDER
 
+    ws.auto_filter.ref = f"A5:H{5 + len(movimientos)}"
     _autosize(ws, 8)
     ws.freeze_panes = "A6"
 
