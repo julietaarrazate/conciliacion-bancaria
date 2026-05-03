@@ -315,16 +315,21 @@ def buscar_match(
         candidatos_scored.sort(key=lambda x: x[0], reverse=True)
         mejor_score, mejor_mov = candidatos_scored[0]
 
-        # Empate con score bajo = ambiguo, no arriesgar
-        if len(candidatos_scored) > 1 and candidatos_scored[1][0] == mejor_score and mejor_score < 5:
+        # Empate con score bajo entre dos candidatos = ambiguo, no arriesgar
+        if (len(candidatos_scored) > 1
+                and candidatos_scored[1][0] == mejor_score
+                and mejor_score < 5):
             n = len(candidatos)
-            return None, f"faltan datos ({n} mov. de ese monto)"
+            return None, f"ambiguo ({n} candidatos, mismo score)"
 
         return mejor_mov, "ok"
 
-    # Sin identidad disponible — informar cuántos candidatos hay
+    # Sin ningún dato identificatorio → explicar qué falta
     n = len(candidatos)
-    return None, f"faltan datos ({n} mov. de ese monto)"
+    tiene_algo = any([cuit_plan_raw, cbu_plan, nums_plan, titular_planilla, referencia_planilla])
+    if not tiene_algo:
+        return None, f"sin datos ({n} mov. del mismo monto — agregar CUIT/CBU/titular)"
+    return None, f"no coincide ({n} mov. del mismo monto — revisar CUIT/CBU/titular)"
 
 
 # Config por defecto (Caneland — comportamiento original)
