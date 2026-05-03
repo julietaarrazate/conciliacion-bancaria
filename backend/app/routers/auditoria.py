@@ -73,6 +73,35 @@ def list_auditoria(
     return {"total": total, "items": items}
 
 
+@router.get("/patrones")
+def get_patrones_aprendidos(
+    cliente: Optional[str] = Query(None),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Lista patrones aprendidos de correcciones manuales para esta org."""
+    from app.models.patron_aprendido import PatronAprendido
+    oid = org_id if current_user.is_superadmin and org_id else (current_user.organizacion_id or 1)
+    q = db.query(PatronAprendido).filter(
+        PatronAprendido.organizacion_id == oid,
+        PatronAprendido.activo == True
+    )
+    if cliente:
+        q = q.filter(PatronAprendido.cliente_nombre.ilike(f"%{cliente}%"))
+    patrones = q.order_by(PatronAprendido.veces_correcto.desc()).limit(100).all()
+    return [{
+        "id": p.id,
+        "cliente_nombre": p.cliente_nombre,
+        "titular_fragmento": p.titular_fragmento,
+        "numeros_clave": p.numeros_clave,
+        "monto_tipico": p.monto_tipico,
+        "titular_extracto_fragmento": p.titular_extracto_fragmento,
+        "veces_correcto": p.veces_correcto,
+        "creado_at": p.creado_at
+    } for p in patrones]
+
+
 @router.get("/insights")
 def get_insights(
     dias: int = Query(30, description="Ventana de analisis en dias"),

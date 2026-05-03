@@ -4,6 +4,7 @@ from .cliente import Cliente
 from .extracto import ExtractoBancario, MovimientoBanco
 from .planilla import Planilla, PlanillaRow
 from .auditoria import AuditoriaLog
+from .patron_aprendido import PatronAprendido
 
 __all__ = [
     "Organizacion",
@@ -13,5 +14,6 @@ __all__ = [
     "MovimientoBanco",
     "Planilla",
     "PlanillaRow",
-    "AuditoriaLog"
+    "AuditoriaLog",
+    "PatronAprendido"
 ]

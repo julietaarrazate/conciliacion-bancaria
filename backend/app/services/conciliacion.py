@@ -348,7 +348,8 @@ def conciliar_planilla(
     movimientos: List[MovimientoBanco],
     cliente_nombre: str,
     fecha_acred_str: str,
-    org_config: Optional[Dict[str, Any]] = None
+    org_config: Optional[Dict[str, Any]] = None,
+    org_id: int = 1
 ) -> dict:
     from datetime import datetime, timedelta
 
@@ -386,13 +387,38 @@ def conciliar_planilla(
             org_config=config
         )
 
+        # ── Nivel 2: consultar patrones aprendidos antes de fallar ──────────
+        if status not in ("ok", "no está", "duplicado") and "acreditado" not in status:
+            try:
+                from app.services.aprendizaje import buscar_por_patrones
+                libres_actuales = [m for m in movimientos
+                                   if m.id not in procesados
+                                   and es_libre(m.cliente_acreditado)
+                                   and montos_iguales(m.monto, monto, config.get("tolerancia_monto", 0.01))]
+                mov_aprendido = buscar_por_patrones(
+                    db=db,
+                    org_id=org_id,
+                    cliente_nombre=cliente_nombre,
+                    monto=monto,
+                    cuit=row.cuit,
+                    titular=row.titular,
+                    referencia=getattr(row, 'referencia', None),
+                    movimientos_libres=libres_actuales,
+                    procesados=procesados
+                )
+                if mov_aprendido:
+                    mov = mov_aprendido
+                    status = "ok (aprendido)"
+            except Exception:
+                pass
+
         # Estados ricos: EN_REVISION en vez de "faltan datos" si la org lo habilita
-        if status == "faltan datos" and "EN_REVISION" in estados_habilitados:
+        if status not in ("ok", "ok (aprendido)", "no está", "duplicado") and "acreditado" not in status and "EN_REVISION" in estados_habilitados:
             row.status = "EN_REVISION"
             res["sin_datos"] += 1
             continue
 
-        row.status = status
+        row.status = status if status != "ok (aprendido)" else "ok"
 
         if mov:
             mov.cliente_acreditado = cliente_nombre

@@ -153,7 +153,8 @@ def conciliar(
             movimientos=movimientos,
             cliente_nombre=planilla.cliente.nombre,
             fecha_acred_str=fecha_acred,
-            org_config=org_config
+            org_config=org_config,
+            org_id=org_id
         )
 
         registrar_log(
@@ -318,6 +319,21 @@ def patch_row_status(
     row.status = nuevo_status
     if "comentario" in payload:
         row.comentario_revision = payload["comentario"]
+
+    # ── Aprendizaje: si se corrige a 'ok', registrar el patron ──────────
+    if nuevo_status == "ok" and row.orden_movimiento_acreditado:
+        try:
+            from app.services.aprendizaje import registrar_correccion
+            planilla = db.query(Planilla).filter(Planilla.id == row.planilla_id).first()
+            if planilla:
+                registrar_correccion(
+                    db=db,
+                    row=row,
+                    cliente_nombre=planilla.cliente.nombre,
+                    org_id=planilla.organizacion_id or 1
+                )
+        except Exception:
+            pass  # el aprendizaje no debe bloquear la operacion principal
 
     # Actualizar fecha de acreditación en el movimiento vinculado
     if "fecha_acred" in payload and row.orden_movimiento_acreditado:
