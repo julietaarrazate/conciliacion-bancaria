@@ -8,8 +8,8 @@ export const Login: React.FC = () => {
   const { setUser, setToken } = useAuthStore()
 
   const [formData, setFormData] = useState({
-    email: 'admin@caneland.com',
-    password: 'admin123'
+    email: '',
+    password: ''
   })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -53,7 +53,7 @@ export const Login: React.FC = () => {
             Conciliación Bancaria
           </h1>
           <p className="text-sm text-ml-text-soft dark:text-gray-400 mt-1">
-            Caneland SA
+            Sistema de Conciliación Bancaria
           </p>
         </div>
 
@@ -116,11 +116,6 @@ export const Login: React.FC = () => {
             </button>
           </form>
 
-          <div className="mt-5 pt-5 border-t border-gray-100 dark:border-slate-700">
-            <p className="text-xs text-ml-text-soft dark:text-gray-400 text-center">
-              Demo: admin@caneland.com / admin123
-            </p>
-          </div>
         </div>
       </div>
     </div>
