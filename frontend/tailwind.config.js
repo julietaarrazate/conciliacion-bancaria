@@ -5,7 +5,8 @@ export default {
   theme: {
     extend: {
       colors: {
-                ml: {
+        ml: {
+          // Modo claro — identidad original
           yellow: '#FFE600',
           'yellow-dark': '#FFDB15',
           blue: '#3483FA',
@@ -15,9 +16,17 @@ export default {
           'gray-dark': '#999999',
           'gray-bg': '#F5F5F5',
           text: '#333333',
-          'text-soft': '#666666'
+          'text-soft': '#666666',
+          // Modo oscuro — estética fintech/coder
+          'dark-bg':      '#09090B',  // casi negro
+          'dark-surface': '#18181B',  // zinc-900
+          'dark-card':    '#1C1C1F',
+          'dark-border':  '#27272A',
+          'green':        '#22C55E',  // acento principal dark
+          'green-bright': '#4ADE80',  // hover
+          'green-dim':    '#15803D',  // active/pressed
+          'green-glow':   '#22C55E33', // glow sutil
         },
-        // legacy primary -> ml.blue
         primary: {
           50: '#EFF6FF',
           100: '#DBEAFE',
@@ -27,7 +36,12 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['Proxima Nova', 'Helvetica', 'Arial', 'sans-serif']
+        sans: ['Proxima Nova', 'Helvetica', 'Arial', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace']
+      },
+      boxShadow: {
+        'green-glow': '0 0 16px 0 rgba(34,197,94,0.25)',
+        'green-glow-sm': '0 0 8px 0 rgba(34,197,94,0.20)',
       }
     }
   },

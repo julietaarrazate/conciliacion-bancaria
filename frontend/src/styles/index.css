@@ -2,9 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Base ─────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; }
+/* ─── Fuente mono para datos numéricos / coder feel ─── */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
+/* ─── Base ──────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -12,127 +14,160 @@ body {
   background-color: #F5F5F5;
   color: #333333;
   overflow-x: hidden;
-  /* Evita que el teclado virtual desplace el layout en móvil */
   min-height: 100dvh;
 }
 
+/* ─── Dark mode base ────────────────────────────────── */
 .dark body {
-  background-color: #0F1419;
-  color: #E5E7EB;
+  background-color: #09090B;
+  color: #FAFAFA;
 }
 
-/* ─── Scrollables en móvil ──────────────────────────────────── */
+.dark {
+  color-scheme: dark;
+}
+
+/* ─── Scrollables ───────────────────────────────────── */
 .overflow-x-auto { -webkit-overflow-scrolling: touch; }
 
-/* ─── Componentes ────────────────────────────────────────────── */
+/* ─── Componentes ───────────────────────────────────── */
 @layer components {
+
+  /* Botón primario — azul en claro, verde en oscuro */
   .btn-primary {
     @apply px-4 py-2.5 bg-ml-blue text-white rounded-md font-medium text-sm
            hover:bg-ml-blue-dark active:bg-ml-blue-darker
-           disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+           disabled:opacity-50 disabled:cursor-not-allowed transition-colors
+           dark:bg-ml-green dark:text-black dark:hover:bg-ml-green-bright
+           dark:shadow-green-glow-sm dark:font-semibold;
   }
 
+  /* Botón amarillo (claro) → verde neón (oscuro) */
   .btn-yellow {
     @apply px-4 py-2.5 bg-ml-yellow text-ml-text rounded-md font-semibold text-sm
            hover:bg-ml-yellow-dark active:scale-95
-           disabled:opacity-50 disabled:cursor-not-allowed transition-all;
+           disabled:opacity-50 disabled:cursor-not-allowed transition-all
+           dark:bg-ml-green dark:text-black dark:hover:bg-ml-green-bright
+           dark:shadow-green-glow dark:active:bg-ml-green-dim;
   }
 
+  /* Botón secundario */
   .btn-secondary {
     @apply px-4 py-2.5 bg-white text-ml-blue border border-ml-blue rounded-md font-medium text-sm
            hover:bg-ml-blue/5 disabled:opacity-50 transition-colors
-           dark:bg-slate-800 dark:border-slate-500 dark:text-blue-400 dark:hover:bg-slate-700;
+           dark:bg-ml-dark-surface dark:border-ml-dark-border dark:text-ml-green
+           dark:hover:bg-ml-dark-card dark:hover:border-ml-green;
   }
 
+  /* Card */
   .card {
-    @apply bg-white rounded-lg p-4 md:p-6 shadow-sm border border-gray-100
-           dark:bg-slate-800 dark:border-slate-700;
+    @apply bg-white rounded-xl p-4 md:p-6 shadow-sm border border-gray-100
+           dark:bg-ml-dark-surface dark:border-ml-dark-border;
   }
 
+  /* Input */
   .input-field {
     @apply w-full px-3 py-2 border border-gray-300 rounded-md text-sm
            focus:outline-none focus:ring-2 focus:ring-ml-blue/40 focus:border-ml-blue
            transition-shadow bg-white text-gray-900
-           dark:bg-slate-900 dark:border-slate-600 dark:text-gray-100
-           dark:placeholder-gray-500 dark:focus:border-blue-500;
+           dark:bg-ml-dark-bg dark:border-ml-dark-border dark:text-gray-100
+           dark:placeholder-gray-600
+           dark:focus:border-ml-green dark:focus:ring-ml-green/20;
   }
 
   .label {
     @apply block text-sm font-medium mb-1.5
-           text-gray-700 dark:text-gray-200;
+           text-gray-700 dark:text-gray-300;
   }
 
   /* Badges */
   .badge { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold; }
-  .badge-ok    { @apply badge bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300; }
-  .badge-warn  { @apply badge bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300; }
-  .badge-error { @apply badge bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300; }
-  .badge-info  { @apply badge bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300; }
+  .badge-ok    { @apply badge bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400; }
+  .badge-warn  { @apply badge bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400; }
+  .badge-error { @apply badge bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400; }
+  .badge-info  { @apply badge bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400; }
 
   /* KPI cards */
   .kpi {
     @apply bg-white rounded-xl p-4 shadow-sm border border-gray-100
-           dark:bg-slate-800 dark:border-slate-700;
+           dark:bg-ml-dark-surface dark:border-ml-dark-border;
   }
-  .kpi-value { @apply text-2xl md:text-3xl font-bold text-gray-900 dark:text-white; }
-  .kpi-label { @apply text-[11px] uppercase tracking-wide font-medium text-gray-500 dark:text-gray-400; }
+  .kpi-value {
+    @apply text-2xl md:text-3xl font-bold text-gray-900
+           dark:text-ml-green dark:font-mono;
+  }
+  .kpi-label {
+    @apply text-[11px] uppercase tracking-wide font-medium text-gray-500
+           dark:text-gray-500;
+  }
 
-  /* Tabla header azul banco Macro */
+  /* Header de tabla — azul en claro, dark surface + borde verde en oscuro */
   .th-macro {
     @apply px-2 py-2.5 text-left text-xs font-bold text-white bg-ml-blue
-           border-r border-blue-400 last:border-r-0 whitespace-nowrap select-none;
+           border-r border-blue-400 last:border-r-0 whitespace-nowrap select-none
+           dark:bg-ml-dark-card dark:text-ml-green dark:border-ml-dark-border
+           dark:tracking-wider dark:font-mono;
   }
 
-  /* Fila UM marcada en verde claro */
+  /* Fila UM */
   .row-um {
-    @apply bg-emerald-50/60 dark:bg-emerald-900/20;
+    @apply bg-emerald-50/60 dark:bg-green-900/10;
   }
   .row-um:hover {
-    @apply bg-emerald-100/60 dark:bg-emerald-900/30;
+    @apply bg-emerald-100/60 dark:bg-green-900/20;
+  }
+
+  /* Números y montos — font mono en dark */
+  .monto {
+    @apply font-mono dark:text-ml-green-bright tabular-nums;
   }
 }
 
-/* ─── Dark mode: texto con contraste suficiente ──────────────── */
-.dark {
-  color-scheme: dark;
-}
-.dark h1, .dark h2, .dark h3 { color: #F3F4F6; }
+/* ─── Dark: contraste de texto ──────────────────────── */
+.dark h1, .dark h2, .dark h3 { color: #FAFAFA; }
 .dark p, .dark span, .dark td, .dark th { color: inherit; }
 
-/* Subtextos en dark deben tener contraste mínimo AA */
-.dark .text-ml-text-soft,
 .dark .text-gray-500,
-.dark .text-gray-400 { color: #9CA3AF !important; }
+.dark .text-gray-400,
+.dark .text-ml-text-soft { color: #71717A !important; }
 
 .dark .text-ml-text,
 .dark .text-gray-700,
 .dark .text-gray-800,
-.dark .text-gray-900 { color: #F3F4F6 !important; }
+.dark .text-gray-900 { color: #FAFAFA !important; }
 
-/* Inputs y select en dark */
-.dark select option { background-color: #1e293b; color: #f1f5f9; }
+/* ─── Dark: inputs y selects ────────────────────────── */
+.dark select option { background-color: #18181B; color: #FAFAFA; }
 
-/* ─── Mobile helpers ─────────────────────────────────────────── */
+/* ─── Dark: scrollbar discreta verde ───────────────── */
+.dark ::-webkit-scrollbar { width: 6px; height: 6px; }
+.dark ::-webkit-scrollbar-track { background: #09090B; }
+.dark ::-webkit-scrollbar-thumb {
+  background: #27272A;
+  border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb:hover { background: #22C55E55; }
+
+/* ─── Línea de acento verde en cards focuseadas ─────── */
+.dark .card:focus-within {
+  border-color: #22C55E44;
+  box-shadow: 0 0 0 1px #22C55E22;
+}
+
+/* ─── Mobile helpers ────────────────────────────────── */
 @media (max-width: 768px) {
-  /* Evita scroll horizontal en páginas */
   .page-container {
     padding-left: 0.75rem;
     padding-right: 0.75rem;
   }
-
-  /* Tablas scrolleables */
   .table-scroll-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     border-radius: 0.5rem;
   }
-
-  /* Cards más compactas en móvil */
   .card {
     padding: 0.875rem;
     border-radius: 0.625rem;
   }
-
-  /* KPI más pequeñas en móvil */
   .kpi-value { font-size: 1.5rem; }
 }
