@@ -45,18 +45,42 @@ export const Layout: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const drawerTouchStartX = React.useRef(0)
   const drawerTouchStartY = React.useRef(0)
+  const edgeTouchStartX = React.useRef(0)
+  const edgeTouchStartY = React.useRef(0)
 
+  // Swipe dentro del drawer → cerrar (deslizar a la izquierda)
   const handleDrawerTouchStart = (e: React.TouchEvent) => {
     drawerTouchStartX.current = e.touches[0].clientX
     drawerTouchStartY.current = e.touches[0].clientY
   }
-
   const handleDrawerTouchEnd = (e: React.TouchEvent) => {
     const dx = e.changedTouches[0].clientX - drawerTouchStartX.current
     const dy = Math.abs(e.changedTouches[0].clientY - drawerTouchStartY.current)
-    // Swipe izquierda > 60px y mas horizontal que vertical → cerrar
     if (dx < -60 && Math.abs(dx) > dy) setDrawerOpen(false)
   }
+
+  // Swipe desde el borde izquierdo → abrir drawer
+  React.useEffect(() => {
+    if (drawerOpen) return
+    const onStart = (e: TouchEvent) => {
+      edgeTouchStartX.current = e.touches[0].clientX
+      edgeTouchStartY.current = e.touches[0].clientY
+    }
+    const onEnd = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - edgeTouchStartX.current
+      const dy = Math.abs(e.changedTouches[0].clientY - edgeTouchStartY.current)
+      // Solo si empieza en el borde izquierdo (primeros 25px) y se desliza a la derecha
+      if (edgeTouchStartX.current < 25 && dx > 50 && dx > dy) {
+        setDrawerOpen(true)
+      }
+    }
+    document.addEventListener('touchstart', onStart, { passive: true })
+    document.addEventListener('touchend', onEnd, { passive: true })
+    return () => {
+      document.removeEventListener('touchstart', onStart)
+      document.removeEventListener('touchend', onEnd)
+    }
+  }, [drawerOpen])
 
   useEffect(() => {
     if (user?.is_superadmin) {

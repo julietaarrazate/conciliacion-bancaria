@@ -1,48 +1,51 @@
 """
-Algoritmo de conciliacion bancaria.
+Algoritmo de conciliacion bancaria — version mejorada.
 Soporta configuracion por organizacion (multi-tenant).
-Caneland (org 1) usa el algoritmo original: monto + CUIT.
+Caneland sigue usando el algoritmo original (monto + CUIT/titular).
 """
 
 import re
 from typing import List, Optional, Tuple, Dict, Any
+from datetime import date
 from sqlalchemy.orm import Session
 from app.models.extracto import MovimientoBanco
 from app.models.planilla import PlanillaRow
 
-UMBRAL_COMUN = 3
+# Umbral base: si un monto aparece >= N veces requiere validacion de identidad
+UMBRAL_BASE = 3
 
 
 def norm_cuit(v) -> str:
+    """Solo digitos, sin guiones ni espacios."""
     if v is None:
         return ''
     return re.sub(r'\D', '', str(v))
 
 
 def extraer_cuit(texto: str) -> str:
+    """Extrae el primer CUIT/CUIL (10-11 digitos) que aparezca en el texto."""
     if not texto:
         return ''
-    nums = re.findall(r'\d{10,11}', str(texto))
+    nums = re.findall(r'\b\d{10,11}\b', str(texto))
     return nums[0] if nums else ''
 
 
 def extraer_cbu(texto: str) -> str:
-    """Extrae el primer CBU (22 dígitos exactos) del texto."""
+    """Extrae el primer CBU (22 digitos exactos) del texto."""
     if not texto:
         return ''
     nums = re.findall(r'\b\d{22}\b', str(texto))
     return nums[0] if nums else ''
 
 
-def titular_coincide(titular_planilla: str, titular_extracto: str) -> bool:
-    """Compara las primeras 2 palabras significativas del titular."""
-    if not titular_planilla or not titular_extracto:
-        return False
-    palabras = [p for p in titular_planilla.split() if len(p) > 2][:2]
-    if not palabras:
-        return False
-    patron = ' '.join(palabras).lower()
-    return patron in titular_extracto.lower()
+def normalizar_nombre(texto: str) -> str:
+    """Normaliza nombre para comparacion: minusculas, sin tildes basicas, sin doble espacio."""
+    if not texto:
+        return ''
+    t = texto.lower().strip()
+    for a, b in [('á','a'),('é','e'),('í','i'),('ó','o'),('ú','u'),('ñ','n')]:
+        t = t.replace(a, b)
+    return re.sub(r'\s+', ' ', t)
 
 
 def parse_importe(v) -> Optional[float]:
@@ -76,22 +79,85 @@ def es_libre(cliente_acreditado: Optional[str]) -> bool:
     return cliente_acreditado.strip().lower() in ('no identificado', '')
 
 
+def _score_identidad(
+    cuit_plan: str,
+    cbu_plan: str,
+    titular_plan: str,
+    mov: MovimientoBanco,
+    fecha_planilla: Optional[date],
+    dias_tolerancia: int
+) -> int:
+    """
+    Calcula un score de similitud entre una fila de planilla y un movimiento bancario.
+    Mayor score = mejor match.
+      10 = CUIT exacto
+       8 = CBU exacto
+       5 = titular (primeras 2 palabras)
+       3 = titular (primera palabra larga)
+       2 = fecha cercana (bonus)
+    """
+    score = 0
+    titular_mov = mov.titular or ''
+
+    # --- CUIT ---
+    cuit_mov = extraer_cuit(titular_mov)
+    if cuit_plan and cuit_mov and cuit_plan == cuit_mov:
+        score += 10
+        # Bonus fecha si CUIT matchea y tiene fecha
+        if fecha_planilla and mov.fecha and dias_tolerancia > 0:
+            delta = abs((fecha_planilla - mov.fecha).days)
+            if delta <= dias_tolerancia:
+                score += 2
+        return score  # CUIT match es definitivo, no seguir
+
+    # --- CBU ---
+    cbu_mov = extraer_cbu(titular_mov)
+    if cbu_plan and cbu_mov and cbu_plan == cbu_mov:
+        score += 8
+        return score
+
+    # --- Titular por palabras ---
+    if titular_plan:
+        norm_plan = normalizar_nombre(titular_plan)
+        norm_mov  = normalizar_nombre(titular_mov)
+        palabras = [p for p in norm_plan.split() if len(p) > 3]
+
+        if len(palabras) >= 2:
+            patron2 = ' '.join(palabras[:2])
+            if patron2 in norm_mov:
+                score += 5
+            elif palabras[0] in norm_mov:
+                score += 3
+        elif len(palabras) == 1:
+            if palabras[0] in norm_mov:
+                score += 3
+
+    # --- Bonus fecha ---
+    if score > 0 and fecha_planilla and mov.fecha and dias_tolerancia > 0:
+        delta = abs((fecha_planilla - mov.fecha).days)
+        if delta <= dias_tolerancia:
+            score += 2
+
+    return score
+
+
 def buscar_match_referencia(
     referencia: str,
+    monto: float,
     movimientos: List[MovimientoBanco],
-    procesados: set
+    procesados: set,
+    tolerancia: float
 ) -> Optional[MovimientoBanco]:
     """Match por referencia exacta en el campo titular del extracto."""
     if not referencia:
         return None
     ref_norm = referencia.strip().lower()
     for mov in movimientos:
-        if mov.id in procesados:
-            continue
-        if not es_libre(mov.cliente_acreditado):
+        if mov.id in procesados or not es_libre(mov.cliente_acreditado):
             continue
         if mov.titular and ref_norm in mov.titular.lower():
-            return mov
+            if montos_iguales(mov.monto, monto, tolerancia):
+                return mov
     return None
 
 
@@ -100,31 +166,33 @@ def buscar_match(
     cuit_planilla: Optional[str],
     titular_planilla: Optional[str],
     referencia_planilla: Optional[str],
+    fecha_planilla: Optional[date],
     movimientos: List[MovimientoBanco],
     procesados: set,
     org_config: Dict[str, Any]
 ) -> Tuple[Optional[MovimientoBanco], str]:
     """
     Busca el movimiento bancario que mejor coincide con la fila de planilla.
-    Respeta match_rules de la configuracion de la organizacion.
+    Usa scoring para desempatar cuando hay multiples candidatos con identidad similar.
     """
-    match_rules = org_config.get("match_rules", ["monto_cuit"])
-    tolerancia = org_config.get("tolerancia_monto", 0.01)
+    match_rules     = org_config.get("match_rules", ["monto_cuit"])
+    tolerancia      = org_config.get("tolerancia_monto", 0.01)
+    dias_tolerancia = org_config.get("dias_tolerancia_fecha", 0)
 
-    # 1. Match por referencia (si la org lo habilita)
+    # 1. Match por referencia (si habilitado)
     if "referencia" in match_rules and referencia_planilla:
-        mov = buscar_match_referencia(referencia_planilla, movimientos, procesados)
-        if mov and montos_iguales(mov.monto, monto, tolerancia):
+        mov = buscar_match_referencia(referencia_planilla, monto, movimientos, procesados, tolerancia)
+        if mov:
             return mov, "ok"
 
-    # 2. Match por monto
+    # 2. Candidatos por monto
     candidatos = [m for m in movimientos if montos_iguales(m.monto, monto, tolerancia)]
 
     if not candidatos:
         return None, "no está"
 
     no_usados = [m for m in candidatos if m.id not in procesados]
-    libres = [m for m in no_usados if es_libre(m.cliente_acreditado)]
+    libres    = [m for m in no_usados  if es_libre(m.cliente_acreditado)]
 
     if not libres:
         if not no_usados:
@@ -133,45 +201,50 @@ def buscar_match(
             return None, f"acreditado {fecha_s}"
         return None, "duplicado"
 
-    # Monto poco frecuente → acreditar directamente
-    if len(candidatos) < UMBRAL_COMUN:
+    # Umbral dinamico: si hay muchos candidatos, siempre exigir identidad
+    # Para extractos grandes con montos frecuentes el umbral sube
+    umbral = UMBRAL_BASE if len(candidatos) < 10 else 1
+
+    # 3. Monto poco frecuente → acreditar directamente al primer libre
+    if len(candidatos) < umbral:
         return libres[0], "ok"
 
-    # Monto comun → validar por CUIT, CBU o titular (en ese orden)
+    # 4. Monto comun → scoring por identidad
     cuit_plan_raw = norm_cuit(cuit_planilla or '')
     if not cuit_plan_raw and titular_planilla:
         cuit_plan_raw = extraer_cuit(titular_planilla)
 
-    # CBU desde el campo titular/referencia de la planilla
     cbu_plan = ''
     if titular_planilla:
         cbu_plan = extraer_cbu(titular_planilla)
     if not cbu_plan and cuit_planilla:
         cbu_plan = extraer_cbu(cuit_planilla)
 
+    # Calcular score para cada candidato libre
+    candidatos_scored = []
     for mov in libres:
-        titular_mov = mov.titular or ''
+        score = _score_identidad(
+            cuit_plan_raw, cbu_plan, titular_planilla or '',
+            mov, fecha_planilla, dias_tolerancia
+        )
+        if score > 0:
+            candidatos_scored.append((score, mov))
 
-        # 1. Match por CUIT
-        if cuit_plan_raw:
-            cuit_mov = extraer_cuit(titular_mov)
-            if cuit_mov and cuit_mov == cuit_plan_raw:
-                return mov, "ok"
+    if candidatos_scored:
+        # Ordenar por score desc, tomar el mejor
+        candidatos_scored.sort(key=lambda x: x[0], reverse=True)
+        mejor_score, mejor_mov = candidatos_scored[0]
 
-        # 2. Match por CBU
-        if cbu_plan:
-            cbu_mov = extraer_cbu(titular_mov)
-            if cbu_mov and cbu_mov == cbu_plan:
-                return mov, "ok"
+        # Si hay empate entre los dos mejores, ser conservador solo si el score es muy bajo
+        if len(candidatos_scored) > 1 and candidatos_scored[1][0] == mejor_score and mejor_score < 5:
+            return None, "faltan datos"  # empate con score bajo = ambiguo
 
-        # 3. Match por titular (primeras 2 palabras)
-        if titular_planilla and titular_coincide(titular_planilla, titular_mov):
-            return mov, "ok"
+        return mejor_mov, "ok"
 
     return None, "faltan datos"
 
 
-# Config por defecto (Caneland - comportamiento original)
+# Config por defecto (Caneland — comportamiento original)
 CONFIG_CANELAND = {
     "match_rules": ["monto_cuit"],
     "tolerancia_monto": 0.01,
@@ -195,7 +268,13 @@ def conciliar_planilla(
     estados_habilitados = config.get("estados_habilitados", [])
 
     procesados = set()
-    res = {"acreditadas": 0, "no_encontradas": 0, "duplicadas": 0, "sin_datos": 0, "filas_procesadas": 0}
+    res = {
+        "acreditadas": 0,
+        "no_encontradas": 0,
+        "duplicadas": 0,
+        "sin_datos": 0,
+        "filas_procesadas": 0
+    }
 
     for row in planilla_rows:
         res["filas_procesadas"] += 1
@@ -205,17 +284,21 @@ def conciliar_planilla(
             res["sin_datos"] += 1
             continue
 
+        # Fecha de la fila (si existe) para scoring
+        fecha_fila = getattr(row, 'fecha_acred', None) or None
+
         mov, status = buscar_match(
             monto=monto,
             cuit_planilla=row.cuit,
             titular_planilla=row.titular,
             referencia_planilla=getattr(row, 'referencia', None),
+            fecha_planilla=fecha_fila,
             movimientos=movimientos,
             procesados=procesados,
             org_config=config
         )
 
-        # Para orgs con estados ricos: marcar EN_REVISION si faltan datos
+        # Estados ricos: EN_REVISION en vez de "faltan datos" si la org lo habilita
         if status == "faltan datos" and "EN_REVISION" in estados_habilitados:
             row.status = "EN_REVISION"
             res["sin_datos"] += 1
