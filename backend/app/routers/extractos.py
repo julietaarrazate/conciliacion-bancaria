@@ -37,9 +37,17 @@ def _fingerprint(movimientos: list) -> str:
 
 @router.get("", response_model=ExtractoListResponse)
 def list_extractos(skip: int = 0, limit: int = 50,
-                   db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    total = db.query(ExtractoBancario).count()
-    rows = db.query(ExtractoBancario).order_by(desc(ExtractoBancario.fecha_creacion)).offset(skip).limit(limit).all()
+                   org_id: Optional[int] = Query(None),
+                   db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
+    q = db.query(ExtractoBancario)
+    # Superadmin puede filtrar por org; usuarios normales ven solo su org
+    if current_user.is_superadmin and org_id:
+        q = q.filter(ExtractoBancario.organizacion_id == org_id)
+    elif not current_user.is_superadmin:
+        q = q.filter(ExtractoBancario.organizacion_id == (current_user.organizacion_id or 1))
+    total = q.count()
+    rows = q.order_by(desc(ExtractoBancario.fecha_creacion)).offset(skip).limit(limit).all()
     items = [{"id": e.id, "nombre_archivo": e.nombre_archivo,
               "fecha_creacion": e.fecha_creacion, "total_movimientos": len(e.movimientos)} for e in rows]
     return {"total": total, "items": items}

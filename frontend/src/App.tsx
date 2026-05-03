@@ -11,6 +11,7 @@ import { Movimientos } from '@/pages/Movimientos'
 import { Bulk } from '@/pages/Bulk'
 import { Clientes } from '@/pages/Clientes'
 import { Perfil } from '@/pages/Perfil'
+import { Organizaciones } from '@/pages/Organizaciones'
 import { Layout } from '@/components/Layout'
 import { useThemeStore } from '@/store/theme'
 import '@/styles/index.css'
@@ -84,6 +85,11 @@ export function App() {
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/bulk" element={<Bulk />} />
           <Route path="/perfil" element={<Perfil />} />
+          <Route path="/organizaciones" element={
+            <ProtectedRoute permission="manage_users">
+              <Organizaciones />
+            </ProtectedRoute>
+          } />
           <Route path="/movimientos" element={<Movimientos />} />
           <Route path="/historial" element={<Historial />} />
           <Route

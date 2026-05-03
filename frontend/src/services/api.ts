@@ -164,6 +164,7 @@ class ApiClient {
     cliente?: string
     desde?: string
     hasta?: string
+    org_id?: number | null
   }): Promise<PaginatedResponse<PlanillaHistorialItem>> {
     const res = await this.client.get('/historial/planillas', { params })
     return res.data
@@ -211,8 +212,8 @@ class ApiClient {
   }
 
   // Extractos: listar y filtrar movimientos, append UM
-  async listExtractos(): Promise<{ total: number; items: ExtractoListItem[] }> {
-    const res = await this.client.get('/extractos')
+  async listExtractos(orgId?: number | null): Promise<{ total: number; items: ExtractoListItem[] }> {
+    const res = await this.client.get('/extractos', { params: orgId ? { org_id: orgId } : {} })
     return res.data
   }
 

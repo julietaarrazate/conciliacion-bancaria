@@ -1,7 +1,9 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
 import { useThemeStore } from '@/store/theme'
+import { useOrgStore } from '@/store/org'
+import { apiClient } from '@/services/api'
 import { UserRole } from '@/types'
 import { ThemeToggle } from './ThemeToggle'
 
@@ -21,6 +23,7 @@ const navItems: NavItem[] = [
   { to: '/historial', label: 'Historial', icon: '📋' },
   { to: '/auditoria', label: 'Audit.', icon: '🔍', permission: 'view_audit' },
   { to: '/usuarios', label: 'Usuarios', icon: '👥', permission: 'manage_users' },
+  { to: '/organizaciones', label: 'Orgs', icon: '🏢', permission: 'manage_users' },
   { to: '/perfil', label: 'Mi perfil', icon: '👤' }
 ]
 
@@ -28,6 +31,16 @@ export const Layout: React.FC = () => {
   const navigate = useNavigate()
   const { user, logout, hasPermission } = useAuthStore()
   const { theme, toggle } = useThemeStore()
+  const { activeOrgId, activeOrgNombre, setActiveOrg, clearActiveOrg } = useOrgStore()
+  const [orgs, setOrgs] = useState<{ id: number; nombre: string }[]>([])
+
+  useEffect(() => {
+    if (user?.is_superadmin) {
+      apiClient.client.get('/admin/organizaciones')
+        .then(r => setOrgs(r.data))
+        .catch(() => {})
+    }
+  }, [user?.is_superadmin])
 
   const handleLogout = () => {
     if (!confirm('¿Querés cerrar sesión?')) return
@@ -94,13 +107,39 @@ export const Layout: React.FC = () => {
         </nav>
 
         <div className="p-3 border-t border-gray-100 dark:border-slate-700 space-y-1">
+          {/* Org switcher — solo superadmin */}
+          {user?.is_superadmin && orgs.length > 0 && (
+            <div className="px-1 pb-1">
+              <p className="text-[10px] text-gray-400 dark:text-zinc-600 uppercase tracking-wider px-2 mb-1">Viendo org</p>
+              <select
+                className="input-field !py-1 !text-xs w-full"
+                value={activeOrgId ?? ''}
+                onChange={e => {
+                  const id = Number(e.target.value)
+                  if (!id) { clearActiveOrg(); return }
+                  const org = orgs.find(o => o.id === id)
+                  if (org) setActiveOrg(org.id, org.nombre)
+                }}
+              >
+                <option value="">— Todas —</option>
+                {orgs.map(o => (
+                  <option key={o.id} value={o.id}>{o.nombre}</option>
+                ))}
+              </select>
+              {activeOrgId && (
+                <p className="text-[10px] text-ml-green dark:text-ml-green font-mono px-2 mt-0.5">
+                  ▸ {activeOrgNombre}
+                </p>
+              )}
+            </div>
+          )}
           <ThemeToggle />
           <div className="px-3 py-2">
             <p className="text-sm font-medium text-ml-text dark:text-white truncate">
               {user?.full_name}
             </p>
             <p className="text-xs text-ml-text-soft dark:text-gray-400 capitalize">
-              {user?.role}
+              {user?.is_superadmin ? 'superadmin' : user?.role}
             </p>
           </div>
           <button

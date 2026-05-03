@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FileUpload } from '@/components/FileUpload'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { apiClient } from '@/services/api'
+import { useOrgStore } from '@/store/org'
 import {
   ConciliacionResultado,
   ExtractoListItem,
@@ -20,6 +21,7 @@ function fmtFecha(s: string) {
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate()
+  const { activeOrgId, activeOrgNombre } = useOrgStore()
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [planillas, setPlanillas] = useState<PlanillaHistorialItem[]>([])
   const [extractoId, setExtractoId] = useState<number | null>(null)
@@ -35,15 +37,17 @@ export const Dashboard: React.FC = () => {
   )
 
   useEffect(() => {
-    apiClient.listExtractos().then((data) => {
+    setExtractoId(null)
+    setExtractoNombre('')
+    apiClient.listExtractos(activeOrgId).then((data) => {
       setExtractos(data.items)
       if (data.items.length > 0) {
         setExtractoId(data.items[0].id)
         setExtractoNombre(data.items[0].nombre_archivo)
       }
     })
-    apiClient.getHistorialPlanillas({ limit: 5 }).then((d) => setPlanillas(d.items))
-  }, [])
+    apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then((d) => setPlanillas(d.items))
+  }, [activeOrgId])
 
   const refreshExtractos = async () => {
     const data = await apiClient.listExtractos()
@@ -147,7 +151,7 @@ export const Dashboard: React.FC = () => {
       const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred)
       setResultado(r)
       setSuccess(`Conciliación completa: ${r.acreditadas}/${r.filas_procesadas} acreditadas`)
-      apiClient.getHistorialPlanillas({ limit: 5 }).then((d) => setPlanillas(d.items))
+      apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then((d) => setPlanillas(d.items))
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error en la conciliación')
     } finally {
@@ -167,10 +171,16 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-ml-text">Conciliar transferencias</h1>
-        <p className="text-ml-text-soft text-sm mt-1">
-          Subí el extracto bancario y las planillas de cliente. El sistema concilia automáticamente.
-        </p>
+        <h1 className="text-2xl font-bold text-ml-text dark:text-white">Conciliar transferencias</h1>
+        {activeOrgId ? (
+          <p className="text-sm mt-1 text-ml-green dark:text-ml-green font-mono">
+            ▸ Viendo: <strong>{activeOrgNombre}</strong>
+          </p>
+        ) : (
+          <p className="text-ml-text-soft dark:text-gray-400 text-sm mt-1">
+            Subí el extracto bancario y las planillas de cliente.
+          </p>
+        )}
       </div>
 
       {/* KPIs */}

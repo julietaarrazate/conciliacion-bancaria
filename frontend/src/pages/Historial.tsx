@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { PlanillaHistorialItem } from '@/types'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
+import { useOrgStore } from '@/store/org'
 
 export const Historial: React.FC = () => {
+  const { activeOrgId } = useOrgStore()
   const [items, setItems] = useState<PlanillaHistorialItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
@@ -16,7 +18,7 @@ export const Historial: React.FC = () => {
   const load = async (f = filter) => {
     setLoading(true)
     try {
-      const res = await apiClient.getHistorialPlanillas({ cliente: f || undefined, limit: 200 })
+      const res = await apiClient.getHistorialPlanillas({ cliente: f || undefined, limit: 200, org_id: activeOrgId })
       setItems(res.items)
     } catch { setItems([]) }
     finally { setLoading(false) }
