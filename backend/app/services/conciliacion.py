@@ -1,26 +1,25 @@
 """
-Algoritmo de conciliacion bancaria (portado de watcher.py).
-El CUIT puede venir en la columna CUIT de la planilla O embebido en el titular.
+Algoritmo de conciliacion bancaria.
+Soporta configuracion por organizacion (multi-tenant).
+Caneland (org 1) usa el algoritmo original: monto + CUIT.
 """
 
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from sqlalchemy.orm import Session
 from app.models.extracto import MovimientoBanco
 from app.models.planilla import PlanillaRow
 
-UMBRAL_COMUN = 3  # Si un monto aparece 3+ veces en el extracto requiere CUIT/titular
+UMBRAL_COMUN = 3
 
 
 def norm_cuit(v) -> str:
-    """Solo digitos, sin guiones ni espacios"""
     if v is None:
         return ''
     return re.sub(r'\D', '', str(v))
 
 
 def extraer_cuit(texto: str) -> str:
-    """Extrae el primer CUIT/CUIL (10-11 digitos) que aparezca en el texto"""
     if not texto:
         return ''
     nums = re.findall(r'\d{10,11}', str(texto))
@@ -48,9 +47,8 @@ def parse_importe(v) -> Optional[float]:
     return None
 
 
-def montos_iguales(a: float, b: float) -> bool:
-    """Comparacion con tolerancia para evitar errores de float"""
-    return abs(a - b) < 0.01
+def montos_iguales(a: float, b: float, tolerancia: float = 0.01) -> bool:
+    return abs(a - b) < tolerancia
 
 
 def es_libre(cliente_acreditado: Optional[str]) -> bool:
@@ -59,29 +57,55 @@ def es_libre(cliente_acreditado: Optional[str]) -> bool:
     return cliente_acreditado.strip().lower() in ('no identificado', '')
 
 
+def buscar_match_referencia(
+    referencia: str,
+    movimientos: List[MovimientoBanco],
+    procesados: set
+) -> Optional[MovimientoBanco]:
+    """Match por referencia exacta en el campo titular del extracto."""
+    if not referencia:
+        return None
+    ref_norm = referencia.strip().lower()
+    for mov in movimientos:
+        if mov.id in procesados:
+            continue
+        if not es_libre(mov.cliente_acreditado):
+            continue
+        if mov.titular and ref_norm in mov.titular.lower():
+            return mov
+    return None
+
+
 def buscar_match(
     monto: float,
     cuit_planilla: Optional[str],
     titular_planilla: Optional[str],
+    referencia_planilla: Optional[str],
     movimientos: List[MovimientoBanco],
-    procesados: set
+    procesados: set,
+    org_config: Dict[str, Any]
 ) -> Tuple[Optional[MovimientoBanco], str]:
     """
     Busca el movimiento bancario que mejor coincide con la fila de planilla.
-
-    CUIT lookup: el CUIT puede venir en:
-      - columna CUIT de la planilla  (cuit_planilla)
-      - columna titular de la planilla (titular_planilla — puede tener el CUIT embebido)
-      - campo titular del extracto (cuit embebido en "TRANSF 20112233440 GARCIA MARIA")
+    Respeta match_rules de la configuracion de la organizacion.
     """
-    # Candidatos con el mismo monto (tolerancia 1 centavo)
-    candidatos = [m for m in movimientos if montos_iguales(m.monto, monto)]
+    match_rules = org_config.get("match_rules", ["monto_cuit"])
+    tolerancia = org_config.get("tolerancia_monto", 0.01)
+
+    # 1. Match por referencia (si la org lo habilita)
+    if "referencia" in match_rules and referencia_planilla:
+        mov = buscar_match_referencia(referencia_planilla, movimientos, procesados)
+        if mov and montos_iguales(mov.monto, monto, tolerancia):
+            return mov, "ok"
+
+    # 2. Match por monto
+    candidatos = [m for m in movimientos if montos_iguales(m.monto, monto, tolerancia)]
 
     if not candidatos:
         return None, "no está"
 
     no_usados = [m for m in candidatos if m.id not in procesados]
-    libres    = [m for m in no_usados  if es_libre(m.cliente_acreditado)]
+    libres = [m for m in no_usados if es_libre(m.cliente_acreditado)]
 
     if not libres:
         if not no_usados:
@@ -90,24 +114,21 @@ def buscar_match(
             return None, f"acreditado {fecha_s}"
         return None, "duplicado"
 
-    # Monto poco frecuente → acreditar directamente al primer libre
+    # Monto poco frecuente → acreditar directamente
     if len(candidatos) < UMBRAL_COMUN:
         return libres[0], "ok"
 
-    # Monto comun → requiere validar CUIT o titular
-    # Obtener el CUIT de la planilla desde cualquiera de los dos campos
+    # Monto comun → validar CUIT o titular
     cuit_plan_raw = norm_cuit(cuit_planilla or '')
     if not cuit_plan_raw and titular_planilla:
         cuit_plan_raw = extraer_cuit(titular_planilla)
 
-    # Buscar por CUIT en TODOS los candidatos libres
     if cuit_plan_raw:
         for mov in libres:
             cuit_mov = extraer_cuit(mov.titular or '')
             if cuit_mov and cuit_mov == cuit_plan_raw:
                 return mov, "ok"
 
-    # Buscar por coincidencia de primeras 2 palabras del titular
     if titular_planilla:
         palabras = [p for p in titular_planilla.split() if len(p) > 2][:2]
         if palabras:
@@ -119,14 +140,28 @@ def buscar_match(
     return None, "faltan datos"
 
 
+# Config por defecto (Caneland - comportamiento original)
+CONFIG_CANELAND = {
+    "match_rules": ["monto_cuit"],
+    "tolerancia_monto": 0.01,
+    "dias_tolerancia_fecha": 0,
+    "estados_habilitados": ["pendiente", "ok", "no está", "duplicado", "faltan datos"],
+    "requiere_cierre_periodo": False,
+}
+
+
 def conciliar_planilla(
     db: Session,
     planilla_rows: List[PlanillaRow],
     movimientos: List[MovimientoBanco],
     cliente_nombre: str,
-    fecha_acred_str: str
+    fecha_acred_str: str,
+    org_config: Optional[Dict[str, Any]] = None
 ) -> dict:
     from datetime import datetime, timedelta
+
+    config = org_config or CONFIG_CANELAND
+    estados_habilitados = config.get("estados_habilitados", [])
 
     procesados = set()
     res = {"acreditadas": 0, "no_encontradas": 0, "duplicadas": 0, "sin_datos": 0, "filas_procesadas": 0}
@@ -143,9 +178,18 @@ def conciliar_planilla(
             monto=monto,
             cuit_planilla=row.cuit,
             titular_planilla=row.titular,
+            referencia_planilla=getattr(row, 'referencia', None),
             movimientos=movimientos,
-            procesados=procesados
+            procesados=procesados,
+            org_config=config
         )
+
+        # Para orgs con estados ricos: marcar EN_REVISION si faltan datos
+        if status == "faltan datos" and "EN_REVISION" in estados_habilitados:
+            row.status = "EN_REVISION"
+            res["sin_datos"] += 1
+            continue
+
         row.status = status
 
         if mov:

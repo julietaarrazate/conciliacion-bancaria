@@ -11,7 +11,6 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
-    """Middleware para autenticación basada en JWT"""
     token = credentials.credentials
     payload = verify_token(token)
 
@@ -37,10 +36,23 @@ async def get_current_user(
 
     return user
 
+
+async def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
+    """Solo superadmin (Julieta) puede acceder."""
+    if not current_user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el superadmin puede realizar esta acción"
+        )
+    return current_user
+
+
 def require_permission(permission: str):
-    """Decorator para verificar permisos específicos"""
+    """Verifica permisos por rol. Superadmin tiene todos los permisos."""
     async def check_permission(current_user: User = Depends(get_current_user)):
-        # Mapeo de permisos por rol (clave es el valor string del enum)
+        if current_user.is_superadmin:
+            return current_user
+
         permissions = {
             "admin": ["upload_files", "reconcile", "manage_users", "view_audit"],
             "operador": ["upload_files", "reconcile"],

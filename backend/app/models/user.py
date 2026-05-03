@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -19,9 +19,11 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
-    # Guardar role como String simple para evitar problemas con Enum nativo en Postgres
     role = Column(String, default=RoleEnum.OPERADOR.value, nullable=False)
     is_active = Column(Boolean, default=True)
+    # Multi-tenant
+    organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
+    is_superadmin = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -29,3 +31,4 @@ class User(Base):
     planillas = relationship("Planilla", back_populates="usuario")
     auditoria = relationship("AuditoriaLog", back_populates="usuario")
     extractos = relationship("ExtractoBancario", back_populates="creado_por_user")
+    organizacion = relationship("Organizacion", foreign_keys=[organizacion_id])

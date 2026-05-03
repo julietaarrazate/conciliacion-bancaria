@@ -11,13 +11,14 @@ class ExtractoBancario(Base):
     creado_por = Column(Integer, ForeignKey("users.id"), nullable=False)
     fecha_creacion = Column(DateTime, default=datetime.utcnow)
     fecha_extracto = Column(Date, nullable=True)
-    # Huella digital para detectar duplicados: hash de (total, primer_orden, ultimo_orden, suma_montos)
     fingerprint = Column(String, nullable=True, index=True)
+    organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
 
     # Relationships
     creado_por_user = relationship("User", back_populates="extractos")
     movimientos = relationship("MovimientoBanco", back_populates="extracto", cascade="all, delete-orphan")
     planillas = relationship("Planilla", back_populates="extracto")
+    organizacion = relationship("Organizacion", foreign_keys=[organizacion_id])
 
 class MovimientoBanco(Base):
     __tablename__ = "movimientos_banco"
@@ -25,20 +26,19 @@ class MovimientoBanco(Base):
     id = Column(Integer, primary_key=True, index=True)
     extracto_id = Column(Integer, ForeignKey("extractos_bancarios.id"), nullable=False)
 
-    # Campos del extracto
-    orden = Column(Integer, nullable=True)  # Número secuencial
+    orden = Column(Integer, nullable=True)
     fecha = Column(Date, nullable=True)
     mes = Column(String, nullable=True)
-    titular = Column(String, nullable=True)  # Concepto/CUIT del ordenante
+    titular = Column(String, nullable=True)
     monto = Column(Float, nullable=False)
     saldo = Column(Float, nullable=True)
 
-    # Acreditación
     cliente_acreditado = Column(String, nullable=True)
     fecha_acred = Column(Date, nullable=True)
-    # Origen: 'extracto' (cargado originalmente) o 'um' (agregado via Últimos Movimientos)
     source = Column(String, nullable=True, default='extracto')
+    organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
 
     # Relationships
     extracto = relationship("ExtractoBancario", back_populates="movimientos")
     planilla_rows = relationship("PlanillaRow", back_populates="movimiento_acreditado")
+    organizacion = relationship("Organizacion", foreign_keys=[organizacion_id])

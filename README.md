@@ -1,22 +1,26 @@
-# Sistema de Conciliación Bancaria - Aplicación Moderna
+# Sistema de Conciliación Bancaria
 
-Plataforma web y móvil para automatizar la conciliación de transferencias bancarias contra planillas de clientes, con autenticación, auditoría completa y permisos granulares.
+Plataforma web y móvil para automatizar la conciliación de transferencias bancarias contra planillas de clientes, con autenticación, auditoría completa, multi-tenant y permisos granulares.
 
-## 🚀 Inicio Rápido
+## Autora y Propietaria
 
-### Con Docker (Recomendado)
+**Julieta Arrazate** — Desarrolladora, propietaria intelectual y titular de todos los derechos sobre este sistema.
+
+Este software es propiedad exclusiva de Julieta Arrazate. Queda prohibida su reproducción, distribución o uso comercial sin autorización expresa de la autora.
+
+## Inicio Rápido
+
+### Backend
 
 ```bash
 cd backend
-docker-compose up
+pip install -r requirements.txt
+export SUPERADMIN_PASSWORD="tu_contraseña_segura"
+python seed.py
+uvicorn app.main:app --reload
 ```
 
-Esto inicia:
-- API FastAPI: http://localhost:8000
-- PostgreSQL: localhost:5432
-- Redis: localhost:6379
-
-### Frontend (en otra terminal)
+### Frontend
 
 ```bash
 cd frontend
@@ -24,171 +28,113 @@ npm install
 npm run dev
 ```
 
-Frontend en: http://localhost:3000
-
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
-AppConciliacionBancaria/
-├── backend/                    # API FastAPI + BD
+conciliacion-bancaria/
+├── backend/                    # API FastAPI + BD PostgreSQL
 │   ├── app/
-│   │   ├── models/            # Modelos SQLAlchemy
-│   │   ├── schemas/           # Schemas Pydantic
-│   │   ├── services/          # Lógica de negocio
-│   │   ├── routers/           # Endpoints
-│   │   └── middleware/        # Auth, permisos
-│   ├── tests/                 # Tests unitarios
-│   ├── docker-compose.yml
-│   └── requirements.txt
+│   │   ├── models/            # SQLAlchemy: Organizacion, User, Cliente, Extracto, Planilla
+│   │   ├── schemas/           # Pydantic schemas
+│   │   ├── services/          # conciliacion.py, excel_parser, excel_export
+│   │   ├── routers/           # auth, me, extractos, planillas, admin, organizaciones
+│   │   └── middleware/        # Auth JWT + superadmin
+│   └── seed.py
 │
-├── frontend/                   # Aplicación React
-│   ├── src/
-│   │   ├── components/        # UI componentes
-│   │   ├── pages/            # Páginas
-│   │   ├── services/         # API client
-│   │   ├── store/            # Estado global
-│   │   ├── types/            # TypeScript types
-│   │   └── styles/           # Estilos
-│   ├── vite.config.ts
-│   └── package.json
-│
-├── mobile/                     # App React Native (próximamente)
-└── watcher.py                 # Script original (referencia)
+├── frontend/                   # React 18 + TypeScript + Vite + TailwindCSS + PWA
+└── mobile/                     # App móvil (React Native — en desarrollo)
 ```
 
-## ✨ Características
+## Características
 
 ### Backend (FastAPI)
-- ✅ Autenticación JWT con roles y permisos
-- ✅ API RESTful completa
-- ✅ Base de datos PostgreSQL robusta
-- ✅ Auditoría de operaciones
-- ✅ Parseo automático de Excel
-- ✅ Algoritmo inteligente de matching (migrado de watcher.py)
-- ✅ Tests unitarios
+- Autenticación JWT con roles y permisos
+- **Multi-tenant**: cada organización tiene datos aislados
+- **Superadmin** (Julieta Arrazate): acceso a todas las organizaciones
+- Configuración de flujo personalizable por cliente (JSON)
+- Estados ricos de conciliación por organización
+- Cola de revisión manual para orgs con cierre de período
+- Match configurable: por referencia, monto+CUIT, monto+fecha
+- Auditoría automática de todas las operaciones
+- Exportación Excel con Hoja1 (planilla) + Hoja2 (extracto)
 
 ### Frontend (React)
-- ✅ Login seguro con JWT
-- ✅ Dashboard intuitivo
-- ✅ Upload con drag-and-drop
-- ✅ Gestión de estado (Zustand)
-- ✅ TypeScript completo
-- ✅ Diseño responsivo (TailwindCSS)
+- PWA instalable en Android e iOS
+- Dashboard con KPIs
+- Gestión de clientes, extractos y planillas
+- Dark mode persistido
+- Login con usuario/contraseña
+- **Próximamente**: Login con Google / OAuth2
 
-## 📝 Documentación
-
-- [Backend README](./backend/README.md) - API y setup
-- [Frontend README](./frontend/README.md) - Interfaz web
-
-## 🔑 Roles y Permisos
+## Roles y Permisos
 
 | Rol | Permisos |
 |---|---|
-| **Admin** | Todo (usuarios, auditoría, reconciliación) |
-| **Operador** | Subir archivos, reconciliar |
+| **Superadmin** | Todo — acceso a todas las organizaciones |
+| **Admin** | Usuarios, auditoría, conciliación |
+| **Operador** | Subir archivos, conciliar |
 | **Revisor** | Solo lectura de resultados |
 | **Auditor** | Solo auditoría y reportes |
 
-## 🔄 Flujo de Conciliación
+## Flujo de Conciliación
 
-1. **Cargar Extracto** → Parsea banco.xlsx automáticamente
-2. **Seleccionar Cliente** → Identifica cliente
-3. **Cargar Planilla** → Parsea planilla.xlsx del cliente
-4. **Conciliar** → Algoritmo busca matches por monto, CUIT, titular
-5. **Resultados** → Estadísticas y status por fila
+1. Cargar extracto bancario (.xlsx Banco Macro)
+2. Seleccionar cliente y cargar su planilla de pagos
+3. Ejecutar conciliación (algoritmo configurable por organización)
+4. Revisar resultados y descargar Excel acreditado
 
-### Estados de Fila
-- **ok** - Coincidencia exacta encontrada
-- **no está** - Monto no existe en banco
-- **duplicado** - Ya fue acreditado antes
-- **faltan datos** - Monto común, sin CUIT/titular para validar
-- **acreditado DD/MM** - Ya acreditado a otro cliente
+### Estados de Fila (Caneland)
+- **ok** — Coincidencia exacta encontrada
+- **no está** — Monto no existe en banco
+- **duplicado** — Ya fue acreditado antes
+- **faltan datos** — Monto común, sin CUIT/titular
+- **acreditado DD/MM** — Ya acreditado a otro cliente
 
-## 🛠️ Desarrollo
+### Estados Ricos (orgs Pro)
+- **PAGO_PARCIAL** — Pago parcial registrado
+- **CONCILIADO_CON_DIFERENCIA** — Conciliado con diferencia de monto
+- **VENCIDO** — Pago vencido sin acreditar
+- **EN_REVISION** — En cola de revisión manual
 
-### Backend
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-### Frontend
-```bash
-cd frontend
-npm run dev
-```
-
-### Tests
-```bash
-cd backend
-pytest tests/
-```
-
-## 🚢 Deployment
-
-### Producción (Docker)
-```bash
-docker-compose -f docker-compose.yml up -d
-```
-
-Para producción, actualizar:
-- `SECRET_KEY` en `.env`
-- `DATABASE_URL` a servidor PostgreSQL externo
-- `CORS_ORIGINS` en FastAPI
-- `API_URL` en frontend .env
-
-## 📊 API Endpoints
+## API Endpoints Principales
 
 ### Auth
-- `POST /auth/register` - Registrar usuario
-- `POST /auth/login` - Login y obtener JWT
+- `POST /auth/login` — Login y obtener JWT
 
 ### Extractos
-- `POST /extractos/upload` - Subir extracto bancario
-- `GET /extractos/{id}` - Obtener detalles
+- `POST /extractos/upload` — Subir extracto bancario
+- `GET /extractos` — Listar extractos
 
 ### Planillas
-- `POST /planillas/upload` - Subir planilla cliente
-- `GET /planillas/{id}` - Obtener detalles
-- `POST /planillas/{id}/conciliar` - Ejecutar conciliación
+- `POST /planillas/upload` — Subir planilla cliente
+- `POST /planillas/{id}/conciliar` — Ejecutar conciliación
+- `GET /planillas/{id}/revision` — Cola de revisión (orgs Pro)
+- `POST /planillas/{id}/revision/{row_id}/resolver` — Resolver revisión
 
-## 🧪 Testing
+### Admin (superadmin)
+- `GET /admin/organizaciones` — Listar organizaciones
+- `POST /admin/organizaciones` — Crear organización
+- `PUT /admin/organizaciones/{id}` — Actualizar configuración
 
-```bash
-# Backend
-cd backend && pytest tests/ -v
+## Producción
 
-# Frontend
-cd frontend && npm test
-```
+- Frontend: [conciliacion-bancaria-ten.vercel.app](https://conciliacion-bancaria-ten.vercel.app)
+- Backend: [conciliacion-api.onrender.com](https://conciliacion-api.onrender.com)
+- Base de datos: Neon PostgreSQL
 
-## 📱 Próximas Fases
+## Seguridad
 
-- [ ] App móvil (React Native)
-- [ ] Reportes avanzados (PDF, gráficos)
-- [ ] Historial y auditoría visual
-- [ ] Notificaciones en tiempo real
-- [ ] Descarga de resultados en Excel
+- Contraseñas hasheadas (pbkdf2_sha256)
+- JWT tokens con expiración de 8h
+- SQL injection prevention (ORM SQLAlchemy)
+- CORS configurado
+- Auditoría completa de cambios
+- Contraseña de superadmin vía variable de entorno (nunca en código)
+- **Roadmap**: autenticación biométrica (huella dactilar) para acceso móvil
 
-## 🔒 Seguridad
+## Licencia
 
-- ✅ Contraseñas hasheadas (bcrypt)
-- ✅ JWT tokens con expiración
-- ✅ SQL injection prevention (ORM)
-- ✅ CORS configurado
-- ✅ Auditoría completa de cambios
-- ✅ Validación de input en todos lados
+© 2026 **Julieta Arrazate** — Todos los derechos reservados.
 
-## 📞 Soporte
-
-Para problemas o preguntas, ver README en backend/ o frontend/
-
-## 📄 Licencia
-
-Privado - Caneland SA
-
----
-
-**Versión:** 1.0.0 (MVP)  
-**Última actualización:** 2026-04-28
+Este software es propiedad intelectual exclusiva de Julieta Arrazate.
+Desarrollado a partir de Mayo 2026.

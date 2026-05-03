@@ -8,6 +8,7 @@ from app.models.planilla import Planilla, PlanillaRow
 from app.models.cliente import Cliente
 from app.models.extracto import ExtractoBancario
 from app.models.user import User
+from app.models.organizacion import Organizacion
 from fastapi.responses import StreamingResponse
 from app.schemas.planilla import PlanillaResponse, PlanillaDetalleResponse, ConciliacionResultado
 from app.services.excel_parser import parsear_planilla_cliente
@@ -18,6 +19,16 @@ from app.middleware.auth import get_current_user, require_permission
 
 router = APIRouter(prefix="/planillas", tags=["planillas"])
 
+
+def _get_org_config(db: Session, organizacion_id: int) -> dict:
+    """Obtiene la config de la org. Si no existe, retorna config default (Caneland)."""
+    from app.services.conciliacion import CONFIG_CANELAND
+    org = db.query(Organizacion).filter(Organizacion.id == organizacion_id).first()
+    if org and org.configuracion:
+        return org.configuracion
+    return CONFIG_CANELAND
+
+
 @router.post("/upload", response_model=PlanillaResponse)
 async def upload_planilla(
     cliente_nombre: str = Query(..., description="Nombre del cliente"),
@@ -27,19 +38,12 @@ async def upload_planilla(
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permission("upload_files"))
 ):
-    """
-    Carga una planilla de cliente y la prepara para conciliación.
-    Requiere que ya exista un extracto bancario.
-    """
-
-    # Validar tipo de archivo
     if not file.filename.endswith('.xlsx'):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Solo se aceptan archivos Excel (.xlsx)"
         )
 
-    # Verificar que el extracto existe
     extracto = db.query(ExtractoBancario).filter(
         ExtractoBancario.id == extracto_id
     ).first()
@@ -49,12 +53,14 @@ async def upload_planilla(
             detail="Extracto bancario no encontrado"
         )
 
-    # Obtener o crear cliente
+    org_id = current_user.organizacion_id or 1
+
     cliente = db.query(Cliente).filter(
-        Cliente.nombre == cliente_nombre
+        Cliente.nombre == cliente_nombre,
+        Cliente.organizacion_id == org_id
     ).first()
     if not cliente:
-        cliente = Cliente(nombre=cliente_nombre)
+        cliente = Cliente(nombre=cliente_nombre, organizacion_id=org_id)
         db.add(cliente)
         db.flush()
 
@@ -64,27 +70,27 @@ async def upload_planilla(
             tmp.write(contents)
             tmp_path = tmp.name
 
-        # Parsear el archivo
         parsed = parsear_planilla_cliente(tmp_path)
 
-        # Crear planilla en BD
         planilla = Planilla(
             cliente_id=cliente.id,
             extracto_id=extracto_id,
             usuario_id=current_user.id,
-            nombre_archivo=file.filename
+            nombre_archivo=file.filename,
+            organizacion_id=org_id
         )
         db.add(planilla)
         db.flush()
 
-        # Crear filas de planilla
         for fila_data in parsed["filas"]:
             fila = PlanillaRow(
                 planilla_id=planilla.id,
                 monto=fila_data.get("monto"),
                 cuit=fila_data.get("cuit"),
                 titular=fila_data.get("titular"),
-                status="pendiente"
+                referencia=fila_data.get("referencia"),
+                status="pendiente",
+                organizacion_id=org_id
             )
             db.add(fila)
 
@@ -100,7 +106,8 @@ async def upload_planilla(
             cambios={
                 "cliente": cliente_nombre,
                 "extracto_id": extracto_id,
-                "filas": len(parsed["filas"])
+                "filas": len(parsed["filas"]),
+                "organizacion_id": org_id
             }
         )
 
@@ -116,6 +123,7 @@ async def upload_planilla(
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
+
 @router.post("/{planilla_id}/conciliar", response_model=ConciliacionResultado)
 def conciliar(
     planilla_id: int,
@@ -124,11 +132,6 @@ def conciliar(
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permission("reconcile"))
 ):
-    """
-    Ejecuta la conciliación de una planilla contra los movimientos bancarios.
-    """
-
-    # Obtener planilla
     planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
     if not planilla:
         raise HTTPException(
@@ -136,19 +139,21 @@ def conciliar(
             detail="Planilla no encontrada"
         )
 
-    # Obtener movimientos del extracto
     movimientos = db.query(ExtractoBancario).filter(
         ExtractoBancario.id == planilla.extracto_id
     ).first().movimientos
 
-    # Ejecutar conciliación
+    org_id = planilla.organizacion_id or 1
+    org_config = _get_org_config(db, org_id)
+
     try:
         resultado = conciliar_planilla(
             db=db,
             planilla_rows=planilla.rows,
             movimientos=movimientos,
             cliente_nombre=planilla.cliente.nombre,
-            fecha_acred_str=fecha_acred
+            fecha_acred_str=fecha_acred,
+            org_config=org_config
         )
 
         registrar_log(
@@ -172,6 +177,123 @@ def conciliar(
             detail=f"Error en conciliación: {str(e)}"
         )
 
+
+# ── Cola de revisión manual ───────────────────────────────────────────────────
+
+@router.get("/{planilla_id}/revision")
+def get_revision(
+    planilla_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Lista filas EN_REVISION de la planilla.
+    Solo disponible para orgs con requiere_cierre_periodo: true.
+    """
+    planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
+    if not planilla:
+        raise HTTPException(status_code=404, detail="Planilla no encontrada")
+
+    org_id = planilla.organizacion_id or 1
+    org_config = _get_org_config(db, org_id)
+
+    if not org_config.get("requiere_cierre_periodo", False):
+        raise HTTPException(
+            status_code=400,
+            detail="Esta organización no tiene habilitada la cola de revisión"
+        )
+
+    filas_revision = [r for r in planilla.rows if r.status == "EN_REVISION"]
+    return {
+        "planilla_id": planilla_id,
+        "total_en_revision": len(filas_revision),
+        "filas": [
+            {
+                "id": r.id,
+                "monto": r.monto,
+                "cuit": r.cuit,
+                "titular": r.titular,
+                "referencia": r.referencia,
+                "comentario_revision": r.comentario_revision,
+            }
+            for r in filas_revision
+        ]
+    }
+
+
+@router.post("/{planilla_id}/revision/{row_id}/resolver")
+def resolver_revision(
+    planilla_id: int,
+    row_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Resuelve una fila EN_REVISION.
+    Body: {"accion": "aprobar|rechazar|pago_parcial", "comentario": "..."}
+    """
+    planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
+    if not planilla:
+        raise HTTPException(status_code=404, detail="Planilla no encontrada")
+
+    org_id = planilla.organizacion_id or 1
+    org_config = _get_org_config(db, org_id)
+
+    if not org_config.get("requiere_cierre_periodo", False):
+        raise HTTPException(
+            status_code=400,
+            detail="Esta organización no tiene habilitada la cola de revisión"
+        )
+
+    row = db.query(PlanillaRow).filter(
+        PlanillaRow.id == row_id,
+        PlanillaRow.planilla_id == planilla_id
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Fila no encontrada")
+
+    if row.status != "EN_REVISION":
+        raise HTTPException(status_code=400, detail="La fila no está en estado EN_REVISION")
+
+    accion = payload.get("accion", "")
+    comentario = payload.get("comentario", "")
+
+    if accion == "aprobar":
+        row.status = "ok"
+    elif accion == "rechazar":
+        row.status = "no está"
+    elif accion == "pago_parcial":
+        row.status = "PAGO_PARCIAL"
+        row.monto_acreditado = payload.get("monto_acreditado")
+    elif accion == "diferencia":
+        row.status = "CONCILIADO_CON_DIFERENCIA"
+        row.monto_acreditado = payload.get("monto_acreditado")
+    elif accion == "vencido":
+        row.status = "VENCIDO"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Acción inválida. Use: aprobar, rechazar, pago_parcial, diferencia, vencido"
+        )
+
+    row.comentario_revision = comentario
+    db.commit()
+
+    registrar_log(
+        db=db,
+        usuario_id=current_user.id,
+        tabla="planilla_rows",
+        registro_id=row.id,
+        accion="RESOLVER_REVISION",
+        cambios={"accion": accion, "comentario": comentario, "nuevo_status": row.status}
+    )
+
+    return {"ok": True, "row_id": row_id, "nuevo_status": row.status}
+
+
+# ── Endpoints existentes ──────────────────────────────────────────────────────
+
 @router.get("/{planilla_id}/download")
 def download_planilla_conciliada(
     planilla_id: int,
@@ -187,7 +309,6 @@ def download_planilla_conciliada(
     if not p:
         raise HTTPException(404, "Planilla no encontrada")
 
-    # Enriquecer rows con datos del movimiento
     mov_ids = [r.orden_movimiento_acreditado for r in p.rows if r.orden_movimiento_acreditado]
     movs_map = {}
     if mov_ids:
@@ -221,8 +342,7 @@ def download_planilla_conciliada(
     }
 
     xlsx = export_planilla_conciliada(planilla_data, movimientos_acreditados)
-    # Respetar nombre original del archivo + sufijo acreditado
-    nombre_base = p.nombre_archivo.replace('.xlsx','').replace('.XLSX','')
+    nombre_base = p.nombre_archivo.replace('.xlsx', '').replace('.XLSX', '')
     fname = f"{nombre_base}_acreditado_{datetime.now().strftime('%d.%m')}.xlsx"
     return StreamingResponse(
         io.BytesIO(xlsx),
@@ -242,7 +362,6 @@ def delete_planilla(
     if not planilla:
         raise HTTPException(status_code=404, detail="Planilla no encontrada")
 
-    # Liberar movimientos que estaban acreditados a esta planilla
     from app.models.extracto import MovimientoBanco
     for row in planilla.rows:
         if row.orden_movimiento_acreditado:
@@ -269,14 +388,12 @@ def get_planilla_detalle(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
-    """Retorna planilla con stats + datos del movimiento bancario para filtrar en el panel"""
     from app.models.extracto import MovimientoBanco
 
     p = db.query(Planilla).filter(Planilla.id == planilla_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Planilla no encontrada")
 
-    # Pre-cargar movimientos del extracto en un dict por id para el JOIN manual
     mov_ids = [r.orden_movimiento_acreditado for r in p.rows if r.orden_movimiento_acreditado]
     movs_map = {}
     if mov_ids:

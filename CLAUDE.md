@@ -1,10 +1,17 @@
 # Sistema de Conciliacion Bancaria — Julieta Arrazate
 
+## Autora y Propietaria
+
+**Julieta Arrazate** — Desarrolladora y propietaria intelectual de este sistema.
+Email: julietaarrazate@gmail.com
+
+---
+
 ## Que es esto
 
 Sistema web + app movil para conciliar transferencias bancarias contra planillas de clientes.
-Desarrollado por y para **Julieta Arrazate** que ofrece servicios contables a empresas.
-Empresa cliente actual: **Caneland SA** (y en el futuro otras).
+Multi-tenant: cada empresa tiene datos aislados. Julieta es superadmin con acceso a todo.
+Empresa cliente actual: **Caneland SA** (organizacion_id=1).
 
 ---
 
@@ -16,14 +23,17 @@ Empresa cliente actual: **Caneland SA** (y en el futuro otras).
 - Codigo: GitHub — julietaarrazate/conciliacion-bancaria
 
 Render free tier: duerme tras 15 min sin uso. Primera request del dia tarda ~30 seg.
-No requiere PC local para funcionar — todo corre en la nube.
 
 ---
 
 ## Credenciales de produccion
 
-- Admin real: coopagrofuturoadm@gmail.com / admin123 (cambiar password en Mi perfil)
+- Superadmin: julietaarrazate@gmail.com / password definido via env var SUPERADMIN_PASSWORD en Render
 - Admin demo: admin@caneland.com / admin123
+- Operador demo: operador@caneland.com / operador123
+
+IMPORTANTE: Antes del primer deploy, definir en Render la variable de entorno:
+  SUPERADMIN_PASSWORD=tu_contraseña_segura
 
 API keys para deploy desde Claude Code:
 - Render API key: rnd_8Kqkb028Ochfw6eSOYZR3v2O7Cv2
@@ -48,10 +58,10 @@ API keys para deploy desde Claude Code:
 ## Estructura del repositorio
 
 /backend — FastAPI + SQLAlchemy + PostgreSQL
-  /app/models — User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog
-  /app/routers — auth, me, extractos, planillas, historial, auditoria, admin, clientes_dir
-  /app/services — conciliacion.py (algoritmo core), excel_parser, excel_export, extracto_merger
-  seed.py — Crea usuarios iniciales
+  /app/models — Organizacion, User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog
+  /app/routers — auth, me, extractos, planillas, historial, auditoria, admin, clientes_dir, organizaciones
+  /app/services — conciliacion.py (configurable por org), excel_parser, excel_export, extracto_merger
+  seed.py — Crea org Caneland + usuarios iniciales
   requirements.txt
 
 /frontend — React 18 + TypeScript + Vite + TailwindCSS + PWA
@@ -61,59 +71,125 @@ API keys para deploy desde Claude Code:
 
 ---
 
+## Multi-tenant (implementado en v2.0)
+
+- Model Organizacion: id, nombre, plan (basic/pro), configuracion (JSON), activo
+- Caneland SA es organizacion_id=1 (no cambia nada en su operatoria)
+- Nuevos clientes usan su propio organizacion_id
+- Julieta (julietaarrazate@gmail.com) es superadmin: ve y gestiona todas las orgs
+- Usuarios normales solo ven su organizacion_id
+
+### Configuracion de flujo por org (JSON)
+```json
+{
+  "match_rules": ["referencia", "monto_cuit", "monto_fecha"],
+  "tolerancia_monto": 0.01,
+  "dias_tolerancia_fecha": 3,
+  "estados_habilitados": ["pendiente", "conciliado", "parcial", "vencido", "en_revision"],
+  "requiere_cierre_periodo": false,
+  "notificaciones_whatsapp": false,
+  "exportar_formato_contador": "excel_actual"
+}
+```
+
+### Caneland SA config (no modificar)
+```json
+{
+  "match_rules": ["monto_cuit"],
+  "tolerancia_monto": 0.01,
+  "dias_tolerancia_fecha": 0,
+  "estados_habilitados": ["pendiente", "ok", "no está", "duplicado", "faltan datos"],
+  "requiere_cierre_periodo": false
+}
+```
+
+---
+
 ## Algoritmo de conciliacion (services/conciliacion.py)
 
 Para cada fila de la planilla del cliente:
-1. Buscar movimientos con monto == monto_planilla (tolerancia 0.01)
-2. Si monto aparece < 3 veces -> acreditar al primer libre (sin validar CUIT)
-3. Si monto aparece >= 3 veces (UMBRAL_COMUN = 3) -> requiere CUIT o titular:
-   - El CUIT puede estar en: columna CUIT de planilla, campo titular del extracto
-   - Buscar CUIT en campo titular del extracto (regex \d{10,11})
-   - Si hay match -> ok, si no -> "faltan datos"
-4. Sin movimientos libres -> "duplicado" o "acreditado DD/MM"
-5. Monto no existe -> "no esta"
+1. Si org tiene "referencia" en match_rules: buscar por referencia en titular del extracto
+2. Buscar movimientos con monto == monto_planilla (tolerancia configurable)
+3. Si monto aparece < 3 veces -> acreditar al primer libre
+4. Si monto aparece >= 3 veces -> requiere CUIT o titular
+5. Si org tiene EN_REVISION habilitado: marcar como EN_REVISION en vez de "faltan datos"
+
+Caneland sigue usando: monto + CUIT (algoritmo original sin cambios).
+
+---
+
+## Estados de conciliacion
+
+### Base (Caneland y todas las orgs)
+- ok / no está / duplicado / faltan datos / acreditado DD/MM / pendiente
+
+### Ricos (solo orgs con estados_habilitados extendidos)
+- PAGO_PARCIAL
+- CONCILIADO_CON_DIFERENCIA
+- VENCIDO
+- EN_REVISION
+
+---
+
+## Cola de revision manual
+
+Para orgs con requiere_cierre_periodo: true:
+- GET  /planillas/{id}/revision              — lista EN_REVISION
+- POST /planillas/{id}/revision/{row_id}/resolver  — resuelve con {accion, comentario}
+  acciones: aprobar, rechazar, pago_parcial, diferencia, vencido
+
+---
+
+## Admin endpoints (solo superadmin)
+
+- GET  /admin/organizaciones        — lista todas
+- POST /admin/organizaciones        — crea nueva
+- PUT  /admin/organizaciones/{id}   — actualiza config de flujo
 
 ---
 
 ## Features implementadas
 
-Backend:
-- Auth JWT 8h con pbkdf2_sha256 (sin bcrypt)
-- Roles: admin, operador, revisor, auditor
-- Extracto bancario: upload, listar, filtrar, exportar Excel, borrar
-- Ultimos Movimientos (UM): agregar sin duplicar (clave: orden+monto), filas marcadas con source='um'
-- Planillas: upload, conciliar, detalle, download (Hoja1 cliente + Hoja2 extracto), borrar
+Backend v2.0:
+- Auth JWT 8h con pbkdf2_sha256
+- Roles: admin, operador, revisor, auditor + superadmin
+- Multi-tenant completo con Organizacion model
+- Flujo personalizable por org via JSON config
+- Estados ricos de conciliacion (opt-in por org)
+- Cola de revision manual (opt-in)
+- Match configurable: referencia / monto+cuit / monto+fecha
+- Endpoints admin de organizaciones
+- Extracto bancario: upload, listar, filtrar, exportar, borrar
+- Ultimos Movimientos (UM): agregar sin duplicar
+- Planillas: upload, conciliar, detalle, download, borrar
 - Historial agrupado por cliente/mes
-- Auditoria automatica de todas las operaciones
-- Gestion de usuarios (crear, cambiar rol, activar/desactivar)
-- Change password / update profile
-- Guardar en carpetas locales: Desktop/clientes/{Cliente}/{Anio}/{Mes}/
+- Auditoria automatica
+- Gestion de usuarios
+- Migraciones aditivas sin borrar datos
 
 Frontend:
-- PWA instalable como app en celular (Android + iOS)
+- PWA instalable (Android + iOS)
 - Dashboard con KPIs + conciliaciones recientes
 - Seccion Clientes: arbol Anio -> Mes -> archivos
-- Movimientos con filtros Excel inline en headers + tab UM editable (doble clic para editar)
-- Historial con preview y descarga (Hoja1+Hoja2)
-- Bulk: multiples planillas a la vez
-- Dark mode con toggle persistido
-- Layout responsive (desktop sidebar / mobile bottom nav)
-- Swipe derecha para cerrar paneles
+- Movimientos con filtros Excel inline
+- Dark mode persistido
+- Layout responsive
 
 ---
 
 ## Pendientes / Roadmap
 
 Alta prioridad:
-- Multi-tenant: cada empresa tiene datos aislados (model Organizacion, Julieta como super-admin)
+- Login con Google (OAuth2) — pendiente implementacion frontend + backend
+- Autenticacion biometrica (huella dactilar) — para app movil, fase futura
+- Keep-alive de Render (ping cada 14 min)
 - Exportar extracto actualizado al contador al final del dia
-- Mejorar dark mode contraste en tablas y headers
-- Keep-alive de Render (ping cada 14 min para no dormir)
 
 Media prioridad:
-- Notificaciones cuando Render se despierta
+- Notificaciones WhatsApp cuando Render se despierta
 - Multiples formatos de extracto (otros bancos)
 - PDF de conciliacion mensual
+- App movil React Native
 
 ---
 
@@ -131,18 +207,10 @@ Para push a GitHub:
 
 ---
 
-## Clientes configurados
+## Clientes configurados (Caneland)
 
 Green, Tucu, David, Smt, Gwinn, Innova, Camparo, Alojando, Pinares, Paraguay
 
 ---
 
-## Modelo multi-tenant futuro
-
-Cuando sumes otras empresas, el sistema necesita:
-- Model Organizacion (id, nombre, plan)
-- Usuario.organizacion_id (Julieta super-admin con acceso a todas)
-- Todos los modelos filtrados por organizacion_id
-- Por ahora todo bajo un unico tenant (Caneland)
-
-Generado — Proyecto iniciado Mayo 2026
+Generado — Proyecto iniciado Mayo 2026 | Autora: Julieta Arrazate
