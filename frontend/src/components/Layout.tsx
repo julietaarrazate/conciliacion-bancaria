@@ -44,7 +44,7 @@ export const Layout: React.FC = () => {
       {/* Header mobile */}
       <header className="md:hidden bg-ml-yellow flex items-center justify-between px-4 py-2.5 z-30 shadow">
         <div>
-          <p className="font-bold text-sm text-ml-text dark:text-ml-green font-mono">Conciliación</p>
+          <p className="font-bold text-sm font-mono app-title">Conciliación</p>
           <p className="text-[11px] text-ml-text-soft truncate max-w-[180px]">
             {user?.full_name}
           </p>
@@ -70,7 +70,7 @@ export const Layout: React.FC = () => {
       {/* Sidebar desktop */}
       <aside className="hidden md:flex w-60 bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 flex-col">
         <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-700 bg-ml-yellow">
-          <h1 className="text-base font-bold text-ml-text dark:text-ml-green font-mono">Conciliación</h1>
+          <h1 className="text-base font-bold font-mono app-title">Conciliación</h1>
           <p className="text-xs text-ml-text-soft">Julieta Arrazate</p>
         </div>
 

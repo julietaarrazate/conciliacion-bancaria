@@ -123,6 +123,10 @@ body {
   }
 }
 
+/* ─── Titulo app: negro en claro, verde hacker en oscuro ─────── */
+.app-title { color: #333333; }
+.dark .app-title { color: #22C55E !important; }
+
 /* ─── Dark: contraste de texto ──────────────────────── */
 .dark h1, .dark h2, .dark h3 { color: #FAFAFA; }
 .dark p, .dark span, .dark td, .dark th { color: inherit; }

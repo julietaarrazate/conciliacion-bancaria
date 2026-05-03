@@ -81,6 +81,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
   const [showFilters, setShowFilters] = useState(false)
   const [editingRowId, setEditingRowId] = useState<number | null>(null)
   const [editStatus, setEditStatus] = useState('')
+  const [editFecha, setEditFecha] = useState('')
   const [savingRow, setSavingRow] = useState(false)
 
   useEffect(() => {
@@ -123,15 +124,19 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
   const startEdit = (row: Row) => {
     setEditingRowId(row.id)
     setEditStatus(row.status)
+    // Precargar fecha actual del movimiento si existe
+    setEditFecha(row.mov_fecha_acred ? row.mov_fecha_acred.split('T')[0] : '')
   }
 
   const saveEdit = async (rowId: number) => {
     setSavingRow(true)
     try {
-      await apiClient.patchRowStatus(rowId, editStatus)
+      await apiClient.patchRowStatus(rowId, editStatus, undefined, editFecha || undefined)
       setDetalle(prev => prev ? {
         ...prev,
-        rows: prev.rows.map(r => r.id === rowId ? { ...r, status: editStatus } : r)
+        rows: prev.rows.map(r => r.id === rowId
+          ? { ...r, status: editStatus, mov_fecha_acred: editFecha || r.mov_fecha_acred }
+          : r)
       } : prev)
       setEditingRowId(null)
     } finally { setSavingRow(false) }
@@ -277,9 +282,9 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                       <td className="px-2 py-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(row.mov_fecha_acred)}</td>
                       <td className="px-2 py-1.5 min-w-[130px]">
                         {editingRowId === row.id ? (
-                          <div className="flex items-center gap-1">
+                          <div className="flex flex-col gap-1 min-w-[160px]">
                             <select
-                              className="text-[10px] border border-ml-blue rounded px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white"
+                              className="text-[10px] border border-ml-blue rounded px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white w-full"
                               value={editStatus}
                               onChange={e => setEditStatus(e.target.value)}
                               autoFocus
@@ -288,10 +293,19 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                                 <option key={s} value={s}>{s}</option>
                               ))}
                             </select>
-                            <button onClick={() => saveEdit(row.id)} disabled={savingRow}
-                              className="text-green-600 hover:text-green-700 text-xs px-1 disabled:opacity-50">✓</button>
-                            <button onClick={() => setEditingRowId(null)}
-                              className="text-gray-400 hover:text-gray-600 text-xs px-1">✕</button>
+                            <input
+                              type="date"
+                              className="text-[10px] border border-gray-300 dark:border-slate-600 rounded px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white w-full font-mono"
+                              value={editFecha}
+                              onChange={e => setEditFecha(e.target.value)}
+                              title="Fecha de acreditación"
+                            />
+                            <div className="flex gap-1">
+                              <button onClick={() => saveEdit(row.id)} disabled={savingRow}
+                                className="flex-1 bg-green-500 text-white text-[10px] rounded py-0.5 disabled:opacity-50">✓ Guardar</button>
+                              <button onClick={() => setEditingRowId(null)}
+                                className="flex-1 bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-white text-[10px] rounded py-0.5">✕</button>
+                            </div>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1 group">

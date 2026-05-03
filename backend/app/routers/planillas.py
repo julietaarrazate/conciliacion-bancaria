@@ -319,6 +319,17 @@ def patch_row_status(
     if "comentario" in payload:
         row.comentario_revision = payload["comentario"]
 
+    # Actualizar fecha de acreditación en el movimiento vinculado
+    if "fecha_acred" in payload and row.orden_movimiento_acreditado:
+        from app.models.extracto import MovimientoBanco as MB
+        from datetime import date
+        mov = db.query(MB).filter(MB.id == row.orden_movimiento_acreditado).first()
+        if mov:
+            try:
+                mov.fecha_acred = date.fromisoformat(payload["fecha_acred"])
+            except Exception:
+                pass
+
     db.commit()
 
     registrar_log(
