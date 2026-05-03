@@ -16,6 +16,9 @@ export const Bulk: React.FC = () => {
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [items, setItems] = useState<BulkItem[]>([])
   const [running, setRunning] = useState(false)
+  const [fechaAcred, setFechaAcred] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  )
 
   useEffect(() => {
     apiClient.listExtractos().then(d => {
@@ -53,7 +56,7 @@ export const Bulk: React.FC = () => {
         const planilla = await apiClient.uploadPlanilla(
           item.clienteNombre, extractoId, item.file
         )
-        const resultado = await apiClient.conciliarPlanilla(planilla.id)
+        const resultado = await apiClient.conciliarPlanilla(planilla.id, fechaAcred)
         updateItem(item.id, { status: 'ok', resultado })
       } catch (err: any) {
         updateItem(item.id, {
@@ -94,6 +97,22 @@ export const Bulk: React.FC = () => {
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Fecha de acreditación */}
+      <div className="card mb-4 flex flex-wrap gap-4 items-end">
+        <div>
+          <label className="label">Fecha de acreditación</label>
+          <input
+            type="date"
+            className="input-field font-mono w-auto"
+            value={fechaAcred}
+            onChange={e => setFechaAcred(e.target.value)}
+          />
+        </div>
+        <p className="text-xs text-gray-400 dark:text-zinc-600 pb-2">
+          Todas las planillas se acreditarán con esta fecha
+        </p>
       </div>
 
       {/* Drop zone */}

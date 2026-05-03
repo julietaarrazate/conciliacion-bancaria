@@ -13,6 +13,8 @@ export interface User {
   full_name: string
   role: UserRole
   is_active: boolean
+  is_superadmin: boolean
+  organizacion_id?: number
   created_at: string
 }
 

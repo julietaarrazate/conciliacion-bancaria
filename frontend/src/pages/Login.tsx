@@ -14,6 +14,7 @@ export const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [waking, setWaking] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,10 +31,20 @@ export const Login: React.FC = () => {
       if (code === 401) {
         setError('Email o contraseña incorrectos')
       } else if (err.code === 'ERR_NETWORK' || !err.response) {
-        const apiUrl = err.config?.baseURL || 'desconocido'
-        setError(
-          `No se puede conectar al servidor (${apiUrl}). Verificá que el backend esté corriendo y que el celular esté en la misma red WiFi que la PC.`
-        )
+        setWaking(true)
+        setError('')
+        // Render free tier duerme — reintentamos automáticamente
+        await new Promise(r => setTimeout(r, 30000))
+        setWaking(false)
+        try {
+          const response2 = await apiClient.login(formData.email, formData.password)
+          setUser(response2.user)
+          setToken(response2.access_token)
+          navigate('/dashboard')
+          return
+        } catch {
+          setError('El servidor tardó en responder. Intentá de nuevo en unos segundos.')
+        }
       } else {
         setError(detail || 'Error en autenticación')
       }
@@ -63,7 +74,13 @@ export const Login: React.FC = () => {
         {/* Card */}
         <div className="bg-white dark:bg-ml-dark-surface rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-ml-dark-border dark:shadow-none">
 
-          {error && (
+          {waking && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 text-sm dark:bg-amber-950/30 dark:border-amber-800/40 dark:text-amber-400 flex items-center gap-2">
+              <span className="animate-spin text-base">⏳</span>
+              <span>Servidor despertando… reintentando en 30 seg</span>
+            </div>
+          )}
+          {error && !waking && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm dark:bg-red-950/40 dark:border-red-800/50 dark:text-red-400">
               {error}
             </div>

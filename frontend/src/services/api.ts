@@ -206,6 +206,10 @@ class ApiClient {
     return res.data
   }
 
+  async deleteUser(userId: number): Promise<void> {
+    await this.client.delete(`/admin/users/${userId}`)
+  }
+
   // Extractos: listar y filtrar movimientos, append UM
   async listExtractos(): Promise<{ total: number; items: ExtractoListItem[] }> {
     const res = await this.client.get('/extractos')

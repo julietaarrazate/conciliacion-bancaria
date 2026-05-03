@@ -6,6 +6,7 @@ export const Usuarios: React.FC = () => {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [formError, setFormError] = useState('')
   const [formLoading, setFormLoading] = useState(false)
@@ -71,6 +72,17 @@ export const Usuarios: React.FC = () => {
       const updated = await apiClient.updateUser(user.id, { is_active: !user.is_active })
       setUsers(prev => prev.map(u => u.id === user.id ? updated : u))
     } finally { setSavingId(null) }
+  }
+
+  const handleDelete = async (user: User) => {
+    if (!confirm(`¿Eliminar permanentemente a ${user.full_name} (${user.email})?`)) return
+    setDeletingId(user.id)
+    try {
+      await apiClient.deleteUser(user.id)
+      setUsers(prev => prev.filter(u => u.id !== user.id))
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Error al eliminar')
+    } finally { setDeletingId(null) }
   }
 
   return (
@@ -144,7 +156,7 @@ export const Usuarios: React.FC = () => {
             <table className="w-full text-sm min-w-[500px]">
               <thead className="bg-gray-50 dark:bg-slate-900 border-b dark:border-slate-700">
                 <tr>
-                  {['Nombre', 'Email', 'Rol', 'Estado', 'Creado'].map(h => (
+                  {['Nombre', 'Email', 'Rol', 'Estado', 'Creado', ''].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{h}</th>
                   ))}
                 </tr>
@@ -152,26 +164,49 @@ export const Usuarios: React.FC = () => {
               <tbody className="divide-y dark:divide-slate-700">
                 {users.map(u => (
                   <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/40">
-                    <td className="px-4 py-2.5 font-medium dark:text-white">{u.full_name}</td>
+                    <td className="px-4 py-2.5 font-medium dark:text-white">
+                      <span>{u.full_name}</span>
+                      {u.is_superadmin && (
+                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-ml-green/20 text-ml-green dark:bg-ml-green/10 font-mono border border-ml-green/30">
+                          superadmin
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 text-xs">{u.email}</td>
                     <td className="px-4 py-2.5">
-                      <select className="input-field !py-1 !text-xs max-w-[120px]" value={u.role}
-                        disabled={savingId === u.id}
-                        onChange={e => handleRoleChange(u, e.target.value as UserRole)}>
-                        <option value={UserRole.ADMIN}>Admin</option>
-                        <option value={UserRole.OPERADOR}>Operador</option>
-                        <option value={UserRole.REVISOR}>Revisor</option>
-                        <option value={UserRole.AUDITOR}>Auditor</option>
-                      </select>
+                      {u.is_superadmin ? (
+                        <span className="text-xs text-gray-400 dark:text-gray-500 italic">—</span>
+                      ) : (
+                        <select className="input-field !py-1 !text-xs max-w-[120px]" value={u.role}
+                          disabled={savingId === u.id}
+                          onChange={e => handleRoleChange(u, e.target.value as UserRole)}>
+                          <option value={UserRole.ADMIN}>Admin</option>
+                          <option value={UserRole.OPERADOR}>Operador</option>
+                          <option value={UserRole.REVISOR}>Revisor</option>
+                          <option value={UserRole.AUDITOR}>Auditor</option>
+                        </select>
+                      )}
                     </td>
                     <td className="px-4 py-2.5">
-                      <button onClick={() => handleActiveToggle(u)} disabled={savingId === u.id}
-                        className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${u.is_active ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-300'}`}>
+                      <button onClick={() => handleActiveToggle(u)} disabled={savingId === u.id || u.is_superadmin}
+                        className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors disabled:opacity-50 ${u.is_active ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-300'}`}>
                         {u.is_active ? 'Activo' : 'Inactivo'}
                       </button>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-gray-500">
                       {new Date(u.created_at).toLocaleDateString('es-AR')}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {!u.is_superadmin && (
+                        <button
+                          onClick={() => handleDelete(u)}
+                          disabled={deletingId === u.id}
+                          className="text-gray-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors disabled:opacity-30 text-base"
+                          title="Eliminar usuario"
+                        >
+                          {deletingId === u.id ? '⏳' : '🗑️'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
