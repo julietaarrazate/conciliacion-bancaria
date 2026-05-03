@@ -277,15 +277,16 @@ def buscar_match(
             return None, f"acreditado {fecha_s}"
         return None, "duplicado"
 
-    # Umbral dinamico: si hay muchos candidatos, siempre exigir identidad
-    # Para extractos grandes con montos frecuentes el umbral sube
-    umbral = UMBRAL_BASE if len(candidatos) < 10 else 1
-
-    # 3. Monto poco frecuente → acreditar directamente al primer libre
-    if len(candidatos) < umbral:
+    # Regla fundamental para extractos de alto volumen:
+    #   - Monto UNICO (aparece 1 sola vez) → acreditar directo, no hay ambiguedad
+    #   - Monto REPETIDO (2+ veces)        → SIEMPRE exigir identidad
+    #
+    # Razon: en un extracto real puede haber 30 movimientos de $50.000 el mismo dia
+    # de clientes distintos. Acreditar sin validar CUIT/CBU seria incorrecto.
+    if len(candidatos) == 1:
         return libres[0], "ok"
 
-    # 4. Monto comun → scoring por identidad
+    # Monto repetido → scoring por identidad (CUIT, CBU, numeros, titular)
     cuit_plan_raw = norm_cuit(cuit_planilla or '')
     if not cuit_plan_raw and titular_planilla:
         cuit_plan_raw = extraer_cuit(titular_planilla)
@@ -311,17 +312,19 @@ def buscar_match(
             candidatos_scored.append((score, mov))
 
     if candidatos_scored:
-        # Ordenar por score desc, tomar el mejor
         candidatos_scored.sort(key=lambda x: x[0], reverse=True)
         mejor_score, mejor_mov = candidatos_scored[0]
 
-        # Si hay empate entre los dos mejores, ser conservador solo si el score es muy bajo
+        # Empate con score bajo = ambiguo, no arriesgar
         if len(candidatos_scored) > 1 and candidatos_scored[1][0] == mejor_score and mejor_score < 5:
-            return None, "faltan datos"  # empate con score bajo = ambiguo
+            n = len(candidatos)
+            return None, f"faltan datos ({n} mov. de ese monto)"
 
         return mejor_mov, "ok"
 
-    return None, "faltan datos"
+    # Sin identidad disponible — informar cuántos candidatos hay
+    n = len(candidatos)
+    return None, f"faltan datos ({n} mov. de ese monto)"
 
 
 # Config por defecto (Caneland — comportamiento original)
