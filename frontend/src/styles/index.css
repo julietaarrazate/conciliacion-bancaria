@@ -7,10 +7,7 @@
 
 /* ─── Base ──────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
-html {
-  -webkit-text-size-adjust: 100%;
-  overscroll-behavior-x: none;
-}
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   font-family: 'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif;

@@ -13,6 +13,7 @@ export const Historial: React.FC = () => {
   const [savingId, setSavingId] = useState<number | null>(null)
   const [savedMsg, setSavedMsg] = useState('')
   const [panelId, setPanelId] = useState<number | null>(null)
+  const [compact, setCompact] = useState(false)
 
   const handleDownload = async (id: number) => {
     setDownloadingId(id)
@@ -93,13 +94,22 @@ export const Historial: React.FC = () => {
             {items.length} planillas · {totalAcred}/{totalFilas} acreditadas · {pct}% precisión
           </p>
         </div>
-        <button
-          onClick={handleExport}
-          disabled={exporting || items.length === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
-        >
-          {exporting ? '⏳ Exportando...' : '⬇️ Exportar Excel'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setCompact(c => !c)}
+            className="px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+            title="Cambiar tamaño"
+          >
+            {compact ? '🔍 Normal' : '🔎 Compacto'}
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={exporting || items.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+          >
+            {exporting ? '⏳' : '⬇️ Excel'}
+          </button>
+        </div>
       </div>
 
       <div className="card mb-4 flex gap-3 items-end">
@@ -124,47 +134,48 @@ export const Historial: React.FC = () => {
           <div className="p-8 text-center text-ml-text-soft">Sin reconciliaciones registradas</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className={`w-full ${compact ? 'text-[11px]' : 'text-sm'}`}>
               <thead className="bg-ml-gray-bg dark:bg-slate-900 border-b dark:border-slate-700">
                 <tr>
-                  {['Cliente','Archivo','Fecha','Usuario','Total','OK','No está','Dup.','Datos','%',''].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-ml-text-soft uppercase dark:text-gray-400">{h}</th>
+                  {['Cliente','Archivo','Fecha','Total','OK','No está','Dup.','%',''].map(h => (
+                    <th key={h} className={`${compact ? 'px-1.5 py-1.5' : 'px-3 py-2.5'} text-left text-xs font-semibold text-ml-text-soft uppercase dark:text-gray-400`}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y dark:divide-slate-700">
                 {items.map((it) => {
                   const acc = it.total_filas > 0 ? Math.round((it.acreditadas / it.total_filas) * 100) : 0
+                  const td = compact ? 'px-1.5 py-1' : 'px-3 py-2'
                   return (
                     <tr key={it.id} className="hover:bg-ml-gray-bg dark:hover:bg-slate-700/50">
-                      <td className="px-3 py-2 font-medium dark:text-white">{it.cliente_nombre}</td>
-                      <td className="px-3 py-2 text-ml-text-soft dark:text-gray-400 max-w-[180px] truncate">{it.nombre_archivo}</td>
-                      <td className="px-3 py-2 text-ml-text-soft dark:text-gray-400 whitespace-nowrap">{new Date(it.fecha_carga).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}</td>
-                      <td className="px-3 py-2 text-ml-text-soft dark:text-gray-400">{it.usuario_nombre}</td>
-                      <td className="px-3 py-2 text-center">{it.total_filas}</td>
-                      <td className="px-3 py-2 text-center font-bold text-green-600 dark:text-green-400">{it.acreditadas}</td>
-                      <td className="px-3 py-2 text-center font-bold text-red-600 dark:text-red-400">{it.no_encontradas || '—'}</td>
-                      <td className="px-3 py-2 text-center font-bold text-yellow-600 dark:text-yellow-400">{it.duplicadas || '—'}</td>
-                      <td className="px-3 py-2 text-center font-bold text-blue-600 dark:text-blue-400">{it.sin_datos || '—'}</td>
-                      <td className="px-3 py-2 text-center">
+                      <td className={`${td} font-medium dark:text-white`}>{it.cliente_nombre}</td>
+                      <td className={`${td} text-ml-text-soft dark:text-gray-400 max-w-[140px] truncate`}>{it.nombre_archivo}</td>
+                      <td className={`${td} text-ml-text-soft dark:text-gray-400 whitespace-nowrap`}>
+                        {new Date(it.fecha_carga).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}
+                      </td>
+                      <td className={`${td} text-center`}>{it.total_filas}</td>
+                      <td className={`${td} text-center font-bold text-green-600 dark:text-green-400`}>{it.acreditadas}</td>
+                      <td className={`${td} text-center font-bold text-red-600 dark:text-red-400`}>{it.no_encontradas || '—'}</td>
+                      <td className={`${td} text-center font-bold text-yellow-600 dark:text-yellow-400`}>{it.duplicadas || '—'}</td>
+                      <td className={`${td} text-center`}>
                         <span className={`badge ${acc === 100 ? 'badge-ok' : acc >= 80 ? 'badge-warn' : 'badge-error'}`}>{acc}%</span>
                       </td>
-                      <td className="px-3 py-2 text-center">
-                        <div className="flex items-center gap-1 justify-center">
-                          <button onClick={() => setPanelId(it.id)} className="text-ml-blue hover:text-ml-blue-dark text-sm" title="Ver detalle">👁️</button>
+                      <td className={`${td} text-center`}>
+                        <div className="flex items-center gap-0.5 justify-center">
+                          <button onClick={() => setPanelId(it.id)} className="text-ml-blue hover:text-ml-blue-dark" title="Ver detalle">👁️</button>
                           <button onClick={() => handleGuardar(it.id, it.cliente_nombre)} disabled={savingId === it.id}
-                            className="text-purple-600 hover:text-purple-700 dark:text-purple-400 disabled:opacity-30 text-sm"
-                            title="Guardar en carpeta clientes/Cliente/Mes/">
+                            className="text-purple-600 hover:text-purple-700 dark:text-purple-400 disabled:opacity-30"
+                            title="Guardar en carpeta">
                             {savingId === it.id ? '⏳' : '📁'}
                           </button>
                           <button onClick={() => handleDownload(it.id)} disabled={downloadingId === it.id}
-                            className="text-green-600 hover:text-green-700 disabled:opacity-30 text-sm"
+                            className="text-green-600 hover:text-green-700 disabled:opacity-30"
                             title="Descargar Excel">
                             {downloadingId === it.id ? '⏳' : '⬇️'}
                           </button>
                           <button onClick={() => handleDelete(it.id)} disabled={deletingId === it.id}
-                            className="text-gray-400 hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 disabled:opacity-30 text-sm"
-                            title="Borrar planilla">🗑️</button>
+                            className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-30"
+                            title="Borrar">🗑️</button>
                         </div>
                       </td>
                     </tr>

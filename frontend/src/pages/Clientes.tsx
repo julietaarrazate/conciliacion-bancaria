@@ -83,7 +83,7 @@ export const Clientes: React.FC = () => {
     s + c.meses.reduce((ms, m) => ms + m.archivos.length, 0), 0)
 
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto" style={{ touchAction: 'pan-y' }}>
+    <div className="p-4 md:p-6 max-w-4xl mx-auto">
       <div className="mb-4">
         <h1 className="text-xl md:text-2xl font-bold dark:text-white">Clientes</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">

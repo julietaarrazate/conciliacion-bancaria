@@ -40,12 +40,12 @@ export const Layout: React.FC = () => {
   )
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-ml-gray-bg dark:bg-slate-900 overflow-hidden" style={{ overscrollBehaviorX: 'none' }}>
+    <div className="flex flex-col md:flex-row h-screen bg-ml-gray-bg dark:bg-slate-900 overflow-hidden">
       {/* Header mobile */}
-      <header className="md:hidden bg-ml-yellow dark:bg-ml-dark-surface dark:border-b dark:border-ml-green/20 flex items-center justify-between px-4 py-2.5 z-30 shadow dark:shadow-none">
+      <header className="md:hidden bg-ml-yellow flex items-center justify-between px-4 py-2.5 z-30 shadow">
         <div>
-          <p className="font-bold text-sm text-ml-text dark:text-ml-green font-mono dark:tracking-wide">Conciliación</p>
-          <p className="text-[11px] text-ml-text-soft dark:text-zinc-500 truncate max-w-[180px]">
+          <p className="font-bold text-sm text-ml-text dark:text-ml-green font-mono">Conciliación</p>
+          <p className="text-[11px] text-ml-text-soft truncate max-w-[180px]">
             {user?.full_name}
           </p>
         </div>
@@ -69,9 +69,9 @@ export const Layout: React.FC = () => {
 
       {/* Sidebar desktop */}
       <aside className="hidden md:flex w-60 bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 flex-col">
-        <div className="px-5 py-4 border-b border-gray-100 dark:border-ml-green/20 bg-ml-yellow dark:bg-ml-dark-surface">
-          <h1 className="text-base font-bold text-ml-text dark:text-ml-green font-mono dark:tracking-wider">Conciliación</h1>
-          <p className="text-xs text-ml-text-soft dark:text-zinc-500">Julieta Arrazate</p>
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-700 bg-ml-yellow">
+          <h1 className="text-base font-bold text-ml-text dark:text-ml-green font-mono">Conciliación</h1>
+          <p className="text-xs text-ml-text-soft">Julieta Arrazate</p>
         </div>
 
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
@@ -112,7 +112,7 @@ export const Layout: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto text-ml-text dark:text-gray-100 pb-16 md:pb-0" style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}>
+      <main className="flex-1 overflow-y-auto text-ml-text dark:text-gray-100 pb-16 md:pb-0">
         <Outlet />
       </main>
 

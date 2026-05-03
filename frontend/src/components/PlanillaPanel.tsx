@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { apiClient } from '@/services/api'
 
 interface Row {
@@ -93,37 +93,6 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
       .finally(() => setLoading(false))
   }, [planillaId])
 
-  // Bloquear swipe-back del navegador (Android + iOS) mientras el panel está abierto
-  useEffect(() => {
-    if (!planillaId) return
-
-    let startX = 0
-    let startY = 0
-
-    const onTouchStart = (e: TouchEvent) => {
-      startX = e.touches[0].clientX
-      startY = e.touches[0].clientY
-    }
-
-    const onTouchMove = (e: TouchEvent) => {
-      const dx = e.touches[0].clientX - startX
-      const dy = e.touches[0].clientY - startY
-      // Si el movimiento es más horizontal que vertical → bloquear
-      if (Math.abs(dx) > Math.abs(dy)) {
-        e.preventDefault()
-      }
-    }
-
-    document.addEventListener('touchstart', onTouchStart, { passive: true })
-    document.addEventListener('touchmove', onTouchMove, { passive: false })
-    document.body.style.overscrollBehaviorX = 'none'
-
-    return () => {
-      document.removeEventListener('touchstart', onTouchStart)
-      document.removeEventListener('touchmove', onTouchMove)
-      document.body.style.overscrollBehaviorX = ''
-    }
-  }, [planillaId])
 
   const filteredRows = useMemo(() => {
     if (!detalle) return []
@@ -168,15 +137,6 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     } finally { setSavingRow(false) }
   }
 
-  // Swipe para cerrar (izquierda = cerrar, derecha = cerrar)
-  const touchStartX = useRef(0)
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX
-  }, [])
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    const dx = e.changedTouches[0].clientX - touchStartX.current
-    if (dx > 60) onClose() // swipe derecha = cerrar
-  }, [onClose])
 
   if (!planillaId) return null
 
@@ -195,9 +155,6 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
 
       <div
         className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white dark:bg-slate-800 shadow-2xl z-50 flex flex-col"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}
       >
         {/* Header */}
         <div className="flex items-start justify-between px-4 py-3 bg-ml-yellow dark:bg-ml-dark-surface dark:border-b dark:border-ml-green/30 border-b">
