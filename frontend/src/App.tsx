@@ -14,6 +14,8 @@ import { Perfil } from '@/pages/Perfil'
 import { Organizaciones } from '@/pages/Organizaciones'
 import { Liquidaciones } from '@/pages/Liquidaciones'
 import { Revision } from '@/pages/Revision'
+import { Caja } from '@/pages/Caja'
+import { OrdenDePago } from '@/pages/OrdenDePago'
 import { Layout } from '@/components/Layout'
 import { useThemeStore } from '@/store/theme'
 import '@/styles/index.css'
@@ -92,6 +94,8 @@ export function App() {
               <Liquidaciones />
             </ProtectedRoute>
           } />
+          <Route path="/caja" element={<ProtectedRoute permission="reconcile"><Caja /></ProtectedRoute>} />
+          <Route path="/op" element={<ProtectedRoute permission="reconcile"><OrdenDePago /></ProtectedRoute>} />
           <Route path="/revision" element={
             <ProtectedRoute permission="reconcile">
               <Revision />
