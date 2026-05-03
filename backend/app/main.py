@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.database import engine, Base
 from app.routers import auth, extractos, planillas, me, admin, auditoria, historial, clientes_dir
 from app.routers import organizaciones
+from app.routers import liquidaciones
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog
 from app.models.organizacion import Organizacion
 
@@ -210,6 +211,7 @@ app.include_router(auditoria.router)
 app.include_router(admin.router)
 app.include_router(clientes_dir.router)
 app.include_router(organizaciones.router)
+app.include_router(liquidaciones.router)
 
 
 @app.get("/")

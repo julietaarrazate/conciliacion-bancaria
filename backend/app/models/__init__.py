@@ -5,15 +5,12 @@ from .extracto import ExtractoBancario, MovimientoBanco
 from .planilla import Planilla, PlanillaRow
 from .auditoria import AuditoriaLog
 from .patron_aprendido import PatronAprendido
+from .liquidacion import Liquidacion, LiquidacionDetalle, CierrePeriodo
 
 __all__ = [
-    "Organizacion",
-    "User",
-    "Cliente",
-    "ExtractoBancario",
-    "MovimientoBanco",
-    "Planilla",
-    "PlanillaRow",
-    "AuditoriaLog",
-    "PatronAprendido"
+    "Organizacion", "User", "Cliente",
+    "ExtractoBancario", "MovimientoBanco",
+    "Planilla", "PlanillaRow",
+    "AuditoriaLog", "PatronAprendido",
+    "Liquidacion", "LiquidacionDetalle", "CierrePeriodo"
 ]

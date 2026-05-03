@@ -30,6 +30,7 @@ const navItems = [
   { to: '/bulk',           label: 'Bulk',        Icon: Icon.Stack },
   { to: '/movimientos',    label: 'Movimientos', Icon: Icon.Chart },
   { to: '/historial',      label: 'Historial',   Icon: Icon.List },
+  { to: '/liquidaciones',  label: 'Liquidaciones', Icon: Icon.Chart, permission: 'manage_users' },
   { to: '/auditoria',      label: 'Auditoría',   Icon: Icon.Search, permission: 'view_audit' },
   { to: '/usuarios',       label: 'Usuarios',    Icon: Icon.Users,  permission: 'manage_users' },
   { to: '/organizaciones', label: 'Orgs',        Icon: Icon.Building, permission: 'manage_users' },

@@ -420,3 +420,119 @@ def export_backup_completo(org_nombre: str, planillas: List[dict], extractos: Li
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
+
+
+def export_liquidacion_excel(liquidacion, revisiones) -> bytes:
+    """
+    Excel de liquidacion con 3 hojas:
+    Hoja 1 — Resumen ejecutivo
+    Hoja 2 — Detalle por cliente
+    Hoja 3 — Log de revisiones manuales
+    """
+    from datetime import datetime as dt
+    ESTADO_FILL = {
+        "borrador": PatternFill("solid", fgColor="FEF3C7"),
+        "aprobada": PatternFill("solid", fgColor="D1FAE5"),
+        "pagada":   PatternFill("solid", fgColor="DBEAFE"),
+    }
+    now_str = dt.now().strftime('%d/%m/%Y %H:%M')
+    wb = openpyxl.Workbook()
+
+    # ── Hoja 1: Resumen ejecutivo ─────────────────────────────────────────
+    ws1 = wb.active
+    ws1.title = "Resumen ejecutivo"
+
+    ws1.merge_cells("A1:D1")
+    ws1.cell(row=1, column=1, value="LIQUIDACIÓN").font = Font(bold=True, size=14, color="1B3F73")
+    ws1.cell(row=1, column=1).alignment = Alignment(horizontal="left")
+    ws1.cell(row=2, column=1, value=f"Período: {liquidacion.periodo_inicio} → {liquidacion.periodo_fin}").font = Font(italic=True, color="666666")
+    ws1.cell(row=3, column=1, value=f"Generado: {now_str}").font = Font(italic=True, color="666666")
+
+    # Estado
+    estado_cell = ws1.cell(row=4, column=1, value=f"Estado: {liquidacion.estado.upper()}")
+    estado_cell.font = Font(bold=True, size=11)
+    fill = ESTADO_FILL.get(liquidacion.estado, PatternFill("solid", fgColor="F3F4F6"))
+    for col in range(1, 5):
+        ws1.cell(row=4, column=col).fill = fill
+
+    # Totales
+    totales = [
+        ("", ""),
+        ("Total conciliado", liquidacion.total_conciliado),
+        ("Total comisión", liquidacion.total_comision),
+        ("Total neto", liquidacion.total_neto),
+    ]
+    for i, (label, val) in enumerate(totales, start=6):
+        if not label:
+            continue
+        c_label = ws1.cell(row=i, column=1, value=label)
+        c_label.font = Font(bold=True)
+        c_val = ws1.cell(row=i, column=2, value=val)
+        c_val.number_format = '"$"#,##0.00'
+        c_val.font = Font(bold=True, size=12)
+        c_val.alignment = Alignment(horizontal="right")
+        if label == "Total neto":
+            c_val.font = Font(bold=True, size=13, color="155724")
+
+    if liquidacion.notas:
+        ws1.cell(row=11, column=1, value="Notas:").font = Font(bold=True)
+        ws1.cell(row=12, column=1, value=liquidacion.notas).font = Font(italic=True, color="666666")
+
+    ws1.column_dimensions["A"].width = 25
+    ws1.column_dimensions["B"].width = 18
+
+    # ── Hoja 2: Detalle por cliente ───────────────────────────────────────
+    ws2 = wb.create_sheet("Detalle por cliente")
+    ws2.cell(row=1, column=1, value=f"Detalle — {liquidacion.periodo_inicio} → {liquidacion.periodo_fin}").font = TITLE_FONT
+
+    headers2 = ["Cliente", "Monto conciliado", "% Comisión", "Monto comisión", "Monto neto", "Observaciones"]
+    _hdr(ws2, 3, headers2)
+
+    for i, d in enumerate(liquidacion.detalles, start=4):
+        ws2.cell(row=i, column=1, value=d.cliente_nombre)
+        ws2.cell(row=i, column=2, value=d.monto_conciliado).number_format = '"$"#,##0.00'
+        ws2.cell(row=i, column=3, value=d.porcentaje_comision).number_format = '0.00"%"'
+        ws2.cell(row=i, column=4, value=d.monto_comision).number_format = '"$"#,##0.00'
+        ws2.cell(row=i, column=5, value=d.monto_neto).number_format = '"$"#,##0.00'
+        ws2.cell(row=i, column=6, value=d.observaciones or "")
+        for col in range(1, 7):
+            ws2.cell(row=i, column=col).border = BORDER
+
+    # Fila totales
+    tot = len(liquidacion.detalles) + 4
+    ws2.cell(row=tot, column=1, value="TOTAL").font = Font(bold=True)
+    ws2.cell(row=tot, column=2, value=liquidacion.total_conciliado).number_format = '"$"#,##0.00'
+    ws2.cell(row=tot, column=4, value=liquidacion.total_comision).number_format = '"$"#,##0.00'
+    ws2.cell(row=tot, column=5, value=liquidacion.total_neto).number_format = '"$"#,##0.00'
+    for col in [1,2,3,4,5]:
+        ws2.cell(row=tot, column=col).fill = PatternFill("solid", fgColor="E2EAF7")
+        ws2.cell(row=tot, column=col).font = Font(bold=True)
+
+    ws2.auto_filter.ref = f"A3:F{tot-1}"
+    _autosize(ws2, 6)
+    ws2.freeze_panes = "A4"
+
+    # ── Hoja 3: Log de revisiones manuales ───────────────────────────────
+    ws3 = wb.create_sheet("Revisiones manuales")
+    ws3.cell(row=1, column=1, value="Log de revisiones manuales del período").font = TITLE_FONT
+
+    if not revisiones:
+        ws3.cell(row=3, column=1, value="Sin revisiones manuales en este período").font = Font(italic=True, color="888888")
+    else:
+        headers3 = ["Planilla", "Cliente", "Monto", "Estado anterior", "Estado final", "Comentario"]
+        _hdr(ws3, 3, headers3)
+        for i, (row, planilla) in enumerate(revisiones, start=4):
+            ws3.cell(row=i, column=1, value=planilla.nombre_archivo)
+            ws3.cell(row=i, column=2, value=planilla.cliente.nombre if planilla.cliente else "")
+            ws3.cell(row=i, column=3, value=row.monto).number_format = '"$"#,##0.00'
+            ws3.cell(row=i, column=4, value="sin datos")
+            ws3.cell(row=i, column=5, value=row.status)
+            ws3.cell(row=i, column=6, value=row.comentario_revision or "")
+            for col in range(1, 7):
+                ws3.cell(row=i, column=col).border = BORDER
+        _autosize(ws3, 6)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
