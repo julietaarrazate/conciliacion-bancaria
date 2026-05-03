@@ -106,6 +106,34 @@ def es_libre(cliente_acreditado: Optional[str]) -> bool:
     return cliente_acreditado.strip().lower() in ('no identificado', '')
 
 
+def _bonus_fecha(fecha_planilla: Optional[date], fecha_mov: Optional[date], dias_tolerancia: int) -> int:
+    """
+    Bonus progresivo por proximidad de fecha.
+    Cubre feriados, fines de semana y demoras bancarias tipicas.
+
+      0 dias (mismo dia)          → +5
+      1-2 dias (lun-vie normal)   → +4
+      3-4 dias (fin de semana)    → +3
+      5-7 dias (feriado largo)    → +2
+      8-10 dias (caso extremo)    → +1
+      > dias_tolerancia           → 0
+    """
+    if not fecha_planilla or not fecha_mov or dias_tolerancia <= 0:
+        return 0
+    delta = abs((fecha_planilla - fecha_mov).days)
+    if delta > dias_tolerancia:
+        return 0
+    if delta == 0:
+        return 5
+    if delta <= 2:
+        return 4
+    if delta <= 4:
+        return 3
+    if delta <= 7:
+        return 2
+    return 1
+
+
 def _score_identidad(
     cuit_plan: str,
     cbu_plan: str,
@@ -116,63 +144,61 @@ def _score_identidad(
     dias_tolerancia: int
 ) -> int:
     """
-    Calcula un score de similitud entre una fila de planilla y un movimiento bancario.
-    Mayor score = mejor match.
+    Score de similitud entre una fila de planilla y un movimiento bancario.
 
+    Identidad (quien pago):
       12 = CUIT exacto
       10 = CBU/CVU exacto (22 digitos)
-       8 = cualquier numero significativo de la planilla aparece en el titular del extracto
-           (numero de cuenta, operacion, referencia, etc.)
+       8 = numero de cuenta largo (10+ digitos) en comun
+       6 = numero de referencia/operacion (6-9 digitos) en comun
        5 = titular (primeras 2 palabras)
        3 = titular (primera palabra larga)
-      +2 = bonus fecha cercana
 
-    El extracto de Banco Macro mezcla en 'titular': CUIT, CBU, nombre, nro operacion.
-    Al cruzar TODOS los numeros de la planilla contra el titular del extracto,
-    capturamos matches que antes se perdian.
+    Fecha (cuando pago) — bonus progresivo:
+      +5 = mismo dia
+      +4 = 1-2 dias (demora normal)
+      +3 = 3-4 dias (fin de semana)
+      +2 = 5-7 dias (feriado largo)
+      +1 = 8-10 dias (caso extremo)
+
+    La fecha nunca descarta un match por identidad fuerte —
+    solo ayuda a desempatar cuando hay multiples candidatos con el mismo monto.
     """
     score = 0
     titular_mov = mov.titular or ''
     nums_mov = extraer_todos_numeros(titular_mov)
 
-    # --- CUIT exacto (mas confiable) ---
+    # ── CUIT exacto ────────────────────────────────────────────
     cuit_mov = extraer_cuit(titular_mov)
     if cuit_plan and cuit_mov and cuit_plan == cuit_mov:
-        score = 12
-        if fecha_planilla and mov.fecha and dias_tolerancia > 0:
-            if abs((fecha_planilla - mov.fecha).days) <= dias_tolerancia:
-                score += 2
+        score = 12 + _bonus_fecha(fecha_planilla, mov.fecha, dias_tolerancia)
         return score
 
-    # --- CBU/CVU exacto ---
+    # ── CBU/CVU exacto ─────────────────────────────────────────
     cbu_mov = extraer_cbu(titular_mov)
     if cbu_plan and cbu_mov and cbu_plan == cbu_mov:
-        score = 10
+        score = 10 + _bonus_fecha(fecha_planilla, mov.fecha, dias_tolerancia)
         return score
 
-    # --- Cruce de TODOS los numeros significativos ---
-    # Cualquier numero de 6+ digitos de la planilla que aparezca en el extracto
+    # ── Cruce de todos los numeros significativos ───────────────
+    # Captura: nro de cuenta, nro operacion, referencia, CBU parcial, etc.
     if nums_planilla and nums_mov:
         interseccion = nums_planilla & nums_mov
         if interseccion:
-            # Numeros mas largos = mas confiables (CBU 22 > nro cuenta 10 > referencia 6)
             max_len = max(len(n) for n in interseccion)
             if max_len >= 22:
-                score = 10  # CBU/CVU
+                base = 10   # CBU/CVU por longitud
             elif max_len >= 10:
-                score = 8   # CUIT o nro de cuenta largo
+                base = 8    # nro cuenta largo / CUIT sin guiones
             else:
-                score = 6   # nro operacion o referencia corta
-            if fecha_planilla and mov.fecha and dias_tolerancia > 0:
-                if abs((fecha_planilla - mov.fecha).days) <= dias_tolerancia:
-                    score += 2
+                base = 6    # nro operacion o referencia corta
+            score = base + _bonus_fecha(fecha_planilla, mov.fecha, dias_tolerancia)
             return score
 
-    # --- Titular por palabras (fallback) ---
+    # ── Titular por palabras (fallback) ────────────────────────
     if titular_plan:
         norm_plan = normalizar_nombre(titular_plan)
         norm_mov  = normalizar_nombre(titular_mov)
-        # Solo palabras alfabeticas largas (evita numeros sueltos)
         palabras = [p for p in norm_plan.split() if len(p) > 3 and p.isalpha()]
 
         if len(palabras) >= 2:
@@ -185,10 +211,8 @@ def _score_identidad(
             if palabras[0] in norm_mov:
                 score += 3
 
-    # --- Bonus fecha ---
-    if score > 0 and fecha_planilla and mov.fecha and dias_tolerancia > 0:
-        if abs((fecha_planilla - mov.fecha).days) <= dias_tolerancia:
-            score += 2
+    if score > 0:
+        score += _bonus_fecha(fecha_planilla, mov.fecha, dias_tolerancia)
 
     return score
 
@@ -304,7 +328,7 @@ def buscar_match(
 CONFIG_CANELAND = {
     "match_rules": ["monto_cuit"],
     "tolerancia_monto": 0.01,
-    "dias_tolerancia_fecha": 0,
+    "dias_tolerancia_fecha": 5,  # cubre fin de semana + feriado (vie→lun + 1 dia)
     "estados_habilitados": ["pendiente", "ok", "no está", "duplicado", "faltan datos"],
     "requiere_cierre_periodo": False,
 }

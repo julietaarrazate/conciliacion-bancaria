@@ -99,7 +99,7 @@ def _init_db():
             config_caneland = {
                 "match_rules": ["monto_cuit"],
                 "tolerancia_monto": 0.01,
-                "dias_tolerancia_fecha": 0,
+                "dias_tolerancia_fecha": 5,
                 "estados_habilitados": ["pendiente", "ok", "no está", "duplicado", "faltan datos"],
                 "requiere_cierre_periodo": False,
                 "notificaciones_whatsapp": False,
