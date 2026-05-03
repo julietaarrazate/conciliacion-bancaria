@@ -12,7 +12,7 @@ export default defineConfig({
       manifest: {
         name: 'Conciliación Bancaria',
         short_name: 'Conciliación',
-        description: 'Sistema de conciliación bancaria - Caneland SA',
+        description: 'Sistema de conciliación bancaria — Julieta Arrazate',
         theme_color: '#FFE600',
         background_color: '#F5F5F5',
         display: 'standalone',

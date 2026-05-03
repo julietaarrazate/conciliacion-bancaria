@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 480   # 8h = jornada laboral
 
     # App
-    app_name: str = "Conciliacion Bancaria - Caneland SA"
+    app_name: str = "Conciliacion Bancaria — Julieta Arrazate"
     debug: bool = False
 
     # Archivos
