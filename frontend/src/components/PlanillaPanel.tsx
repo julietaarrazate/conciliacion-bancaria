@@ -159,10 +159,10 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
 
       <div
-        className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white dark:bg-slate-800 shadow-2xl z-50 flex flex-col"
+        className="fixed right-0 top-12 md:top-0 h-[calc(100dvh-3rem)] md:h-dvh w-full md:max-w-3xl bg-white dark:bg-ml-dark-surface shadow-2xl z-50 flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-4 py-3 bg-ml-yellow dark:bg-ml-dark-surface dark:border-b dark:border-ml-green/30 border-b">
+        <div className="flex items-start justify-between px-4 py-3 bg-ml-yellow dark:bg-ml-dark-card border-b border-ml-yellow-dark dark:border-ml-dark-border shrink-0">
           <div className="flex-1 min-w-0">
             <p className="font-bold text-ml-text text-sm truncate">{detalle?.cliente_nombre ?? '...'}</p>
             <p className="text-xs text-ml-text-soft truncate">{detalle?.nombre_archivo}</p>
@@ -224,7 +224,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
         {loading && <div className="flex-1 flex items-center justify-center text-ml-text-soft">Cargando...</div>}
 
         {detalle && (
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto min-h-0">
             <table className="w-full text-xs min-w-[780px]">
               <thead className="sticky top-0 z-10">
                 {/* Headers azul banco Macro — con Estado al FINAL */}
