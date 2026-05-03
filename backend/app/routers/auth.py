@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from datetime import timedelta
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse
@@ -9,10 +11,12 @@ from app.config import get_settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/register", response_model=UserResponse)
-def register(user_data: UserRegister, db: Session = Depends(get_db)):
-    """Registra un nuevo usuario"""
+@limiter.limit("5/minute")
+def register(request: Request, user_data: UserRegister, db: Session = Depends(get_db)):
+    """Registra un nuevo usuario. Limitado a 5 intentos por minuto por IP."""
     user = register_user(db, user_data)
     if not user:
         raise HTTPException(
@@ -22,7 +26,8 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)):
     return user
 
 @router.post("/login", response_model=TokenResponse)
-def login(credentials: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db)):
     """Autentica un usuario y retorna JWT token"""
     user = authenticate_user(db, credentials.email, credentials.password)
     if not user:

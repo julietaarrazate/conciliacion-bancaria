@@ -24,3 +24,6 @@ openpyxl==3.1.5
 # Utilidades
 python-dotenv==1.0.1
 requests==2.32.3
+
+# Rate limiting (proteccion brute force)
+slowapi==0.1.9

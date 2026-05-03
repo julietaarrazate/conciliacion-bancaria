@@ -1,209 +1,170 @@
-# Sistema de Conciliacion Bancaria — Julieta Arrazate
+# Sistema de Conciliación Bancaria — Julieta Arrazate
+
+## Para continuar en un nuevo chat
+
+Decile a Claude: "Soy Julieta Arrazate. Proyecto: conciliacion-bancaria.
+Lee el CLAUDE.md del repo julietaarrazate/conciliacion-bancaria para entender el contexto."
+
+---
 
 ## Autora y Propietaria
 
-**Julieta Arrazate** — Desarrolladora y propietaria intelectual de este sistema.
-Email: julietaarrazate@gmail.com
+**Julieta Arrazate** — Desarrolladora y propietaria intelectual.
+Email: julietaarrazate@gmail.com (superadmin del sistema)
 
 ---
 
-## Que es esto
-
-Sistema web + app movil para conciliar transferencias bancarias contra planillas de clientes.
-Multi-tenant: cada empresa tiene datos aislados. Julieta es superadmin con acceso a todo.
-Empresa cliente actual: **Caneland SA** (organizacion_id=1).
-
----
-
-## Arquitectura de produccion (100% gratuita)
+## Arquitectura de producción
 
 - Frontend (React + PWA): Vercel — https://conciliacion-bancaria-ten.vercel.app
 - Backend (FastAPI): Render — https://conciliacion-api.onrender.com
 - Base de datos: Neon PostgreSQL — ep-ancient-hall-anz4pezn.c-6.us-east-1.aws.neon.tech
-- Codigo: GitHub — julietaarrazate/conciliacion-bancaria
+- Código: GitHub — julietaarrazate/conciliacion-bancaria
+- Keep-alive: UptimeRobot pinguea /health cada 5 min
 
-Render free tier: duerme tras 15 min sin uso. Primera request del dia tarda ~30 seg.
+API keys para deploy:
+- Render API key: rnd_8Kqkb028Ochfw6eSOYZR3v2O7Cv2
+- Render service ID: srv-d7pqt81j2pic73c0c6fg
+- Vercel token: vcp_5vau9jj3k4E9Pn9yI3m4BMaWBWJSv5mNh3mU9Yd1mkHxbFmFub03rpK8
+- Vercel project ID: prj_cVINkspVm6j3B1fxOrdU81B0ehWg
+
+Para push a GitHub:
+  git push "https://julietaarrazate:TOKEN@github.com/julietaarrazate/conciliacion-bancaria.git" main
+
+Para deploy manual de Render:
+  curl -X POST https://api.render.com/v1/services/srv-d7pqt81j2pic73c0c6fg/deploys \
+    -H "Authorization: Bearer rnd_8Kqkb028Ochfw6eSOYZR3v2O7Cv2"
 
 ---
 
-## Credenciales de produccion
+## Credenciales
 
-- Superadmin: julietaarrazate@gmail.com / password definido via env var SUPERADMIN_PASSWORD en Render
-- Admin demo: admin@caneland.com / admin123
-- Operador demo: operador@caneland.com / operador123
+- Superadmin: julietaarrazate@gmail.com / ver SUPERADMIN_PASSWORD en Render env vars
+- Admin demo: admin@julieta.com / admin123
 
-IMPORTANTE: Antes del primer deploy, definir en Render la variable de entorno:
-  SUPERADMIN_PASSWORD=tu_contraseña_segura
+---
 
-API keys para deploy desde Claude Code:
-- Render API key: rnd_8Kqkb028Ochfw6eSOYZR3v2O7Cv2
-- Vercel token: vcp_5vau9jj3k4E9Pn9yI3m4BMaWBWJSv5mNh3mU9Yd1mkHxbFmFub03rpK8
-- Vercel project ID: prj_cVINkspVm6j3B1fxOrdU81B0ehWg
-- Render service ID: srv-d7pqt81j2pic73c0c6fg
+## Stack técnico
+
+Backend: FastAPI + SQLAlchemy + PostgreSQL (Neon) + Python 3.11
+Frontend: React 18 + TypeScript + Vite + TailwindCSS + PWA (instalable)
+Auth: JWT 8h, pbkdf2_sha256
+Diseño: Linear-inspired, Inter font, dark mode profundo (#0B0B0F)
 
 ---
 
 ## Flujo de negocio
 
-1. Julieta recibe el extracto bancario del mes (Excel .xlsx de Banco Macro)
-2. Diariamente el contador envia "Ultimos Movimientos" (UM) -> se agregan al extracto
-3. Los clientes (Green, Tucu, Alojando, etc.) envian sus planillas de pagos
-4. El sistema concilia: busca cada monto de la planilla en el extracto
-5. Si hay match -> acredita (guarda nombre cliente + fecha)
-6. Resultado: planilla con columna Estado + extracto actualizado
-7. Se descarga y guarda en: Desktop/clientes/{Cliente}/{Anio}/{Mes}/
+1. Julieta recibe extracto bancario mensual (Excel .xlsx Banco Macro)
+2. Diariamente el contador envía "Últimos Movimientos" (UM) → se agregan sin duplicar
+3. Los clientes (Green, Tucu, David, Smt, etc.) envían sus planillas de pagos
+4. El sistema concilia: motor de match con scoring por CUIT/CBU/número/titular
+5. Resultado: planilla con estado por fila + extracto actualizado
+6. Se exporta para el contador (Excel profesional, formato Macro)
 
 ---
 
 ## Estructura del repositorio
 
 /backend — FastAPI + SQLAlchemy + PostgreSQL
-  /app/models — Organizacion, User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog
-  /app/routers — auth, me, extractos, planillas, historial, auditoria, admin, clientes_dir, organizaciones
-  /app/services — conciliacion.py (configurable por org), excel_parser, excel_export, extracto_merger
-  seed.py — Crea org Caneland + usuarios iniciales
-  requirements.txt
+  /app/models — Organizacion, User, Cliente, ExtractoBancario, MovimientoBanco,
+                Planilla, PlanillaRow, AuditoriaLog, PatronAprendido,
+                Liquidacion, LiquidacionDetalle, CierrePeriodo
+  /app/routers — auth, me, extractos, planillas, historial, auditoria,
+                 admin, clientes_dir, organizaciones, liquidaciones
+  /app/services — conciliacion.py, aprendizaje.py, excel_export.py,
+                  extracto_merger.py, excel_parser.py
+  seed.py — Crea org Caneland + usuarios
 
 /frontend — React 18 + TypeScript + Vite + TailwindCSS + PWA
-  /src/pages — Dashboard, Clientes, Movimientos, Historial, Bulk, Auditoria, Usuarios, Perfil, Login
-  /src/components — Layout, PlanillaPanel, FileUpload, ThemeToggle
+  /src/pages — Dashboard, Clientes, Movimientos, Historial, Bulk,
+               Auditoria, Usuarios, Perfil, Login, Organizaciones,
+               Liquidaciones
+  /src/components — Layout (drawer mobile), PlanillaPanel, FileUpload
+  /src/store — auth.ts, org.ts, theme.ts
   /src/services/api.ts — Todos los endpoints
 
 ---
 
-## Multi-tenant (implementado en v2.0)
+## Motor de conciliación (services/conciliacion.py)
 
-- Model Organizacion: id, nombre, plan (basic/pro), configuracion (JSON), activo
-- Caneland SA es organizacion_id=1 (no cambia nada en su operatoria)
-- Nuevos clientes usan su propio organizacion_id
-- Julieta (julietaarrazate@gmail.com) es superadmin: ve y gestiona todas las orgs
-- Usuarios normales solo ven su organizacion_id
+Sistema de scoring por identidad:
+  CUIT exacto (10-11 dígitos)           → 12 puntos
+  CBU/CVU exacto (22 dígitos)           → 10 puntos
+  Número de cuenta largo (10+ dígitos)  →  8 puntos
+  Número de referencia (6-9 dígitos)    →  6 puntos
+  Titular (2 palabras)                  →  5 puntos
+  Titular (1 palabra)                   →  3 puntos
+  + bonus fecha cercana (progresivo)    → +1 a +5 puntos
 
-### Configuracion de flujo por org (JSON)
-```json
-{
-  "match_rules": ["referencia", "monto_cuit", "monto_fecha"],
-  "tolerancia_monto": 0.01,
-  "dias_tolerancia_fecha": 3,
-  "estados_habilitados": ["pendiente", "conciliado", "parcial", "vencido", "en_revision"],
-  "requiere_cierre_periodo": false,
-  "notificaciones_whatsapp": false,
-  "exportar_formato_contador": "excel_actual"
-}
-```
+Regla fundamental: si el monto aparece 2+ veces → SIEMPRE exigir identidad.
+Solo acredita directo si el monto es único en el extracto.
+Mensajes: "sin datos (N mov.)", "no coincide (N mov.)", "ambiguo"
 
-### Caneland SA config (no modificar)
-```json
-{
-  "match_rules": ["monto_cuit"],
-  "tolerancia_monto": 0.01,
-  "dias_tolerancia_fecha": 0,
-  "estados_habilitados": ["pendiente", "ok", "no está", "duplicado", "faltan datos"],
-  "requiere_cierre_periodo": false
-}
-```
+Tolerancia fecha: 5 días (cubre feriados + fin de semana)
+Bonus fecha: mismo día +5, 1-2 días +4, 3-4 días +3, 5-7 días +2
+
+UM deduplicación: clave (orden, monto) o (fecha, monto, titular_normalizado)
 
 ---
 
-## Algoritmo de conciliacion (services/conciliacion.py)
+## IA Nivel 2 — Aprendizaje de correcciones
 
-Para cada fila de la planilla del cliente:
-1. Si org tiene "referencia" en match_rules: buscar por referencia en titular del extracto
-2. Buscar movimientos con monto == monto_planilla (tolerancia configurable)
-3. Si monto aparece < 3 veces -> acreditar al primer libre
-4. Si monto aparece >= 3 veces -> requiere CUIT o titular
-5. Si org tiene EN_REVISION habilitado: marcar como EN_REVISION en vez de "faltan datos"
-
-Caneland sigue usando: monto + CUIT (algoritmo original sin cambios).
+Tabla PatronAprendido: guarda patrones extraídos de correcciones manuales.
+Cuando el usuario cambia "sin datos" → "ok", el sistema extrae:
+  - fragmento del titular del extracto
+  - números clave de la planilla
+Con 2+ confirmaciones, el sistema usa el patrón automáticamente en futuras conciliaciones.
+Ver GET /auditoria/patrones y GET /auditoria/insights.
 
 ---
 
-## Estados de conciliacion
+## Multi-tenant
 
-### Base (Caneland y todas las orgs)
-- ok / no está / duplicado / faltan datos / acreditado DD/MM / pendiente
+- Caneland SA = organizacion_id=1 (nunca cambia)
+- Julieta es superadmin: ve y gestiona todas las orgs
+- Config de flujo por org (JSON): match_rules, tolerancia, estados, comisiones
+- Switcher de org en el sidebar (solo superadmin)
 
-### Ricos (solo orgs con estados_habilitados extendidos)
-- PAGO_PARCIAL
-- CONCILIADO_CON_DIFERENCIA
-- VENCIDO
-- EN_REVISION
-
----
-
-## Cola de revision manual
-
-Para orgs con requiere_cierre_periodo: true:
-- GET  /planillas/{id}/revision              — lista EN_REVISION
-- POST /planillas/{id}/revision/{row_id}/resolver  — resuelve con {accion, comentario}
-  acciones: aprobar, rechazar, pago_parcial, diferencia, vencido
+Config Caneland (NO modificar):
+  match_rules: ["monto_cuit"]
+  tolerancia_monto: 0.01
+  dias_tolerancia_fecha: 5
+  requiere_cierre_periodo: false
 
 ---
 
-## Admin endpoints (solo superadmin)
+## Módulo Liquidaciones
 
-- GET  /admin/organizaciones        — lista todas
-- POST /admin/organizaciones        — crea nueva
-- PUT  /admin/organizaciones/{id}   — actualiza config de flujo
-
----
-
-## Features implementadas
-
-Backend v2.0:
-- Auth JWT 8h con pbkdf2_sha256
-- Roles: admin, operador, revisor, auditor + superadmin
-- Multi-tenant completo con Organizacion model
-- Flujo personalizable por org via JSON config
-- Estados ricos de conciliacion (opt-in por org)
-- Cola de revision manual (opt-in)
-- Match configurable: referencia / monto+cuit / monto+fecha
-- Endpoints admin de organizaciones
-- Extracto bancario: upload, listar, filtrar, exportar, borrar
-- Ultimos Movimientos (UM): agregar sin duplicar
-- Planillas: upload, conciliar, detalle, download, borrar
-- Historial agrupado por cliente/mes
-- Auditoria automatica
-- Gestion de usuarios
-- Migraciones aditivas sin borrar datos
-
-Frontend:
-- PWA instalable (Android + iOS)
-- Dashboard con KPIs + conciliaciones recientes
-- Seccion Clientes: arbol Anio -> Mes -> archivos
-- Movimientos con filtros Excel inline
-- Dark mode persistido
-- Layout responsive
+Para orgs con comisiones y cierre de período.
+Flujo: Generar borrador → Aprobar → Marcar pagada
+Excel 3 hojas: resumen ejecutivo, detalle por cliente, log revisiones.
+POST /liquidaciones/periodos/cerrar valida EN_REVISION antes de cerrar.
+Caneland: requiere_cierre_periodo: false — no le afecta.
 
 ---
 
-## Pendientes / Roadmap
+## Seguridad
 
-Alta prioridad:
-- Login con Google (OAuth2) — pendiente implementacion frontend + backend
-- Autenticacion biometrica (huella dactilar) — para app movil, fase futura
-- Keep-alive de Render (ping cada 14 min)
-- Exportar extracto actualizado al contador al final del dia
-
-Media prioridad:
-- Notificaciones WhatsApp cuando Render se despierta
-- Multiples formatos de extracto (otros bancos)
-- PDF de conciliacion mensual
-- App movil React Native
+- Contraseñas: pbkdf2_sha256
+- JWT: 8 horas, sin refresh token
+- Rate limiting: login 10/min, register 5/min por IP (slowapi)
+- Headers de seguridad: X-Frame-Options, HSTS, XSS-Protection, etc.
+- Auditoría completa de todas las operaciones
+- Botón "Borrar todo" requiere escribir "BORRAR"
+- SUPERADMIN_PASSWORD nunca en código — env var en Render
 
 ---
 
-## Para continuar en un nuevo chat
+## Pendientes del roadmap
 
-Decirle a Claude: "Soy Julieta Arrazate. Continuamos el proyecto de conciliacion bancaria.
-Lee el CLAUDE.md del repo julietaarrazate/conciliacion-bancaria para entender el contexto."
-
-Comandos de deploy (Python):
-  Vercel: POST https://api.vercel.com/v13/deployments con gitSource github/julietaarrazate
-  Render: POST https://api.render.com/v1/services/srv-d7pqt81j2pic73c0c6fg/deploys
-
-Para push a GitHub:
-  git push "https://julietaarrazate:TOKEN@github.com/julietaarrazate/conciliacion-bancaria.git" main
+- Módulo OP (Órdenes de Pago) + Caja — requiere implementar Caja primero
+- Google OAuth / login con Google
+- PDF de conciliación mensual
+- Soporte otros bancos (BBVA, Santander, Galicia)
+- Panel de actividad por org
+- IA Nivel 3 — predicción (requiere volumen de datos, 3-6 meses de uso)
+- App móvil nativa (React Native) — elimina swipe Android
 
 ---
 
@@ -212,5 +173,13 @@ Para push a GitHub:
 Green, Tucu, David, Smt, Gwinn, Innova, Camparo, Alojando, Pinares, Paraguay
 
 ---
+
+## IMPORTANTE para Claude
+
+- Todos los cambios van DIRECTO a GitHub. No hay nada en la PC local.
+- Caneland NUNCA se modifica — todos los cambios son aditivos.
+- El repo se clona en /tmp para trabajar y se limpia al terminar.
+- Para deployar Render: usar curl con la API key arriba.
+- El token de GitHub NO tiene scope "workflow" — no se pueden crear GitHub Actions.
 
 Generado — Proyecto iniciado Mayo 2026 | Autora: Julieta Arrazate

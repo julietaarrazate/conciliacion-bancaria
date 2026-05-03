@@ -1,7 +1,11 @@
 import threading
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
 from app.config import get_settings
@@ -13,6 +17,9 @@ from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planill
 from app.models.organizacion import Organizacion
 
 settings = get_settings()
+
+# Rate limiter — protección brute force
+limiter = Limiter(key_func=get_remote_address)
 
 
 def _init_db():
@@ -29,7 +36,34 @@ def _init_db():
         print(f"[db] Warning tablas: {e}")
         return
 
-    # 2. Migraciones de columnas — todas idempotentes (IF NOT EXISTS no disponible en todos los Postgres,
+    # 2. Índices de performance (CREATE INDEX IF NOT EXISTS — idempotente)
+    indexes = [
+        # MovimientoBanco: consultas más frecuentes
+        "CREATE INDEX IF NOT EXISTS idx_mov_extracto_fecha ON movimientos_banco(extracto_id, fecha DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_mov_cliente ON movimientos_banco(cliente_acreditado) WHERE cliente_acreditado IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_mov_monto ON movimientos_banco(monto)",
+        "CREATE INDEX IF NOT EXISTS idx_mov_org ON movimientos_banco(organizacion_id)",
+        # Planillas
+        "CREATE INDEX IF NOT EXISTS idx_planillas_org_fecha ON planillas(organizacion_id, fecha_carga DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_planillas_cliente ON planillas(cliente_id)",
+        # PlanillaRows
+        "CREATE INDEX IF NOT EXISTS idx_rows_planilla ON planilla_rows(planilla_id)",
+        "CREATE INDEX IF NOT EXISTS idx_rows_status ON planilla_rows(status)",
+        # AuditoriaLog
+        "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON auditoria(timestamp DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_audit_accion ON auditoria(accion)",
+        # Clientes
+        "CREATE INDEX IF NOT EXISTS idx_clientes_org ON clientes(organizacion_id, nombre)",
+    ]
+    for sql in indexes:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(sql))
+                conn.commit()
+        except Exception as ex:
+            print(f"[db] Index warning: {ex}")
+
+    # 3. Migraciones de columnas — todas idempotentes (IF NOT EXISTS no disponible en todos los Postgres,
     #    se usa try/except para ignorar "column already exists")
     migrations = [
         "ALTER TABLE extractos_bancarios ADD COLUMN fingerprint VARCHAR",
@@ -194,6 +228,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -201,6 +239,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Headers de seguridad bancaria
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"]    = "nosniff"
+    response.headers["X-Frame-Options"]           = "DENY"
+    response.headers["X-XSS-Protection"]          = "1; mode=block"
+    response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"]        = "geolocation=(), microphone=(), camera=()"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 app.include_router(auth.router)
 app.include_router(me.router)
