@@ -159,7 +159,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
 
       <div
-        className="fixed right-0 top-12 md:top-0 h-[calc(100dvh-3rem)] md:h-dvh w-full md:max-w-3xl bg-white dark:bg-ml-dark-surface shadow-2xl z-50 flex flex-col"
+        className="fixed right-0 top-12 md:top-0 h-[calc(100dvh-3rem)] md:h-screen w-full md:max-w-4xl bg-white dark:bg-ml-dark-surface shadow-2xl z-50 flex flex-col overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-start justify-between px-4 py-3 bg-ml-yellow dark:bg-ml-dark-card border-b border-ml-yellow-dark dark:border-ml-dark-border shrink-0">
@@ -192,7 +192,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
 
         {/* Stats */}
         {detalle && (
-          <div className="grid grid-cols-4 gap-px bg-gray-100 dark:bg-slate-700">
+          <div className="grid grid-cols-4 gap-px bg-gray-100 dark:bg-slate-700 shrink-0">
             {[
               { label: 'OK', val: detalle.acreditadas, cls: 'text-green-600 dark:text-green-400', filter: 'ok' },
               { label: 'No está', val: detalle.no_encontradas, cls: 'text-red-600 dark:text-red-400', filter: 'no está' },
@@ -214,7 +214,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
 
         {/* Meta */}
         {detalle && (
-          <div className="px-4 py-1.5 text-xs text-ml-text-soft dark:text-gray-400 flex gap-4 border-b dark:border-slate-700 bg-ml-gray-bg dark:bg-slate-900">
+          <div className="px-4 py-1.5 text-xs text-ml-text-soft dark:text-gray-400 flex gap-4 border-b dark:border-slate-700 bg-ml-gray-bg dark:bg-slate-900 shrink-0">
             <span>📅 {fmtDate(detalle.fecha_carga)}</span>
             <span>👤 {detalle.usuario_nombre}</span>
             <span>{filteredRows.length}/{detalle.total} filas{hasFilters ? ' (filtrado)' : ''}</span>

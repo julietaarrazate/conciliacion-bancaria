@@ -20,19 +20,53 @@ interface ClienteData {
   meses: MesArchivos[]
 }
 
-const ICONOS: Record<string, string> = {
-  Green: '🟢', Tucu: '🟡', David: '🔵', Smt: '🔴',
-  Gwinn: '🟠', Innova: '⚪', Camparo: '🟤',
-  Alojando: '🏠', Pinares: '🌲', Paraguay: '🇵🇾'
+// Paleta de colores Linear-style — se asigna por hash del nombre
+const PALETTE = [
+  ['#5E6AD2', '#EEF0FF'], // indigo
+  ['#26B5CE', '#E6F7FA'], // cyan
+  ['#4CAF50', '#E8F5E9'], // green
+  ['#F59E0B', '#FEF3C7'], // amber
+  ['#EF4444', '#FEE2E2'], // red
+  ['#8B5CF6', '#F3E8FF'], // purple
+  ['#EC4899', '#FCE7F3'], // pink
+  ['#14B8A6', '#CCFBF1'], // teal
+  ['#F97316', '#FFEDD5'], // orange
+  ['#6366F1', '#EEF2FF'], // violet
+]
+const PALETTE_DARK = [
+  ['#818CF8', '#1e1b4b'],
+  ['#67E8F9', '#0e4a5e'],
+  ['#86EFAC', '#14532d'],
+  ['#FCD34D', '#451a03'],
+  ['#FCA5A5', '#450a0a'],
+  ['#C4B5FD', '#3b0764'],
+  ['#F9A8D4', '#500724'],
+  ['#5EEAD4', '#042f2e'],
+  ['#FDBA74', '#431407'],
+  ['#A5B4FC', '#1e1b4b'],
+]
+
+function hashNombre(nombre: string): number {
+  let h = 0
+  for (let i = 0; i < nombre.length; i++) h = (h * 31 + nombre.charCodeAt(i)) >>> 0
+  return h % PALETTE.length
 }
 
-// Matching por prefijo, case-insensitive — "Green prueba" → 🟢
-const getIcono = (nombre: string): string => {
-  const exact = ICONOS[nombre]
-  if (exact) return exact
-  const lower = nombre.toLowerCase()
-  const key = Object.keys(ICONOS).find(k => lower.startsWith(k.toLowerCase()))
-  return key ? ICONOS[key] : '🏢'
+const ClienteAvatar: React.FC<{ nombre: string; size?: 'sm' | 'md' }> = ({ nombre, size = 'md' }) => {
+  const idx = hashNombre(nombre)
+  const initials = nombre.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const [fg, bg] = PALETTE[idx]
+  const [fgd, bgd] = PALETTE_DARK[idx]
+  const dim = size === 'sm' ? 'w-7 h-7 text-[11px]' : 'w-9 h-9 text-sm'
+  return (
+    <span
+      className={`${dim} rounded-lg flex items-center justify-center font-bold shrink-0 select-none`}
+      style={{ color: fg, backgroundColor: bg } as any}
+    >
+      <style>{`.dark .avatar-${idx} { color: ${fgd} !important; background-color: ${bgd} !important; }`}</style>
+      <span className={`avatar-${idx}`} style={{ color: fg }}>{initials}</span>
+    </span>
+  )
 }
 
 export const Clientes: React.FC = () => {
@@ -111,16 +145,15 @@ export const Clientes: React.FC = () => {
             const total = cliente.meses.reduce((s, m) => s + m.archivos.length, 0)
             const acred = cliente.meses.reduce((s, m) =>
               s + m.archivos.reduce((as, a) => as + a.acreditadas, 0), 0)
-            const icono = getIcono(cliente.nombre)
 
             return (
               <div key={cliente.nombre} className="card p-0 overflow-hidden">
                 {/* Header cliente */}
                 <button
                   onClick={() => toggle(cliente.nombre)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-ml-gray-bg dark:hover:bg-ml-dark-hover transition-colors text-left"
                 >
-                  <span className="text-xl">{icono}</span>
+                  <ClienteAvatar nombre={cliente.nombre} />
                   <div className="flex-1">
                     <p className="font-semibold dark:text-white">{cliente.nombre}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
