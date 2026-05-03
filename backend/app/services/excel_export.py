@@ -370,3 +370,53 @@ def export_historial_planillas(planillas: List[dict]) -> bytes:
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
+
+
+def export_backup_completo(org_nombre: str, planillas: List[dict], extractos: List[dict]) -> bytes:
+    """Backup completo: Hoja1=planillas conciliadas, Hoja2=extractos"""
+    wb = openpyxl.Workbook()
+    now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
+
+    # ── Hoja 1: Planillas ──────────────────────────────────────
+    ws1 = wb.active
+    ws1.title = "Planillas"
+    ws1.cell(row=1, column=1, value=f"Backup — {org_nombre}").font = TITLE_FONT
+    ws1.cell(row=2, column=1, value=f"Generado: {now_str}").font = Font(italic=True, color="666666")
+
+    hdrs1 = ["ID","Cliente","Archivo","Fecha carga","Usuario","Total","OK","No está","Dup.","Sin datos"]
+    _hdr(ws1, 4, hdrs1)
+    for i, p in enumerate(planillas, start=5):
+        ws1.cell(row=i, column=1, value=p.get("id"))
+        ws1.cell(row=i, column=2, value=p.get("cliente_nombre"))
+        ws1.cell(row=i, column=3, value=p.get("nombre_archivo"))
+        ws1.cell(row=i, column=4, value=p.get("fecha_carga")).number_format = "DD/MM/YYYY HH:MM"
+        ws1.cell(row=i, column=5, value=p.get("usuario_nombre"))
+        ws1.cell(row=i, column=6, value=p.get("total_filas"))
+        ws1.cell(row=i, column=7, value=p.get("acreditadas"))
+        ws1.cell(row=i, column=8, value=p.get("no_encontradas"))
+        ws1.cell(row=i, column=9, value=p.get("duplicadas"))
+        ws1.cell(row=i, column=10, value=p.get("sin_datos"))
+        for col in range(1, 11):
+            ws1.cell(row=i, column=col).border = BORDER
+    ws1.auto_filter.ref = f"A4:J{4+len(planillas)}"
+    _autosize(ws1, 10)
+    ws1.freeze_panes = "A5"
+
+    # ── Hoja 2: Extractos ──────────────────────────────────────
+    ws2 = wb.create_sheet("Extractos")
+    ws2.cell(row=1, column=1, value=f"Extractos — {org_nombre}").font = TITLE_FONT
+    hdrs2 = ["ID","Archivo","Fecha creación","Movimientos"]
+    _hdr(ws2, 3, hdrs2)
+    for i, e in enumerate(extractos, start=4):
+        ws2.cell(row=i, column=1, value=e.get("id"))
+        ws2.cell(row=i, column=2, value=e.get("nombre_archivo"))
+        ws2.cell(row=i, column=3, value=e.get("fecha_creacion")).number_format = "DD/MM/YYYY HH:MM"
+        ws2.cell(row=i, column=4, value=e.get("total_movimientos"))
+        for col in range(1, 5):
+            ws2.cell(row=i, column=col).border = BORDER
+    _autosize(ws2, 4)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()

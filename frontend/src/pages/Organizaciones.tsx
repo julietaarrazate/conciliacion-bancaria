@@ -30,6 +30,9 @@ export const Organizaciones: React.FC = () => {
   const [editingOrg, setEditingOrg] = useState<Org | null>(null)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const [showUserForm, setShowUserForm] = useState<number | null>(null)
+  const [userForm, setUserForm] = useState({ full_name: '', email: '', password: '' })
+  const [savingUser, setSavingUser] = useState(false)
 
   const [form, setForm] = useState({
     nombre: '',
@@ -186,23 +189,68 @@ export const Organizaciones: React.FC = () => {
                     </p>
                   </div>
 
-                  <div className="flex gap-2 shrink-0">
-                    {/* Ver como esta org */}
+                  <div className="flex gap-2 shrink-0 flex-wrap">
                     <button
                       onClick={() => isActive ? clearActiveOrg() : setActiveOrg(org.id, org.nombre)}
                       className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${isActive
-                        ? 'bg-ml-green text-black dark:shadow-green-glow-sm'
-                        : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 hover:bg-ml-green/10 dark:hover:bg-ml-green/10'}`}
-                      title="Activar para ver datos de esta org"
+                        ? 'bg-ml-green text-black'
+                        : 'bg-gray-100 dark:bg-ml-dark-card text-gray-600 dark:text-gray-300 hover:bg-ml-green/10'}`}
                     >
-                      {isActive ? '✓ Activa' : '👁️ Ver'}
+                      {isActive ? '✓ Viendo' : '👁 Ver'}
                     </button>
                     <button onClick={() => openEdit(org)}
                       className="px-3 py-1.5 text-xs rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100">
                       ✏️ Config
                     </button>
+                    <button
+                      onClick={() => { apiClient.client.get(`/admin/organizaciones/${org.id}/backup`, { responseType: 'blob' }).then(r => { const url = URL.createObjectURL(r.data); const a = document.createElement('a'); a.href = url; a.download = `backup_${org.nombre}.xlsx`; a.click(); URL.revokeObjectURL(url) }) }}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100"
+                      title="Descargar backup Excel"
+                    >
+                      ⬇ Backup
+                    </button>
+                    <button
+                      onClick={() => { setShowUserForm(org.id); setUserForm({ full_name: '', email: '', password: '' }) }}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 hover:bg-purple-100"
+                    >
+                      + Usuario
+                    </button>
                   </div>
                 </div>
+
+                {/* Form crear primer usuario */}
+                {showUserForm === org.id && (
+                  <div className="border-t border-ml-gray dark:border-ml-dark-border px-4 py-3 bg-gray-50 dark:bg-ml-dark-card">
+                    <p className="text-xs font-semibold dark:text-white mb-2">Crear usuario para {org.nombre}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <input className="input-field !text-xs" placeholder="Nombre completo"
+                        value={userForm.full_name} onChange={e => setUserForm(p => ({ ...p, full_name: e.target.value }))} />
+                      <input className="input-field !text-xs" placeholder="Email" type="email"
+                        value={userForm.email} onChange={e => setUserForm(p => ({ ...p, email: e.target.value }))} />
+                      <input className="input-field !text-xs" placeholder="Contraseña (mín 6)" type="password"
+                        value={userForm.password} onChange={e => setUserForm(p => ({ ...p, password: e.target.value }))} />
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        disabled={savingUser}
+                        onClick={async () => {
+                          setSavingUser(true)
+                          try {
+                            await apiClient.client.post(`/admin/organizaciones/${org.id}/primer-usuario`, userForm)
+                            setMsg(`✓ Usuario ${userForm.email} creado en ${org.nombre}`)
+                            setShowUserForm(null)
+                          } catch (err: any) {
+                            setMsg(err.response?.data?.detail || 'Error al crear usuario')
+                          } finally { setSavingUser(false) }
+                        }}
+                        className="btn-yellow text-xs py-1.5"
+                      >
+                        {savingUser ? 'Creando...' : 'Crear'}
+                      </button>
+                      <button onClick={() => setShowUserForm(null)} className="btn-ghost text-xs">Cancelar</button>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}
