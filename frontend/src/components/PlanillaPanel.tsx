@@ -142,7 +142,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
         onTouchEnd={handleTouchEnd}
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-4 py-3 bg-ml-yellow border-b">
+        <div className="flex items-start justify-between px-4 py-3 bg-ml-yellow dark:bg-ml-dark-surface dark:border-b dark:border-ml-green/30 border-b">
           <div className="flex-1 min-w-0">
             <p className="font-bold text-ml-text text-sm truncate">{detalle?.cliente_nombre ?? '...'}</p>
             <p className="text-xs text-ml-text-soft truncate">{detalle?.nombre_archivo}</p>
@@ -166,7 +166,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                 className="px-2 py-1 text-red-700 hover:bg-red-100 rounded text-sm"
               >🗑️</button>
             )}
-            <button onClick={onClose} className="px-2 py-1 text-ml-text hover:bg-ml-yellow-dark rounded text-lg leading-none">✕</button>
+            <button onClick={onClose} className="px-2 py-1 text-ml-text dark:text-gray-300 hover:bg-ml-yellow-dark dark:hover:bg-ml-dark-border rounded text-lg leading-none">✕</button>
           </div>
         </div>
 

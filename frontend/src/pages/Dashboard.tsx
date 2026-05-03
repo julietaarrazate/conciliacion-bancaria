@@ -30,6 +30,9 @@ export const Dashboard: React.FC = () => {
   const [success, setSuccess] = useState('')
   const [resultado, setResultado] = useState<ConciliacionResultado | null>(null)
   const [panelId, setPanelId] = useState<number | null>(null)
+  const [fechaAcred, setFechaAcred] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  )
 
   useEffect(() => {
     apiClient.listExtractos().then((data) => {
@@ -141,7 +144,7 @@ export const Dashboard: React.FC = () => {
         extractoId,
         file
       )
-      const r = await apiClient.conciliarPlanilla(planilla.id)
+      const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred)
       setResultado(r)
       setSuccess(`Conciliación completa: ${r.acreditadas}/${r.filas_procesadas} acreditadas`)
       apiClient.getHistorialPlanillas({ limit: 5 }).then((d) => setPlanillas(d.items))
@@ -292,6 +295,20 @@ export const Dashboard: React.FC = () => {
               onChange={(e) => setClienteNombre(e.target.value)}
               disabled={!extractoId}
             />
+          </div>
+
+          <div className="mb-3">
+            <label className="label">Fecha de acreditación</label>
+            <input
+              type="date"
+              className="input-field font-mono"
+              value={fechaAcred}
+              onChange={(e) => setFechaAcred(e.target.value)}
+              disabled={!extractoId}
+            />
+            <p className="mt-1 text-xs text-gray-400 dark:text-zinc-600">
+              Con esta fecha se registran los movimientos acreditados
+            </p>
           </div>
 
           <FileUpload

@@ -37,6 +37,13 @@ export function App() {
     applyTheme()
   }, [applyTheme])
 
+  // Keep-alive: ping cada 14 min para que Render no duerma
+  useEffect(() => {
+    const ping = () => apiClient.client.get('/health').catch(() => {})
+    const id = setInterval(ping, 14 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
+
   useEffect(() => {
     const loadUser = async () => {
       if (token) {

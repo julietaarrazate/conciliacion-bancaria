@@ -26,6 +26,15 @@ const ICONOS: Record<string, string> = {
   Alojando: '🏠', Pinares: '🌲', Paraguay: '🇵🇾'
 }
 
+// Matching por prefijo, case-insensitive — "Green prueba" → 🟢
+const getIcono = (nombre: string): string => {
+  const exact = ICONOS[nombre]
+  if (exact) return exact
+  const lower = nombre.toLowerCase()
+  const key = Object.keys(ICONOS).find(k => lower.startsWith(k.toLowerCase()))
+  return key ? ICONOS[key] : '🏢'
+}
+
 export const Clientes: React.FC = () => {
   const [clientes, setClientes] = useState<ClienteData[]>([])
   const [loading, setLoading] = useState(true)
@@ -74,7 +83,7 @@ export const Clientes: React.FC = () => {
     s + c.meses.reduce((ms, m) => ms + m.archivos.length, 0), 0)
 
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto" style={{ touchAction: 'pan-y' }}>
       <div className="mb-4">
         <h1 className="text-xl md:text-2xl font-bold dark:text-white">Clientes</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -102,7 +111,7 @@ export const Clientes: React.FC = () => {
             const total = cliente.meses.reduce((s, m) => s + m.archivos.length, 0)
             const acred = cliente.meses.reduce((s, m) =>
               s + m.archivos.reduce((as, a) => as + a.acreditadas, 0), 0)
-            const icono = ICONOS[cliente.nombre] || '📁'
+            const icono = getIcono(cliente.nombre)
 
             return (
               <div key={cliente.nombre} className="card p-0 overflow-hidden">
