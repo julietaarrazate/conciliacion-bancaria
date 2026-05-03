@@ -204,6 +204,15 @@ export const Movimientos: React.FC = () => {
             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
             {exporting ? '⏳' : '⬇️'} Excel
           </button>
+          {extractoId && (
+            <button
+              onClick={() => apiClient.exportExtractoContador(extractoId)}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
+              title="Exportar extracto completo conciliado para el contador"
+            >
+              📤 Para contador
+            </button>
+          )}
         </div>
       </div>
 
