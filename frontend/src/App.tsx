@@ -13,6 +13,7 @@ import { Clientes } from '@/pages/Clientes'
 import { Perfil } from '@/pages/Perfil'
 import { Organizaciones } from '@/pages/Organizaciones'
 import { Liquidaciones } from '@/pages/Liquidaciones'
+import { Revision } from '@/pages/Revision'
 import { Layout } from '@/components/Layout'
 import { useThemeStore } from '@/store/theme'
 import '@/styles/index.css'
@@ -89,6 +90,11 @@ export function App() {
           <Route path="/liquidaciones" element={
             <ProtectedRoute permission="manage_users">
               <Liquidaciones />
+            </ProtectedRoute>
+          } />
+          <Route path="/revision" element={
+            <ProtectedRoute permission="reconcile">
+              <Revision />
             </ProtectedRoute>
           } />
           <Route path="/organizaciones" element={
