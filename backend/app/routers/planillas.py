@@ -292,6 +292,48 @@ def resolver_revision(
     return {"ok": True, "row_id": row_id, "nuevo_status": row.status}
 
 
+# ── Editar estado de una fila ────────────────────────────────────────────────
+
+@router.patch("/rows/{row_id}")
+def patch_row_status(
+    row_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Modifica el estado de una fila de planilla manualmente.
+    Útil cuando se obtienen más datos después de la conciliación.
+    Body: {status: string, comentario?: string}
+    """
+    row = db.query(PlanillaRow).filter(PlanillaRow.id == row_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Fila no encontrada")
+
+    status_anterior = row.status
+    nuevo_status = payload.get("status", "").strip()
+    if not nuevo_status:
+        raise HTTPException(status_code=400, detail="El campo status es requerido")
+
+    row.status = nuevo_status
+    if "comentario" in payload:
+        row.comentario_revision = payload["comentario"]
+
+    db.commit()
+
+    registrar_log(
+        db=db,
+        usuario_id=current_user.id,
+        tabla="planilla_rows",
+        registro_id=row.id,
+        accion="UPDATE_STATUS",
+        cambios={"antes": status_anterior, "despues": nuevo_status,
+                 "comentario": payload.get("comentario")}
+    )
+
+    return {"ok": True, "row_id": row_id, "status": row.status}
+
+
 # ── Endpoints existentes ──────────────────────────────────────────────────────
 
 @router.get("/{planilla_id}/download")

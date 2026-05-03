@@ -26,6 +26,25 @@ def extraer_cuit(texto: str) -> str:
     return nums[0] if nums else ''
 
 
+def extraer_cbu(texto: str) -> str:
+    """Extrae el primer CBU (22 dígitos exactos) del texto."""
+    if not texto:
+        return ''
+    nums = re.findall(r'\b\d{22}\b', str(texto))
+    return nums[0] if nums else ''
+
+
+def titular_coincide(titular_planilla: str, titular_extracto: str) -> bool:
+    """Compara las primeras 2 palabras significativas del titular."""
+    if not titular_planilla or not titular_extracto:
+        return False
+    palabras = [p for p in titular_planilla.split() if len(p) > 2][:2]
+    if not palabras:
+        return False
+    patron = ' '.join(palabras).lower()
+    return patron in titular_extracto.lower()
+
+
 def parse_importe(v) -> Optional[float]:
     if isinstance(v, (int, float)):
         return round(float(v), 2)
@@ -118,24 +137,36 @@ def buscar_match(
     if len(candidatos) < UMBRAL_COMUN:
         return libres[0], "ok"
 
-    # Monto comun → validar CUIT o titular
+    # Monto comun → validar por CUIT, CBU o titular (en ese orden)
     cuit_plan_raw = norm_cuit(cuit_planilla or '')
     if not cuit_plan_raw and titular_planilla:
         cuit_plan_raw = extraer_cuit(titular_planilla)
 
-    if cuit_plan_raw:
-        for mov in libres:
-            cuit_mov = extraer_cuit(mov.titular or '')
+    # CBU desde el campo titular/referencia de la planilla
+    cbu_plan = ''
+    if titular_planilla:
+        cbu_plan = extraer_cbu(titular_planilla)
+    if not cbu_plan and cuit_planilla:
+        cbu_plan = extraer_cbu(cuit_planilla)
+
+    for mov in libres:
+        titular_mov = mov.titular or ''
+
+        # 1. Match por CUIT
+        if cuit_plan_raw:
+            cuit_mov = extraer_cuit(titular_mov)
             if cuit_mov and cuit_mov == cuit_plan_raw:
                 return mov, "ok"
 
-    if titular_planilla:
-        palabras = [p for p in titular_planilla.split() if len(p) > 2][:2]
-        if palabras:
-            patron = ' '.join(palabras).lower()
-            for mov in libres:
-                if mov.titular and patron in mov.titular.lower():
-                    return mov, "ok"
+        # 2. Match por CBU
+        if cbu_plan:
+            cbu_mov = extraer_cbu(titular_mov)
+            if cbu_mov and cbu_mov == cbu_plan:
+                return mov, "ok"
+
+        # 3. Match por titular (primeras 2 palabras)
+        if titular_planilla and titular_coincide(titular_planilla, titular_mov):
+            return mov, "ok"
 
     return None, "faltan datos"
 

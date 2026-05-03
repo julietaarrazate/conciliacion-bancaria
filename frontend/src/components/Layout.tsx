@@ -30,6 +30,7 @@ export const Layout: React.FC = () => {
   const { theme, toggle } = useThemeStore()
 
   const handleLogout = () => {
+    if (!confirm('¿Querés cerrar sesión?')) return
     logout()
     navigate('/login')
   }
@@ -39,7 +40,7 @@ export const Layout: React.FC = () => {
   )
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-ml-gray-bg dark:bg-slate-900 overflow-hidden">
+    <div className="flex flex-col md:flex-row h-screen bg-ml-gray-bg dark:bg-slate-900 overflow-hidden" style={{ overscrollBehaviorX: 'none' }}>
       {/* Header mobile */}
       <header className="md:hidden bg-ml-yellow flex items-center justify-between px-4 py-2.5 z-30 shadow">
         <div>
@@ -111,7 +112,7 @@ export const Layout: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto text-ml-text dark:text-gray-100 pb-16 md:pb-0">
+      <main className="flex-1 overflow-y-auto text-ml-text dark:text-gray-100 pb-16 md:pb-0" style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}>
         <Outlet />
       </main>
 

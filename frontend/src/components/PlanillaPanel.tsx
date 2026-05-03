@@ -69,11 +69,19 @@ interface Props {
   onDelete?: (id: number) => void
 }
 
+const ESTADOS_DISPONIBLES = [
+  'ok', 'no está', 'duplicado', 'faltan datos', 'pendiente',
+  'PAGO_PARCIAL', 'CONCILIADO_CON_DIFERENCIA', 'VENCIDO', 'EN_REVISION'
+]
+
 export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }) => {
   const [detalle, setDetalle] = useState<Detalle | null>(null)
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [showFilters, setShowFilters] = useState(false)
+  const [editingRowId, setEditingRowId] = useState<number | null>(null)
+  const [editStatus, setEditStatus] = useState('')
+  const [savingRow, setSavingRow] = useState(false)
 
   useEffect(() => {
     if (!planillaId) { setDetalle(null); setFilters(EMPTY_FILTERS); return }
@@ -110,6 +118,23 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     if (!detalle) return []
     return [...new Set(detalle.rows.map(r => r.status))].sort()
   }, [detalle])
+
+  const startEdit = (row: Row) => {
+    setEditingRowId(row.id)
+    setEditStatus(row.status)
+  }
+
+  const saveEdit = async (rowId: number) => {
+    setSavingRow(true)
+    try {
+      await apiClient.patchRowStatus(rowId, editStatus)
+      setDetalle(prev => prev ? {
+        ...prev,
+        rows: prev.rows.map(r => r.id === rowId ? { ...r, status: editStatus } : r)
+      } : prev)
+      setEditingRowId(null)
+    } finally { setSavingRow(false) }
+  }
 
   // Swipe para cerrar (izquierda = cerrar, derecha = cerrar)
   const touchStartX = useRef(0)
@@ -260,8 +285,36 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                         {row.status === 'ok' ? <span className="text-green-600 dark:text-green-400 text-[10px] font-medium">{row.mov_titular?.split(' ').slice(0,2).join(' ') || '—'}</span> : '—'}
                       </td>
                       <td className="px-2 py-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(row.mov_fecha_acred)}</td>
-                      <td className="px-2 py-1.5">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusStyle(row.status)}`}>{row.status}</span>
+                      <td className="px-2 py-1.5 min-w-[130px]">
+                        {editingRowId === row.id ? (
+                          <div className="flex items-center gap-1">
+                            <select
+                              className="text-[10px] border border-ml-blue rounded px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white"
+                              value={editStatus}
+                              onChange={e => setEditStatus(e.target.value)}
+                              autoFocus
+                            >
+                              {ESTADOS_DISPONIBLES.map(s => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </select>
+                            <button onClick={() => saveEdit(row.id)} disabled={savingRow}
+                              className="text-green-600 hover:text-green-700 text-xs px-1 disabled:opacity-50">✓</button>
+                            <button onClick={() => setEditingRowId(null)}
+                              className="text-gray-400 hover:text-gray-600 text-xs px-1">✕</button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 group">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusStyle(row.status)}`}>
+                              {row.status}
+                            </span>
+                            <button
+                              onClick={() => startEdit(row)}
+                              className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-ml-blue dark:hover:text-ml-green text-[10px] transition-opacity"
+                              title="Editar estado"
+                            >✏️</button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))
