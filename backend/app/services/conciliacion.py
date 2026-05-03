@@ -31,11 +31,38 @@ def extraer_cuit(texto: str) -> str:
 
 
 def extraer_cbu(texto: str) -> str:
-    """Extrae el primer CBU (22 digitos exactos) del texto."""
+    """Extrae el primer CBU/CVU (22 digitos exactos) del texto."""
     if not texto:
         return ''
     nums = re.findall(r'\b\d{22}\b', str(texto))
     return nums[0] if nums else ''
+
+
+def extraer_todos_numeros(texto: str) -> set:
+    """
+    Extrae TODOS los numeros significativos de un texto sin formato fijo.
+    Incluye: CUIT (10-11), CBU/CVU (22), numeros de cuenta/operacion (6-21).
+    Util para el campo 'titular' del extracto Banco Macro que mezcla todo.
+    Ej: "TRANSF 20112233440 GARCIA MARIA" -> {"20112233440"}
+        "CBU 2850590940090418135201 EMPRESA" -> {"2850590940090418135201"}
+        "ACRED 00001234567 RODRIGUEZ JUAN" -> {"1234567"}
+    """
+    if not texto:
+        return set()
+    # Todos los numeros de 6+ digitos (excluye numeros cortos tipo dia/mes)
+    return set(re.findall(r'\b\d{6,22}\b', str(texto)))
+
+
+def numeros_de_planilla(cuit: Optional[str], titular: Optional[str], referencia: Optional[str]) -> set:
+    """
+    Reune todos los identificadores numericos de una fila de planilla.
+    Incluye CUIT, CBU, numeros de cuenta u operacion que el cliente haya anotado.
+    """
+    nums = set()
+    for campo in [cuit, titular, referencia]:
+        if campo:
+            nums.update(extraer_todos_numeros(campo))
+    return nums
 
 
 def normalizar_nombre(texto: str) -> str:
@@ -83,6 +110,7 @@ def _score_identidad(
     cuit_plan: str,
     cbu_plan: str,
     titular_plan: str,
+    nums_planilla: set,
     mov: MovimientoBanco,
     fecha_planilla: Optional[date],
     dias_tolerancia: int
@@ -90,37 +118,62 @@ def _score_identidad(
     """
     Calcula un score de similitud entre una fila de planilla y un movimiento bancario.
     Mayor score = mejor match.
-      10 = CUIT exacto
-       8 = CBU exacto
+
+      12 = CUIT exacto
+      10 = CBU/CVU exacto (22 digitos)
+       8 = cualquier numero significativo de la planilla aparece en el titular del extracto
+           (numero de cuenta, operacion, referencia, etc.)
        5 = titular (primeras 2 palabras)
        3 = titular (primera palabra larga)
-       2 = fecha cercana (bonus)
+      +2 = bonus fecha cercana
+
+    El extracto de Banco Macro mezcla en 'titular': CUIT, CBU, nombre, nro operacion.
+    Al cruzar TODOS los numeros de la planilla contra el titular del extracto,
+    capturamos matches que antes se perdian.
     """
     score = 0
     titular_mov = mov.titular or ''
+    nums_mov = extraer_todos_numeros(titular_mov)
 
-    # --- CUIT ---
+    # --- CUIT exacto (mas confiable) ---
     cuit_mov = extraer_cuit(titular_mov)
     if cuit_plan and cuit_mov and cuit_plan == cuit_mov:
-        score += 10
-        # Bonus fecha si CUIT matchea y tiene fecha
+        score = 12
         if fecha_planilla and mov.fecha and dias_tolerancia > 0:
-            delta = abs((fecha_planilla - mov.fecha).days)
-            if delta <= dias_tolerancia:
+            if abs((fecha_planilla - mov.fecha).days) <= dias_tolerancia:
                 score += 2
-        return score  # CUIT match es definitivo, no seguir
-
-    # --- CBU ---
-    cbu_mov = extraer_cbu(titular_mov)
-    if cbu_plan and cbu_mov and cbu_plan == cbu_mov:
-        score += 8
         return score
 
-    # --- Titular por palabras ---
+    # --- CBU/CVU exacto ---
+    cbu_mov = extraer_cbu(titular_mov)
+    if cbu_plan and cbu_mov and cbu_plan == cbu_mov:
+        score = 10
+        return score
+
+    # --- Cruce de TODOS los numeros significativos ---
+    # Cualquier numero de 6+ digitos de la planilla que aparezca en el extracto
+    if nums_planilla and nums_mov:
+        interseccion = nums_planilla & nums_mov
+        if interseccion:
+            # Numeros mas largos = mas confiables (CBU 22 > nro cuenta 10 > referencia 6)
+            max_len = max(len(n) for n in interseccion)
+            if max_len >= 22:
+                score = 10  # CBU/CVU
+            elif max_len >= 10:
+                score = 8   # CUIT o nro de cuenta largo
+            else:
+                score = 6   # nro operacion o referencia corta
+            if fecha_planilla and mov.fecha and dias_tolerancia > 0:
+                if abs((fecha_planilla - mov.fecha).days) <= dias_tolerancia:
+                    score += 2
+            return score
+
+    # --- Titular por palabras (fallback) ---
     if titular_plan:
         norm_plan = normalizar_nombre(titular_plan)
         norm_mov  = normalizar_nombre(titular_mov)
-        palabras = [p for p in norm_plan.split() if len(p) > 3]
+        # Solo palabras alfabeticas largas (evita numeros sueltos)
+        palabras = [p for p in norm_plan.split() if len(p) > 3 and p.isalpha()]
 
         if len(palabras) >= 2:
             patron2 = ' '.join(palabras[:2])
@@ -134,8 +187,7 @@ def _score_identidad(
 
     # --- Bonus fecha ---
     if score > 0 and fecha_planilla and mov.fecha and dias_tolerancia > 0:
-        delta = abs((fecha_planilla - mov.fecha).days)
-        if delta <= dias_tolerancia:
+        if abs((fecha_planilla - mov.fecha).days) <= dias_tolerancia:
             score += 2
 
     return score
@@ -220,11 +272,15 @@ def buscar_match(
     if not cbu_plan and cuit_planilla:
         cbu_plan = extraer_cbu(cuit_planilla)
 
+    # Todos los numeros significativos de la planilla (CUIT, CBU, nro cuenta, referencia, etc.)
+    nums_plan = numeros_de_planilla(cuit_planilla, titular_planilla, referencia_planilla)
+
     # Calcular score para cada candidato libre
     candidatos_scored = []
     for mov in libres:
         score = _score_identidad(
             cuit_plan_raw, cbu_plan, titular_planilla or '',
+            nums_plan,
             mov, fecha_planilla, dias_tolerancia
         )
         if score > 0:
