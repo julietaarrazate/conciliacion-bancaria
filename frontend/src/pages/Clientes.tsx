@@ -20,51 +20,36 @@ interface ClienteData {
   meses: MesArchivos[]
 }
 
-// Paleta de colores Linear-style — se asigna por hash del nombre
-const PALETTE = [
-  ['#5E6AD2', '#EEF0FF'], // indigo
-  ['#26B5CE', '#E6F7FA'], // cyan
-  ['#4CAF50', '#E8F5E9'], // green
-  ['#F59E0B', '#FEF3C7'], // amber
-  ['#EF4444', '#FEE2E2'], // red
-  ['#8B5CF6', '#F3E8FF'], // purple
-  ['#EC4899', '#FCE7F3'], // pink
-  ['#14B8A6', '#CCFBF1'], // teal
-  ['#F97316', '#FFEDD5'], // orange
-  ['#6366F1', '#EEF2FF'], // violet
-]
-const PALETTE_DARK = [
-  ['#818CF8', '#1e1b4b'],
-  ['#67E8F9', '#0e4a5e'],
-  ['#86EFAC', '#14532d'],
-  ['#FCD34D', '#451a03'],
-  ['#FCA5A5', '#450a0a'],
-  ['#C4B5FD', '#3b0764'],
-  ['#F9A8D4', '#500724'],
-  ['#5EEAD4', '#042f2e'],
-  ['#FDBA74', '#431407'],
-  ['#A5B4FC', '#1e1b4b'],
+// Gradientes vibrantes — uno por cliente según hash del nombre
+const GRADIENTS = [
+  'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',  // violeta
+  'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)',  // azul-cyan
+  'linear-gradient(135deg, #10B981 0%, #34D399 100%)',  // esmeralda
+  'linear-gradient(135deg, #F59E0B 0%, #EF4444 100%)',  // ambar-rojo
+  'linear-gradient(135deg, #EC4899 0%, #F43F5E 100%)',  // rosa-rojo
+  'linear-gradient(135deg, #14B8A6 0%, #6366F1 100%)',  // teal-violeta
+  'linear-gradient(135deg, #F97316 0%, #FBBF24 100%)',  // naranja-ambar
+  'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',  // purple-pink
+  'linear-gradient(135deg, #06B6D4 0%, #10B981 100%)',  // cyan-verde
+  'linear-gradient(135deg, #EF4444 0%, #F97316 100%)',  // rojo-naranja
 ]
 
 function hashNombre(nombre: string): number {
   let h = 0
   for (let i = 0; i < nombre.length; i++) h = (h * 31 + nombre.charCodeAt(i)) >>> 0
-  return h % PALETTE.length
+  return h % GRADIENTS.length
 }
 
 const ClienteAvatar: React.FC<{ nombre: string; size?: 'sm' | 'md' }> = ({ nombre, size = 'md' }) => {
   const idx = hashNombre(nombre)
-  const initials = nombre.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
-  const [fg, bg] = PALETTE[idx]
-  const [fgd, bgd] = PALETTE_DARK[idx]
-  const dim = size === 'sm' ? 'w-7 h-7 text-[11px]' : 'w-9 h-9 text-sm'
+  const letter = nombre.trim().charAt(0).toUpperCase()
+  const dim = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-10 h-10 text-base'
   return (
     <span
-      className={`${dim} rounded-lg flex items-center justify-center font-bold shrink-0 select-none`}
-      style={{ color: fg, backgroundColor: bg } as any}
+      className={`${dim} rounded-2xl flex items-center justify-center font-bold text-white shrink-0 select-none shadow-md`}
+      style={{ background: GRADIENTS[idx] } as any}
     >
-      <style>{`.dark .avatar-${idx} { color: ${fgd} !important; background-color: ${bgd} !important; }`}</style>
-      <span className={`avatar-${idx}`} style={{ color: fg }}>{initials}</span>
+      {letter}
     </span>
   )
 }
