@@ -71,7 +71,8 @@ export const Dashboard: React.FC = () => {
   }
 
   const handleLimpiarTodo = async () => {
-    if (!confirm('⚠️ Esto borra TODOS los extractos, movimientos y planillas. ¿Confirmar?')) return
+    const confirmacion = window.prompt('⚠️ PELIGRO: Esto borra TODOS los extractos, movimientos y planillas.\n\nEscribí BORRAR para confirmar:')
+    if (confirmacion !== 'BORRAR') return
     try {
       const r = await apiClient.deleteTodosExtractos()
       setExtractos([])
@@ -253,12 +254,17 @@ export const Dashboard: React.FC = () => {
                 )}
               </div>
               {extractos.length > 1 && (
-                <button
-                  onClick={handleLimpiarTodo}
-                  className="mt-1.5 text-xs text-red-600 dark:text-red-400 hover:underline"
-                >
-                  🗑️ Limpiar todo ({extractos.length} extractos)
-                </button>
+                <details className="mt-2">
+                  <summary className="text-xs text-gray-400 dark:text-zinc-600 cursor-pointer select-none">
+                    Opciones avanzadas
+                  </summary>
+                  <button
+                    onClick={handleLimpiarTodo}
+                    className="mt-1.5 text-xs text-red-600 dark:text-red-400 hover:underline block"
+                  >
+                    🗑️ Borrar todo ({extractos.length} extractos)
+                  </button>
+                </details>
               )}
             </div>
           )}
