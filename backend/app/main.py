@@ -122,20 +122,29 @@ def _init_db():
         # Superadmin Julieta — password desde variable de entorno SUPERADMIN_PASSWORD
         julieta_email = "julietaarrazate@gmail.com"
         julieta_pwd = os.environ.get("SUPERADMIN_PASSWORD", "")
-        if julieta_pwd and not db.query(U).filter(U.email == julieta_email).first():
-            db.add(U(
-                email=julieta_email,
-                full_name="Julieta Arrazate",
-                hashed_password=get_password_hash(julieta_pwd),
-                role=RoleEnum.ADMIN.value,
-                is_active=True,
-                is_superadmin=True,
-                organizacion_id=1
-            ))
+        if julieta_pwd:
+            julieta = db.query(U).filter(U.email == julieta_email).first()
+            if not julieta:
+                db.add(U(
+                    email=julieta_email,
+                    full_name="Julieta Arrazate",
+                    hashed_password=get_password_hash(julieta_pwd),
+                    role=RoleEnum.ADMIN.value,
+                    is_active=True,
+                    is_superadmin=True,
+                    organizacion_id=1
+                ))
+                print(f"[db] Superadmin {julieta_email} creado")
+            else:
+                # Siempre actualizar password y flags desde el env var
+                julieta.hashed_password = get_password_hash(julieta_pwd)
+                julieta.is_superadmin = True
+                julieta.is_active = True
+                julieta.role = RoleEnum.ADMIN.value
+                print(f"[db] Superadmin {julieta_email} actualizado")
             db.commit()
-            print(f"[db] Superadmin {julieta_email} creado")
-        elif not julieta_pwd:
-            print("[db] AVISO: variable SUPERADMIN_PASSWORD no definida — cuenta superadmin no creada")
+        else:
+            print("[db] AVISO: SUPERADMIN_PASSWORD no definida")
 
         # Migrar admin@caneland.com → admin@julieta.com si existe el viejo
         old = db.query(U).filter(U.email == "admin@caneland.com").first()
