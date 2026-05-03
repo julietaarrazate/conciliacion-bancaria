@@ -159,7 +159,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
 
       <div
-        className="fixed right-0 top-12 md:top-0 h-[calc(100dvh-3rem)] md:h-screen w-full md:max-w-4xl bg-white dark:bg-ml-dark-surface shadow-2xl z-50 flex flex-col overflow-hidden"
+        className="fixed right-0 top-12 md:top-0 bottom-0 w-full md:w-[75vw] lg:w-[65vw] xl:w-[55vw] bg-white dark:bg-ml-dark-surface shadow-2xl z-50 flex flex-col overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-start justify-between px-4 py-3 bg-ml-yellow dark:bg-ml-dark-card border-b border-ml-yellow-dark dark:border-ml-dark-border shrink-0">
