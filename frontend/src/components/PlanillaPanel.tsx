@@ -93,6 +93,24 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
       .finally(() => setLoading(false))
   }, [planillaId])
 
+  // Bloquear swipe-back del navegador mientras el panel está abierto
+  useEffect(() => {
+    if (!planillaId) return
+    const prevent = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0]
+        // Bloquear si el gesto empieza cerca del borde izquierdo o es claramente horizontal
+        if (touch.clientX < 30) e.preventDefault()
+      }
+    }
+    document.addEventListener('touchstart', prevent, { passive: false })
+    document.body.style.overscrollBehaviorX = 'none'
+    return () => {
+      document.removeEventListener('touchstart', prevent)
+      document.body.style.overscrollBehaviorX = ''
+    }
+  }, [planillaId])
+
   const filteredRows = useMemo(() => {
     if (!detalle) return []
     return detalle.rows.filter(row => {
@@ -165,6 +183,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
         className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white dark:bg-slate-800 shadow-2xl z-50 flex flex-col"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
+        style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}
       >
         {/* Header */}
         <div className="flex items-start justify-between px-4 py-3 bg-ml-yellow dark:bg-ml-dark-surface dark:border-b dark:border-ml-green/30 border-b">
