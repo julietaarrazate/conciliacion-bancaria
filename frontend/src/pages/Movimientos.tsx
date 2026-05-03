@@ -71,6 +71,8 @@ export const Movimientos: React.FC = () => {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState<ColFilter>(EMPTY)
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 200
   const [umLoading, setUmLoading] = useState(false)
   const [umMsg, setUmMsg] = useState('')
   const [exporting, setExporting] = useState(false)
@@ -88,7 +90,7 @@ export const Movimientos: React.FC = () => {
   }, [])
 
   const buildApiFilters = useCallback((): MovimientosFiltros => {
-    const f: MovimientosFiltros = { limit: 10000 }
+    const f: MovimientosFiltros = { limit: 0 }  // 0 = sin límite
     if (filters.cliente) f.cliente = filters.cliente
     if (filters.cuit) f.cuit = filters.cuit
     if (filters.titular) f.titular = filters.titular
@@ -141,6 +143,7 @@ export const Movimientos: React.FC = () => {
       const data = await apiClient.getMovimientos(extractoId, buildApiFilters())
       setMovimientos(data.items)
       setTotal(data.total)
+      setPage(0)
     } catch { setMovimientos([]); setTotal(0) }
     finally { setLoading(false) }
   }, [extractoId, buildApiFilters])
@@ -264,8 +267,31 @@ export const Movimientos: React.FC = () => {
 
       {/* Tabla */}
       <div className={`bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 overflow-hidden shadow-sm ${umCount > 0 ? 'rounded-b-lg' : 'rounded-lg'}`}>
-        <div className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border-b dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400">
-          <b>{filteredMovs.length}</b> de {total} movimientos
+        <div className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border-b dark:border-slate-700 flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            <b>{filteredMovs.length}</b> de {total} movimientos
+            {filteredMovs.length > PAGE_SIZE && (
+              <span className="ml-2 text-gray-400">
+                · mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filteredMovs.length)}
+              </span>
+            )}
+          </span>
+          {filteredMovs.length > PAGE_SIZE && (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                className="px-2 py-0.5 text-xs rounded border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
+                ← Ant.
+              </button>
+              <span className="text-xs text-gray-500 dark:text-gray-400 px-1">
+                {page + 1} / {Math.ceil(filteredMovs.length / PAGE_SIZE)}
+              </span>
+              <button onClick={() => setPage(p => Math.min(Math.ceil(filteredMovs.length / PAGE_SIZE) - 1, p + 1))}
+                disabled={page >= Math.ceil(filteredMovs.length / PAGE_SIZE) - 1}
+                className="px-2 py-0.5 text-xs rounded border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
+                Sig. →
+              </button>
+            </div>
+          )}
         </div>
 
         {loading ? (
@@ -347,7 +373,7 @@ export const Movimientos: React.FC = () => {
               <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
                 {filteredMovs.length === 0 ? (
                   <tr><td colSpan={8} className="py-8 text-center text-gray-400">Sin resultados</td></tr>
-                ) : filteredMovs.map(m => {
+                ) : filteredMovs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(m => {
                   const isEditing = editingId === m.id && tab === 'um'
                   return (
                     <tr key={m.id}
