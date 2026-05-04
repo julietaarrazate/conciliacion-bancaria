@@ -59,6 +59,7 @@ async def preview_hojas(
 async def upload_planilla(
     cliente_nombre: str = Query(..., description="Nombre del cliente"),
     extracto_id: int = Query(..., description="ID del extracto a usar"),
+    sheet_name: str = Query(None, description="Hoja del Excel a usar (opcional)"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -115,6 +116,7 @@ async def upload_planilla(
                 cuit=fila_data.get("cuit"),
                 titular=fila_data.get("titular"),
                 referencia=fila_data.get("referencia"),
+                datos_originales=fila_data.get("datos_originales"),
                 status="pendiente",
                 organizacion_id=org_id
             )

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Parseo de archivos Excel para extractos bancarios y planillas de clientes.
 Soporta Banco Macro, BBVA, Santander, Galicia, ICBC y formatos genericos.
 """
@@ -32,6 +32,13 @@ def detectar_banco(ws) -> str:
             if p in texto:
                 return banco
     return "generico"
+
+def listar_hojas(filepath: str) -> list:
+    """Retorna los nombres de hojas de un Excel."""
+    wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
+    hojas = list(wb.sheetnames)
+    wb.close()
+    return hojas
 
 def _parse_fecha(v):
     if v is None:
@@ -185,12 +192,22 @@ def detectar_titular_col(ws, hdr_row):
             return c
     return None
 
-def parsear_planilla_cliente(filepath: str) -> dict:
+def parsear_planilla_cliente(filepath: str, sheet_name: Optional[str] = None) -> dict:
     wb = openpyxl.load_workbook(filepath, data_only=True)
-    ws = wb.active
+    if sheet_name and sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+    else:
+        ws = wb.active
     hdr_row, imp_col = detectar_header(ws)
     cuit_col    = detectar_cuit_col(ws, hdr_row)
     titular_col = detectar_titular_col(ws, hdr_row)
+
+    # Leer headers originales de la fila de encabezado
+    headers_originales = []
+    for c in range(1, ws.max_column + 1):
+        v = ws.cell(hdr_row, c).value
+        headers_originales.append(str(v).strip() if v is not None else f"Col{c}")
+
     filas = []
     for row in range(hdr_row + 1, ws.max_row + 1):
         monto = ws.cell(row, imp_col).value
@@ -198,6 +215,27 @@ def parsear_planilla_cliente(filepath: str) -> dict:
             continue
         cuit    = ws.cell(row, cuit_col).value    if cuit_col    else None
         titular = ws.cell(row, titular_col).value if titular_col else None
-        filas.append({"monto": monto, "cuit": str(cuit) if cuit else None, "titular": str(titular) if titular else None})
+
+        # Guardar todas las columnas originales como dict
+        datos_originales = {}
+        for c, h in enumerate(headers_originales, start=1):
+            v = ws.cell(row, c).value
+            if v is not None:
+                datos_originales[h] = str(v) if not isinstance(v, (int, float)) else v
+
+        filas.append({
+            "monto": monto,
+            "cuit": str(cuit) if cuit else None,
+            "titular": str(titular) if titular else None,
+            "datos_originales": datos_originales if datos_originales else None,
+        })
     wb.close()
-    return {"filas": filas, "total": len(filas), "header_row": hdr_row, "imp_col": imp_col, "cuit_col": cuit_col, "titular_col": titular_col}
+    return {
+        "filas": filas,
+        "total": len(filas),
+        "headers_originales": headers_originales,
+        "header_row": hdr_row,
+        "imp_col": imp_col,
+        "cuit_col": cuit_col,
+        "titular_col": titular_col,
+    }
