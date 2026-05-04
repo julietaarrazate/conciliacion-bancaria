@@ -122,20 +122,33 @@ class ApiClient {
   }
 
   // Planillas endpoints
+  async previewHojas(file: File): Promise<{ hojas: string[]; tiene_multiples: boolean }> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await this.client.post('/planillas/preview-hojas', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    return res.data
+  }
+
   async uploadPlanilla(
     clienteNombre: string,
     extractoId: number,
-    file: File
+    file: File,
+    sheetName?: string
   ): Promise<Planilla> {
     const formData = new FormData()
     formData.append('file', file)
 
+    const params: Record<string, any> = {
+      cliente_nombre: clienteNombre,
+      extracto_id: extractoId
+    }
+    if (sheetName) params.sheet_name = sheetName
+
     const res = await this.client.post('/planillas/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      params: {
-        cliente_nombre: clienteNombre,
-        extracto_id: extractoId
-      }
+      params
     })
     return res.data
   }

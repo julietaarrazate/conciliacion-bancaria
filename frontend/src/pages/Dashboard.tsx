@@ -35,6 +35,10 @@ export const Dashboard: React.FC = () => {
   const [fechaAcred, setFechaAcred] = useState<string>(
     new Date().toISOString().split('T')[0]
   )
+  const [esperandoHoja, setEsperandoHoja] = useState(false)
+  const [hojasPlanilla, setHojasPlanilla] = useState<string[]>([])
+  const [hojaSeleccionada, setHojaSeleccionada] = useState('')
+  const [archivoTemp, setArchivoTemp] = useState<File | null>(null)
 
   useEffect(() => {
     setExtractoId(null)
@@ -134,21 +138,17 @@ export const Dashboard: React.FC = () => {
     }
   }
 
-  const handleUploadPlanilla = async (file: File) => {
-    if (!extractoId || !clienteNombre.trim()) {
-      setError('Cargá primero un extracto e ingresá el cliente')
-      return
-    }
+  const conciliarConHoja = async (file: File, sheetName?: string) => {
+    if (!extractoId || !clienteNombre.trim()) return
+    setEsperandoHoja(false)
+    setArchivoTemp(null)
+    setHojasPlanilla([])
     setLoading(true)
     setError('')
     setSuccess('')
     setResultado(null)
     try {
-      const planilla = await apiClient.uploadPlanilla(
-        clienteNombre,
-        extractoId,
-        file
-      )
+      const planilla = await apiClient.uploadPlanilla(clienteNombre, extractoId, file, sheetName)
       const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred)
       setResultado(r)
       setSuccess(`Conciliación completa: ${r.acreditadas}/${r.filas_procesadas} acreditadas`)
@@ -157,6 +157,28 @@ export const Dashboard: React.FC = () => {
       setError(err.response?.data?.detail || 'Error en la conciliación')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleUploadPlanilla = async (file: File) => {
+    if (!extractoId || !clienteNombre.trim()) {
+      setError('Cargá primero un extracto e ingresá el cliente')
+      return
+    }
+    setError('')
+    setSuccess('')
+    try {
+      const preview = await apiClient.previewHojas(file)
+      if (preview.tiene_multiples) {
+        setArchivoTemp(file)
+        setHojasPlanilla(preview.hojas)
+        setHojaSeleccionada(preview.hojas[0] || '')
+        setEsperandoHoja(true)
+      } else {
+        await conciliarConHoja(file)
+      }
+    } catch {
+      await conciliarConHoja(file)
     }
   }
 
