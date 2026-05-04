@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_, or_, text
+from sqlalchemy import desc, and_, or_, text, func
 from datetime import date, datetime
 from typing import Optional
 import tempfile, os, io, hashlib
@@ -40,8 +40,15 @@ def list_extractos(skip: int = 0, limit: int = 50,
                    org_id: Optional[int] = Query(None),
                    db: Session = Depends(get_db),
                    current_user: User = Depends(get_current_user)):
-    q = db.query(ExtractoBancario)
-    # Superadmin puede filtrar por org; usuarios normales ven solo su org
+    mov_count = (
+        db.query(MovimientoBanco.extracto_id, func.count(MovimientoBanco.id).label("total"))
+        .group_by(MovimientoBanco.extracto_id)
+        .subquery()
+    )
+    q = (
+        db.query(ExtractoBancario, mov_count.c.total)
+        .outerjoin(mov_count, ExtractoBancario.id == mov_count.c.extracto_id)
+    )
     if current_user.is_superadmin and org_id:
         q = q.filter(ExtractoBancario.organizacion_id == org_id)
     elif not current_user.is_superadmin:
@@ -49,7 +56,7 @@ def list_extractos(skip: int = 0, limit: int = 50,
     total = q.count()
     rows = q.order_by(desc(ExtractoBancario.fecha_creacion)).offset(skip).limit(limit).all()
     items = [{"id": e.id, "nombre_archivo": e.nombre_archivo,
-              "fecha_creacion": e.fecha_creacion, "total_movimientos": len(e.movimientos)} for e in rows]
+              "fecha_creacion": e.fecha_creacion, "total_movimientos": int(cnt or 0)} for e, cnt in rows]
     return {"total": total, "items": items}
 
 
