@@ -19,6 +19,15 @@ from app.middleware.auth import get_current_user, require_permission
 
 router = APIRouter(prefix="/planillas", tags=["planillas"])
 
+def _get_headers_from_rows(rows) -> list:
+    """Extrae los headers originales de la primera fila con datos_originales."""
+    for r in rows:
+        datos = getattr(r, "datos_originales", None)
+        if datos and isinstance(datos, dict):
+            return list(datos.keys())
+    return []
+
+
 
 def _get_org_config(db: Session, organizacion_id: int) -> dict:
     """Obtiene la config de la org. Si no existe, retorna config default (Caneland)."""
@@ -412,6 +421,7 @@ def download_planilla_conciliada(
             "mov_titular": mov.titular if mov else None,
             "mov_fecha": mov.fecha if mov else None,
             "mov_fecha_acred": mov.fecha_acred if mov else None,
+            "datos_originales": getattr(r, "datos_originales", None),
         })
         if mov and mov.id not in ids_acred_vistos:
             ids_acred_vistos.add(mov.id)
@@ -425,6 +435,7 @@ def download_planilla_conciliada(
         "cliente_nombre": p.cliente.nombre,
         "nombre_archivo": p.nombre_archivo,
         "rows": rows_data,
+        "headers_originales": _get_headers_from_rows(p.rows),
     }
 
     xlsx = export_planilla_conciliada(planilla_data, movimientos_acreditados)
@@ -499,6 +510,7 @@ def get_planilla_detalle(
             "mov_titular": mov.titular if mov else None,
             "mov_fecha": mov.fecha if mov else None,
             "mov_fecha_acred": mov.fecha_acred if mov else None,
+            "datos_originales": getattr(r, "datos_originales", None),
         })
 
     statuses = [r.status for r in p.rows]
