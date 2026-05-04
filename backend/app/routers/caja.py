@@ -141,12 +141,29 @@ def registrar_op(
     dens_usadas = payload.get("denominaciones", {})  # {"20000": 2, "10000": 1}
     notas = payload.get("notas")
 
-    if not cliente_id or not beneficiario or importe <= 0:
-        raise HTTPException(400, "cliente_id, beneficiario e importe son requeridos")
+    cliente_nombre_libre = payload.get("cliente_nombre", "").strip()
 
-    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not beneficiario or importe <= 0:
+        raise HTTPException(400, "beneficiario e importe son requeridos")
+
+    # Resolver cliente: por ID, por nombre libre, o crear si no existe
+    cliente = None
+    if cliente_id:
+        try:
+            cliente = db.query(Cliente).filter(Cliente.id == int(cliente_id)).first()
+        except Exception:
+            pass
+    if not cliente and cliente_nombre_libre:
+        cliente = db.query(Cliente).filter(
+            Cliente.nombre == cliente_nombre_libre,
+            Cliente.organizacion_id == org_id
+        ).first()
+        if not cliente:
+            cliente = Cliente(nombre=cliente_nombre_libre, organizacion_id=org_id)
+            db.add(cliente)
+            db.flush()
     if not cliente:
-        raise HTTPException(404, "Cliente no encontrado")
+        raise HTTPException(400, "Especifica cliente_id o cliente_nombre")
 
     # Obtener o crear arqueo del día
     fecha = date.today()

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+﻿import React, { useEffect, useRef, useState } from 'react'
 import { apiClient } from '@/services/api'
 
 const DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 200, 100]
@@ -79,7 +79,7 @@ export const OrdenDePago: React.FC = () => {
         Object.entries(dens).filter(([, v]) => parseInt(v) > 0).map(([k, v]) => [k, parseInt(v)])
       )
       const res = await apiClient.client.post('/caja/op/registrar', {
-        cliente_id: clienteMatch?.id || parseInt(form.cliente_id),
+        cliente_nombre: form.cliente_id,
         beneficiario: form.beneficiario,
         importe: importeNum,
         foto_base64: foto,
