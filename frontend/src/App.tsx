@@ -54,7 +54,10 @@ export function App() {
     const loadUser = async () => {
       if (token) {
         try {
-          const user = await apiClient.getCurrentUser()
+          const timeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), 8000)
+          )
+          const user = await Promise.race([apiClient.getCurrentUser(), timeout])
           setUser(user)
         } catch {
           useAuthStore.setState({ token: null, isAuthenticated: false })
