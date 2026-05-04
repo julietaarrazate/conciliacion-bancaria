@@ -140,36 +140,45 @@ def get_estructura(db: Session = Depends(get_db), _: User = Depends(get_current_
 @router.get("/archivos")
 def get_archivos_por_cliente(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """
-    Devuelve todos los archivos conciliados agrupados por cliente y mes.
-    Estructura: { cliente: { 'Abril 2026': [ {id, nombre, fecha, acreditadas, total} ] } }
+    Devuelve archivos conciliados agrupados por cliente y mes.
+    Usa agregación SQL en vez de cargar todos los rows a memoria.
     """
     from app.models.planilla import Planilla, PlanillaRow
     from app.models.cliente import Cliente
+    from sqlalchemy import func, case
     from collections import defaultdict
 
     MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
              'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
-    planillas = (db.query(Planilla)
-                 .join(Cliente)
-                 .order_by(Planilla.fecha_carga.desc())
-                 .all())
+    rows = (
+        db.query(
+            Cliente.nombre,
+            Planilla.id,
+            Planilla.nombre_archivo,
+            Planilla.fecha_carga,
+            func.count(PlanillaRow.id).label("total"),
+            func.sum(case((PlanillaRow.status == "ok", 1), else_=0)).label("acreditadas"),
+        )
+        .join(Cliente, Planilla.cliente_id == Cliente.id)
+        .outerjoin(PlanillaRow, PlanillaRow.planilla_id == Planilla.id)
+        .group_by(Cliente.nombre, Planilla.id, Planilla.nombre_archivo, Planilla.fecha_carga)
+        .order_by(Planilla.fecha_carga.desc())
+        .all()
+    )
 
     resultado: dict = defaultdict(lambda: defaultdict(list))
-
-    for p in planillas:
-        anio_str = str(p.fecha_carga.year)
-        mes_anio = f"{MESES[p.fecha_carga.month - 1]}"
-        statuses = [r.status for r in p.rows]
-        resultado[p.cliente.nombre][f"{anio_str}/{mes_anio}"].append({
-            "id": p.id,
-            "nombre_archivo": p.nombre_archivo,
-            "fecha_carga": p.fecha_carga.isoformat(),
-            "total": len(statuses),
-            "acreditadas": sum(1 for s in statuses if s == "ok"),
+    for cliente_nombre, p_id, nombre_archivo, fecha_carga, total, acreditadas in rows:
+        anio_str = str(fecha_carga.year)
+        mes_anio = MESES[fecha_carga.month - 1]
+        resultado[cliente_nombre][f"{anio_str}/{mes_anio}"].append({
+            "id": p_id,
+            "nombre_archivo": nombre_archivo,
+            "fecha_carga": fecha_carga.isoformat(),
+            "total": int(total or 0),
+            "acreditadas": int(acreditadas or 0),
         })
 
-    # Convertir a lista ordenada
     clientes_lista = []
     for cliente_nombre in sorted(resultado.keys()):
         meses = []

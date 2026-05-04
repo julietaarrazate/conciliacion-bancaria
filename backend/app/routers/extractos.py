@@ -119,28 +119,34 @@ def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
         raise HTTPException(404, "Extracto no encontrado")
 
     nombre  = extracto.nombre_archivo
-    n_movs  = len(extracto.movimientos)
-    ids_movs = [m.id for m in extracto.movimientos]
 
     try:
-        # 1. Nullificar FK planilla_rows.orden_movimiento_acreditado usando ORM
-        if ids_movs:
-            db.query(PlanillaRow)\
-              .filter(PlanillaRow.orden_movimiento_acreditado.in_(ids_movs))\
-              .update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
-            db.flush()
+        n_movs = db.query(func.count(MovimientoBanco.id)).filter(
+            MovimientoBanco.extracto_id == extracto_id
+        ).scalar() or 0
 
-        # 2. Borrar planillas y sus rows (cascade)
-        for p in list(extracto.planillas):
-            db.delete(p)
-        db.flush()
+        planilla_ids = [p.id for p in db.query(Planilla.id).filter(
+            Planilla.extracto_id == extracto_id
+        ).all()]
 
-        # 3. Borrar movimientos
-        for m in list(extracto.movimientos):
-            db.delete(m)
-        db.flush()
+        if planilla_ids:
+            db.query(PlanillaRow).filter(
+                PlanillaRow.planilla_id.in_(planilla_ids)
+            ).delete(synchronize_session=False)
 
-        # 4. Borrar extracto
+        db.query(PlanillaRow).filter(
+            PlanillaRow.orden_movimiento_acreditado.in_(
+                db.query(MovimientoBanco.id).filter(MovimientoBanco.extracto_id == extracto_id)
+            )
+        ).update({"orden_movimiento_acreditado": None}, synchronize_session=False)
+
+        if planilla_ids:
+            db.query(Planilla).filter(Planilla.id.in_(planilla_ids)).delete(synchronize_session=False)
+
+        db.query(MovimientoBanco).filter(
+            MovimientoBanco.extracto_id == extracto_id
+        ).delete(synchronize_session=False)
+
         db.delete(extracto)
         db.commit()
 
@@ -159,14 +165,11 @@ def delete_todos_extractos(db: Session = Depends(get_db),
     from app.models.planilla import PlanillaRow, Planilla
 
     try:
-        # Borrar en orden correcto para respetar FKs
-        db.query(PlanillaRow).update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
-        db.flush()
-        n_planillas = db.query(Planilla).delete(synchronize_session="fetch")
-        db.flush()
-        n_movs = db.query(MovimientoBanco).delete(synchronize_session="fetch")
-        db.flush()
-        n_extractos = db.query(ExtractoBancario).delete(synchronize_session="fetch")
+        db.query(PlanillaRow).update({"orden_movimiento_acreditado": None}, synchronize_session=False)
+        n_rows = db.query(PlanillaRow).delete(synchronize_session=False)
+        n_planillas = db.query(Planilla).delete(synchronize_session=False)
+        n_movs = db.query(MovimientoBanco).delete(synchronize_session=False)
+        n_extractos = db.query(ExtractoBancario).delete(synchronize_session=False)
         db.commit()
 
         registrar_log(db, current_user.id, "extractos_bancarios", 0, "DELETE_ALL",
@@ -223,7 +226,7 @@ def _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fech
         q = q.filter(and_(MovimientoBanco.cliente_acreditado.isnot(None),
                           MovimientoBanco.cliente_acreditado != "",
                           ~MovimientoBanco.cliente_acreditado.ilike("no identificado")))
-    return q.order_by(MovimientoBanco.orden.desc().nulls_last(), MovimientoBanco.id.desc())
+    return q
 
 
 @router.get("/{extracto_id}/movimientos", response_model=MovimientosFiltradosResponse)

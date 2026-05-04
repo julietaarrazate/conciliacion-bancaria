@@ -196,11 +196,13 @@ export const OrdenDePago: React.FC = () => {
           <div className="card space-y-4">
             <div>
               <label className="label">Cliente (quien pidió el pago)</label>
-              <select className="input-field" value={form.cliente_id}
-                onChange={e => setForm(p => ({ ...p, cliente_id: e.target.value }))}>
-                <option value="">Seleccionar cliente...</option>
-                {clientes.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
-              </select>
+              <input className="input-field" list="clientes-list"
+                placeholder="Escribí o elegí un cliente..."
+                value={form.cliente_id}
+                onChange={e => setForm(p => ({ ...p, cliente_id: e.target.value }))} />
+              <datalist id="clientes-list">
+                {clientes.map(c => <option key={c.id} value={c.nombre} />)}
+              </datalist>
             </div>
 
             <div>
