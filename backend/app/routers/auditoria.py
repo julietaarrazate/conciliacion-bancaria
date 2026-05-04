@@ -218,3 +218,65 @@ def get_insights(
             ]
         }
     }
+
+
+@router.post("/patrones/importar-historico")
+def importar_patrones_historicos(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Importa patrones de aprendizaje desde planillas historicas ya conciliadas.
+    Body: {"patrones": [{"cliente": "Green", "titular": "Juan Perez", "cuit": "20123456789", "monto": 50000}]}
+    """
+    from app.models.patron_aprendido import PatronAprendido
+    import re
+
+    org_id = current_user.organizacion_id or 1
+    patrones = payload.get("patrones", [])
+    creados = 0
+    actualizados = 0
+
+    for p in patrones:
+        cliente = str(p.get("cliente","")).strip()
+        titular = str(p.get("titular","")).strip()
+        cuit    = re.sub(r'\D','', str(p.get("cuit","") or ""))  # solo digitos
+        monto   = float(p.get("monto",0) or 0)
+
+        if not cliente or (not titular and not cuit):
+            continue
+
+        # Normalizar titular (primeras 3 palabras alfabeticas)
+        palabras = [w for w in titular.lower().split() if len(w) > 3 and w.isalpha()][:3]
+        titular_frag = ' '.join(palabras)
+
+        # Buscar patron existente
+        existente = db.query(PatronAprendido).filter(
+            PatronAprendido.organizacion_id == org_id,
+            PatronAprendido.cliente_nombre == cliente,
+            PatronAprendido.titular_extracto_fragmento == titular_frag
+        ).first()
+
+        if existente:
+            existente.veces_visto  += 1
+            existente.veces_correcto += 1
+            if monto > 0:
+                existente.monto_tipico = monto
+            actualizados += 1
+        else:
+            db.add(PatronAprendido(
+                organizacion_id=org_id,
+                cliente_nombre=cliente,
+                titular_fragmento=titular_frag,
+                numeros_clave=cuit if cuit else None,
+                monto_tipico=monto if monto > 0 else None,
+                titular_extracto_fragmento=titular_frag,
+                veces_visto=2,
+                veces_correcto=2,  # historico = confiable desde el inicio
+                activo=True
+            ))
+            creados += 1
+
+    db.commit()
+    return {"ok": True, "creados": creados, "actualizados": actualizados, "total": len(patrones)}
