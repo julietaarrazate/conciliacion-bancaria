@@ -183,3 +183,83 @@ def crear_primer_usuario(
                   {"email": email, "org": org.nombre, "rol": "admin"})
 
     return {"ok": True, "user_id": user.id, "email": email, "organizacion": org.nombre}
+
+
+@router.get("/actividad")
+def panel_actividad(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_superadmin)
+):
+    """
+    Panel de actividad por org para superadmin.
+    Muestra estado actual de cada org: ultima conciliacion, planillas del mes,
+    tasa de exito, casos pendientes, usuarios activos.
+    """
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+    from app.models.planilla import Planilla, PlanillaRow
+    from app.models.user import User as U
+    from app.models.cliente import Cliente
+
+    orgs = db.query(Organizacion).filter(Organizacion.activo == True).all()
+    hoy = datetime.utcnow()
+    inicio_mes = hoy.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    hace_7_dias = hoy - timedelta(days=7)
+
+    resultado = []
+    for org in orgs:
+        # Planillas del mes
+        planillas_mes = db.query(Planilla).filter(
+            Planilla.organizacion_id == org.id,
+            Planilla.fecha_carga >= inicio_mes
+        ).all()
+
+        # Stats de filas del mes
+        filas_mes = []
+        for p in planillas_mes:
+            filas_mes.extend(p.rows)
+
+        total_filas = len(filas_mes)
+        ok = sum(1 for r in filas_mes if r.status == "ok")
+        sin_datos = sum(1 for r in filas_mes if "faltan" in str(r.status) or "sin datos" in str(r.status))
+        en_revision = sum(1 for r in filas_mes if r.status == "EN_REVISION")
+
+        # Ultima conciliacion
+        ultima_planilla = db.query(Planilla).filter(
+            Planilla.organizacion_id == org.id
+        ).order_by(Planilla.fecha_carga.desc()).first()
+
+        # Usuarios de la org
+        usuarios = db.query(U).filter(
+            U.organizacion_id == org.id,
+            U.is_active == True,
+            U.is_superadmin == False
+        ).count()
+
+        # Clientes activos (con planillas en los ultimos 30 dias)
+        clientes_activos = db.query(func.count(func.distinct(Planilla.cliente_id))).filter(
+            Planilla.organizacion_id == org.id,
+            Planilla.fecha_carga >= hoy - timedelta(days=30)
+        ).scalar() or 0
+
+        tasa = round(ok / total_filas * 100, 1) if total_filas > 0 else None
+
+        resultado.append({
+            "id": org.id,
+            "nombre": org.nombre,
+            "plan": org.plan,
+            "planillas_mes": len(planillas_mes),
+            "filas_mes": total_filas,
+            "ok_mes": ok,
+            "sin_datos_mes": sin_datos,
+            "en_revision_mes": en_revision,
+            "tasa_exito": tasa,
+            "ultima_conciliacion": ultima_planilla.fecha_carga.isoformat() if ultima_planilla else None,
+            "usuarios_activos": usuarios,
+            "clientes_activos": clientes_activos,
+            "alerta": en_revision > 0 or (tasa is not None and tasa < 70),
+        })
+
+    # Ordenar: alertas primero, luego por actividad
+    resultado.sort(key=lambda x: (-int(x["alerta"]), -(x["planillas_mes"])))
+    return resultado

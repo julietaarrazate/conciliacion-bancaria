@@ -12,6 +12,7 @@ import { Bulk } from '@/pages/Bulk'
 import { Clientes } from '@/pages/Clientes'
 import { Perfil } from '@/pages/Perfil'
 import { Organizaciones } from '@/pages/Organizaciones'
+import { Actividad } from '@/pages/Actividad'
 import { Liquidaciones } from '@/pages/Liquidaciones'
 import { Revision } from '@/pages/Revision'
 import { Caja } from '@/pages/Caja'
@@ -101,6 +102,7 @@ export function App() {
               <Revision />
             </ProtectedRoute>
           } />
+          <Route path="/actividad" element={<ProtectedRoute permission="manage_users"><Actividad /></ProtectedRoute>} />
           <Route path="/organizaciones" element={
             <ProtectedRoute permission="manage_users">
               <Organizaciones />
