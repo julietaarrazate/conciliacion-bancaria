@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+﻿from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
 import tempfile
 import os
@@ -11,7 +11,7 @@ from app.models.user import User
 from app.models.organizacion import Organizacion
 from fastapi.responses import StreamingResponse
 from app.schemas.planilla import PlanillaResponse, PlanillaDetalleResponse, ConciliacionResultado
-from app.services.excel_parser import parsear_planilla_cliente
+from app.services.excel_parser import parsear_planilla_cliente, listar_hojas
 from app.services.conciliacion import conciliar_planilla
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_planilla_conciliada
@@ -27,6 +27,23 @@ def _get_org_config(db: Session, organizacion_id: int) -> dict:
     if org and org.configuracion:
         return org.configuracion
     return CONFIG_CANELAND
+
+
+@router.post("/preview-hojas")
+async def preview_hojas(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Retorna las hojas del Excel. Llamar antes de upload cuando el archivo tiene multiples solapas."""
+    import tempfile, os
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    try:
+        hojas = listar_hojas(tmp_path)
+    finally:
+        if os.path.exists(tmp_path): os.remove(tmp_path)
+    return {"hojas": hojas, "tiene_multiples": len(hojas) > 1}
 
 
 @router.post("/upload", response_model=PlanillaResponse)
@@ -70,7 +87,7 @@ async def upload_planilla(
             tmp.write(contents)
             tmp_path = tmp.name
 
-        parsed = parsear_planilla_cliente(tmp_path)
+        parsed = parsear_planilla_cliente(tmp_path, sheet_name=sheet_name)
 
         planilla = Planilla(
             cliente_id=cliente.id,
