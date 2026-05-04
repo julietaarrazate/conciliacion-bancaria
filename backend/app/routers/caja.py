@@ -288,3 +288,40 @@ def _op_response(op: OrdenDePago, con_foto: bool = False) -> dict:
         "tiene_foto": bool(op.foto_comprobante),
         "created_at": op.created_at
     }
+
+
+@router.get("/op/exportar-eft")
+def exportar_eft(
+    desde: Optional[date] = Query(None),
+    hasta: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Exporta el historial EFT en Excel (formato identico a la planilla manual)."""
+    import io
+    from fastapi.responses import StreamingResponse
+    from app.services.excel_export import export_eft_historial
+
+    org_id = _org_id(current_user)
+    q = db.query(OrdenDePago).filter(OrdenDePago.organizacion_id == org_id)
+    if desde:
+        q = q.filter(OrdenDePago.fecha >= desde)
+    if hasta:
+        q = q.filter(OrdenDePago.fecha <= hasta)
+    ops = q.order_by(OrdenDePago.fecha.asc(), OrdenDePago.id.asc()).all()
+
+    data = [{"fecha": op.fecha, "cliente_nombre": op.cliente.nombre if op.cliente else "—",
+              "importe": op.importe} for op in ops]
+
+    desde_str = str(desde) if desde else "inicio"
+    hasta_str = str(hasta) if hasta else str(date.today())
+    periodo = f"{desde_str}_{hasta_str}"
+
+    xlsx = export_eft_historial(data, periodo)
+    fname = f"pago_eft_{periodo}.xlsx"
+
+    return StreamingResponse(
+        io.BytesIO(xlsx),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'}
+    )

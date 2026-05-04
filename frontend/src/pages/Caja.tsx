@@ -36,6 +36,24 @@ export const Caja: React.FC = () => {
   const [arqueo, setArqueo] = useState<Arqueo | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [exportando, setExportando] = useState(false)
+  const [filtroDesde, setFiltroDesde] = useState('')
+  const [filtroHasta, setFiltroHasta] = useState('')
+
+  const exportarEFT = async () => {
+    setExportando(true)
+    try {
+      const params = new URLSearchParams()
+      if (filtroDesde) params.set('desde', filtroDesde)
+      if (filtroHasta) params.set('hasta', filtroHasta)
+      const res = await apiClient.client.get(`/caja/op/exportar-eft?${params}`, { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url; a.download = `pago_eft.xlsx`; a.click()
+      URL.revokeObjectURL(url)
+    } catch { setMsg('Error al exportar') }
+    finally { setExportando(false) }
+  }
   const [msg, setMsg] = useState('')
   const [dens, setDens] = useState<Record<string, string>>({})
   const [editando, setEditando] = useState<'saldo' | 'agregados' | 'ingresos' | null>(null)

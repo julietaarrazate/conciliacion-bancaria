@@ -536,3 +536,89 @@ def export_liquidacion_excel(liquidacion, revisiones) -> bytes:
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
+
+
+def export_eft_historial(ops: list, periodo: str = "") -> bytes:
+    """
+    Exporta el historial EFT identico a la planilla manual de Julieta.
+
+    Hoja 1 - Historico: Fecha | Cliente | Importe (mismo formato que pago eft.xlsx)
+    Hoja 2 - Tabla dinamica: totales por fecha
+    """
+    GREEN_HEADER = PatternFill("solid", fgColor="92D050")  # verde del original
+    GREEN_FONT   = Font(bold=True, color="FFFFFF", size=11)
+    MONEY_FMT    = '"$"#,##0.00'
+    now_str      = datetime.now().strftime('%d/%m/%Y %H:%M')
+
+    wb = openpyxl.Workbook()
+
+    # ── Hoja 1: Historico ─────────────────────────────────────────────────────
+    ws1 = wb.active
+    ws1.title = "Historico"
+
+    # Headers identicos al original (verde, bold, blanco)
+    for col, label in enumerate(["Fecha", "Cliente", "Importe"], start=1):
+        c = ws1.cell(row=1, column=col, value=label)
+        c.fill   = GREEN_HEADER
+        c.font   = GREEN_FONT
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.border = BORDER
+    ws1.row_dimensions[1].height = 16
+
+    # Datos
+    for i, op in enumerate(ops, start=2):
+        fecha_val = op.get("fecha")
+        ws1.cell(row=i, column=1, value=fecha_val).number_format = "DD-MMM"
+        ws1.cell(row=i, column=1).alignment = Alignment(horizontal="left")
+        ws1.cell(row=i, column=2, value=op.get("cliente_nombre", ""))
+        monto_cell = ws1.cell(row=i, column=3, value=op.get("importe", 0))
+        monto_cell.number_format = MONEY_FMT
+        for col in range(1, 4):
+            ws1.cell(row=i, column=col).border = BORDER
+
+    # Total al pie
+    if ops:
+        tot_row = len(ops) + 2
+        ws1.cell(row=tot_row, column=2, value="TOTAL").font = Font(bold=True)
+        tc = ws1.cell(row=tot_row, column=3,
+                      value=sum(op.get("importe", 0) for op in ops))
+        tc.number_format = MONEY_FMT
+        tc.font = Font(bold=True)
+        tc.fill = PatternFill("solid", fgColor="E2EFDA")
+
+    ws1.column_dimensions["A"].width = 10
+    ws1.column_dimensions["B"].width = 18
+    ws1.column_dimensions["C"].width = 16
+    ws1.freeze_panes = "A2"
+    ws1.auto_filter.ref = f"A1:C{len(ops) + 1}"
+
+    # ── Hoja 2: Totales por fecha (tabla dinamica manual) ────────────────────
+    ws2 = wb.create_sheet("Diario")
+
+    # Agrupar por fecha
+    por_fecha: dict = {}
+    for op in ops:
+        f = str(op.get("fecha", ""))
+        por_fecha.setdefault(f, 0)
+        por_fecha[f] += op.get("importe", 0)
+
+    ws2.cell(row=1, column=1, value="Etiquetas de fila").font = Font(bold=True)
+    ws2.cell(row=1, column=2, value="Suma de Importe").font = Font(bold=True)
+    for col in [1, 2]:
+        ws2.cell(row=1, column=col).fill   = GREEN_HEADER
+        ws2.cell(row=1, column=col).font   = GREEN_FONT
+        ws2.cell(row=1, column=col).border = BORDER
+
+    for i, (fecha_str, total) in enumerate(sorted(por_fecha.items()), start=2):
+        ws2.cell(row=i, column=1, value=fecha_str).border = BORDER
+        c = ws2.cell(row=i, column=2, value=total)
+        c.number_format = MONEY_FMT
+        c.border = BORDER
+
+    ws2.column_dimensions["A"].width = 14
+    ws2.column_dimensions["B"].width = 16
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
