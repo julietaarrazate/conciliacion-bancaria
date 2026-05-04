@@ -23,6 +23,7 @@ export const OrdenDePago: React.FC = () => {
   const [saving, setSaving] = useState(false)
   const [resultado, setResultado] = useState<any>(null)
   const [msg, setMsg] = useState('')
+  const [showSugerencias, setShowSugerencias] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -194,15 +195,34 @@ export const OrdenDePago: React.FC = () => {
           )}
 
           <div className="card space-y-4">
-            <div>
+            <div className="relative">
               <label className="label">Cliente (quien pidió el pago)</label>
-              <input className="input-field" list="clientes-list"
-                placeholder="Escribí o elegí un cliente..."
+              <input className="input-field" type="text" autoComplete="off"
+                placeholder="Escribí el nombre del cliente..."
                 value={form.cliente_id}
-                onChange={e => setForm(p => ({ ...p, cliente_id: e.target.value }))} />
-              <datalist id="clientes-list">
-                {clientes.map(c => <option key={c.id} value={c.nombre} />)}
-              </datalist>
+                onChange={e => { setForm(p => ({ ...p, cliente_id: e.target.value })); setShowSugerencias(true) }}
+                onFocus={() => setShowSugerencias(true)}
+                onBlur={() => setTimeout(() => setShowSugerencias(false), 200)} />
+              {showSugerencias && form.cliente_id.length === 0 && clientes.length > 0 && (
+                <ul className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-ml-dark-surface border border-ml-gray dark:border-ml-dark-border rounded-xl shadow-lg">
+                  {clientes.map(c => (
+                    <li key={c.id} className="px-4 py-2.5 text-sm cursor-pointer hover:bg-ml-gray-bg dark:hover:bg-ml-dark-card dark:text-white"
+                      onMouseDown={() => { setForm(p => ({ ...p, cliente_id: c.nombre })); setShowSugerencias(false) }}>
+                      {c.nombre}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {showSugerencias && form.cliente_id.length > 0 && clientes.filter(c => c.nombre.toLowerCase().includes(form.cliente_id.toLowerCase())).length > 0 && (
+                <ul className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-ml-dark-surface border border-ml-gray dark:border-ml-dark-border rounded-xl shadow-lg">
+                  {clientes.filter(c => c.nombre.toLowerCase().includes(form.cliente_id.toLowerCase())).map(c => (
+                    <li key={c.id} className="px-4 py-2.5 text-sm cursor-pointer hover:bg-ml-gray-bg dark:hover:bg-ml-dark-card dark:text-white"
+                      onMouseDown={() => { setForm(p => ({ ...p, cliente_id: c.nombre })); setShowSugerencias(false) }}>
+                      {c.nombre}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div>
