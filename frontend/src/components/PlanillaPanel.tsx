@@ -224,7 +224,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
         {loading && <div className="flex-1 flex items-center justify-center text-ml-text-soft">Cargando...</div>}
 
         {detalle && (
-          <div className="flex-1 overflow-auto min-h-0" style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          <div className="flex-1 overflow-auto min-h-0">
             <table className="w-full text-xs min-w-[780px]">
               <thead className="sticky top-0 z-10">
                 {/* Headers azul banco Macro — con Estado al FINAL */}

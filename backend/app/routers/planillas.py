@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
 import tempfile
 import os
@@ -11,22 +11,13 @@ from app.models.user import User
 from app.models.organizacion import Organizacion
 from fastapi.responses import StreamingResponse
 from app.schemas.planilla import PlanillaResponse, PlanillaDetalleResponse, ConciliacionResultado
-from app.services.excel_parser import parsear_planilla_cliente, listar_hojas
+from app.services.excel_parser import parsear_planilla_cliente
 from app.services.conciliacion import conciliar_planilla
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_planilla_conciliada
 from app.middleware.auth import get_current_user, require_permission
 
 router = APIRouter(prefix="/planillas", tags=["planillas"])
-
-def _get_headers_from_rows(rows) -> list:
-    """Extrae los headers originales de la primera fila con datos_originales."""
-    for r in rows:
-        datos = getattr(r, "datos_originales", None)
-        if datos and isinstance(datos, dict):
-            return list(datos.keys())
-    return []
-
 
 
 def _get_org_config(db: Session, organizacion_id: int) -> dict:
@@ -38,28 +29,10 @@ def _get_org_config(db: Session, organizacion_id: int) -> dict:
     return CONFIG_CANELAND
 
 
-@router.post("/preview-hojas")
-async def preview_hojas(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user)
-):
-    """Retorna las hojas del Excel. Llamar antes de upload cuando el archivo tiene multiples solapas."""
-    import tempfile, os
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
-        tmp.write(await file.read())
-        tmp_path = tmp.name
-    try:
-        hojas = listar_hojas(tmp_path)
-    finally:
-        if os.path.exists(tmp_path): os.remove(tmp_path)
-    return {"hojas": hojas, "tiene_multiples": len(hojas) > 1}
-
-
 @router.post("/upload", response_model=PlanillaResponse)
 async def upload_planilla(
     cliente_nombre: str = Query(..., description="Nombre del cliente"),
     extracto_id: int = Query(..., description="ID del extracto a usar"),
-    sheet_name: str = Query(None, description="Hoja del Excel a usar (opcional)"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -97,7 +70,7 @@ async def upload_planilla(
             tmp.write(contents)
             tmp_path = tmp.name
 
-        parsed = parsear_planilla_cliente(tmp_path, sheet_name=sheet_name)
+        parsed = parsear_planilla_cliente(tmp_path)
 
         planilla = Planilla(
             cliente_id=cliente.id,
@@ -116,7 +89,6 @@ async def upload_planilla(
                 cuit=fila_data.get("cuit"),
                 titular=fila_data.get("titular"),
                 referencia=fila_data.get("referencia"),
-                datos_originales=fila_data.get("datos_originales"),
                 status="pendiente",
                 organizacion_id=org_id
             )
@@ -423,7 +395,6 @@ def download_planilla_conciliada(
             "mov_titular": mov.titular if mov else None,
             "mov_fecha": mov.fecha if mov else None,
             "mov_fecha_acred": mov.fecha_acred if mov else None,
-            "datos_originales": getattr(r, "datos_originales", None),
         })
         if mov and mov.id not in ids_acred_vistos:
             ids_acred_vistos.add(mov.id)
@@ -437,7 +408,6 @@ def download_planilla_conciliada(
         "cliente_nombre": p.cliente.nombre,
         "nombre_archivo": p.nombre_archivo,
         "rows": rows_data,
-        "headers_originales": _get_headers_from_rows(p.rows),
     }
 
     xlsx = export_planilla_conciliada(planilla_data, movimientos_acreditados)
@@ -512,7 +482,6 @@ def get_planilla_detalle(
             "mov_titular": mov.titular if mov else None,
             "mov_fecha": mov.fecha if mov else None,
             "mov_fecha_acred": mov.fecha_acred if mov else None,
-            "datos_originales": getattr(r, "datos_originales", None),
         })
 
     statuses = [r.status for r in p.rows]

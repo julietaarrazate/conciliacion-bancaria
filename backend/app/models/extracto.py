@@ -22,6 +22,7 @@ class ExtractoBancario(Base):
 
 class MovimientoBanco(Base):
     __tablename__ = "movimientos_banco"
+
     id = Column(Integer, primary_key=True, index=True)
     extracto_id = Column(Integer, ForeignKey("extractos_bancarios.id"), nullable=False)
 

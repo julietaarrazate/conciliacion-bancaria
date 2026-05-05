@@ -1,6 +1,6 @@
 # Sistema de Conciliación Bancaria
 
-Plataforma web y móvil para automatizar la conciliación de transferencias bancarias contra planillas de clientes, con autenticación, auditoría completa, multi-tenant y permisos granulares. fix deploy
+Plataforma web y móvil para automatizar la conciliación de transferencias bancarias contra planillas de clientes, con autenticación, auditoría completa, multi-tenant y permisos granulares.
 
 ## Autora y Propietaria
 

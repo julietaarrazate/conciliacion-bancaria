@@ -1,5 +1,4 @@
-
-import React, { useEffect, useRef, useState } from 'react'
+﻿import React, { useEffect, useRef, useState } from 'react'
 import { apiClient } from '@/services/api'
 
 const DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 200, 100]
@@ -13,7 +12,7 @@ type Step = 'foto' | 'datos' | 'exito'
 export const OrdenDePago: React.FC = () => {
   const [step, setStep] = useState<Step>('foto')
   const [clientes, setClientes] = useState<Cliente[]>([])
-  const [foto, setFoto] = useState<string | null>(null)
+  const [foto, setFoto] = useState<string | null>(null)  // base64
   const [fotoPreview, setFotoPreview] = useState<string | null>(null)
   const [form, setForm] = useState({
     cliente_id: '',
@@ -24,13 +23,13 @@ export const OrdenDePago: React.FC = () => {
   const [saving, setSaving] = useState(false)
   const [resultado, setResultado] = useState<any>(null)
   const [msg, setMsg] = useState('')
-  const [showSugerencias, setShowSugerencias] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     apiClient.client.get('/clientes/archivos').then(r => {
       setClientes(r.data.clientes?.map((c: any) => ({ id: c.id || 0, nombre: c.nombre })) || [])
     }).catch(() => {
+      // fallback: traer del historial
       apiClient.client.get('/historial/planillas?limit=200').then(r => {
         const nombres = [...new Set(r.data.items?.map((p: any) => p.cliente_nombre) || [])]
         setClientes(nombres.map((n: any, i: number) => ({ id: i + 1, nombre: n })))
@@ -45,6 +44,7 @@ export const OrdenDePago: React.FC = () => {
     reader.onload = ev => {
       const base64 = (ev.target?.result as string) || ''
       setFotoPreview(base64)
+      // Comprimir si es muy grande (max ~500KB para la DB)
       const img = new Image()
       img.onload = () => {
         const canvas = document.createElement('canvas')
@@ -73,6 +73,8 @@ export const OrdenDePago: React.FC = () => {
     setSaving(true)
     setMsg('')
     try {
+      // Buscar cliente_id real
+      const clienteMatch = clientes.find(c => c.nombre === form.cliente_id || String(c.id) === form.cliente_id)
       const densObj = Object.fromEntries(
         Object.entries(dens).filter(([, v]) => parseInt(v) > 0).map(([k, v]) => [k, parseInt(v)])
       )
@@ -93,7 +95,11 @@ export const OrdenDePago: React.FC = () => {
   const compartirWhatsApp = async () => {
     if (!resultado) return
     const texto = `OP pagada%0A• Proveedor: ${form.beneficiario}%0A• Cliente: ${form.cliente_id}%0A• Importe: ${fmt(importeNum)}%0A• Fecha: ${new Date().toLocaleDateString('es-AR')}`
+
+    // Marcar como compartida
     await apiClient.client.post(`/caja/op/${resultado.op_id}/compartir`).catch(() => {})
+
+    // Intentar compartir foto via Web Share API
     if (foto && navigator.share && navigator.canShare) {
       try {
         const blob = await fetch(foto).then(r => r.blob())
@@ -108,6 +114,7 @@ export const OrdenDePago: React.FC = () => {
         }
       } catch { }
     }
+    // Fallback: abrir WhatsApp con texto
     window.open(`whatsapp://send?text=${texto}`, '_blank')
   }
 
@@ -121,17 +128,13 @@ export const OrdenDePago: React.FC = () => {
     setMsg('')
   }
 
-  const seleccionarCliente = (nombre: string) => {
-    setForm(p => ({ ...p, cliente_id: nombre }))
-    setShowSugerencias(false)
-  }
-
   return (
     <div className="p-4 max-w-lg mx-auto">
       <div className="flex items-center gap-3 mb-5">
         <h1 className="text-xl font-bold dark:text-white">Registrar OP pagada</h1>
       </div>
 
+      {/* Indicador de pasos */}
       <div className="flex items-center gap-2 mb-6">
         {(['foto', 'datos', 'exito'] as Step[]).map((s, i) => (
           <React.Fragment key={s}>
@@ -191,38 +194,13 @@ export const OrdenDePago: React.FC = () => {
           )}
 
           <div className="card space-y-4">
-            <div className="relative">
+            <div>
               <label className="label">Cliente (quien pidió el pago)</label>
-
-              {/* ── DROPDOWN CUSTOM ANDROID-SAFE ── */}
-              <button
-                type="button"
-                className="input-field w-full text-left flex items-center justify-between"
-                onClick={() => setShowSugerencias(v => !v)}
-              >
-                <span className={form.cliente_id ? 'dark:text-white' : 'text-gray-400'}>
-                  {form.cliente_id || 'Seleccionar cliente...'}
-                </span>
-                <span className="text-gray-400 ml-2">▾</span>
-              </button>
-
-              {showSugerencias && (
-                <div className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-ml-dark-surface border border-ml-gray dark:border-ml-dark-border rounded-xl shadow-lg">
-                  {clientes.map(c => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className="w-full text-left px-4 py-3 text-sm dark:text-white hover:bg-ml-gray-bg dark:hover:bg-ml-dark-card border-b border-ml-gray dark:border-ml-dark-border last:border-0"
-                      onClick={() => seleccionarCliente(c.nombre)}
-                    >
-                      {c.nombre}
-                    </button>
-                  ))}
-                  {clientes.length === 0 && (
-                    <div className="px-4 py-3 text-sm text-gray-400">No hay clientes disponibles</div>
-                  )}
-                </div>
-              )}
+              <select className="input-field" value={form.cliente_id}
+                onChange={e => setForm(p => ({ ...p, cliente_id: e.target.value }))}>
+                <option value="">Seleccionar cliente...</option>
+                {clientes.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+              </select>
             </div>
 
             <div>
@@ -243,7 +221,7 @@ export const OrdenDePago: React.FC = () => {
             </div>
           </div>
 
-          {/* Denominaciones */}
+          {/* Denominaciones usadas */}
           <div className="card">
             <h3 className="font-semibold text-sm dark:text-white mb-3">Billetes usados para este pago</h3>
             <div className="space-y-2">
@@ -269,7 +247,7 @@ export const OrdenDePago: React.FC = () => {
             </div>
 
             {totalDens > 0 && (
-              <div className="mt-3 pt-3 border-t border-ml-gray dark:border-ml-dark-border flex justify-between items-center">
+              <div className={`mt-3 pt-3 border-t border-ml-gray dark:border-ml-dark-border flex justify-between items-center`}>
                 <span className="text-sm font-semibold dark:text-white">Total en billetes</span>
                 <div className="text-right">
                   <span className="font-mono font-bold dark:text-white">{fmt(totalDens)}</span>
@@ -304,6 +282,7 @@ export const OrdenDePago: React.FC = () => {
             <p className="text-sm text-gray-400 dark:text-zinc-500 mt-1">
               {form.beneficiario} · {fmt(importeNum)}
             </p>
+
             <div className="mt-4 grid grid-cols-2 gap-3 text-left">
               <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
                 <p className="text-2xs text-green-600 dark:text-green-400 font-semibold uppercase tracking-wider">Guardado en EFT</p>
