@@ -80,7 +80,6 @@ def _init_db():
         "ALTER TABLE planilla_rows ADD COLUMN referencia VARCHAR",
         "ALTER TABLE planilla_rows ADD COLUMN monto_acreditado FLOAT",
         "ALTER TABLE planilla_rows ADD COLUMN comentario_revision TEXT",
-        "ALTER TABLE planilla_rows ADD COLUMN datos_originales JSONB",
     ]
     for sql in migrations:
         try:

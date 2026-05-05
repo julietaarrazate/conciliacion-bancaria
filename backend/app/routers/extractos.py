@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_, or_, text, func
+from sqlalchemy import desc, and_, or_, text
 from datetime import date, datetime
 from typing import Optional
 import tempfile, os, io, hashlib
@@ -40,15 +40,8 @@ def list_extractos(skip: int = 0, limit: int = 50,
                    org_id: Optional[int] = Query(None),
                    db: Session = Depends(get_db),
                    current_user: User = Depends(get_current_user)):
-    mov_count = (
-        db.query(MovimientoBanco.extracto_id, func.count(MovimientoBanco.id).label("total"))
-        .group_by(MovimientoBanco.extracto_id)
-        .subquery()
-    )
-    q = (
-        db.query(ExtractoBancario, mov_count.c.total)
-        .outerjoin(mov_count, ExtractoBancario.id == mov_count.c.extracto_id)
-    )
+    q = db.query(ExtractoBancario)
+    # Superadmin puede filtrar por org; usuarios normales ven solo su org
     if current_user.is_superadmin and org_id:
         q = q.filter(ExtractoBancario.organizacion_id == org_id)
     elif not current_user.is_superadmin:
@@ -56,7 +49,7 @@ def list_extractos(skip: int = 0, limit: int = 50,
     total = q.count()
     rows = q.order_by(desc(ExtractoBancario.fecha_creacion)).offset(skip).limit(limit).all()
     items = [{"id": e.id, "nombre_archivo": e.nombre_archivo,
-              "fecha_creacion": e.fecha_creacion, "total_movimientos": int(cnt or 0)} for e, cnt in rows]
+              "fecha_creacion": e.fecha_creacion, "total_movimientos": len(e.movimientos)} for e in rows]
     return {"total": total, "items": items}
 
 
@@ -89,18 +82,10 @@ async def upload_extracto(file: UploadFile = File(...),
         extracto = ExtractoBancario(nombre_archivo=file.filename, creado_por=current_user.id, fingerprint=fp)
         db.add(extracto)
         db.flush()
-        next_orden = 1
-        seen = set()
         for m in movs:
-            dedup_key = (m.get("fecha"), round(float(m.get("monto") or 0), 2), (m.get("titular") or m.get("referencia") or "").strip().lower())
-            if dedup_key in seen:
-                continue
-            seen.add(dedup_key)
-            db.add(MovimientoBanco(extracto_id=extracto.id, orden=next_orden,
+            db.add(MovimientoBanco(extracto_id=extracto.id, orden=m.get("orden"),
                                    fecha=m.get("fecha"), mes=m.get("mes"),
-                                   titular=m.get("titular"),
-                                   monto=m.get("monto"), saldo=m.get("saldo")))
-            next_orden += 1
+                                   titular=m.get("titular"), monto=m.get("monto"), saldo=m.get("saldo")))
         db.commit()
         db.refresh(extracto)
         registrar_log(db, current_user.id, "extractos_bancarios", extracto.id, "INSERT",
@@ -127,34 +112,28 @@ def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
         raise HTTPException(404, "Extracto no encontrado")
 
     nombre  = extracto.nombre_archivo
+    n_movs  = len(extracto.movimientos)
+    ids_movs = [m.id for m in extracto.movimientos]
 
     try:
-        n_movs = db.query(func.count(MovimientoBanco.id)).filter(
-            MovimientoBanco.extracto_id == extracto_id
-        ).scalar() or 0
+        # 1. Nullificar FK planilla_rows.orden_movimiento_acreditado usando ORM
+        if ids_movs:
+            db.query(PlanillaRow)\
+              .filter(PlanillaRow.orden_movimiento_acreditado.in_(ids_movs))\
+              .update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
+            db.flush()
 
-        planilla_ids = [p.id for p in db.query(Planilla.id).filter(
-            Planilla.extracto_id == extracto_id
-        ).all()]
+        # 2. Borrar planillas y sus rows (cascade)
+        for p in list(extracto.planillas):
+            db.delete(p)
+        db.flush()
 
-        if planilla_ids:
-            db.query(PlanillaRow).filter(
-                PlanillaRow.planilla_id.in_(planilla_ids)
-            ).delete(synchronize_session=False)
+        # 3. Borrar movimientos
+        for m in list(extracto.movimientos):
+            db.delete(m)
+        db.flush()
 
-        db.query(PlanillaRow).filter(
-            PlanillaRow.orden_movimiento_acreditado.in_(
-                db.query(MovimientoBanco.id).filter(MovimientoBanco.extracto_id == extracto_id)
-            )
-        ).update({"orden_movimiento_acreditado": None}, synchronize_session=False)
-
-        if planilla_ids:
-            db.query(Planilla).filter(Planilla.id.in_(planilla_ids)).delete(synchronize_session=False)
-
-        db.query(MovimientoBanco).filter(
-            MovimientoBanco.extracto_id == extracto_id
-        ).delete(synchronize_session=False)
-
+        # 4. Borrar extracto
         db.delete(extracto)
         db.commit()
 
@@ -173,11 +152,14 @@ def delete_todos_extractos(db: Session = Depends(get_db),
     from app.models.planilla import PlanillaRow, Planilla
 
     try:
-        db.query(PlanillaRow).update({"orden_movimiento_acreditado": None}, synchronize_session=False)
-        n_rows = db.query(PlanillaRow).delete(synchronize_session=False)
-        n_planillas = db.query(Planilla).delete(synchronize_session=False)
-        n_movs = db.query(MovimientoBanco).delete(synchronize_session=False)
-        n_extractos = db.query(ExtractoBancario).delete(synchronize_session=False)
+        # Borrar en orden correcto para respetar FKs
+        db.query(PlanillaRow).update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
+        db.flush()
+        n_planillas = db.query(Planilla).delete(synchronize_session="fetch")
+        db.flush()
+        n_movs = db.query(MovimientoBanco).delete(synchronize_session="fetch")
+        db.flush()
+        n_extractos = db.query(ExtractoBancario).delete(synchronize_session="fetch")
         db.commit()
 
         registrar_log(db, current_user.id, "extractos_bancarios", 0, "DELETE_ALL",
@@ -234,7 +216,7 @@ def _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fech
         q = q.filter(and_(MovimientoBanco.cliente_acreditado.isnot(None),
                           MovimientoBanco.cliente_acreditado != "",
                           ~MovimientoBanco.cliente_acreditado.ilike("no identificado")))
-    return q
+    return q.order_by(MovimientoBanco.orden.desc().nulls_last(), MovimientoBanco.id.desc())
 
 
 @router.get("/{extracto_id}/movimientos", response_model=MovimientosFiltradosResponse)
@@ -249,7 +231,7 @@ def listar_movimientos(extracto_id: int,
         raise HTTPException(404, "Extracto no encontrado")
     q = _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fecha_desde, fecha_hasta, sin_acreditar)
     total = q.count()
-    q = q.order_by(MovimientoBanco.orden.desc().nullslast(), MovimientoBanco.id.desc()).offset(skip)
+    q = q.order_by(desc(MovimientoBanco.fecha), desc(MovimientoBanco.id)).offset(skip)
     if limit > 0:
         q = q.limit(limit)
     items = q.all()
@@ -267,7 +249,7 @@ def export_movimientos_xlsx(extracto_id: int,
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
     q = _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fecha_desde, fecha_hasta, sin_acreditar)
-    rows = q.order_by(MovimientoBanco.orden.desc().nullslast(), MovimientoBanco.id.desc()).all()
+    rows = q.order_by(desc(MovimientoBanco.fecha)).all()
     movs = [{"orden": m.orden, "fecha": m.fecha, "mes": m.mes, "titular": m.titular,
               "monto": m.monto, "saldo": m.saldo, "cliente_acreditado": m.cliente_acreditado,
               "fecha_acred": m.fecha_acred} for m in rows]
@@ -293,7 +275,7 @@ def export_para_contador(
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
 
-    movs = sorted(extracto.movimientos, key=lambda m: (m.orden is None, -(m.orden or 0), -m.id))
+    movs = sorted(extracto.movimientos, key=lambda m: (m.fecha or "", m.orden or 0))
     data = [
         {
             "orden": m.orden,
@@ -354,7 +336,3 @@ def get_extracto(extracto_id: int, db: Session = Depends(get_db), _: User = Depe
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
     return extracto
-def _next_orden(db: Session, extracto_id: int) -> int:
-    return (db.query(func.max(MovimientoBanco.orden)).filter(
-        MovimientoBanco.extracto_id == extracto_id
-    ).scalar() or 0) + 1

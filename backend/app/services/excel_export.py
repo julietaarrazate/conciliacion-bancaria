@@ -97,81 +97,54 @@ def export_planilla_conciliada(planilla_data: dict, movimientos_acreditados: Lis
     ws1.cell(row=2, column=1, value=f"Archivo: {planilla_data['nombre_archivo']}").font = Font(italic=True, color="666666")
     ws1.cell(row=3, column=1, value=f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}").font = Font(italic=True, color="666666")
 
+    # Hoja 1: columnas del cliente + movimiento del extracto + Estado AL FINAL
+    h1 = ["#", "Importe", "CUIT", "Titular planilla", "Orden mov.", "Titular extracto", "Fecha mov.", "Fecha acred.", "Estado"]
+    _hdr(ws1, 5, h1)
+
     STATUS_COLORS = {
         "ok": "D4EDDA",
         "no está": "F8D7DA",
-        "no esta": "F8D7DA",
         "faltan datos": "D1ECF1",
         "duplicado": "FFF3CD",
     }
 
-    # Hoja 1: columnas ORIGINALES del cliente + Estado AL FINAL
-    filas = planilla_data["rows"]
-    headers_orig = planilla_data.get("headers_originales", [])
-    headers_limpios = [h for h in headers_orig if str(h).strip()] if headers_orig else []
-
-    if headers_limpios:
-        # Preservar columnas originales del cliente (sin modificar)
-        _hdr(ws1, 5, headers_limpios + ["Estado"])
-        n_cols = len(headers_limpios)
-        for i, row in enumerate(filas, start=6):
-            datos = row.get("datos_originales") or {}
-            for j, h in enumerate(headers_limpios, start=1):
-                v = datos.get(h, "")
-                ws1.cell(row=i, column=j, value=v).border = BORDER
-            # Estado siempre al final con color
-            st = row.get("status", "")
-            sc = ws1.cell(row=i, column=n_cols + 1, value=st)
-            color = STATUS_COLORS.get(st if isinstance(st, str) else "", "FFFFFF")
-            if isinstance(st, str) and st.startswith("acreditado"):
-                color = "FFF3CD"
-            sc.fill = PatternFill("solid", fgColor=color)
-            sc.border = BORDER
-    else:
-        # Formato generico para planillas sin datos_originales (historial viejo)
-        h1 = ["#", "Importe", "CUIT", "Titular planilla", "Orden mov.", "Titular extracto", "Fecha mov.", "Fecha acred.", "Estado"]
-        _hdr(ws1, 5, h1)
-        n_cols = 9
-        for i, row in enumerate(filas, start=6):
-            ws1.cell(row=i, column=1, value=i - 5)
-            ws1.cell(row=i, column=2, value=row.get("monto")).number_format = '"$"#,##0.00'
-            ws1.cell(row=i, column=3, value=row.get("cuit") or "")
-            ws1.cell(row=i, column=4, value=row.get("titular") or "")
-            ws1.cell(row=i, column=5, value=row.get("orden_movimiento_acreditado"))
-            ws1.cell(row=i, column=6, value=row.get("mov_titular") or "")
-            ws1.cell(row=i, column=7, value=row.get("mov_fecha")).number_format = "DD/MM/YYYY"
-            ws1.cell(row=i, column=8, value=row.get("mov_fecha_acred")).number_format = "DD/MM/YYYY"
-            st = row.get("status", "")
-            sc = ws1.cell(row=i, column=9, value=st)
-            color = STATUS_COLORS.get(st if isinstance(st, str) else "", "FFFFFF")
-            if isinstance(st, str) and st.startswith("acreditado"):
-                color = "FFF3CD"
-            sc.fill = PatternFill("solid", fgColor=color)
-            for col in range(1, 10):
-                ws1.cell(row=i, column=col).border = BORDER
+    for i, row in enumerate(planilla_data["rows"], start=6):
+        ws1.cell(row=i, column=1, value=i - 5)
+        ws1.cell(row=i, column=2, value=row["monto"]).number_format = '"$"#,##0.00'
+        ws1.cell(row=i, column=3, value=row.get("cuit") or "")
+        ws1.cell(row=i, column=4, value=row.get("titular") or "")
+        ws1.cell(row=i, column=5, value=row.get("orden_movimiento_acreditado"))
+        ws1.cell(row=i, column=6, value=row.get("mov_titular") or "")
+        f = row.get("mov_fecha")
+        ws1.cell(row=i, column=7, value=f).number_format = "DD/MM/YYYY"
+        fa = row.get("mov_fecha_acred")
+        ws1.cell(row=i, column=8, value=fa).number_format = "DD/MM/YYYY"
+        # Estado ULTIMA columna con color
+        st = row["status"]
+        status_cell = ws1.cell(row=i, column=9, value=st)
+        color = STATUS_COLORS.get(st, "FFFFFF")
+        if isinstance(st, str) and st.startswith("acreditado"):
+            color = STATUS_COLORS["duplicado"]
+        status_cell.fill = PatternFill("solid", fgColor=color)
+        for col in range(1, 10):
+            ws1.cell(row=i, column=col).border = BORDER
 
     ws1.freeze_panes = "A6"
-    _autosize(ws1, n_cols + 1)
+    _autosize(ws1, 9)
 
     # ── HOJA 2: movimientos del extracto acreditados ─────────────────────────
     ws2 = wb.create_sheet("Movimientos acreditados")
 
     ws2.cell(row=1, column=1, value="Movimientos bancarios acreditados a esta planilla").font = TITLE_FONT
 
-    # Headers azul oscuro identico al extracto Banco Macro
-    MACRO_BORDER = Border(
-        left=Side(style="thin", color="2968C8"),
-        right=Side(style="thin", color="2968C8"),
-        top=Side(style="thin", color="2968C8"),
-        bottom=Side(style="thin", color="2968C8")
-    )
-    h2 = ["Orden", "Fecha", "Mes", "Titular / CUIT", "Importe Pesos", "Saldo", "Cliente acreditado", "Fecha acred."]
-    for col, h in enumerate(h2, start=2):
+    # Headers estilo extracto Macro (azul)
+    h2 = [None, "Orden", "Fecha", "Mes", "Titular / CUIT", "Importe Pesos", "Saldo", "Cliente", "Fecha acred."]
+    for col, h in enumerate(h2, 1):
         c = ws2.cell(row=3, column=col, value=h)
-        c.fill = HDR_FILL   # #3483FA — azul Macro
-        c.font = HDR_FONT   # blanco bold
-        c.alignment = Alignment(horizontal="center", vertical="center")
-        c.border = MACRO_BORDER
+        if h:
+            c.fill = HDR_FILL
+            c.font = HDR_FONT
+            c.alignment = Alignment(horizontal="center")
 
     for i, m in enumerate(movimientos_acreditados, start=4):
         ws2.cell(row=i, column=2, value=m.get("orden"))

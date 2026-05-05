@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FileUpload } from '@/components/FileUpload'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
@@ -35,10 +35,6 @@ export const Dashboard: React.FC = () => {
   const [fechaAcred, setFechaAcred] = useState<string>(
     new Date().toISOString().split('T')[0]
   )
-  const [esperandoHoja, setEsperandoHoja] = useState(false)
-  const [hojasPlanilla, setHojasPlanilla] = useState<string[]>([])
-  const [hojaSeleccionada, setHojaSeleccionada] = useState('')
-  const [archivoTemp, setArchivoTemp] = useState<File | null>(null)
 
   useEffect(() => {
     setExtractoId(null)
@@ -138,17 +134,21 @@ export const Dashboard: React.FC = () => {
     }
   }
 
-  const conciliarConHoja = async (file: File, sheetName?: string) => {
-    if (!extractoId || !clienteNombre.trim()) return
-    setEsperandoHoja(false)
-    setArchivoTemp(null)
-    setHojasPlanilla([])
+  const handleUploadPlanilla = async (file: File) => {
+    if (!extractoId || !clienteNombre.trim()) {
+      setError('Cargá primero un extracto e ingresá el cliente')
+      return
+    }
     setLoading(true)
     setError('')
     setSuccess('')
     setResultado(null)
     try {
-      const planilla = await apiClient.uploadPlanilla(clienteNombre, extractoId, file, sheetName)
+      const planilla = await apiClient.uploadPlanilla(
+        clienteNombre,
+        extractoId,
+        file
+      )
       const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred)
       setResultado(r)
       setSuccess(`Conciliación completa: ${r.acreditadas}/${r.filas_procesadas} acreditadas`)
@@ -157,28 +157,6 @@ export const Dashboard: React.FC = () => {
       setError(err.response?.data?.detail || 'Error en la conciliación')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleUploadPlanilla = async (file: File) => {
-    if (!extractoId || !clienteNombre.trim()) {
-      setError('Cargá primero un extracto e ingresá el cliente')
-      return
-    }
-    setError('')
-    setSuccess('')
-    try {
-      const preview = await apiClient.previewHojas(file)
-      if (preview.tiene_multiples) {
-        setArchivoTemp(file)
-        setHojasPlanilla(preview.hojas)
-        setHojaSeleccionada(preview.hojas[0] || '')
-        setEsperandoHoja(true)
-      } else {
-        await conciliarConHoja(file)
-      }
-    } catch {
-      await conciliarConHoja(file)
     }
   }
 
@@ -453,39 +431,6 @@ export const Dashboard: React.FC = () => {
               })}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {/* Modal seleccion de hoja — SMT, Gwinn y clientes con multiples solapas */}
-      {esperandoHoja && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-ml-dark-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
-            <h3 className="font-bold text-base dark:text-white mb-1">Seleccionar hoja a conciliar</h3>
-            <p className="text-sm text-gray-400 dark:text-zinc-500 mb-4">
-              El archivo tiene multiples solapas. Elegí cual corresponde a las transferencias de este cliente.
-            </p>
-            <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
-              {hojasPlanilla.map(hoja => (
-                <button key={hoja} onClick={() => setHojaSeleccionada(hoja)}
-                  className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-                    hojaSeleccionada === hoja
-                      ? 'border-ml-blue dark:border-ml-green bg-ml-blue/5 dark:bg-ml-green/10 text-ml-blue dark:text-ml-green'
-                      : 'border-ml-gray dark:border-ml-dark-border dark:text-gray-200 hover:border-ml-blue dark:hover:border-ml-green'
-                  }`}>
-                  {hoja}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => { setEsperandoHoja(false); setArchivoTemp(null); setHojasPlanilla([]) }}
-                className="btn-secondary flex-1">Cancelar</button>
-              <button
-                onClick={() => archivoTemp && conciliarConHoja(archivoTemp, hojaSeleccionada)}
-                className="btn-yellow flex-1" disabled={loading}>
-                {loading ? 'Conciliando...' : 'Conciliar esta hoja'}
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

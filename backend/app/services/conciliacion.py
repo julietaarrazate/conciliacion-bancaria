@@ -23,31 +23,13 @@ def norm_cuit(v) -> str:
 
 
 def extraer_cuit(texto: str) -> str:
-    """Extrae el primer CUIT/CUIL (10-11 digitos), con o sin guiones."""
+    """Extrae el primer CUIT/CUIL (10-11 digitos) que aparezca en el texto."""
     if not texto:
         return ''
-    candidatos = re.findall(r'(?:\d[\s-]*){10,11}', str(texto))
-    for c in candidatos:
-        solo = re.sub(r'\D', '', c)
-        if 10 <= len(solo) <= 11:
-            return solo
-    return ''
+    nums = re.findall(r'\b\d{10,11}\b', str(texto))
+    return nums[0] if nums else ''
 
 
-
-
-def extraer_cuit_titular(texto: Optional[str]) -> str:
-    """Compat: alias histórico para extraer CUIT desde titular."""
-    if not texto:
-        return ""
-    raw = str(texto)
-    dig = re.sub(r'\D', '', raw)
-    if '-' in raw and len(dig) >= 10:
-        return dig[:10]
-    if 10 <= len(dig) <= 11:
-        return dig
-    m = re.search(r'\d{10,11}', dig)
-    return m.group(0) if m else ""
 def extraer_cbu(texto: str) -> str:
     """Extrae el primer CBU/CVU (22 digitos exactos) del texto."""
     if not texto:
@@ -259,29 +241,16 @@ def buscar_match(
     monto: float,
     cuit_planilla: Optional[str],
     titular_planilla: Optional[str],
-    referencia_planilla: Optional[str] = None,
-    fecha_planilla: Optional[date] = None,
-    movimientos: Optional[List[MovimientoBanco]] = None,
-    procesados: Optional[set] = None,
-    org_config: Optional[Dict[str, Any]] = None,
-    movimientos_procesados: Optional[set] = None
+    referencia_planilla: Optional[str],
+    fecha_planilla: Optional[date],
+    movimientos: List[MovimientoBanco],
+    procesados: set,
+    org_config: Dict[str, Any]
 ) -> Tuple[Optional[MovimientoBanco], str]:
     """
     Busca el movimiento bancario que mejor coincide con la fila de planilla.
     Usa scoring para desempatar cuando hay multiples candidatos con identidad similar.
     """
-    legacy_mode = org_config is None
-    if movimientos is None:
-        movimientos = []
-    if procesados is None:
-        procesados = movimientos_procesados or set()
-    if org_config is None:
-        org_config = {
-            "match_rules": ["monto_cuit"],
-            "tolerancia_monto": 0.01,
-            "dias_tolerancia_fecha": 0,
-        }
-
     match_rules     = org_config.get("match_rules", ["monto_cuit"])
     tolerancia      = org_config.get("tolerancia_monto", 0.01)
     dias_tolerancia = org_config.get("dias_tolerancia_fecha", 0)
@@ -305,7 +274,7 @@ def buscar_match(
         if not no_usados:
             primer = candidatos[0]
             fecha_s = primer.fecha_acred.strftime('%d/%m') if primer.fecha_acred else '?'
-            return None, "duplicado" if legacy_mode else f"acreditado {fecha_s}"
+            return None, f"acreditado {fecha_s}"
         return None, "duplicado"
 
     # Regla fundamental para extractos de alto volumen:
@@ -359,7 +328,7 @@ def buscar_match(
     n = len(candidatos)
     tiene_algo = any([cuit_plan_raw, cbu_plan, nums_plan, titular_planilla, referencia_planilla])
     if not tiene_algo:
-        return None, "faltan datos" if legacy_mode else f"sin datos ({n} mov. del mismo monto — agregar CUIT/CBU/titular)"
+        return None, f"sin datos ({n} mov. del mismo monto — agregar CUIT/CBU/titular)"
     return None, f"no coincide ({n} mov. del mismo monto — revisar CUIT/CBU/titular)"
 
 

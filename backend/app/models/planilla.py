@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Text, JSON
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -49,7 +49,6 @@ class PlanillaRow(Base):
     status = Column(String, nullable=False)
     monto_acreditado = Column(Float, nullable=True)  # para PAGO_PARCIAL / CONCILIADO_CON_DIFERENCIA
     comentario_revision = Column(Text, nullable=True)  # para EN_REVISION
-    datos_originales = Column(JSON, nullable=True)  # columnas originales de la planilla del cliente
     orden_movimiento_acreditado = Column(Integer, ForeignKey("movimientos_banco.id"), nullable=True)
 
     # Relationships
