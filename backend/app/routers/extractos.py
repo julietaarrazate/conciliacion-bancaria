@@ -92,13 +92,13 @@ async def upload_extracto(file: UploadFile = File(...),
         next_orden = 1
         seen = set()
         for m in movs:
-            dedup_key = (m.get("fecha"), round(float(m.get("monto") or 0), 2), (m.get("referencia") or m.get("titular") or "").strip().lower())
+            dedup_key = (m.get("fecha"), round(float(m.get("monto") or 0), 2), (m.get("titular") or m.get("referencia") or "").strip().lower())
             if dedup_key in seen:
                 continue
             seen.add(dedup_key)
             db.add(MovimientoBanco(extracto_id=extracto.id, orden=next_orden,
                                    fecha=m.get("fecha"), mes=m.get("mes"),
-                                   titular=m.get("titular"), referencia=m.get("referencia") or m.get("titular"),
+                                   titular=m.get("titular"),
                                    monto=m.get("monto"), saldo=m.get("saldo")))
             next_orden += 1
         db.commit()
