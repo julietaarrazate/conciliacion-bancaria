@@ -1,4 +1,4 @@
-"""Merge de últimos movimientos con deduplicación por (fecha, monto, referencia)."""
+"""Merge de últimos movimientos con deduplicación por (fecha, monto, titular)."""
 
 import re
 from typing import List, Tuple, Optional
@@ -30,13 +30,13 @@ def _normalizar_titular(titular: Optional[str]) -> str:
     return ' '.join(palabras)
 
 
-def _clave(orden, monto, fecha, referencia) -> Tuple:
+def _clave(orden, monto, fecha, titular) -> Tuple:
     monto_r = round(float(monto or 0), 2)
-    return ("fec", _normalizar_fecha(fecha), monto_r, _normalizar_titular(referencia))
+    return ("fec", _normalizar_fecha(fecha), monto_r, _normalizar_titular(titular))
 
 
 def _clave_db(mov: MovimientoBanco) -> Tuple:
-    return _clave(mov.orden, mov.monto, mov.fecha, mov.referencia or mov.titular)
+    return _clave(mov.orden, mov.monto, mov.fecha, mov.titular or "")
 
 
 def _clave_dict(mov_data: dict) -> Tuple:
@@ -44,7 +44,7 @@ def _clave_dict(mov_data: dict) -> Tuple:
         mov_data.get("orden"),
         mov_data.get("monto"),
         mov_data.get("fecha"),
-        mov_data.get("referencia") or mov_data.get("titular")
+        mov_data.get("titular") or mov_data.get("referencia") or ""
     )
 
 
@@ -81,8 +81,7 @@ def mergear_movimientos(db: Session, extracto_id: int, movimientos_nuevos: List[
             orden=max_orden_actual,
             fecha=_normalizar_fecha(mov_data.get("fecha")),
             mes=mov_data.get("mes"),
-            titular=mov_data.get("titular"),
-            referencia=mov_data.get("referencia") or mov_data.get("titular"),
+            titular=mov_data.get("titular") or mov_data.get("referencia") or "",
             monto=mov_data.get("monto"),
             saldo=mov_data.get("saldo"),
             source='um'
