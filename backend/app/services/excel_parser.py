@@ -6,7 +6,10 @@ Soporta Banco Macro, BBVA, Santander, Galicia, ICBC y formatos genericos.
 import re
 from typing import Tuple, Optional, List, Dict
 from datetime import date, datetime
+import logging
 import openpyxl
+
+logger = logging.getLogger(__name__)
 
 INDICADORES_BANCO = {
     "macro":     ["macro", "banco macro"],
@@ -76,6 +79,7 @@ def _parse_monto(v):
 KEYWORDS_MONTO   = ["importe","monto","credito","debito","credit","debit","haber","debe","amount"]
 KEYWORDS_FECHA   = ["fecha","date","vencimiento"]
 KEYWORDS_TITULAR = ["titular","concepto","descripcion","descripcion","glosa","detalle","referencia","nombre","beneficiario","ordenante"]
+KEYWORDS_REFERENCIA = ["referencia", "ref", "comprobante", "operacion", "movimiento", "nro op", "id transaccion"]
 KEYWORDS_ORDEN   = ["orden","nro","numero","secuencia"]
 KEYWORDS_SALDO   = ["saldo","balance"]
 KEYWORDS_MES     = ["mes","period","periodo"]
@@ -85,7 +89,7 @@ def _match_kw(header, keywords):
     return any(k in h for k in keywords)
 
 def detectar_columnas(ws):
-    cols = {"hdr_row":1,"monto":None,"fecha":None,"titular":None,"orden":None,"saldo":None,"mes":None}
+    cols = {"hdr_row":1,"monto":None,"fecha":None,"titular":None,"referencia":None,"orden":None,"saldo":None,"mes":None}
     for r in range(1, 7):
         encontrados = {}
         for c in range(1, ws.max_column + 1):
@@ -98,6 +102,8 @@ def detectar_columnas(ws):
                 encontrados["fecha"] = c
             elif _match_kw(h, KEYWORDS_TITULAR):
                 encontrados.setdefault("titular", c)
+            elif _match_kw(h, KEYWORDS_REFERENCIA):
+                encontrados.setdefault("referencia", c)
             elif _match_kw(h, KEYWORDS_ORDEN):
                 encontrados.setdefault("orden", c)
             elif _match_kw(h, KEYWORDS_SALDO):
@@ -114,12 +120,14 @@ def detectar_columnas(ws):
     cols["fecha"]   = 3
     cols["mes"]     = 4
     cols["titular"] = 5
+    cols["referencia"] = 5
     cols["monto"]   = 6
     cols["saldo"]   = 7
     return cols
 
 def parsear_generico(ws, cols):
     movimientos = []
+    invalid_rows = []
     hdr = cols["hdr_row"]
     for row in range(hdr + 1, ws.max_row + 1):
         monto = _parse_monto(ws.cell(row, cols["monto"]).value) if cols["monto"] else None
@@ -127,18 +135,27 @@ def parsear_generico(ws, cols):
             continue
         fecha   = _parse_fecha(ws.cell(row, cols["fecha"]).value)   if cols["fecha"]   else None
         titular = str(ws.cell(row, cols["titular"]).value or "")     if cols["titular"] else ""
+        referencia = str(ws.cell(row, cols["referencia"]).value or "").strip() if cols["referencia"] else ""
         orden   = ws.cell(row, cols["orden"]).value                  if cols["orden"]   else None
         saldo   = _parse_monto(ws.cell(row, cols["saldo"]).value)    if cols["saldo"]   else None
         mes_val = str(ws.cell(row, cols["mes"]).value or "")         if cols["mes"]     else None
+        if fecha is None:
+            invalid_rows.append({"row": row, "reason": "fecha inválida o vacía"})
+            continue
+        referencia_final = referencia or titular.strip()
+        if not referencia_final:
+            invalid_rows.append({"row": row, "reason": "referencia/titular vacío"})
+            continue
         movimientos.append({
             "orden":   int(orden) if isinstance(orden,(int,float)) else None,
             "fecha":   fecha,
             "mes":     mes_val or (fecha.strftime("%B %Y") if fecha else None),
             "titular": titular.strip() or None,
+            "referencia": referencia_final,
             "monto":   abs(monto),
             "saldo":   saldo
         })
-    return movimientos
+    return movimientos, invalid_rows
 
 def parsear_extracto_bancario(filepath: str) -> dict:
     """
@@ -155,7 +172,9 @@ def parsear_extracto_bancario(filepath: str) -> dict:
             continue
         banco = detectar_banco(ws)
         cols  = detectar_columnas(ws)
-        movs  = parsear_generico(ws, cols)
+        movs, invalid_rows = parsear_generico(ws, cols)
+        if invalid_rows:
+            logger.warning("Se omitieron %s filas inválidas en hoja '%s': %s", len(invalid_rows), sheet_name, invalid_rows[:20])
         if len(movs) > len(mejor_movs):
             mejor_movs = movs
             banco_detectado = banco
