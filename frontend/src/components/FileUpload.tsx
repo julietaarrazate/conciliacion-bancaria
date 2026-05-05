@@ -5,13 +5,15 @@ interface FileUploadProps {
   accept?: string
   label?: string
   error?: string
+  helperText?: string
 }
 
 export const FileUpload: React.FC<FileUploadProps> = ({
   onFileSelected,
   accept = '.xlsx',
   label = 'Selecciona un archivo',
-  error
+  error,
+  helperText
 }) => {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isDragActive, setIsDragActive] = React.useState(false)
@@ -59,6 +61,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       />
       <p className="text-gray-600 mb-2">{label}</p>
       <p className="text-sm text-gray-500">o arrastra un archivo aquí</p>
+      {helperText && <p className="mt-2 text-xs text-gray-500">{helperText}</p>}
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </div>
   )

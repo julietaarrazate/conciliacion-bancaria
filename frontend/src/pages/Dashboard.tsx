@@ -292,7 +292,12 @@ export const Dashboard: React.FC = () => {
                 <p className="text-xs text-ml-text-soft dark:text-gray-400 mb-2">
                   ¿Tenés Últimos Movimientos del banco? Sumalos sin duplicar:
                 </p>
-                <FileUpload onFileSelected={handleUploadUM} label="+ Agregar UM" />
+                <FileUpload
+                  onFileSelected={handleUploadUM}
+                  label="+ Agregar UM"
+                  accept=".xlsx,.xls,.csv"
+                  helperText="Formatos soportados: .xlsx, .xls, .csv"
+                />
               </div>
             </>
           )}

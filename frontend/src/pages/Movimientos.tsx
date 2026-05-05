@@ -230,9 +230,13 @@ export const Movimientos: React.FC = () => {
         </div>
         <label className={`flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium cursor-pointer transition-colors ${umLoading ? 'opacity-50' : 'bg-ml-blue text-white border-ml-blue hover:bg-ml-blue-dark'}`}>
           {umLoading ? '⏳' : '📎'} {umLoading ? 'Procesando...' : 'Agregar UM'}
-          <input ref={umRef} type="file" accept=".xlsx" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
+          <input ref={umRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
         </label>
       </div>
+
+      {!umMsg && (
+        <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">Formatos soportados para UM: .xlsx, .xls, .csv</p>
+      )}
 
       {umMsg && (
         <div className={`mb-3 px-3 py-2 rounded-md text-sm ${umMsg.startsWith('✓') ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'}`}>
