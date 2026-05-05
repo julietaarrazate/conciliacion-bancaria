@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -22,6 +22,9 @@ class ExtractoBancario(Base):
 
 class MovimientoBanco(Base):
     __tablename__ = "movimientos_banco"
+    __table_args__ = (
+        UniqueConstraint("extracto_id", "orden", name="uq_movimientos_extracto_orden"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     extracto_id = Column(Integer, ForeignKey("extractos_bancarios.id"), nullable=False)
@@ -30,6 +33,7 @@ class MovimientoBanco(Base):
     fecha = Column(Date, nullable=True)
     mes = Column(String, nullable=True)
     titular = Column(String, nullable=True)
+    referencia = Column(String, nullable=True)
     monto = Column(Float, nullable=False)
     saldo = Column(Float, nullable=True)
 

@@ -89,10 +89,18 @@ async def upload_extracto(file: UploadFile = File(...),
         extracto = ExtractoBancario(nombre_archivo=file.filename, creado_por=current_user.id, fingerprint=fp)
         db.add(extracto)
         db.flush()
+        next_orden = 1
+        seen = set()
         for m in movs:
-            db.add(MovimientoBanco(extracto_id=extracto.id, orden=m.get("orden"),
+            dedup_key = (m.get("fecha"), round(float(m.get("monto") or 0), 2), (m.get("referencia") or m.get("titular") or "").strip().lower())
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+            db.add(MovimientoBanco(extracto_id=extracto.id, orden=next_orden,
                                    fecha=m.get("fecha"), mes=m.get("mes"),
-                                   titular=m.get("titular"), monto=m.get("monto"), saldo=m.get("saldo")))
+                                   titular=m.get("titular"), referencia=m.get("referencia") or m.get("titular"),
+                                   monto=m.get("monto"), saldo=m.get("saldo")))
+            next_orden += 1
         db.commit()
         db.refresh(extracto)
         registrar_log(db, current_user.id, "extractos_bancarios", extracto.id, "INSERT",
@@ -241,7 +249,7 @@ def listar_movimientos(extracto_id: int,
         raise HTTPException(404, "Extracto no encontrado")
     q = _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fecha_desde, fecha_hasta, sin_acreditar)
     total = q.count()
-    q = q.order_by(desc(MovimientoBanco.fecha), desc(MovimientoBanco.id)).offset(skip)
+    q = q.order_by(MovimientoBanco.orden.desc().nullslast(), MovimientoBanco.id.desc()).offset(skip)
     if limit > 0:
         q = q.limit(limit)
     items = q.all()
@@ -259,7 +267,7 @@ def export_movimientos_xlsx(extracto_id: int,
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
     q = _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fecha_desde, fecha_hasta, sin_acreditar)
-    rows = q.order_by(desc(MovimientoBanco.fecha)).all()
+    rows = q.order_by(MovimientoBanco.orden.desc().nullslast(), MovimientoBanco.id.desc()).all()
     movs = [{"orden": m.orden, "fecha": m.fecha, "mes": m.mes, "titular": m.titular,
               "monto": m.monto, "saldo": m.saldo, "cliente_acreditado": m.cliente_acreditado,
               "fecha_acred": m.fecha_acred} for m in rows]
@@ -285,7 +293,7 @@ def export_para_contador(
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
 
-    movs = sorted(extracto.movimientos, key=lambda m: (m.fecha or "", m.orden or 0))
+    movs = sorted(extracto.movimientos, key=lambda m: (m.orden is None, -(m.orden or 0), -m.id))
     data = [
         {
             "orden": m.orden,
@@ -346,3 +354,7 @@ def get_extracto(extracto_id: int, db: Session = Depends(get_db), _: User = Depe
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
     return extracto
+def _next_orden(db: Session, extracto_id: int) -> int:
+    return (db.query(func.max(MovimientoBanco.orden)).filter(
+        MovimientoBanco.extracto_id == extracto_id
+    ).scalar() or 0) + 1
