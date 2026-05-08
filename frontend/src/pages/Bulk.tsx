@@ -123,9 +123,9 @@ export const Bulk: React.FC = () => {
             Clic o arrastrá las planillas aquí
           </span>
           <span className="text-xs text-ml-text-soft dark:text-gray-400 block mt-1">
-            Podés seleccionar múltiples archivos .xlsx a la vez
+            Podés seleccionar múltiples archivos a la vez
           </span>
-          <input type="file" accept=".xlsx" multiple hidden onChange={handleFiles} />
+          <input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" multiple hidden onChange={handleFiles} />
         </label>
       </div>
 
