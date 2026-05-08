@@ -148,29 +148,33 @@ def _parse_monto(v):
             return None
     return None
 
-KEYWORDS_MONTO   = ["importe","monto","credito","debito","credit","debit","haber","debe","amount"]
+KEYWORDS_MONTO   = ["importe","monto","haber","debe","amount"]
 KEYWORDS_FECHA   = ["fecha","date","vencimiento"]
-KEYWORDS_TITULAR = ["titular","concepto","descripcion","descripcion","glosa","detalle","referencia","nombre","beneficiario","ordenante"]
-KEYWORDS_ORDEN   = ["orden","nro","numero","secuencia"]
+KEYWORDS_TITULAR = ["titular","concepto","descripcion","glosa","detalle","nombre","beneficiario","ordenante"]
+KEYWORDS_ORDEN   = ["orden","nro. de referencia","nro","numero","secuencia","referencia"]
 KEYWORDS_SALDO   = ["saldo","balance"]
 KEYWORDS_MES     = ["mes","period","periodo"]
 
+BLOCKLIST = {"acred", "acreditad", "cliente"}
+
 def _match_kw(header, keywords):
     h = header.lower().strip()
+    if any(b in h for b in BLOCKLIST):
+        return False
     return any(k in h for k in keywords)
 
 def detectar_columnas(ws):
     cols = {"hdr_row":1,"monto":None,"fecha":None,"titular":None,"orden":None,"saldo":None,"mes":None}
-    for r in range(1, 7):
+    for r in range(1, min(13, ws.max_row + 1)):
         encontrados = {}
         for c in range(1, ws.max_column + 1):
             h = str(ws.cell(r, c).value or "").lower().strip()
             if not h:
                 continue
             if _match_kw(h, KEYWORDS_MONTO):
-                encontrados["monto"] = c
+                encontrados.setdefault("monto", c)
             elif _match_kw(h, KEYWORDS_FECHA):
-                encontrados["fecha"] = c
+                encontrados.setdefault("fecha", c)
             elif _match_kw(h, KEYWORDS_TITULAR):
                 encontrados.setdefault("titular", c)
             elif _match_kw(h, KEYWORDS_ORDEN):
@@ -183,7 +187,7 @@ def detectar_columnas(ws):
             cols["hdr_row"] = r
             cols.update(encontrados)
             return cols
-    # Fallback Banco Macro
+    # Fallback Banco Macro extracto
     cols["hdr_row"] = 2
     cols["orden"]   = 2
     cols["fecha"]   = 3
