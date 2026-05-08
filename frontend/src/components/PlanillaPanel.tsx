@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { apiClient } from '@/services/api'
 
 interface Row {
@@ -83,9 +83,11 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
   const [editStatus, setEditStatus] = useState('')
   const [editFecha, setEditFecha] = useState('')
   const [savingRow, setSavingRow] = useState(false)
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
+  const [bulkStatus, setBulkStatus] = useState('')
 
   useEffect(() => {
-    if (!planillaId) { setDetalle(null); setFilters(EMPTY_FILTERS); return }
+    if (!planillaId) { setDetalle(null); setFilters(EMPTY_FILTERS); setSelectedRows(new Set()); return }
     setLoading(true)
     apiClient.client
       .get(`/planillas/${planillaId}/detalle`)
@@ -93,7 +95,6 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
       .catch(() => setDetalle(null))
       .finally(() => setLoading(false))
   }, [planillaId])
-
 
   const filteredRows = useMemo(() => {
     if (!detalle) return []
@@ -124,7 +125,6 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
   const startEdit = (row: Row) => {
     setEditingRowId(row.id)
     setEditStatus(row.status)
-    // Precargar fecha actual del movimiento si existe
     setEditFecha(row.mov_fecha_acred ? row.mov_fecha_acred.split('T')[0] : '')
   }
 
@@ -142,6 +142,66 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     } finally { setSavingRow(false) }
   }
 
+  const deleteRow = useCallback(async (rowId: number) => {
+    if (!confirm('Eliminar esta fila?')) return
+    try {
+      await apiClient.deleteRow(rowId)
+      setDetalle(prev => prev ? {
+        ...prev,
+        rows: prev.rows.filter(r => r.id !== rowId),
+        total: prev.total - 1
+      } : prev)
+      setSelectedRows(prev => { const n = new Set(prev); n.delete(rowId); return n })
+    } catch { /* silently fail */ }
+  }, [])
+
+  const toggleSelect = (id: number) => {
+    setSelectedRows(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }
+
+  const selectAllFiltered = () => {
+    if (selectedRows.size === filteredRows.length) {
+      setSelectedRows(new Set())
+    } else {
+      setSelectedRows(new Set(filteredRows.map(r => r.id)))
+    }
+  }
+
+  const applyBulkStatus = async () => {
+    if (!bulkStatus || selectedRows.size === 0) return
+    setSavingRow(true)
+    try {
+      const promises = Array.from(selectedRows).map(id =>
+        apiClient.patchRowStatus(id, bulkStatus)
+      )
+      await Promise.all(promises)
+      setDetalle(prev => prev ? {
+        ...prev,
+        rows: prev.rows.map(r => selectedRows.has(r.id) ? { ...r, status: bulkStatus } : r)
+      } : prev)
+      setSelectedRows(new Set())
+      setBulkStatus('')
+    } finally { setSavingRow(false) }
+  }
+
+  const bulkDelete = async () => {
+    if (selectedRows.size === 0) return
+    if (!confirm(`Eliminar ${selectedRows.size} filas?`)) return
+    setSavingRow(true)
+    try {
+      await Promise.all(Array.from(selectedRows).map(id => apiClient.deleteRow(id)))
+      setDetalle(prev => prev ? {
+        ...prev,
+        rows: prev.rows.filter(r => !selectedRows.has(r.id)),
+        total: prev.total - selectedRows.size
+      } : prev)
+      setSelectedRows(new Set())
+    } finally { setSavingRow(false) }
+  }
 
   if (!planillaId) return null
 
@@ -173,20 +233,21 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
               className={`px-2 py-1 text-xs rounded font-medium ${showFilters || hasFilters ? 'bg-ml-blue text-white' : 'bg-white/70 text-ml-text hover:bg-white'}`}
               title="Filtros por columna"
             >
-              🔽 {hasFilters ? `Filtros (${Object.values(filters).filter(Boolean).length})` : 'Filtrar'}
+              {hasFilters ? `Filtros (${Object.values(filters).filter(Boolean).length})` : 'Filtrar'}
             </button>
             {hasFilters && (
               <button onClick={clearFilters} className="px-2 py-1 text-xs bg-white/70 text-red-600 rounded hover:bg-white">
-                ✕ Limpiar
+                Limpiar
               </button>
             )}
             {detalle && onDelete && (
               <button
                 onClick={() => { onDelete(detalle.id); onClose() }}
                 className="px-2 py-1 text-red-700 hover:bg-red-100 rounded text-sm"
-              >🗑️</button>
+                title="Eliminar planilla"
+              >Borrar</button>
             )}
-            <button onClick={onClose} className="px-2 py-1 text-ml-text dark:text-gray-300 hover:bg-ml-yellow-dark dark:hover:bg-ml-dark-border rounded text-lg leading-none">✕</button>
+            <button onClick={onClose} className="px-2 py-1 text-ml-text dark:text-gray-300 hover:bg-ml-yellow-dark dark:hover:bg-ml-dark-border rounded text-lg leading-none">X</button>
           </div>
         </div>
 
@@ -195,7 +256,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
           <div className="grid grid-cols-4 gap-px bg-gray-100 dark:bg-slate-700 shrink-0">
             {[
               { label: 'OK', val: detalle.acreditadas, cls: 'text-green-600 dark:text-green-400', filter: 'ok' },
-              { label: 'No está', val: detalle.no_encontradas, cls: 'text-red-600 dark:text-red-400', filter: 'no está' },
+              { label: 'No esta', val: detalle.no_encontradas, cls: 'text-red-600 dark:text-red-400', filter: 'no está' },
               { label: 'Duplicadas', val: detalle.duplicadas, cls: 'text-yellow-600 dark:text-yellow-400', filter: 'duplicado' },
               { label: 'Sin datos', val: detalle.sin_datos, cls: 'text-blue-600 dark:text-blue-400', filter: 'faltan datos' },
             ].map(s => (
@@ -212,12 +273,38 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
           </div>
         )}
 
-        {/* Meta */}
+        {/* Meta + bulk actions */}
         {detalle && (
-          <div className="px-4 py-1.5 text-xs text-ml-text-soft dark:text-gray-400 flex gap-4 border-b dark:border-slate-700 bg-ml-gray-bg dark:bg-slate-900 shrink-0">
-            <span>📅 {fmtDate(detalle.fecha_carga)}</span>
-            <span>👤 {detalle.usuario_nombre}</span>
+          <div className="px-4 py-1.5 text-xs text-ml-text-soft dark:text-gray-400 flex flex-wrap items-center gap-2 border-b dark:border-slate-700 bg-ml-gray-bg dark:bg-slate-900 shrink-0">
+            <span>{fmtDate(detalle.fecha_carga)}</span>
+            <span>{detalle.usuario_nombre}</span>
             <span>{filteredRows.length}/{detalle.total} filas{hasFilters ? ' (filtrado)' : ''}</span>
+
+            {selectedRows.size > 0 && (
+              <div className="flex items-center gap-1 ml-auto">
+                <span className="text-ml-blue font-semibold">{selectedRows.size} sel.</span>
+                <select
+                  className="text-[10px] border border-gray-300 dark:border-slate-600 rounded px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white"
+                  value={bulkStatus}
+                  onChange={e => setBulkStatus(e.target.value)}
+                >
+                  <option value="">Cambiar a...</option>
+                  {ESTADOS_DISPONIBLES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                {bulkStatus && (
+                  <button
+                    onClick={applyBulkStatus}
+                    disabled={savingRow}
+                    className="bg-ml-blue text-white text-[10px] rounded px-2 py-0.5 disabled:opacity-50"
+                  >Aplicar</button>
+                )}
+                <button
+                  onClick={bulkDelete}
+                  disabled={savingRow}
+                  className="bg-red-500 text-white text-[10px] rounded px-2 py-0.5 disabled:opacity-50"
+                >Borrar</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -227,27 +314,34 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
           <div className="flex-1 overflow-auto min-h-0">
             <table className="w-full text-xs min-w-[780px]">
               <thead className="sticky top-0 z-10">
-                {/* Headers azul banco Macro — con Estado al FINAL */}
                 <tr>
-                  {['#','Importe','CUIT','Titular planilla','Titular extracto','Fecha mov.','Saldo','Cliente acred.','Fecha acred.','Estado'].map(h => (
+                  <th className="px-1 py-2.5 text-left font-bold text-white bg-ml-blue border-r border-blue-400 w-8">
+                    <input
+                      type="checkbox"
+                      checked={selectedRows.size > 0 && selectedRows.size === filteredRows.length}
+                      onChange={selectAllFiltered}
+                      className="w-3 h-3"
+                    />
+                  </th>
+                  {['#','Importe','CUIT','Titular planilla','Titular extracto','Fecha mov.','Saldo','Cliente acred.','Fecha acred.','Estado',''].map(h => (
                     <th key={h} className="px-2 py-2.5 text-left font-bold text-white bg-ml-blue border-r border-blue-400 last:border-r-0 whitespace-nowrap">
                       {h}
                     </th>
                   ))}
                 </tr>
 
-                {/* Fila de filtros (se muestra/oculta) */}
                 {showFilters && (
                   <tr className="bg-blue-50 dark:bg-blue-900/10 border-b border-ml-blue/30">
                     <td className="px-1 py-1"></td>
-                    <td className="px-1 py-1"><FilterInput field="importe" placeholder="🔍" /></td>
-                    <td className="px-1 py-1"><FilterInput field="cuit" placeholder="🔍 CUIT" /></td>
-                    <td className="px-1 py-1"><FilterInput field="titular" placeholder="🔍 titular" /></td>
-                    <td className="px-1 py-1"><FilterInput field="mov_titular" placeholder="🔍 extracto" /></td>
-                    <td className="px-1 py-1"><FilterInput field="mov_fecha" placeholder="🔍 fecha" /></td>
+                    <td className="px-1 py-1"></td>
+                    <td className="px-1 py-1"><FilterInput field="importe" placeholder="importe" /></td>
+                    <td className="px-1 py-1"><FilterInput field="cuit" placeholder="CUIT" /></td>
+                    <td className="px-1 py-1"><FilterInput field="titular" placeholder="titular" /></td>
+                    <td className="px-1 py-1"><FilterInput field="mov_titular" placeholder="extracto" /></td>
+                    <td className="px-1 py-1"><FilterInput field="mov_fecha" placeholder="fecha" /></td>
                     <td className="px-1 py-1"></td>
                     <td className="px-1 py-1"></td>
-                    <td className="px-1 py-1"><FilterInput field="mov_fecha_acred" placeholder="🔍 acred." /></td>
+                    <td className="px-1 py-1"><FilterInput field="mov_fecha_acred" placeholder="acred." /></td>
                     <td className="px-1 py-1">
                       <select className="w-full px-1.5 py-0.5 text-xs border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-gray-200"
                         value={filters.status} onChange={e => setFilter('status', e.target.value)}>
@@ -255,6 +349,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                         {uniqueStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </td>
+                    <td className="px-1 py-1"></td>
                   </tr>
                 )}
               </thead>
@@ -262,13 +357,21 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
               <tbody className="divide-y dark:divide-slate-700">
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-6 text-center text-ml-text-soft">
+                    <td colSpan={12} className="px-4 py-6 text-center text-ml-text-soft">
                       Sin resultados para los filtros aplicados
                     </td>
                   </tr>
                 ) : (
                   filteredRows.map((row, i) => (
                     <tr key={row.id} className="hover:bg-ml-gray-bg dark:hover:bg-slate-700/50 divide-x divide-gray-100 dark:divide-slate-700">
+                      <td className="px-1 py-1.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedRows.has(row.id)}
+                          onChange={() => toggleSelect(row.id)}
+                          className="w-3 h-3"
+                        />
+                      </td>
                       <td className="px-2 py-1.5 text-gray-400 dark:text-gray-500">{i + 1}</td>
                       <td className="px-2 py-1.5 text-right font-mono font-semibold dark:text-white whitespace-nowrap">{fmtARS(row.monto)}</td>
                       <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400 font-mono text-[10px]">{row.cuit || '—'}</td>
@@ -298,27 +401,32 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                               className="text-[10px] border border-gray-300 dark:border-slate-600 rounded px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white w-full font-mono"
                               value={editFecha}
                               onChange={e => setEditFecha(e.target.value)}
-                              title="Fecha de acreditación"
+                              title="Fecha de acreditacion"
                             />
                             <div className="flex gap-1">
                               <button onClick={() => saveEdit(row.id)} disabled={savingRow}
-                                className="flex-1 bg-green-500 text-white text-[10px] rounded py-0.5 disabled:opacity-50">✓ Guardar</button>
+                                className="flex-1 bg-green-500 text-white text-[10px] rounded py-0.5 disabled:opacity-50">Guardar</button>
                               <button onClick={() => setEditingRowId(null)}
-                                className="flex-1 bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-white text-[10px] rounded py-0.5">✕</button>
+                                className="flex-1 bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-white text-[10px] rounded py-0.5">X</button>
                             </div>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1 group">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusStyle(row.status)}`}>
+                          <button
+                            onClick={() => startEdit(row)}
+                            className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer active:scale-95 transition-transform"
+                          >
+                            <span className={`inline-flex px-2 py-0.5 rounded-full ${statusStyle(row.status)}`}>
                               {row.status}
                             </span>
-                            <button
-                              onClick={() => startEdit(row)}
-                              className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-ml-blue dark:hover:text-ml-green text-[10px] transition-opacity"
-                              title="Editar estado"
-                            >✏️</button>
-                          </div>
+                          </button>
                         )}
+                      </td>
+                      <td className="px-1 py-1.5 text-center">
+                        <button
+                          onClick={() => deleteRow(row.id)}
+                          className="text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 text-[10px] transition-colors"
+                          title="Eliminar fila"
+                        >X</button>
                       </td>
                     </tr>
                   ))

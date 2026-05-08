@@ -266,6 +266,10 @@ class ApiClient {
     await this.client.patch(`/planillas/rows/${rowId}`, { status, comentario, fecha_acred: fechaAcred })
   }
 
+  async deleteRow(rowId: number): Promise<void> {
+    await this.client.delete(`/planillas/rows/${rowId}`)
+  }
+
   async appendUM(extractoId: number, file: File): Promise<MergeUMResult> {
     const formData = new FormData()
     formData.append('file', file)

@@ -321,8 +321,8 @@ def patch_row_status(
     if "comentario" in payload:
         row.comentario_revision = payload["comentario"]
 
-    # ── Aprendizaje: si se corrige a 'ok', registrar el patron ──────────
-    if nuevo_status == "ok" and row.orden_movimiento_acreditado:
+    # ── Aprendizaje: registrar toda correccion manual para alimentar IA ──
+    if status_anterior != nuevo_status and row.orden_movimiento_acreditado:
         try:
             from app.services.aprendizaje import registrar_correccion
             planilla = db.query(Planilla).filter(Planilla.id == row.planilla_id).first()
@@ -334,7 +334,7 @@ def patch_row_status(
                     org_id=planilla.organizacion_id or 1
                 )
         except Exception:
-            pass  # el aprendizaje no debe bloquear la operacion principal
+            pass
 
     # Actualizar fecha de acreditación en el movimiento vinculado
     if "fecha_acred" in payload and row.orden_movimiento_acreditado:
@@ -360,6 +360,30 @@ def patch_row_status(
     )
 
     return {"ok": True, "row_id": row_id, "status": row.status}
+
+
+@router.delete("/rows/{row_id}")
+def delete_row(
+    row_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    row = db.query(PlanillaRow).filter(PlanillaRow.id == row_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Fila no encontrada")
+
+    registrar_log(
+        db=db,
+        usuario_id=current_user.id,
+        tabla="planilla_rows",
+        registro_id=row.id,
+        accion="DELETE_ROW",
+        cambios={"monto": float(row.monto or 0), "status": row.status, "titular": row.titular}
+    )
+
+    db.delete(row)
+    db.commit()
+    return {"ok": True, "row_id": row_id}
 
 
 # ── Endpoints existentes ──────────────────────────────────────────────────────
