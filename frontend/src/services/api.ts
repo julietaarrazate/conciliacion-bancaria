@@ -49,24 +49,34 @@ class ApiClient {
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
+      timeout: 60000,
       headers: {
         'Content-Type': 'application/json'
       }
     })
 
-    // Cargar token del localStorage
     const stored = localStorage.getItem('token')
     if (stored) {
       this.setToken(stored)
     }
 
-    // Interceptor para añadir token a requests
     this.client.interceptors.request.use((config) => {
       if (this.token) {
         config.headers.Authorization = `Bearer ${this.token}`
       }
       return config
     })
+
+    this.client.interceptors.response.use(
+      (res) => res,
+      (err) => {
+        if (err.response?.status === 401 && this.token) {
+          this.clearToken()
+          window.location.href = '/login'
+        }
+        return Promise.reject(err)
+      }
+    )
   }
 
   setToken(token: string) {

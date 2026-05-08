@@ -271,7 +271,7 @@ export const Dashboard: React.FC = () => {
 
           <FileUpload
             onFileSelected={handleUploadExtraco}
-            label="Subir nuevo extracto (.xlsx)"
+            label="Subir extracto (.xlsx, .xls, .csv)"
           />
 
           {extractoId && (
@@ -335,7 +335,7 @@ export const Dashboard: React.FC = () => {
 
           <FileUpload
             onFileSelected={handleUploadPlanilla}
-            label={!extractoId ? 'Cargá primero un extracto (Paso 1)' : 'Subir planilla del cliente (.xlsx)'}
+            label={!extractoId ? 'Cargá primero un extracto (Paso 1)' : 'Subir planilla (.xlsx, .xls, .csv)'}
           />
           {!clienteNombre.trim() && extractoId && (
             <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">

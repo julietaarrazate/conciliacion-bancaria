@@ -57,11 +57,12 @@ def list_extractos(skip: int = 0, limit: int = 50,
 async def upload_extracto(file: UploadFile = File(...),
                           db: Session = Depends(get_db),
                           current_user: User = Depends(get_current_user)):
-    if not file.filename.endswith('.xlsx'):
-        raise HTTPException(400, "Solo se aceptan archivos Excel (.xlsx)")
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext not in ('.xlsx', '.xls', '.csv'):
+        raise HTTPException(400, "Formatos aceptados: .xlsx, .xls, .csv")
     tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             tmp.write(await file.read())
             tmp_path = tmp.name
 
@@ -177,11 +178,12 @@ async def agregar_ultimos_movimientos(extracto_id: int, file: UploadFile = File(
     extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
-    if not file.filename.endswith('.xlsx'):
-        raise HTTPException(400, "Solo se aceptan archivos Excel (.xlsx)")
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext not in ('.xlsx', '.xls', '.csv'):
+        raise HTTPException(400, "Formatos aceptados: .xlsx, .xls, .csv")
     tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             tmp.write(await file.read())
             tmp_path = tmp.name
         parsed = parsear_extracto_bancario(tmp_path)
@@ -216,7 +218,7 @@ def _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fech
         q = q.filter(and_(MovimientoBanco.cliente_acreditado.isnot(None),
                           MovimientoBanco.cliente_acreditado != "",
                           ~MovimientoBanco.cliente_acreditado.ilike("no identificado")))
-    return q.order_by(MovimientoBanco.orden.desc().nulls_last(), MovimientoBanco.id.desc())
+    return q
 
 
 @router.get("/{extracto_id}/movimientos", response_model=MovimientosFiltradosResponse)
@@ -231,7 +233,7 @@ def listar_movimientos(extracto_id: int,
         raise HTTPException(404, "Extracto no encontrado")
     q = _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fecha_desde, fecha_hasta, sin_acreditar)
     total = q.count()
-    q = q.order_by(desc(MovimientoBanco.fecha), desc(MovimientoBanco.id)).offset(skip)
+    q = q.order_by(MovimientoBanco.orden.desc().nulls_last(), MovimientoBanco.id.desc()).offset(skip)
     if limit > 0:
         q = q.limit(limit)
     items = q.all()
@@ -249,7 +251,7 @@ def export_movimientos_xlsx(extracto_id: int,
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
     q = _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fecha_desde, fecha_hasta, sin_acreditar)
-    rows = q.order_by(desc(MovimientoBanco.fecha)).all()
+    rows = q.order_by(MovimientoBanco.orden.desc().nulls_last(), MovimientoBanco.id.desc()).all()
     movs = [{"orden": m.orden, "fecha": m.fecha, "mes": m.mes, "titular": m.titular,
               "monto": m.monto, "saldo": m.saldo, "cliente_acreditado": m.cliente_acreditado,
               "fecha_acred": m.fecha_acred} for m in rows]

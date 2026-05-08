@@ -1,12 +1,94 @@
 ﻿"""
 Parseo de archivos Excel para extractos bancarios y planillas de clientes.
+Soporta .xlsx, .xls y .csv.
 Soporta Banco Macro, BBVA, Santander, Galicia, ICBC y formatos genericos.
 """
 
 import re
+import os
+import tempfile
 from typing import Tuple, Optional, List, Dict
 from datetime import date, datetime
 import openpyxl
+
+
+def _convertir_xls_a_xlsx(filepath: str) -> str:
+    """Convierte .xls (formato viejo) a .xlsx para procesarlo con openpyxl."""
+    import xlrd
+    from openpyxl import Workbook
+
+    xls = xlrd.open_workbook(filepath)
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    for sheet_name in xls.sheet_names():
+        xls_sheet = xls.sheet_by_name(sheet_name)
+        ws = wb.create_sheet(title=sheet_name)
+        for row in range(xls_sheet.nrows):
+            for col in range(xls_sheet.ncols):
+                cell = xls_sheet.cell(row, col)
+                val = cell.value
+                if cell.ctype == xlrd.XL_CELL_DATE:
+                    try:
+                        val = datetime(*xlrd.xldate_as_tuple(val, xls.datemode))
+                    except Exception:
+                        pass
+                ws.cell(row=row + 1, column=col + 1, value=val)
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+    wb.save(tmp.name)
+    wb.close()
+    xls.release_resources()
+    return tmp.name
+
+
+def _convertir_csv_a_xlsx(filepath: str) -> str:
+    """Convierte .csv a .xlsx para procesarlo con openpyxl."""
+    import csv
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+
+    encodings = ['utf-8', 'latin-1', 'cp1252']
+    for enc in encodings:
+        try:
+            with open(filepath, 'r', encoding=enc) as f:
+                content = f.read()
+            break
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    else:
+        with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+            content = f.read()
+
+    delimiter = ';' if content.count(';') > content.count(',') else ','
+    reader = csv.reader(content.splitlines(), delimiter=delimiter)
+    for row_idx, row in enumerate(reader, 1):
+        for col_idx, val in enumerate(row, 1):
+            val = val.strip()
+            try:
+                ws.cell(row=row_idx, column=col_idx, value=float(val.replace(',', '.')))
+            except ValueError:
+                ws.cell(row=row_idx, column=col_idx, value=val)
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+    wb.save(tmp.name)
+    wb.close()
+    return tmp.name
+
+
+def preparar_archivo(filepath: str) -> Tuple[str, bool]:
+    """
+    Si el archivo es .xls o .csv, lo convierte a .xlsx.
+    Retorna (ruta_xlsx, necesita_cleanup).
+    """
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext == '.xls':
+        return _convertir_xls_a_xlsx(filepath), True
+    if ext in ('.csv', '.tsv'):
+        return _convertir_csv_a_xlsx(filepath), True
+    return filepath, False
 
 INDICADORES_BANCO = {
     "macro":     ["macro", "banco macro"],
@@ -136,24 +218,29 @@ def parsear_generico(ws, cols):
 def parsear_extracto_bancario(filepath: str) -> dict:
     """
     Parsea un extracto bancario detectando automaticamente el banco y formato.
-    Soporta Macro, BBVA, Santander, Galicia, ICBC y formato generico.
+    Soporta .xlsx, .xls y .csv.
     Prueba todas las hojas del archivo y devuelve la que tiene mas movimientos.
     """
-    wb = openpyxl.load_workbook(filepath, data_only=True)
-    mejor_movs = []
-    banco_detectado = "generico"
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
-        if ws.max_row < 3:
-            continue
-        banco = detectar_banco(ws)
-        cols  = detectar_columnas(ws)
-        movs  = parsear_generico(ws, cols)
-        if len(movs) > len(mejor_movs):
-            mejor_movs = movs
-            banco_detectado = banco
-    wb.close()
-    return {"movimientos": mejor_movs, "total": len(mejor_movs), "banco_detectado": banco_detectado}
+    xlsx_path, necesita_cleanup = preparar_archivo(filepath)
+    try:
+        wb = openpyxl.load_workbook(xlsx_path, data_only=True)
+        mejor_movs = []
+        banco_detectado = "generico"
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            if ws.max_row < 3:
+                continue
+            banco = detectar_banco(ws)
+            cols  = detectar_columnas(ws)
+            movs  = parsear_generico(ws, cols)
+            if len(movs) > len(mejor_movs):
+                mejor_movs = movs
+                banco_detectado = banco
+        wb.close()
+        return {"movimientos": mejor_movs, "total": len(mejor_movs), "banco_detectado": banco_detectado}
+    finally:
+        if necesita_cleanup and os.path.exists(xlsx_path):
+            os.remove(xlsx_path)
 
 def detectar_header(ws):
     for r in range(1, 6):
@@ -186,18 +273,23 @@ def detectar_titular_col(ws, hdr_row):
     return None
 
 def parsear_planilla_cliente(filepath: str) -> dict:
-    wb = openpyxl.load_workbook(filepath, data_only=True)
-    ws = wb.active
-    hdr_row, imp_col = detectar_header(ws)
-    cuit_col    = detectar_cuit_col(ws, hdr_row)
-    titular_col = detectar_titular_col(ws, hdr_row)
-    filas = []
-    for row in range(hdr_row + 1, ws.max_row + 1):
-        monto = ws.cell(row, imp_col).value
-        if monto is None:
-            continue
-        cuit    = ws.cell(row, cuit_col).value    if cuit_col    else None
-        titular = ws.cell(row, titular_col).value if titular_col else None
-        filas.append({"monto": monto, "cuit": str(cuit) if cuit else None, "titular": str(titular) if titular else None})
-    wb.close()
-    return {"filas": filas, "total": len(filas), "header_row": hdr_row, "imp_col": imp_col, "cuit_col": cuit_col, "titular_col": titular_col}
+    xlsx_path, necesita_cleanup = preparar_archivo(filepath)
+    try:
+        wb = openpyxl.load_workbook(xlsx_path, data_only=True)
+        ws = wb.active
+        hdr_row, imp_col = detectar_header(ws)
+        cuit_col    = detectar_cuit_col(ws, hdr_row)
+        titular_col = detectar_titular_col(ws, hdr_row)
+        filas = []
+        for row in range(hdr_row + 1, ws.max_row + 1):
+            monto = ws.cell(row, imp_col).value
+            if monto is None:
+                continue
+            cuit    = ws.cell(row, cuit_col).value    if cuit_col    else None
+            titular = ws.cell(row, titular_col).value if titular_col else None
+            filas.append({"monto": monto, "cuit": str(cuit) if cuit else None, "titular": str(titular) if titular else None})
+        wb.close()
+        return {"filas": filas, "total": len(filas), "header_row": hdr_row, "imp_col": imp_col, "cuit_col": cuit_col, "titular_col": titular_col}
+    finally:
+        if necesita_cleanup and os.path.exists(xlsx_path):
+            os.remove(xlsx_path)

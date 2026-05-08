@@ -190,10 +190,10 @@ def registrar_op(
             dens_actuales[str(den_str)] = max(0, actual - cant)
         arqueo.denominaciones = dens_actuales
 
-    # Crear la OP
+    # Crear la OP — usar el ID del cliente resuelto, no el del payload
     op = OrdenDePago(
         organizacion_id=org_id,
-        cliente_id=cliente_id,
+        cliente_id=cliente.id,
         arqueo_id=arqueo.id,
         fecha=fecha,
         beneficiario=beneficiario,

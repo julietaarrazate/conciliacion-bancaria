@@ -20,6 +20,7 @@ python-multipart==0.0.12
 
 # Excel
 openpyxl==3.1.5
+xlrd==2.0.1
 
 # Utilidades
 python-dotenv==1.0.1

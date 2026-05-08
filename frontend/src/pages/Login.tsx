@@ -33,18 +33,25 @@ export const Login: React.FC = () => {
       } else if (err.code === 'ERR_NETWORK' || !err.response) {
         setWaking(true)
         setError('')
-        // Render free tier duerme — reintentamos automáticamente
-        await new Promise(r => setTimeout(r, 30000))
-        setWaking(false)
-        try {
-          const response2 = await apiClient.login(formData.email, formData.password)
-          setUser(response2.user)
-          setToken(response2.access_token)
-          navigate('/dashboard')
-          return
-        } catch {
-          setError('El servidor tardó en responder. Intentá de nuevo en unos segundos.')
+        for (let attempt = 0; attempt < 4; attempt++) {
+          await new Promise(r => setTimeout(r, 8000))
+          try {
+            const response2 = await apiClient.login(formData.email, formData.password)
+            setUser(response2.user)
+            setToken(response2.access_token)
+            setWaking(false)
+            navigate('/dashboard')
+            return
+          } catch (retryErr: any) {
+            if (retryErr.response?.status === 401) {
+              setWaking(false)
+              setError('Email o contraseña incorrectos')
+              return
+            }
+          }
         }
+        setWaking(false)
+        setError('El servidor tardó en responder. Intentá de nuevo.')
       } else {
         setError(detail || 'Error en autenticación')
       }
@@ -77,7 +84,7 @@ export const Login: React.FC = () => {
           {waking && (
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 text-sm dark:bg-amber-950/30 dark:border-amber-800/40 dark:text-amber-400 flex items-center gap-2">
               <span className="animate-spin text-base">⏳</span>
-              <span>Servidor despertando… reintentando en 30 seg</span>
+              <span>Servidor despertando… reintentando automáticamente</span>
             </div>
           )}
           {error && !waking && (
@@ -115,9 +122,10 @@ export const Login: React.FC = () => {
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-zinc-500 dark:hover:text-ml-green transition-colors"
+                  onPointerDown={(e) => { e.preventDefault(); setShowPassword((s) => !s) }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-zinc-500 dark:hover:text-ml-green transition-colors p-1"
                   tabIndex={-1}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                 >
                   {showPassword ? '🙈' : '👁️'}
                 </button>

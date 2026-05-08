@@ -38,10 +38,11 @@ async def upload_planilla(
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permission("upload_files"))
 ):
-    if not file.filename.endswith('.xlsx'):
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext not in ('.xlsx', '.xls', '.csv'):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Solo se aceptan archivos Excel (.xlsx)"
+            detail="Formatos aceptados: .xlsx, .xls, .csv"
         )
 
     extracto = db.query(ExtractoBancario).filter(
@@ -65,7 +66,7 @@ async def upload_planilla(
         db.flush()
 
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             contents = await file.read()
             tmp.write(contents)
             tmp_path = tmp.name

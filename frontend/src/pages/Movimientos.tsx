@@ -3,6 +3,15 @@ import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { ExtractoListItem, MovimientoFiltrado, MovimientosFiltros } from '@/types'
 
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(id)
+  }, [value, delay])
+  return debounced
+}
+
 // ── Utilidades ────────────────────────────────────────────────
 function fmtARS(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
@@ -89,32 +98,34 @@ export const Movimientos: React.FC = () => {
     })
   }, [])
 
+  const debouncedFilters = useDebounce(filters, 400)
+
   const buildApiFilters = useCallback((): MovimientosFiltros => {
-    const f: MovimientosFiltros = { limit: 0 }  // 0 = sin límite
-    if (filters.cliente) f.cliente = filters.cliente
-    if (filters.cuit) f.cuit = filters.cuit
-    if (filters.titular) f.titular = filters.titular
-    if (filters.desde) f.desde = filters.desde
-    if (filters.hasta) f.hasta = filters.hasta
-    if (filters.fecha_desde) f.fecha_desde = filters.fecha_desde
-    if (filters.fecha_hasta) f.fecha_hasta = filters.fecha_hasta
-    if (filters.sin_acreditar === 'no') f.sin_acreditar = true
-    if (filters.sin_acreditar === 'si') f.sin_acreditar = false
+    const f: MovimientosFiltros = { limit: 0 }
+    if (debouncedFilters.cliente) f.cliente = debouncedFilters.cliente
+    if (debouncedFilters.cuit) f.cuit = debouncedFilters.cuit
+    if (debouncedFilters.titular) f.titular = debouncedFilters.titular
+    if (debouncedFilters.desde) f.desde = debouncedFilters.desde
+    if (debouncedFilters.hasta) f.hasta = debouncedFilters.hasta
+    if (debouncedFilters.fecha_desde) f.fecha_desde = debouncedFilters.fecha_desde
+    if (debouncedFilters.fecha_hasta) f.fecha_hasta = debouncedFilters.fecha_hasta
+    if (debouncedFilters.sin_acreditar === 'no') f.sin_acreditar = true
+    if (debouncedFilters.sin_acreditar === 'si') f.sin_acreditar = false
     return f
-  }, [filters])
+  }, [debouncedFilters])
 
   const filteredMovs = useMemo(() => {
     let m = tab === 'um' ? movimientos.filter(x => x.source === 'um') : movimientos
-    if (filters.importe_min) {
-      const min = parseFloat(filters.importe_min.replace(/\./g,'').replace(',','.'))
+    if (debouncedFilters.importe_min) {
+      const min = parseFloat(debouncedFilters.importe_min.replace(/\./g,'').replace(',','.'))
       if (!isNaN(min)) m = m.filter(x => x.monto >= min)
     }
-    if (filters.importe_max) {
-      const max = parseFloat(filters.importe_max.replace(/\./g,'').replace(',','.'))
+    if (debouncedFilters.importe_max) {
+      const max = parseFloat(debouncedFilters.importe_max.replace(/\./g,'').replace(',','.'))
       if (!isNaN(max)) m = m.filter(x => x.monto <= max)
     }
     return m
-  }, [movimientos, filters.importe_min, filters.importe_max, tab])
+  }, [movimientos, debouncedFilters.importe_min, debouncedFilters.importe_max, tab])
 
   const startEdit = (m: MovimientoFiltrado) => {
     setEditingId(m.id)
@@ -230,7 +241,7 @@ export const Movimientos: React.FC = () => {
         </div>
         <label className={`flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium cursor-pointer transition-colors ${umLoading ? 'opacity-50' : 'bg-ml-blue text-white border-ml-blue hover:bg-ml-blue-dark'}`}>
           {umLoading ? '⏳' : '📎'} {umLoading ? 'Procesando...' : 'Agregar UM'}
-          <input ref={umRef} type="file" accept=".xlsx" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
+          <input ref={umRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
         </label>
       </div>
 

@@ -9,7 +9,7 @@ interface FileUploadProps {
 
 export const FileUpload: React.FC<FileUploadProps> = ({
   onFileSelected,
-  accept = '.xlsx',
+  accept = '.xlsx,.xls,.csv',
   label = 'Selecciona un archivo',
   error
 }) => {
