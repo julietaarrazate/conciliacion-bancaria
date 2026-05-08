@@ -364,7 +364,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                 ) : (
                   filteredRows.map((row, i) => (
                     <tr key={row.id} className="hover:bg-ml-gray-bg dark:hover:bg-slate-700/50 divide-x divide-gray-100 dark:divide-slate-700">
-                      <td className="px-1 py-1.5 text-center">
+                      <td className="px-1 py-px text-center">
                         <input
                           type="checkbox"
                           checked={selectedRows.has(row.id)}
@@ -372,18 +372,18 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                           className="w-3 h-3"
                         />
                       </td>
-                      <td className="px-2 py-1.5 text-gray-400 dark:text-gray-500">{i + 1}</td>
-                      <td className="px-2 py-1.5 text-right font-mono font-semibold dark:text-white whitespace-nowrap">{fmtARS(row.monto)}</td>
-                      <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400 font-mono text-[10px]">{row.cuit || '—'}</td>
-                      <td className="px-2 py-1.5 dark:text-gray-300 max-w-[130px] truncate" title={row.titular || ''}>{row.titular || '—'}</td>
-                      <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400 max-w-[180px] truncate" title={row.mov_titular || ''}>{row.mov_titular || '—'}</td>
-                      <td className="px-2 py-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(row.mov_fecha)}</td>
-                      <td className="px-2 py-1.5 text-right font-mono text-gray-400 dark:text-gray-500">—</td>
-                      <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      <td className="px-2 py-px text-gray-400 dark:text-gray-500">{i + 1}</td>
+                      <td className="px-2 py-px text-right font-mono font-semibold dark:text-white whitespace-nowrap">{fmtARS(row.monto)}</td>
+                      <td className="px-2 py-px text-gray-500 dark:text-gray-400 font-mono text-[10px]">{row.cuit || '—'}</td>
+                      <td className="px-2 py-px dark:text-gray-300 max-w-[130px] truncate" title={row.titular || ''}>{row.titular || '—'}</td>
+                      <td className="px-2 py-px text-gray-500 dark:text-gray-400 max-w-[180px] truncate" title={row.mov_titular || ''}>{row.mov_titular || '—'}</td>
+                      <td className="px-2 py-px whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(row.mov_fecha)}</td>
+                      <td className="px-2 py-px text-right font-mono text-gray-400 dark:text-gray-500">—</td>
+                      <td className="px-2 py-px text-gray-500 dark:text-gray-400 whitespace-nowrap">
                         {row.status === 'ok' ? <span className="text-green-600 dark:text-green-400 text-[10px] font-medium">{row.mov_titular?.split(' ').slice(0,2).join(' ') || '—'}</span> : '—'}
                       </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(row.mov_fecha_acred)}</td>
-                      <td className="px-2 py-1.5 min-w-[130px]">
+                      <td className="px-2 py-px whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(row.mov_fecha_acred)}</td>
+                      <td className="px-2 py-px min-w-[130px]">
                         {editingRowId === row.id ? (
                           <div className="flex flex-col gap-1 min-w-[160px]">
                             <select
@@ -421,7 +421,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                           </button>
                         )}
                       </td>
-                      <td className="px-1 py-1.5 text-center">
+                      <td className="px-1 py-px text-center">
                         <button
                           onClick={() => deleteRow(row.id)}
                           className="text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 text-[10px] transition-colors"

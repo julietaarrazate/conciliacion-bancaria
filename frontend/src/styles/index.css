@@ -123,7 +123,7 @@ body {
 
   /* Header de tabla */
   .th-macro {
-    @apply px-3 py-2.5 text-left text-2xs font-bold uppercase tracking-wider
+    @apply px-2 py-1 text-left text-2xs font-bold uppercase tracking-wider
            text-white bg-ml-blue border-r border-ml-blue-dark last:border-r-0
            dark:bg-ml-dark-card dark:text-ml-green dark:border-ml-dark-border dark:font-mono;
   }
