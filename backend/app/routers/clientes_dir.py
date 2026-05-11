@@ -210,7 +210,19 @@ def get_archivos_por_cliente(db: Session = Depends(get_db),
             "clientes": clientes_lista,
         })
 
-    return {"organizaciones": resultado_orgs}
+    # Compatibilidad con frontend viejo (PWA cacheada con SW anterior):
+    # devolvemos tambien la lista plana de clientes con la misma forma de antes,
+    # para que el codigo legacy no muestre vacio mientras el SW se actualiza.
+    clientes_planos = []
+    for org in resultado_orgs:
+        for c in org["clientes"]:
+            if c["meses"]:
+                clientes_planos.append({"nombre": c["nombre"], "meses": c["meses"]})
+
+    return {
+        "organizaciones": resultado_orgs,
+        "clientes": clientes_planos,
+    }
 
 
 @router.post("")

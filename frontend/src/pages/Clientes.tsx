@@ -85,9 +85,26 @@ export const Clientes: React.FC = () => {
     setLoading(true)
     apiClient.client.get('/clientes/archivos')
       .then(r => {
-        const data = r.data.organizaciones || []
+        // Soporta dos formatos:
+        // 1) Nuevo: { organizaciones: [{id, nombre, clientes: [...]}] }
+        // 2) Viejo (fallback por SW cacheado): { clientes: [{nombre, meses: [...]}] }
+        let data: OrgData[] = r.data.organizaciones || []
+        if (data.length === 0 && Array.isArray(r.data.clientes)) {
+          const clientesViejos = r.data.clientes.map((c: any, idx: number) => ({
+            id: idx + 1,
+            nombre: c.nombre,
+            cuit: null,
+            total_archivos: c.meses?.reduce((s: number, m: any) => s + m.archivos.length, 0) || 0,
+            meses: c.meses || [],
+          }))
+          data = [{
+            id: 1,
+            nombre: 'Caneland SA',
+            total_clientes: clientesViejos.length,
+            clientes: clientesViejos,
+          }]
+        }
         setOrgs(data)
-        // Abrir la primera org automaticamente
         if (data.length > 0) setOpenOrg(o => ({ ...o, [data[0].id]: true }))
       })
       .catch(() => setOrgs([]))

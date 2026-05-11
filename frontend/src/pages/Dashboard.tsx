@@ -369,6 +369,16 @@ export const Dashboard: React.FC = () => {
               <div className="pt-2 border-t border-gray-100 dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400 text-center">
                 Total: {resultado.filas_procesadas} filas procesadas
               </div>
+              <button
+                onClick={() => setPanelId(resultado.planilla_id)}
+                className="mt-3 w-full px-3 py-2 text-sm font-medium bg-ml-blue text-white rounded-md hover:bg-ml-blue-dark transition-colors flex items-center justify-center gap-2"
+                title="Ver, editar estados, corregir errores y descargar"
+              >
+                ✏️ Revisar y editar estados
+              </button>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center mt-1">
+                Podés cambiar cualquier estado antes de exportar al contador
+              </p>
             </div>
           ) : (
             <p className="text-sm text-ml-text-soft py-8 text-center">
