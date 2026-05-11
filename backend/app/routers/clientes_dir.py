@@ -138,43 +138,112 @@ def get_estructura(db: Session = Depends(get_db), _: User = Depends(get_current_
 
 
 @router.get("/archivos")
-def get_archivos_por_cliente(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_archivos_por_cliente(db: Session = Depends(get_db),
+                             current_user: User = Depends(get_current_user)):
     """
-    Devuelve todos los archivos conciliados agrupados por cliente y mes.
-    Estructura: { cliente: { 'Abril 2026': [ {id, nombre, fecha, acreditadas, total} ] } }
+    Devuelve archivos conciliados agrupados por:
+      organizacion -> cliente -> año/mes -> [archivos]
+
+    Incluye TODOS los clientes (aunque no tengan planillas todavia) para que
+    aparezcan como carpetas vacias en la vista, listas para recibir archivos.
     """
-    from app.models.planilla import Planilla, PlanillaRow
+    from app.models.planilla import Planilla
     from app.models.cliente import Cliente
+    from app.models.organizacion import Organizacion
     from collections import defaultdict
 
     MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
              'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
-    planillas = (db.query(Planilla)
-                 .join(Cliente)
-                 .order_by(Planilla.fecha_carga.desc())
-                 .all())
+    # Scope por org segun rol
+    orgs_q = db.query(Organizacion)
+    if not current_user.is_superadmin:
+        orgs_q = orgs_q.filter(Organizacion.id == (current_user.organizacion_id or 1))
+    orgs = orgs_q.order_by(Organizacion.id).all()
 
-    resultado: dict = defaultdict(lambda: defaultdict(list))
+    # Indexar planillas por org_id -> cliente_id -> "anio/mes"
+    pq = db.query(Planilla).join(Cliente)
+    if not current_user.is_superadmin:
+        pq = pq.filter(Planilla.organizacion_id == (current_user.organizacion_id or 1))
+    planillas = pq.order_by(Planilla.fecha_carga.desc()).all()
 
+    archivos_idx: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     for p in planillas:
-        anio_str = str(p.fecha_carga.year)
-        mes_anio = f"{MESES[p.fecha_carga.month - 1]}"
         statuses = [r.status for r in p.rows]
-        resultado[p.cliente.nombre][f"{anio_str}/{mes_anio}"].append({
+        org_id = p.organizacion_id or 1
+        anio_str = str(p.fecha_carga.year)
+        mes_nombre = MESES[p.fecha_carga.month - 1]
+        archivos_idx[org_id][p.cliente_id][f"{anio_str}/{mes_nombre}"].append({
             "id": p.id,
             "nombre_archivo": p.nombre_archivo,
             "fecha_carga": p.fecha_carga.isoformat(),
+            "fecha_dia": p.fecha_carga.strftime("%d/%m"),
             "total": len(statuses),
             "acreditadas": sum(1 for s in statuses if s == "ok"),
         })
 
-    # Convertir a lista ordenada
-    clientes_lista = []
-    for cliente_nombre in sorted(resultado.keys()):
-        meses = []
-        for mes_nombre, archivos in resultado[cliente_nombre].items():
-            meses.append({"mes": mes_nombre, "archivos": archivos})
-        clientes_lista.append({"nombre": cliente_nombre, "meses": meses})
+    # Construir respuesta jerarquica
+    resultado_orgs = []
+    for org in orgs:
+        # Clientes de esta org
+        cli_q = db.query(Cliente).filter(Cliente.organizacion_id == org.id).order_by(Cliente.nombre)
+        clientes_org = cli_q.all()
 
-    return {"clientes": clientes_lista}
+        clientes_lista = []
+        for c in clientes_org:
+            meses_dict = archivos_idx.get(org.id, {}).get(c.id, {})
+            meses = [{"mes": mes, "archivos": archivos}
+                     for mes, archivos in sorted(meses_dict.items(), reverse=True)]
+            total_archivos = sum(len(a["archivos"]) for a in meses)
+            clientes_lista.append({
+                "id": c.id,
+                "nombre": c.nombre,
+                "cuit": c.cuit,
+                "total_archivos": total_archivos,
+                "meses": meses,
+            })
+
+        resultado_orgs.append({
+            "id": org.id,
+            "nombre": org.nombre,
+            "total_clientes": len(clientes_lista),
+            "clientes": clientes_lista,
+        })
+
+    return {"organizaciones": resultado_orgs}
+
+
+@router.post("")
+def crear_cliente(payload: dict,
+                  db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)):
+    """Crea un nuevo cliente (carpeta) en la organizacion del usuario."""
+    from app.models.cliente import Cliente
+    from app.services.auditoria import registrar_log
+
+    nombre = (payload.get("nombre") or "").strip()
+    cuit = (payload.get("cuit") or "").strip() or None
+    org_id = payload.get("organizacion_id") or current_user.organizacion_id or 1
+
+    if not nombre:
+        raise HTTPException(400, "El nombre es obligatorio")
+
+    # Scope: usuarios no superadmin solo pueden crear en su org
+    if not current_user.is_superadmin and org_id != (current_user.organizacion_id or 1):
+        raise HTTPException(403, "Solo podes crear clientes en tu organizacion")
+
+    # No duplicar por (nombre, org)
+    existente = db.query(Cliente).filter(
+        Cliente.nombre.ilike(nombre),
+        Cliente.organizacion_id == org_id
+    ).first()
+    if existente:
+        raise HTTPException(409, f"Ya existe el cliente '{existente.nombre}' en esta organizacion")
+
+    c = Cliente(nombre=nombre, cuit=cuit, organizacion_id=org_id)
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    registrar_log(db, current_user.id, "clientes", c.id, "INSERT",
+                  {"nombre": nombre, "organizacion_id": org_id})
+    return {"id": c.id, "nombre": c.nombre, "cuit": c.cuit, "organizacion_id": c.organizacion_id}

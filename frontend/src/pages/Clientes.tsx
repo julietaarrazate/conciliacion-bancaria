@@ -6,47 +6,53 @@ interface Archivo {
   id: number
   nombre_archivo: string
   fecha_carga: string
+  fecha_dia: string
   total: number
   acreditadas: number
 }
-
 interface MesArchivos {
-  mes: string
+  mes: string  // "2026/Mayo"
   archivos: Archivo[]
 }
-
 interface ClienteData {
+  id: number
   nombre: string
+  cuit?: string | null
+  total_archivos: number
   meses: MesArchivos[]
 }
+interface OrgData {
+  id: number
+  nombre: string
+  total_clientes: number
+  clientes: ClienteData[]
+}
 
-// Gradientes vibrantes — uno por cliente según hash del nombre
 const GRADIENTS = [
-  'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',  // violeta
-  'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)',  // azul-cyan
-  'linear-gradient(135deg, #10B981 0%, #34D399 100%)',  // esmeralda
-  'linear-gradient(135deg, #F59E0B 0%, #EF4444 100%)',  // ambar-rojo
-  'linear-gradient(135deg, #EC4899 0%, #F43F5E 100%)',  // rosa-rojo
-  'linear-gradient(135deg, #14B8A6 0%, #6366F1 100%)',  // teal-violeta
-  'linear-gradient(135deg, #F97316 0%, #FBBF24 100%)',  // naranja-ambar
-  'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',  // purple-pink
-  'linear-gradient(135deg, #06B6D4 0%, #10B981 100%)',  // cyan-verde
-  'linear-gradient(135deg, #EF4444 0%, #F97316 100%)',  // rojo-naranja
+  'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+  'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)',
+  'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+  'linear-gradient(135deg, #F59E0B 0%, #EF4444 100%)',
+  'linear-gradient(135deg, #EC4899 0%, #F43F5E 100%)',
+  'linear-gradient(135deg, #14B8A6 0%, #6366F1 100%)',
+  'linear-gradient(135deg, #F97316 0%, #FBBF24 100%)',
+  'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
+  'linear-gradient(135deg, #06B6D4 0%, #10B981 100%)',
+  'linear-gradient(135deg, #EF4444 0%, #F97316 100%)',
 ]
-
-function hashNombre(nombre: string): number {
+function hashNombre(n: string): number {
   let h = 0
-  for (let i = 0; i < nombre.length; i++) h = (h * 31 + nombre.charCodeAt(i)) >>> 0
+  for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0
   return h % GRADIENTS.length
 }
 
 const ClienteAvatar: React.FC<{ nombre: string; size?: 'sm' | 'md' }> = ({ nombre, size = 'md' }) => {
   const idx = hashNombre(nombre)
   const letter = nombre.trim().charAt(0).toUpperCase()
-  const dim = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-10 h-10 text-base'
+  const dim = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-9 h-9 text-sm'
   return (
     <span
-      className={`${dim} rounded-2xl flex items-center justify-center font-bold text-white shrink-0 select-none shadow-md`}
+      className={`${dim} rounded-xl flex items-center justify-center font-bold text-white shrink-0 select-none shadow-md`}
       style={{ background: GRADIENTS[idx] } as any}
     >
       {letter}
@@ -54,27 +60,41 @@ const ClienteAvatar: React.FC<{ nombre: string; size?: 'sm' | 'md' }> = ({ nombr
   )
 }
 
+const fmtFecha = (s: string) => {
+  try { return new Date(s + 'Z').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) }
+  catch { return s }
+}
+
 export const Clientes: React.FC = () => {
-  const [clientes, setClientes] = useState<ClienteData[]>([])
+  const [orgs, setOrgs] = useState<OrgData[]>([])
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [expandedMes, setExpandedMes] = useState<Record<string, boolean>>({})
+  const [openOrg, setOpenOrg] = useState<Record<number, boolean>>({})
+  const [openCli, setOpenCli] = useState<Record<string, boolean>>({})
+  const [openMes, setOpenMes] = useState<Record<string, boolean>>({})
   const [panelId, setPanelId] = useState<number | null>(null)
   const [savingId, setSavingId] = useState<number | null>(null)
   const [msg, setMsg] = useState('')
 
-  useEffect(() => {
+  // Form nuevo cliente
+  const [creando, setCreando] = useState<number | null>(null) // org_id donde estoy creando
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevoCuit, setNuevoCuit] = useState('')
+  const [creandoLoading, setCreandoLoading] = useState(false)
+
+  const cargar = () => {
+    setLoading(true)
     apiClient.client.get('/clientes/archivos')
-      .then(r => setClientes(r.data.clientes))
-      .catch(() => setClientes([]))
+      .then(r => {
+        const data = r.data.organizaciones || []
+        setOrgs(data)
+        // Abrir la primera org automaticamente
+        if (data.length > 0) setOpenOrg(o => ({ ...o, [data[0].id]: true }))
+      })
+      .catch(() => setOrgs([]))
       .finally(() => setLoading(false))
-  }, [])
+  }
 
-  const toggle = (nombre: string) =>
-    setExpanded(p => ({ ...p, [nombre]: !p[nombre] }))
-
-  const toggleMes = (key: string) =>
-    setExpandedMes(p => ({ ...p, [key]: !p[key] }))
+  useEffect(() => { cargar() }, [])
 
   const handleGuardar = async (id: number, clienteNombre: string) => {
     setSavingId(id)
@@ -93,109 +113,169 @@ export const Clientes: React.FC = () => {
     finally { setSavingId(null) }
   }
 
-  const fmtFecha = (s: string) => {
-    try { return new Date(s + 'Z').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) }
-    catch { return s }
+  const handleCrearCliente = async (org_id: number) => {
+    if (!nuevoNombre.trim()) return
+    setCreandoLoading(true)
+    setMsg('')
+    try {
+      await apiClient.client.post('/clientes', {
+        nombre: nuevoNombre.trim(),
+        cuit: nuevoCuit.trim() || null,
+        organizacion_id: org_id,
+      })
+      setMsg(`✓ Cliente "${nuevoNombre.trim()}" creado`)
+      setNuevoNombre(''); setNuevoCuit(''); setCreando(null)
+      cargar()
+    } catch (e: any) {
+      setMsg(`✗ ${e.response?.data?.detail || 'Error al crear'}`)
+    } finally { setCreandoLoading(false) }
   }
 
-  const totalGlobal = clientes.reduce((s, c) =>
-    s + c.meses.reduce((ms, m) => ms + m.archivos.length, 0), 0)
-
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto">
-      <div className="mb-4">
+    <div className="p-3 md:p-6 max-w-4xl mx-auto">
+      <div className="mb-3">
         <h1 className="text-xl md:text-2xl font-bold dark:text-white">Clientes</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          {clientes.length} clientes · {totalGlobal} conciliaciones guardadas
+        <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Carpetas de conciliaciones organizadas por organización · cliente · mes
         </p>
       </div>
 
       {msg && (
-        <div className={`mb-3 px-3 py-2 rounded text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-700'}`}>
+        <div className={`mb-3 px-3 py-2 rounded text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'}`}>
           {msg}
         </div>
       )}
 
       {loading ? (
         <div className="card p-8 text-center text-gray-400">Cargando...</div>
-      ) : clientes.length === 0 ? (
-        <div className="card p-8 text-center">
-          <p className="text-gray-400 mb-2">Sin conciliaciones guardadas aún</p>
-          <p className="text-sm text-gray-400">Conciliá una planilla desde el Dashboard para verla acá</p>
-        </div>
+      ) : orgs.length === 0 ? (
+        <div className="card p-8 text-center text-gray-400">Sin organizaciones</div>
       ) : (
         <div className="space-y-2">
-          {clientes.map(cliente => {
-            const isOpen = expanded[cliente.nombre]
-            const total = cliente.meses.reduce((s, m) => s + m.archivos.length, 0)
-            const acred = cliente.meses.reduce((s, m) =>
-              s + m.archivos.reduce((as, a) => as + a.acreditadas, 0), 0)
-
+          {orgs.map(org => {
+            const orgOpen = openOrg[org.id]
+            const totArchivos = org.clientes.reduce((s, c) => s + c.total_archivos, 0)
             return (
-              <div key={cliente.nombre} className="card p-0 overflow-hidden">
-                {/* Header cliente */}
+              <div key={org.id} className="card p-0 overflow-hidden">
+                {/* Nivel 1: Organización */}
                 <button
-                  onClick={() => toggle(cliente.nombre)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-ml-gray-bg dark:hover:bg-ml-dark-hover transition-colors text-left"
+                  onClick={() => setOpenOrg(o => ({ ...o, [org.id]: !orgOpen }))}
+                  className="w-full flex items-center gap-3 px-3 md:px-4 py-3 bg-gradient-to-r from-ml-yellow/20 to-transparent dark:from-amber-900/20 hover:bg-ml-gray-bg dark:hover:bg-ml-dark-hover transition-colors text-left"
                 >
-                  <ClienteAvatar nombre={cliente.nombre} />
-                  <div className="flex-1">
-                    <p className="font-semibold dark:text-white">{cliente.nombre}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {total} archivo{total !== 1 ? 's' : ''} · {acred} acreditaciones
+                  <span className="text-lg">🏢</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold dark:text-white truncate">{org.nombre}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                      {org.total_clientes} clientes · {totArchivos} conciliaciones
                     </p>
                   </div>
-                  <span className="text-gray-400 dark:text-gray-500 text-sm">{isOpen ? '▲' : '▼'}</span>
+                  <span className="text-gray-400 dark:text-gray-500 text-xs">{orgOpen ? '▲' : '▼'}</span>
                 </button>
 
-                {/* Meses */}
-                {isOpen && (
+                {orgOpen && (
                   <div className="border-t dark:border-slate-700">
-                    {cliente.meses.map(mes => {
-                      const mesKey = `${cliente.nombre}:${mes.mes}`
-                      const mesOpen = expandedMes[mesKey] !== false // abierto por defecto
+                    {/* Botón crear cliente */}
+                    <div className="px-3 md:px-4 py-2 bg-gray-50/50 dark:bg-slate-900/30 border-b dark:border-slate-700/50">
+                      {creando === org.id ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <input className="input-field text-xs flex-1 min-w-[120px]" placeholder="Nombre del cliente"
+                            value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleCrearCliente(org.id)} autoFocus />
+                          <input className="input-field text-xs w-32" placeholder="CUIT (opcional)"
+                            value={nuevoCuit} onChange={e => setNuevoCuit(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleCrearCliente(org.id)} />
+                          <button onClick={() => handleCrearCliente(org.id)} disabled={creandoLoading || !nuevoNombre.trim()}
+                            className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-30">
+                            {creandoLoading ? '⏳' : 'Crear'}
+                          </button>
+                          <button onClick={() => { setCreando(null); setNuevoNombre(''); setNuevoCuit('') }}
+                            className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700">✕</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setCreando(org.id)}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+                          <span className="text-base leading-none">+</span> Nuevo cliente
+                        </button>
+                      )}
+                    </div>
 
+                    {/* Nivel 2: Clientes */}
+                    {org.clientes.length === 0 ? (
+                      <div className="px-6 py-4 text-xs text-gray-400 text-center">Sin clientes todavía</div>
+                    ) : org.clientes.map(cliente => {
+                      const cliKey = `${org.id}-${cliente.id}`
+                      const cliOpen = openCli[cliKey]
                       return (
-                        <div key={mes.mes}>
+                        <div key={cliente.id}>
                           <button
-                            onClick={() => toggleMes(mesKey)}
-                            className="w-full flex items-center gap-2 px-6 py-2.5 bg-gray-50 dark:bg-slate-900/50 hover:bg-gray-100 dark:hover:bg-slate-700/50 text-left transition-colors"
+                            onClick={() => setOpenCli(o => ({ ...o, [cliKey]: !cliOpen }))}
+                            className="w-full flex items-center gap-2 pl-6 pr-3 py-2.5 hover:bg-gray-50 dark:hover:bg-slate-700/40 text-left transition-colors"
                           >
-                            <span className="text-sm">📅</span>
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex-1">{mes.mes}</span>
-                            <span className="text-xs text-gray-400">{mes.archivos.length} archivos {mesOpen ? '▲' : '▼'}</span>
+                            <ClienteAvatar nombre={cliente.nombre} size="sm" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold dark:text-white truncate">{cliente.nombre}</p>
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                                {cliente.total_archivos} archivo{cliente.total_archivos !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+                            <span className="text-gray-400 text-xs">{cliOpen ? '▲' : '▼'}</span>
                           </button>
 
-                          {mesOpen && (
-                            <div className="divide-y dark:divide-slate-700/50">
-                              {mes.archivos.map(archivo => {
-                                const pct = archivo.total > 0 ? Math.round((archivo.acreditadas / archivo.total) * 100) : 0
-                                return (
-                                  <div key={archivo.id} className="flex items-center gap-3 px-6 py-2.5 hover:bg-gray-50 dark:hover:bg-slate-700/30 transition-colors">
-                                    <span className="text-sm">📄</span>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm truncate dark:text-gray-200">{archivo.nombre_archivo}</p>
-                                      <p className="text-xs text-gray-400 dark:text-gray-500">
-                                        {fmtFecha(archivo.fecha_carga)} · {archivo.acreditadas}/{archivo.total} ({pct}%)
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${pct === 100 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : pct >= 80 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
-                                        {pct}%
-                                      </span>
-                                      <button onClick={() => setPanelId(archivo.id)} className="p-1 text-blue-500 hover:text-blue-700 dark:text-blue-400" title="Ver detalle">👁️</button>
-                                      <button onClick={() => handleGuardar(archivo.id, cliente.nombre)} disabled={savingId === archivo.id}
-                                        className="p-1 text-purple-500 hover:text-purple-700 dark:text-purple-400 disabled:opacity-30" title="Guardar en carpeta">
-                                        {savingId === archivo.id ? '⏳' : '📁'}
-                                      </button>
-                                      <button onClick={() => apiClient.downloadPlanillaConciliada(archivo.id)}
-                                        className="p-1 text-green-600 hover:text-green-700 dark:text-green-400" title="Descargar Excel">⬇️</button>
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </div>
+                          {cliOpen && cliente.meses.length === 0 && (
+                            <div className="pl-12 py-2 text-xs text-gray-400">Carpeta vacía — conciliá una planilla para que aparezca acá</div>
                           )}
+
+                          {/* Nivel 3: Meses */}
+                          {cliOpen && cliente.meses.map(mes => {
+                            const mesKey = `${cliKey}-${mes.mes}`
+                            const mesOpen = openMes[mesKey] !== false
+                            return (
+                              <div key={mes.mes}>
+                                <button
+                                  onClick={() => setOpenMes(o => ({ ...o, [mesKey]: !mesOpen }))}
+                                  className="w-full flex items-center gap-2 pl-12 pr-3 py-2 bg-gray-50/50 dark:bg-slate-900/30 hover:bg-gray-100 dark:hover:bg-slate-700/30 text-left transition-colors"
+                                >
+                                  <span className="text-sm">📅</span>
+                                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300 flex-1">{mes.mes}</span>
+                                  <span className="text-[10px] text-gray-400">{mes.archivos.length} {mesOpen ? '▲' : '▼'}</span>
+                                </button>
+
+                                {/* Nivel 4: Archivos */}
+                                {mesOpen && (
+                                  <div className="divide-y dark:divide-slate-700/50">
+                                    {mes.archivos.map(a => {
+                                      const pct = a.total > 0 ? Math.round((a.acreditadas / a.total) * 100) : 0
+                                      return (
+                                        <div key={a.id} className="flex items-center gap-2 pl-16 pr-3 py-2 hover:bg-gray-50 dark:hover:bg-slate-700/30 transition-colors">
+                                          <span className="text-sm">📄</span>
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-xs truncate dark:text-gray-200" title={a.nombre_archivo}>
+                                              <span className="text-gray-400 font-mono mr-1.5">{a.fecha_dia}</span>{a.nombre_archivo}
+                                            </p>
+                                            <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                                              {fmtFecha(a.fecha_carga)} · {a.acreditadas}/{a.total} ({pct}%)
+                                            </p>
+                                          </div>
+                                          <div className="flex items-center gap-0.5 flex-shrink-0">
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${pct === 100 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : pct >= 80 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+                                              {pct}%
+                                            </span>
+                                            <button onClick={() => setPanelId(a.id)} className="p-1 text-blue-500 hover:text-blue-700 dark:text-blue-400" title="Ver detalle">👁️</button>
+                                            <button onClick={() => handleGuardar(a.id, cliente.nombre)} disabled={savingId === a.id}
+                                              className="p-1 text-purple-500 hover:text-purple-700 dark:text-purple-400 disabled:opacity-30" title="Exportar para contador">
+                                              {savingId === a.id ? '⏳' : '📁'}
+                                            </button>
+                                            <button onClick={() => apiClient.downloadPlanillaConciliada(a.id)}
+                                              className="p-1 text-green-600 hover:text-green-700 dark:text-green-400" title="Descargar Excel">⬇️</button>
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
                       )
                     })}
