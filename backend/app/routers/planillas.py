@@ -436,8 +436,14 @@ def download_planilla_conciliada(
     }
 
     xlsx = export_planilla_conciliada(planilla_data, movimientos_acreditados)
-    nombre_base = p.nombre_archivo.replace('.xlsx', '').replace('.XLSX', '')
-    fname = f"{nombre_base}_acreditado_{datetime.now().strftime('%d.%m')}.xlsx"
+
+    # Nombre: "{cliente} acreditado {d.m}.xlsx" — ej "alojando acreditado 8.5.xlsx"
+    # Fecha = la mas reciente de las acreditaciones; si no hay, fecha de hoy
+    fechas_acred = [mov.fecha_acred for mov in movs_map.values() if mov.fecha_acred]
+    fecha_ref = max(fechas_acred) if fechas_acred else datetime.now().date()
+    fecha_str = f"{fecha_ref.day}.{fecha_ref.month}"
+    cliente_slug = (p.cliente.nombre or "cliente").strip().lower()
+    fname = f"{cliente_slug} acreditado {fecha_str}.xlsx"
     return StreamingResponse(
         io.BytesIO(xlsx),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -74,8 +74,8 @@ def export_movimientos(extracto_nombre: str, movimientos: List[dict]) -> bytes:
             # wrap_text=False fuerza que el titular largo NO agrande la fila
             cell.alignment = Alignment(horizontal=cell.alignment.horizontal or "general",
                                        vertical="center", wrap_text=False)
-        # Altura fija ~15px (Excel usa puntos: 15px ≈ 11.25pt)
-        ws.row_dimensions[i].height = 11.25
+        # Alto 15 estandar Excel (= ~25px en pantalla)
+        ws.row_dimensions[i].height = 15
 
     ws.auto_filter.ref = f"A5:H{5 + len(movimientos)}"
     _autosize(ws, 8)
@@ -280,8 +280,8 @@ def export_extracto_contador(extracto_nombre: str, movimientos: List[dict]) -> b
             c7.font = GREEN_FONT
         wr(8, m.get("fecha_acred"), "DD/MM/YYYY")
 
-        # Altura fija ~15px (15px ≈ 11.25pt en Excel)
-        ws.row_dimensions[i].height = 11.25
+        # Alto 15 estandar Excel (= ~25px en pantalla)
+        ws.row_dimensions[i].height = 15
 
     # Fila de totales al pie
     tot_row = HDR_ROW + len(movs_sorted) + 1

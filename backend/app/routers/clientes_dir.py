@@ -84,10 +84,12 @@ def guardar_planilla_en_carpeta(
     planilla_data = {"cliente_nombre": p.cliente.nombre, "nombre_archivo": p.nombre_archivo, "rows": rows_data}
     xlsx = export_planilla_conciliada(planilla_data, movimientos_acreditados)
 
-    # Nombre del archivo
-    nombre_base = p.nombre_archivo.replace('.xlsx', '').replace('.XLSX', '')
+    # Nombre: "{cliente} acreditado {d.m}.xlsx" — usa la fecha mas reciente de acreditacion
+    fechas_acred = [mov.fecha_acred for mov in movs_map.values() if mov.fecha_acred]
     fecha_hoy = datetime.now()
-    nombre_archivo = f"{nombre_base}_acreditado_{fecha_hoy.strftime('%d.%m')}.xlsx"
+    fecha_ref = max(fechas_acred) if fechas_acred else fecha_hoy.date()
+    cliente_slug = (p.cliente.nombre or "cliente").strip().lower()
+    nombre_archivo = f"{cliente_slug} acreditado {fecha_ref.day}.{fecha_ref.month}.xlsx"
 
     saved_path = None
 
@@ -103,13 +105,12 @@ def guardar_planilla_en_carpeta(
             carpeta = os.path.join(get_clientes_base(), p.cliente.nombre, anio, mes_anio)
             os.makedirs(carpeta, exist_ok=True)
 
-            # Nombre: "Green acreditado 02-05-2026.xlsx"
-            nombre_archivo = f"{p.cliente.nombre} acreditado {fecha_hoy.strftime('%d-%m-%Y')}.xlsx"
+            # Nombre coincide con el de descarga: "alojando acreditado 8.5.xlsx"
             ruta_final = os.path.join(carpeta, nombre_archivo)
-            # Si ya existe, agregar sufijo (2), (3), etc.
             contador = 2
             while os.path.exists(ruta_final):
-                nombre_con_sufijo = f"{nombre_base}_acreditado_{fecha_hoy.strftime('%d.%m')} ({contador}).xlsx"
+                base_sin_ext = nombre_archivo[:-5]  # quita ".xlsx"
+                nombre_con_sufijo = f"{base_sin_ext} ({contador}).xlsx"
                 ruta_final = os.path.join(carpeta, nombre_con_sufijo)
                 nombre_archivo = nombre_con_sufijo
                 contador += 1

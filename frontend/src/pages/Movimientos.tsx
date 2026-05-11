@@ -195,7 +195,7 @@ export const Movimientos: React.FC = () => {
   const umCount = filteredMovs.filter(m => m.source === 'um').length
 
   return (
-    <div className="p-3 md:p-6 max-w-full">
+    <div className="pl-1 pr-3 py-3 md:pl-2 md:pr-6 md:py-6 max-w-full">
       {/* Header */}
       <div className="flex flex-wrap items-start gap-2 mb-3">
         <div className="flex-1 min-w-0">
