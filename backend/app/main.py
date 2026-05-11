@@ -89,6 +89,22 @@ def _init_db():
         except Exception:
             pass  # columna ya existe
 
+    # 2.5. Normalizar campo "mes" de movimientos: dejar solo el numero (1-12).
+    # Casos viejos: "Mayo 2026", "May 2026", "5", "05/2026", etc.
+    try:
+        with engine.connect() as conn:
+            # Postgres: extraer mes desde fecha cuando este disponible
+            conn.execute(text("""
+                UPDATE movimientos_banco
+                SET mes = EXTRACT(MONTH FROM fecha)::text
+                WHERE fecha IS NOT NULL
+                  AND (mes IS NULL OR mes !~ '^[0-9]{1,2}$' OR LENGTH(mes) > 2)
+            """))
+            conn.commit()
+        print("[db] mes normalizado a numero (1-12)")
+    except Exception as ex:
+        print(f"[db] Warning normalize mes: {ex}")
+
     # 3. Backfill organizacion_id=1 en tablas existentes (Caneland)
     backfills = [
         "UPDATE users SET organizacion_id=1 WHERE organizacion_id IS NULL",

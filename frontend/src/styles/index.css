@@ -132,10 +132,25 @@ body {
   .row-um { @apply bg-emerald-50/50 dark:bg-green-900/10; }
   .row-um:hover { @apply bg-emerald-50 dark:bg-green-900/20; }
 
-  /* Fila compacta 15px tipo Excel Macro */
-  .row-15 { height: 15px; }
-  .row-15 > td { @apply py-0 leading-[13px] text-[11px]; }
-  .row-15 > td .pill { @apply py-0 px-1 leading-[12px] inline-block align-middle; }
+  /* Fila compacta 15px tipo Excel Macro — CSS plano (mas seguro que @apply con arbitrary values) */
+  .row-15 { height: 15px !important; }
+  .row-15 > td {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    line-height: 13px !important;
+    font-size: 11px !important;
+    height: 15px !important;
+  }
+  .row-15 > td * { line-height: 13px !important; }
+  .row-15 > td .pill {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    line-height: 12px !important;
+    display: inline-block;
+    vertical-align: middle;
+  }
 
   /* Números y montos */
   .monto { @apply font-mono tabular-nums dark:text-ml-green-bright; }
