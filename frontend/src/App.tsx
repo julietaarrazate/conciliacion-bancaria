@@ -8,6 +8,7 @@ import { Historial } from '@/pages/Historial'
 import { Auditoria } from '@/pages/Auditoria'
 import { Usuarios } from '@/pages/Usuarios'
 import { Movimientos } from '@/pages/Movimientos'
+import { Conciliaciones } from '@/pages/Conciliaciones'
 import { Bulk } from '@/pages/Bulk'
 import { Clientes } from '@/pages/Clientes'
 import { Perfil } from '@/pages/Perfil'
@@ -109,6 +110,7 @@ export function App() {
             </ProtectedRoute>
           } />
           <Route path="/movimientos" element={<Movimientos />} />
+          <Route path="/conciliaciones" element={<Conciliaciones />} />
           <Route path="/historial" element={<Historial />} />
           <Route
             path="/auditoria"

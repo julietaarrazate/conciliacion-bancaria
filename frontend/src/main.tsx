@@ -7,3 +7,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 )
+
+// Marca a la app como booteada para el watchdog en index.html
+;(window as any).__appBooted = true

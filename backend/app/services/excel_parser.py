@@ -154,7 +154,11 @@ KEYWORDS_TITULAR = ["titular","concepto","descripcion","glosa","detalle","nombre
 KEYWORDS_ORDEN   = ["orden","nro. de referencia","nro","numero","secuencia","referencia"]
 KEYWORDS_SALDO   = ["saldo","balance"]
 KEYWORDS_MES     = ["mes","period","periodo"]
+KEYWORDS_CLIENTE_ACRED = ["cliente acreditado", "cliente acredit"]
+KEYWORDS_FECHA_ACRED   = ["fecha acred", "fecha de acred"]
 
+# Bloquear "cliente" / "acred" como TITULAR (no confundir con concepto),
+# pero seguir permitiendolos como columnas propias de cliente_acred/fecha_acred.
 BLOCKLIST = {"acred", "acreditad", "cliente"}
 
 def _match_kw(header, keywords):
@@ -163,13 +167,25 @@ def _match_kw(header, keywords):
         return False
     return any(k in h for k in keywords)
 
+def _match_kw_raw(header, keywords):
+    h = header.lower().strip()
+    return any(k in h for k in keywords)
+
 def detectar_columnas(ws):
-    cols = {"hdr_row":1,"monto":None,"fecha":None,"titular":None,"orden":None,"saldo":None,"mes":None}
+    cols = {"hdr_row":1,"monto":None,"fecha":None,"titular":None,"orden":None,
+            "saldo":None,"mes":None,"cliente_acred":None,"fecha_acred":None}
     for r in range(1, min(13, ws.max_row + 1)):
         encontrados = {}
         for c in range(1, ws.max_column + 1):
             h = str(ws.cell(r, c).value or "").lower().strip()
             if not h:
+                continue
+            # Cliente acreditado / Fecha acred (columnas propias del extracto exportado)
+            if _match_kw_raw(h, KEYWORDS_CLIENTE_ACRED):
+                encontrados.setdefault("cliente_acred", c)
+                continue
+            if _match_kw_raw(h, KEYWORDS_FECHA_ACRED):
+                encontrados.setdefault("fecha_acred", c)
                 continue
             if _match_kw(h, KEYWORDS_MONTO):
                 encontrados.setdefault("monto", c)
@@ -209,13 +225,25 @@ def parsear_generico(ws, cols):
         orden   = ws.cell(row, cols["orden"]).value                  if cols["orden"]   else None
         saldo   = _parse_monto(ws.cell(row, cols["saldo"]).value)    if cols["saldo"]   else None
         mes_val = str(ws.cell(row, cols["mes"]).value or "")         if cols["mes"]     else None
+
+        cliente_acred = None
+        fecha_acred = None
+        if cols.get("cliente_acred"):
+            v = ws.cell(row, cols["cliente_acred"]).value
+            if v is not None and str(v).strip():
+                cliente_acred = str(v).strip()
+        if cols.get("fecha_acred"):
+            fecha_acred = _parse_fecha(ws.cell(row, cols["fecha_acred"]).value)
+
         movimientos.append({
             "orden":   int(orden) if isinstance(orden,(int,float)) else None,
             "fecha":   fecha,
             "mes":     mes_val or (fecha.strftime("%B %Y") if fecha else None),
             "titular": titular.strip() or None,
             "monto":   abs(monto),
-            "saldo":   saldo
+            "saldo":   saldo,
+            "cliente_acreditado": cliente_acred,
+            "fecha_acred": fecha_acred,
         })
     return movimientos
 

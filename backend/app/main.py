@@ -256,6 +256,7 @@ async def security_headers(request: Request, call_next):
 app.include_router(auth.router)
 app.include_router(me.router)
 app.include_router(extractos.router)
+app.include_router(extractos.conciliaciones_router)
 app.include_router(planillas.router)
 app.include_router(historial.router)
 app.include_router(auditoria.router)

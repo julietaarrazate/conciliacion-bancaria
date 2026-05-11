@@ -3,15 +3,15 @@ Mergea Ultimos Movimientos (UM) con el extracto existente.
 
 Estrategia de corte:
   1. Buscar el punto de solapamiento usando (saldo, monto) — el saldo es un
-     acumulado unico por movimiento, asi que la combinacion (saldo, monto) es
-     practicamente un fingerprint.
+     acumulado unico por movimiento, asi que (saldo, monto) es un fingerprint.
+     Usa tolerancia de 0.01 para tolerar redondeos de floats.
   2. Fallback: deduplicar por (fecha, monto, titular_normalizado).
   3. Solo agregar movimientos que estan ANTES del corte (mas nuevos).
   4. Asignar numeros de orden progresivos continuando desde el maximo existente.
 """
 
 import re
-from typing import List, Tuple, Optional, Set
+from typing import List, Optional
 from datetime import date, datetime
 from sqlalchemy.orm import Session
 from app.models.extracto import MovimientoBanco
@@ -26,18 +26,37 @@ def _normalizar_titular(titular: Optional[str]) -> str:
     return ' '.join(palabras)
 
 
-def _clave_saldo(monto, saldo) -> Optional[Tuple]:
-    if saldo is None:
+def _to_float(v):
+    try:
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
         return None
-    return (round(float(monto or 0), 2), round(float(saldo), 2))
 
 
-def _clave_texto(fecha, monto, titular) -> Tuple:
-    return (
-        fecha.isoformat() if isinstance(fecha, date) else str(fecha),
-        round(float(monto or 0), 2),
-        _normalizar_titular(titular)
-    )
+def _match_existente(mov_data: dict, existentes_idx: list) -> bool:
+    """
+    True si el mov_data ya esta en existentes_idx.
+    existentes_idx es lista de tuplas (monto, saldo, fecha_iso, titular_norm).
+    Match por (saldo, monto) con tolerancia 0.01, fallback (fecha, monto, titular).
+    """
+    monto_n = _to_float(mov_data.get("monto"))
+    saldo_n = _to_float(mov_data.get("saldo"))
+    fecha = mov_data.get("fecha")
+    fecha_iso = fecha.isoformat() if isinstance(fecha, date) else (str(fecha) if fecha else "")
+    titular_norm = _normalizar_titular(mov_data.get("titular"))
+
+    for (m_e, s_e, f_e, t_e) in existentes_idx:
+        if (saldo_n is not None and s_e is not None
+            and abs(saldo_n - s_e) < 0.01
+            and monto_n is not None and m_e is not None
+            and abs(monto_n - m_e) < 0.01):
+            return True
+        if (fecha_iso == f_e
+            and monto_n is not None and m_e is not None
+            and abs(monto_n - m_e) < 0.01
+            and titular_norm == t_e):
+            return True
+    return False
 
 
 def mergear_movimientos(db: Session, extracto_id: int, movimientos_nuevos: List[dict]) -> dict:
@@ -47,60 +66,58 @@ def mergear_movimientos(db: Session, extracto_id: int, movimientos_nuevos: List[
         .all()
     )
 
-    claves_saldo: Set[Tuple] = set()
-    claves_texto: Set[Tuple] = set()
+    existentes_idx = []
     max_orden = 0
-
     for m in existentes:
-        cs = _clave_saldo(m.monto, m.saldo)
-        if cs:
-            claves_saldo.add(cs)
-        claves_texto.add(_clave_texto(m.fecha, m.monto, m.titular))
+        existentes_idx.append((
+            _to_float(m.monto),
+            _to_float(m.saldo),
+            m.fecha.isoformat() if isinstance(m.fecha, date) else (str(m.fecha) if m.fecha else ""),
+            _normalizar_titular(m.titular),
+        ))
         if m.orden and m.orden > max_orden:
             max_orden = m.orden
 
     agregados = 0
     duplicados = 0
-    corte_idx = None
+    corte_idx: Optional[int] = None
 
+    # El UM viene ORDENADO del mas nuevo (arriba) al mas viejo (abajo).
+    # Todo lo previo al primer match es nuevo; lo que sigue ya esta en el extracto.
+    nuevos_a_agregar: List[dict] = []
     for i, mov_data in enumerate(movimientos_nuevos):
-        cs = _clave_saldo(mov_data.get("monto"), mov_data.get("saldo"))
-        ct = _clave_texto(mov_data.get("fecha"), mov_data.get("monto"), mov_data.get("titular"))
-
-        if (cs and cs in claves_saldo) or ct in claves_texto:
-            duplicados += 1
+        if _match_existente(mov_data, existentes_idx):
             if corte_idx is None:
                 corte_idx = i
+            duplicados += 1
             continue
-
         if corte_idx is not None:
             duplicados += 1
             continue
+        nuevos_a_agregar.append(mov_data)
 
-        max_orden += 1
+    # Orden: el mas nuevo del UM = max_orden + n (mas alto); el mas viejo = max_orden + 1.
+    n = len(nuevos_a_agregar)
+    for idx, mov_data in enumerate(nuevos_a_agregar):
+        orden_nuevo = max_orden + (n - idx)
         fecha = mov_data.get("fecha")
         if isinstance(fecha, datetime):
             fecha = fecha.date()
-
         mes = mov_data.get("mes")
         if not mes and fecha:
             mes = str(fecha.month)
-
         db.add(MovimientoBanco(
             extracto_id=extracto_id,
-            orden=max_orden,
+            orden=orden_nuevo,
             fecha=fecha,
             mes=mes,
             titular=mov_data.get("titular"),
             monto=mov_data.get("monto"),
             saldo=mov_data.get("saldo"),
-            source='um'
+            cliente_acreditado=mov_data.get("cliente_acreditado"),
+            fecha_acred=mov_data.get("fecha_acred"),
+            source='um',
         ))
-
-        cs_new = _clave_saldo(mov_data.get("monto"), mov_data.get("saldo"))
-        if cs_new:
-            claves_saldo.add(cs_new)
-        claves_texto.add(ct)
         agregados += 1
 
     db.commit()
@@ -108,5 +125,5 @@ def mergear_movimientos(db: Session, extracto_id: int, movimientos_nuevos: List[
         "agregados": agregados,
         "duplicados": duplicados,
         "corte_en": corte_idx,
-        "total_recibido": len(movimientos_nuevos)
+        "total_recibido": len(movimientos_nuevos),
     }

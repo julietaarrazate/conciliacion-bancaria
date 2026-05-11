@@ -70,23 +70,48 @@ async def upload_extracto(file: UploadFile = File(...),
         movs = parsed["movimientos"]
         fp = _fingerprint(movs)
 
-        # Detectar duplicado
+        # Si ya existe un extracto identico (fingerprint match) → upsert de acreditados:
+        # actualizar cliente_acreditado y fecha_acred en movs existentes cuando el archivo
+        # nuevo trae info que el guardado no tiene. NO tirar 409: el usuario espera que
+        # subir el extracto "actualice" lo que ya esta.
         existente = db.query(ExtractoBancario).filter(ExtractoBancario.fingerprint == fp).first()
         if existente:
-            raise HTTPException(409, {
-                "message": f"Este extracto ya fue cargado (#{existente.id} — {existente.nombre_archivo}, {len(existente.movimientos)} movimientos). "
-                           f"Si querés agregar movimientos nuevos, usá 'Agregar UM'.",
-                "extracto_id": existente.id,
-                "nombre": existente.nombre_archivo
-            })
+            actualizados = 0
+            for m in existente.movimientos:
+                cliente_nuevo = None
+                fecha_nueva = None
+                # buscar el correspondiente en el nuevo archivo por (orden) o (saldo, monto)
+                for n in movs:
+                    if (m.orden is not None and n.get("orden") == m.orden) or (
+                        m.saldo is not None and n.get("saldo") is not None
+                        and abs(float(m.saldo) - float(n["saldo"])) < 0.01
+                        and abs(float(m.monto) - float(n.get("monto") or 0)) < 0.01
+                    ):
+                        cliente_nuevo = n.get("cliente_acreditado")
+                        fecha_nueva = n.get("fecha_acred")
+                        break
+                if cliente_nuevo and not m.cliente_acreditado:
+                    m.cliente_acreditado = cliente_nuevo
+                    actualizados += 1
+                if fecha_nueva and not m.fecha_acred:
+                    m.fecha_acred = fecha_nueva
+            db.commit()
+            db.refresh(existente)
+            registrar_log(db, current_user.id, "extractos_bancarios", existente.id, "UPSERT_ACRED",
+                          {"archivo": file.filename, "actualizados": actualizados})
+            return existente
 
         extracto = ExtractoBancario(nombre_archivo=file.filename, creado_por=current_user.id, fingerprint=fp)
         db.add(extracto)
         db.flush()
         for m in movs:
-            db.add(MovimientoBanco(extracto_id=extracto.id, orden=m.get("orden"),
-                                   fecha=m.get("fecha"), mes=m.get("mes"),
-                                   titular=m.get("titular"), monto=m.get("monto"), saldo=m.get("saldo")))
+            db.add(MovimientoBanco(
+                extracto_id=extracto.id, orden=m.get("orden"),
+                fecha=m.get("fecha"), mes=m.get("mes"),
+                titular=m.get("titular"), monto=m.get("monto"), saldo=m.get("saldo"),
+                cliente_acreditado=m.get("cliente_acreditado"),
+                fecha_acred=m.get("fecha_acred"),
+            ))
         db.commit()
         db.refresh(extracto)
         registrar_log(db, current_user.id, "extractos_bancarios", extracto.id, "INSERT",
@@ -338,3 +363,145 @@ def get_extracto(extracto_id: int, db: Session = Depends(get_db), _: User = Depe
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
     return extracto
+
+
+# ─── Conciliaciones globales (cross-extracto) ───────────────────────────
+# IMPORTANTE: estas rutas van con un prefijo distinto para que no choquen
+# con /extractos/{id}. Se montan abajo como APIRouter separado.
+from fastapi import APIRouter as _AR
+
+conciliaciones_router = _AR(prefix="/conciliaciones", tags=["conciliaciones"])
+
+
+def _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, titular):
+    q = db.query(MovimientoBanco).filter(
+        MovimientoBanco.cliente_acreditado.isnot(None),
+        MovimientoBanco.cliente_acreditado != "",
+        ~MovimientoBanco.cliente_acreditado.ilike("no identificado"),
+    )
+    # Scope por organizacion
+    if not current_user.is_superadmin:
+        q = q.filter(MovimientoBanco.organizacion_id == (current_user.organizacion_id or 1))
+    if cliente:
+        q = q.filter(MovimientoBanco.cliente_acreditado.ilike(f"%{cliente}%"))
+    if titular:
+        q = q.filter(MovimientoBanco.titular.ilike(f"%{titular}%"))
+    if desde:
+        q = q.filter(MovimientoBanco.fecha_acred >= desde)
+    if hasta:
+        q = q.filter(MovimientoBanco.fecha_acred <= hasta)
+    if monto_min is not None:
+        q = q.filter(MovimientoBanco.monto >= monto_min)
+    if monto_max is not None:
+        q = q.filter(MovimientoBanco.monto <= monto_max)
+    return q
+
+
+@conciliaciones_router.get("")
+def listar_conciliaciones(
+    cliente: Optional[str] = Query(None),
+    titular: Optional[str] = Query(None),
+    desde: Optional[date] = Query(None),
+    hasta: Optional[date] = Query(None),
+    monto_min: Optional[float] = Query(None),
+    monto_max: Optional[float] = Query(None),
+    skip: int = 0, limit: int = 500,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Lista todas las acreditaciones (movimientos con cliente_acreditado) cruzando
+    TODOS los extractos del usuario. Permite filtrar por cliente, titular, rango
+    de fecha de acreditacion y rango de monto.
+    """
+    q = _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, titular)
+    total = q.count()
+    rows = (
+        q.order_by(MovimientoBanco.fecha_acred.desc().nulls_last(),
+                   MovimientoBanco.fecha.desc().nulls_last(),
+                   MovimientoBanco.id.desc())
+        .offset(skip).limit(limit if limit > 0 else 500).all()
+    )
+    items = [{
+        "id": m.id,
+        "extracto_id": m.extracto_id,
+        "orden": m.orden,
+        "fecha": m.fecha,
+        "titular": m.titular,
+        "monto": m.monto,
+        "saldo": m.saldo,
+        "cliente_acreditado": m.cliente_acreditado,
+        "fecha_acred": m.fecha_acred,
+    } for m in rows]
+    suma = sum(m.monto or 0 for m in rows)
+    return {"total": total, "items": items, "suma": round(suma, 2)}
+
+
+@conciliaciones_router.get("/export")
+def export_conciliaciones(
+    cliente: Optional[str] = Query(None),
+    titular: Optional[str] = Query(None),
+    desde: Optional[date] = Query(None),
+    hasta: Optional[date] = Query(None),
+    monto_min: Optional[float] = Query(None),
+    monto_max: Optional[float] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    q = _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, titular)
+    rows = q.order_by(MovimientoBanco.fecha_acred.desc().nulls_last(),
+                      MovimientoBanco.id.desc()).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Conciliaciones"
+
+    titulo = "Conciliaciones"
+    detalle = []
+    if cliente: detalle.append(f"cliente={cliente}")
+    if desde: detalle.append(f"desde={desde}")
+    if hasta: detalle.append(f"hasta={hasta}")
+    if titular: detalle.append(f"titular={titular}")
+    ws.cell(row=1, column=1, value=titulo + (" — " + " · ".join(detalle) if detalle else ""))
+    ws.cell(row=1, column=1).font = Font(bold=True, size=14)
+
+    headers = ["Fecha mov.", "Orden", "Titular", "Importe", "Saldo", "Cliente", "Fecha acred.", "Extracto #"]
+    for i, h in enumerate(headers, start=1):
+        c = ws.cell(row=3, column=i, value=h)
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="1F4E78")
+        c.alignment = Alignment(horizontal="center")
+
+    total_monto = 0.0
+    for i, m in enumerate(rows, start=4):
+        ws.cell(row=i, column=1, value=m.fecha).number_format = "DD/MM/YYYY"
+        ws.cell(row=i, column=2, value=m.orden)
+        ws.cell(row=i, column=3, value=m.titular)
+        ws.cell(row=i, column=4, value=m.monto).number_format = "#,##0.00"
+        ws.cell(row=i, column=5, value=m.saldo).number_format = "#,##0.00"
+        ws.cell(row=i, column=6, value=m.cliente_acreditado)
+        ws.cell(row=i, column=7, value=m.fecha_acred).number_format = "DD/MM/YYYY"
+        ws.cell(row=i, column=8, value=m.extracto_id)
+        total_monto += float(m.monto or 0)
+
+    n = len(rows)
+    foot = 4 + n
+    ws.cell(row=foot, column=3, value="TOTAL").font = Font(bold=True)
+    ws.cell(row=foot, column=4, value=round(total_monto, 2)).font = Font(bold=True)
+    ws.cell(row=foot, column=4).number_format = "#,##0.00"
+
+    for col_letter, width in [("A",12),("B",8),("C",40),("D",14),("E",14),("F",18),("G",12),("H",12)]:
+        ws.column_dimensions[col_letter].width = width
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    fecha_str = datetime.now().strftime('%Y%m%d')
+    filename = f"conciliaciones_{fecha_str}.xlsx"
+    return StreamingResponse(buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})

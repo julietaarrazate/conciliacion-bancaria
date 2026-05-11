@@ -331,6 +331,40 @@ class ApiClient {
     URL.revokeObjectURL(url)
   }
 
+  // ─── Conciliaciones (cross-extracto) ─────────────────────────
+  async listConciliaciones(filters: {
+    cliente?: string; titular?: string;
+    desde?: string; hasta?: string;
+    monto_min?: number; monto_max?: number;
+    limit?: number; skip?: number;
+  } = {}): Promise<{ total: number; items: any[]; suma: number }> {
+    const params: Record<string, string | number> = {}
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') params[k] = v as string | number
+    })
+    const res = await this.client.get('/conciliaciones', { params })
+    return res.data
+  }
+
+  async exportConciliaciones(filters: {
+    cliente?: string; titular?: string;
+    desde?: string; hasta?: string;
+    monto_min?: number; monto_max?: number;
+  } = {}): Promise<void> {
+    const params: Record<string, string | number> = {}
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') params[k] = v as string | number
+    })
+    const res = await this.client.get('/conciliaciones/export', { params, responseType: 'blob' })
+    const url = URL.createObjectURL(new Blob([res.data]))
+    const a = document.createElement('a')
+    const cd = res.headers['content-disposition'] || ''
+    const match = cd.match(/filename="([^"]+)"/)
+    a.download = match ? match[1] : `conciliaciones_${new Date().toISOString().slice(0,10)}.xlsx`
+    a.href = url; a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // Bulk reconciliar: multiples planillas de un mismo extracto
   async bulkConciliar(
     extractoId: number,
