@@ -187,6 +187,26 @@ export const Clientes: React.FC = () => {
     finally { setSavingId(null) }
   }
 
+  const handleBorrarCliente = async (clienteId: number, clienteNombre: string, totalArchivos: number) => {
+    const tieneArchivos = totalArchivos > 0
+    const mensaje = tieneArchivos
+      ? `¿Borrar "${clienteNombre}"?\n\nTiene ${totalArchivos} archivo(s) guardados.\nSe van a borrar TODOS los archivos y las acreditaciones quedarán sin cliente asignado.`
+      : `¿Borrar "${clienteNombre}"?\n\n(Sin archivos guardados)`
+    if (!confirm(mensaje)) return
+    if (tieneArchivos && !confirm(`Última confirmación: ¿borrar "${clienteNombre}" y sus ${totalArchivos} archivo(s)?`)) return
+
+    setMsg('')
+    try {
+      await apiClient.client.delete(`/clientes/${clienteId}`, {
+        params: tieneArchivos ? { force: true } : {}
+      })
+      setMsg(`✓ Cliente "${clienteNombre}" borrado`)
+      cargar()
+    } catch (e: any) {
+      setMsg(`✗ ${e.response?.data?.detail?.message || e.response?.data?.detail || 'Error al borrar'}`)
+    }
+  }
+
   const handleCrearCliente = async (org_id: number) => {
     if (!nuevoNombre.trim()) return
     setCreandoLoading(true)
@@ -300,6 +320,13 @@ export const Clientes: React.FC = () => {
                               title="Acreditar transferencia desde comprobante"
                             >
                               💸 Acreditar
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleBorrarCliente(cliente.id, cliente.nombre, cliente.total_archivos) }}
+                              className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex-shrink-0"
+                              title="Borrar cliente"
+                            >
+                              🗑
                             </button>
                             <button onClick={() => setOpenCli(o => ({ ...o, [cliKey]: !cliOpen }))}
                               className="text-gray-400 text-xs px-1">{cliOpen ? '▲' : '▼'}</button>

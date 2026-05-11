@@ -488,6 +488,74 @@ def acreditar_movimiento_a_cliente(
     }
 
 
+@router.delete("/{cliente_id}")
+def borrar_cliente(cliente_id: int,
+                   force: bool = False,
+                   db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
+    """
+    Borra un cliente. Si tiene planillas asociadas y no se manda ?force=true,
+    devuelve 409 con la cantidad de archivos para que el frontend pida
+    confirmacion al usuario. Con force=true, borra cliente + planillas + filas
+    y NULL al cliente_acreditado de los movimientos.
+    """
+    from app.models.cliente import Cliente
+    from app.models.planilla import Planilla, PlanillaRow
+    from app.services.auditoria import registrar_log
+
+    cli = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cli:
+        raise HTTPException(404, "Cliente no encontrado")
+
+    # Scope: usuarios no superadmin solo pueden borrar de su org
+    if not current_user.is_superadmin and cli.organizacion_id != (current_user.organizacion_id or 1):
+        raise HTTPException(403, "No podes borrar clientes de otra organizacion")
+
+    planillas = db.query(Planilla).filter(Planilla.cliente_id == cliente_id).all()
+    n_planillas = len(planillas)
+
+    if n_planillas > 0 and not force:
+        raise HTTPException(409, {
+            "message": f"El cliente '{cli.nombre}' tiene {n_planillas} planilla(s) guardada(s). "
+                       f"Mandá force=true para borrar TODO (cliente + planillas + acreditaciones).",
+            "planillas": n_planillas,
+            "nombre": cli.nombre,
+        })
+
+    nombre = cli.nombre
+    try:
+        # 1. Limpiar cliente_acreditado en movimientos que tenian este cliente
+        movs_acreditados = db.query(MovimientoBanco).filter(
+            MovimientoBanco.cliente_acreditado.ilike(nombre)
+        ).all()
+        for m in movs_acreditados:
+            m.cliente_acreditado = None
+            m.fecha_acred = None
+        db.flush()
+
+        # 2. Borrar planillas (cascade borra los rows)
+        for p in planillas:
+            db.delete(p)
+        db.flush()
+
+        # 3. Borrar cliente
+        db.delete(cli)
+        db.commit()
+
+        registrar_log(db, current_user.id, "clientes", cliente_id, "DELETE",
+                      {"nombre": nombre, "planillas_borradas": n_planillas,
+                       "movimientos_liberados": len(movs_acreditados)})
+        return {
+            "ok": True,
+            "mensaje": f"Cliente '{nombre}' borrado",
+            "planillas_borradas": n_planillas,
+            "movimientos_liberados": len(movs_acreditados),
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Error al borrar: {str(e)}")
+
+
 @router.post("")
 def crear_cliente(payload: dict,
                   db: Session = Depends(get_db),

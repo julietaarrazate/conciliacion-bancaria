@@ -182,7 +182,25 @@ botón "+ Nuevo cliente" de cada organización)
 
 ---
 
-## Versión v2.1 — 2026-05-11 (snapshot estable)
+## Versión v2.2 — 2026-05-11 (snapshot estable)
+
+Tag git: v2.2 · agrega sobre v2.1:
+- Acreditacion manual desde comprobante (Cuenta DNI / Mercado Pago / foto):
+  endpoint POST /clientes/{id}/buscar-movimiento con campos opcionales
+  (importe, fecha, referencia, origen — al menos 1) + POST
+  /clientes/movimientos/{id}/acreditar que ademas crea una Planilla manual
+  con 1 fila para que aparezca en la carpeta del cliente del mes.
+- Modal "💸 Acreditar" en cada cliente de /clientes con campo separado
+  "Fecha de acreditacion" (default hoy, editable).
+- Borrado de cliente desde /clientes (boton 🗑): valida planillas y pide
+  force=true. Limpia cliente_acreditado en movimientos asociados.
+- Tabla en Movimientos y Conciliaciones con pl-1 (arrima al margen izq).
+- Exports Excel con altura de fila = 15 (alto 15 estandar Excel, ~25px).
+- Descarga planilla: nombre "{cliente} acreditado {d.m}.xlsx".
+- CRITICO documentado: commits deben tener author Julieta para pasar
+  Vercel seatBlock COMMIT_AUTHOR_REQUIRED.
+
+## Versión v2.1 — 2026-05-11
 
 Tag git: v2.1 · commits clave: a642a5f, 1eb419f, fae2c18, 51cef80, 1488c8a, b7796207
 
