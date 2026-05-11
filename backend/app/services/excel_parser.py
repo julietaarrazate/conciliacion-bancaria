@@ -235,10 +235,24 @@ def parsear_generico(ws, cols):
         if cols.get("fecha_acred"):
             fecha_acred = _parse_fecha(ws.cell(row, cols["fecha_acred"]).value)
 
+        # Mes: SOLO el numero (ej "5"), no "Mayo 2026".
+        # Si en el Excel viene "Mayo" o "5" o "05/2026", normalizamos a numero.
+        def _mes_normalizado(v, f):
+            if v:
+                s = str(v).strip()
+                # si ya es un numero
+                try:
+                    n = int(float(s))
+                    if 1 <= n <= 12:
+                        return str(n)
+                except ValueError:
+                    pass
+            return str(f.month) if f else None
+
         movimientos.append({
             "orden":   int(orden) if isinstance(orden,(int,float)) else None,
             "fecha":   fecha,
-            "mes":     mes_val or (fecha.strftime("%B %Y") if fecha else None),
+            "mes":     _mes_normalizado(mes_val, fecha),
             "titular": titular.strip() or None,
             "monto":   abs(monto),
             "saldo":   saldo,

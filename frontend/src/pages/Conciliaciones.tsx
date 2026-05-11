@@ -45,10 +45,10 @@ export const Conciliaciones: React.FC = () => {
   const [montoMin, setMontoMin] = useState('')
   const [montoMax, setMontoMax] = useState('')
 
-  const dCliente = useDebounce(cliente, 350)
-  const dTitular = useDebounce(titular, 350)
-  const dMontoMin = useDebounce(montoMin, 350)
-  const dMontoMax = useDebounce(montoMax, 350)
+  const dCliente = useDebounce(cliente, 800)
+  const dTitular = useDebounce(titular, 800)
+  const dMontoMin = useDebounce(montoMin, 800)
+  const dMontoMax = useDebounce(montoMax, 800)
 
   const filtros = useMemo(() => {
     const f: any = {}
@@ -174,19 +174,19 @@ export const Conciliaciones: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
                 {items.map(m => (
-                  <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/40">
-                    <td className="px-2 py-1 whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
-                    <td className="px-2 py-1 max-w-[260px]">
+                  <tr key={m.id} className="row-15 hover:bg-gray-50 dark:hover:bg-slate-700/40">
+                    <td className="px-2 whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
+                    <td className="px-2 max-w-[260px]">
                       <p className="truncate dark:text-gray-200" title={m.titular || ''}>{m.titular || '—'}</p>
                     </td>
-                    <td className="px-2 py-1 text-right font-mono font-semibold dark:text-white">{fmtARS(m.monto)}</td>
-                    <td className="px-2 py-1">
-                      <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium">
+                    <td className="px-2 text-right font-mono font-semibold dark:text-white">{fmtARS(m.monto)}</td>
+                    <td className="px-2">
+                      <span className="pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium">
                         {m.cliente_acreditado}
                       </span>
                     </td>
-                    <td className="px-2 py-1 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(m.fecha_acred)}</td>
-                    <td className="px-2 py-1 text-center text-gray-400 font-mono">#{m.extracto_id}</td>
+                    <td className="px-2 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(m.fecha_acred)}</td>
+                    <td className="px-2 text-center text-gray-400 font-mono">#{m.extracto_id}</td>
                   </tr>
                 ))}
               </tbody>

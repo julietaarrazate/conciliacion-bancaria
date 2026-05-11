@@ -132,6 +132,11 @@ body {
   .row-um { @apply bg-emerald-50/50 dark:bg-green-900/10; }
   .row-um:hover { @apply bg-emerald-50 dark:bg-green-900/20; }
 
+  /* Fila compacta 15px tipo Excel Macro */
+  .row-15 { height: 15px; }
+  .row-15 > td { @apply py-0 leading-[13px] text-[11px]; }
+  .row-15 > td .pill { @apply py-0 px-1 leading-[12px] inline-block align-middle; }
+
   /* Números y montos */
   .monto { @apply font-mono tabular-nums dark:text-ml-green-bright; }
 }

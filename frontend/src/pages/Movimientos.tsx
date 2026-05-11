@@ -98,7 +98,7 @@ export const Movimientos: React.FC = () => {
     })
   }, [])
 
-  const debouncedFilters = useDebounce(filters, 400)
+  const debouncedFilters = useDebounce(filters, 800)
 
   const buildApiFilters = useCallback((): MovimientosFiltros => {
     const f: MovimientosFiltros = { limit: 0 }
@@ -389,11 +389,13 @@ export const Movimientos: React.FC = () => {
                   return (
                     <tr key={m.id}
                       onDoubleClick={() => tab === 'um' && m.source === 'um' && startEdit(m)}
-                      className={`transition-colors leading-[15px] ${m.source === 'um' ? 'row-um' : 'hover:bg-gray-50 dark:hover:bg-slate-700/40'} ${tab === 'um' && m.source === 'um' ? 'cursor-pointer' : ''}`}>
-                      <td className="px-2 py-px text-center text-gray-400 dark:text-gray-500 font-mono">{m.orden ?? '—'}</td>
-                      <td className="px-2 py-px whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
-                      <td className="px-2 py-px text-gray-500 dark:text-gray-400">{m.mes || '—'}</td>
-                      <td className="px-2 py-px max-w-[220px]">
+                      className={`transition-colors row-15 ${m.source === 'um' ? 'row-um' : 'hover:bg-gray-50 dark:hover:bg-slate-700/40'} ${tab === 'um' && m.source === 'um' ? 'cursor-pointer' : ''}`}>
+                      <td className="px-2 text-center text-gray-400 dark:text-gray-500 font-mono">{m.orden ?? '—'}</td>
+                      <td className="px-2 whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
+                      <td className="px-2 text-gray-500 dark:text-gray-400">{
+                        m.fecha ? new Date(m.fecha + 'T00:00:00').getMonth() + 1 : (m.mes || '—')
+                      }</td>
+                      <td className="px-2 max-w-[220px]">
                         {isEditing ? (
                           <input className="input-field !py-0 text-xs w-full" value={editValues.titular}
                             onChange={e => setEditValues(p => ({ ...p, titular: e.target.value }))}
@@ -403,22 +405,22 @@ export const Movimientos: React.FC = () => {
                           <p className="truncate dark:text-gray-200" title={m.titular || ''}>{m.titular || '—'}</p>
                         )}
                       </td>
-                      <td className="px-2 py-px text-right font-mono font-semibold dark:text-white">
+                      <td className="px-2 text-right font-mono font-semibold dark:text-white">
                         {isEditing ? (
                           <input className="input-field !py-0 text-xs text-right w-24" value={editValues.monto}
                             onChange={e => setEditValues(p => ({ ...p, monto: e.target.value }))}
                             onKeyDown={e => { if (e.key === 'Enter') saveEdit(m); if (e.key === 'Escape') setEditingId(null) }} />
                         ) : fmtARS(m.monto)}
                       </td>
-                      <td className="px-2 py-px text-right font-mono text-gray-400 dark:text-gray-500">
+                      <td className="px-2 text-right font-mono text-gray-400 dark:text-gray-500">
                         {m.saldo != null ? fmtARS(m.saldo) : '—'}
                       </td>
-                      <td className="px-2 py-px">
+                      <td className="px-2">
                         {m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
-                          ? <span className="px-1.5 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium">{m.cliente_acreditado}</span>
+                          ? <span className="pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium">{m.cliente_acreditado}</span>
                           : <span className="text-gray-300 dark:text-gray-600 text-[10px]">—</span>}
                       </td>
-                      <td className="px-2 py-px whitespace-nowrap text-gray-500 dark:text-gray-400">
+                      <td className="px-2 whitespace-nowrap text-gray-500 dark:text-gray-400">
                         {fmtDate(m.fecha_acred)}
                         {isEditing && (
                           <div className="flex gap-1 mt-0.5">
