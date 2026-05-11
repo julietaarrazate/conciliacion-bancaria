@@ -22,18 +22,23 @@ Email: julietaarrazate@gmail.com (superadmin del sistema)
 - Código: GitHub — julietaarrazate/conciliacion-bancaria
 - Keep-alive: UptimeRobot pinguea /health cada 5 min
 
-API keys para deploy:
-- Render API key: rnd_8Kqkb028Ochfw6eSOYZR3v2O7Cv2
+IDs publicos (no son secrets):
 - Render service ID: srv-d7pqt81j2pic73c0c6fg
-- Vercel token: vcp_7WrBR4fh27c7GFUQXxsF4IhzCQbvigylOwnG7RtzUD2cuadbOL2lz0D9
 - Vercel project ID: prj_cVINkspVm6j3B1fxOrdU81B0ehWg
 
-Para push a GitHub:
-  git push "https://julietaarrazate:TOKEN@github.com/julietaarrazate/conciliacion-bancaria.git" main
+Tokens/keys: NO van en este archivo (repo es privado pero igual mala practica).
+Julieta los maneja en su panel de cada servicio:
+- Render API key: dashboard.render.com → Account Settings → API Keys
+- Vercel token: vercel.com/account/tokens
+- GitHub token: github.com/settings/tokens
+- SUPERADMIN_PASSWORD: env var en Render service
+
+Para push a GitHub (Julieta usa sus credenciales locales o el token guardado
+en su entorno de trabajo, NO compartirlo aqui).
 
 Para deploy manual de Render:
   curl -X POST https://api.render.com/v1/services/srv-d7pqt81j2pic73c0c6fg/deploys \
-    -H "Authorization: Bearer rnd_8Kqkb028Ochfw6eSOYZR3v2O7Cv2"
+    -H "Authorization: Bearer <RENDER_API_KEY>"
 
 ---
 
@@ -152,13 +157,33 @@ Caneland: requiere_cierre_periodo: false — no le afecta.
 
 ## Seguridad
 
-- Contraseñas: pbkdf2_sha256
+### Implementado
+- Contraseñas: pbkdf2_sha256 (no reversible)
 - JWT: 8 horas, sin refresh token
 - Rate limiting: login 10/min, register 5/min por IP (slowapi)
-- Headers de seguridad: X-Frame-Options, HSTS, XSS-Protection, etc.
-- Auditoría completa de todas las operaciones
+- Headers de seguridad: X-Frame-Options, HSTS, XSS-Protection, Referrer-Policy
+- CORS cerrado: solo dominio Vercel prod + previews + localhost dev
+  (puede ampliarse con env var EXTRA_CORS_ORIGINS="https://otro.com,...")
+- Auditoría completa de todas las operaciones (tabla auditoria)
 - Botón "Borrar todo" requiere escribir "BORRAR"
 - SUPERADMIN_PASSWORD nunca en código — env var en Render
+- Repo GitHub PRIVADO
+- HTTPS forzado (Vercel + Render + Neon Postgres SSL)
+- Multi-tenant aislado por organizacion_id en todas las queries
+
+### Cifrado de datos
+- En transito: HTTPS/TLS 1.2+ (todas las capas)
+- En reposo: Neon Postgres encripta el disco automaticamente
+- A nivel aplicacion: NO se cifran campos individuales (titular, CUIT, monto)
+  porque rompe el motor de conciliacion (no se puede ILIKE/filtrar campos
+  cifrados). Es estandar para apps de conciliacion B2B.
+
+### Pendientes de seguridad (roadmap)
+- 2FA opcional para superadmin
+- Tabla de JWT revocados (hoy un token comprometido vive 8hs)
+- Backups documentados: como hacer snapshot manual de Neon antes de cambios grandes
+- Procedimiento de rotacion de credenciales (que hacer si se compromete una key)
+- Sanitizar logs (verificar que no escupan datos sensibles)
 
 ---
 

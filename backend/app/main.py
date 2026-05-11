@@ -249,9 +249,19 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# CORS: cerrado al dominio de produccion + previews de Vercel + dev local.
+# Cualquier otro origen es rechazado.
+import os as _os
+_extra_origins = [o.strip() for o in _os.getenv("EXTRA_CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://conciliacion-bancaria-ten.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:5173",
+        *_extra_origins,
+    ],
+    allow_origin_regex=r"https://conciliacion-bancaria-.*-julietaarrazates-projects\.vercel\.app",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
