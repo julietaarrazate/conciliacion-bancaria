@@ -485,6 +485,12 @@ def export_conciliaciones(
         ws.cell(row=i, column=6, value=m.cliente_acreditado)
         ws.cell(row=i, column=7, value=m.fecha_acred).number_format = "DD/MM/YYYY"
         ws.cell(row=i, column=8, value=m.extracto_id)
+        # Altura fija ~15px y sin wrap_text para que el titular no agrande la fila
+        for col in range(1, 9):
+            c = ws.cell(row=i, column=col)
+            c.alignment = Alignment(horizontal=c.alignment.horizontal or "general",
+                                    vertical="center", wrap_text=False)
+        ws.row_dimensions[i].height = 11.25
         total_monto += float(m.monto or 0)
 
     n = len(rows)

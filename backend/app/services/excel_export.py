@@ -69,7 +69,13 @@ def export_movimientos(extracto_nombre: str, movimientos: List[dict]) -> bytes:
             ws.cell(row=i, column=8, value=fa).number_format = "DD/MM/YYYY"
 
         for col in range(1, 9):
-            ws.cell(row=i, column=col).border = BORDER
+            cell = ws.cell(row=i, column=col)
+            cell.border = BORDER
+            # wrap_text=False fuerza que el titular largo NO agrande la fila
+            cell.alignment = Alignment(horizontal=cell.alignment.horizontal or "general",
+                                       vertical="center", wrap_text=False)
+        # Altura fija ~15px (Excel usa puntos: 15px ≈ 11.25pt)
+        ws.row_dimensions[i].height = 11.25
 
     ws.auto_filter.ref = f"A5:H{5 + len(movimientos)}"
     _autosize(ws, 8)
@@ -252,8 +258,13 @@ def export_extracto_contador(extracto_nombre: str, movimientos: List[dict]) -> b
             c.border = BORDER
             if fmt:
                 c.number_format = fmt
-            if align:
-                c.alignment = Alignment(horizontal=align)
+            # vertical=center + wrap_text=False: la fila NO se agranda
+            # aunque el titular sea largo (estilo Excel Macro original).
+            c.alignment = Alignment(
+                horizontal=align or "general",
+                vertical="center",
+                wrap_text=False,
+            )
             return c
 
         wr(1, m.get("orden"), align="center")
@@ -268,6 +279,9 @@ def export_extracto_contador(extracto_nombre: str, movimientos: List[dict]) -> b
         if acred:
             c7.font = GREEN_FONT
         wr(8, m.get("fecha_acred"), "DD/MM/YYYY")
+
+        # Altura fija ~15px (15px ≈ 11.25pt en Excel)
+        ws.row_dimensions[i].height = 11.25
 
     # Fila de totales al pie
     tot_row = HDR_ROW + len(movs_sorted) + 1
