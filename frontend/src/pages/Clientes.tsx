@@ -81,6 +81,54 @@ export const Clientes: React.FC = () => {
   const [nuevoCuit, setNuevoCuit] = useState('')
   const [creandoLoading, setCreandoLoading] = useState(false)
 
+  // Modal acreditar comprobante
+  const [acreditarCli, setAcreditarCli] = useState<{ id: number; nombre: string } | null>(null)
+  const [acrMonto, setAcrMonto] = useState('')
+  const [acrFecha, setAcrFecha] = useState('')
+  const [acrRef, setAcrRef] = useState('')
+  const [acrOrigen, setAcrOrigen] = useState('')
+  const [acrCandidatos, setAcrCandidatos] = useState<any[]>([])
+  const [acrLoading, setAcrLoading] = useState(false)
+  const [acrConfirming, setAcrConfirming] = useState<number | null>(null)
+
+  const abrirAcreditar = (cliente: { id: number; nombre: string }) => {
+    setAcreditarCli(cliente)
+    setAcrMonto(''); setAcrFecha(''); setAcrRef(''); setAcrOrigen('')
+    setAcrCandidatos([])
+  }
+  const cerrarAcreditar = () => {
+    setAcreditarCli(null); setAcrCandidatos([])
+  }
+  const buscarCandidatos = async () => {
+    if (!acreditarCli || !acrMonto || !acrFecha) return
+    setAcrLoading(true); setMsg('')
+    try {
+      const monto = parseFloat(acrMonto.replace(/\./g, '').replace(',', '.'))
+      const r = await apiClient.client.post(`/clientes/${acreditarCli.id}/buscar-movimiento`, {
+        monto, fecha: acrFecha, referencia: acrRef, origen: acrOrigen,
+      })
+      setAcrCandidatos(r.data.candidatos || [])
+      if (!r.data.candidatos?.length) setMsg(`✗ No se encontró ningún movimiento de $${acrMonto} cerca del ${acrFecha}`)
+    } catch (e: any) {
+      setMsg(`✗ ${e.response?.data?.detail || 'Error buscando'}`)
+    } finally { setAcrLoading(false) }
+  }
+  const confirmarAcreditacion = async (movId: number) => {
+    if (!acreditarCli) return
+    setAcrConfirming(movId)
+    try {
+      await apiClient.client.post(`/clientes/movimientos/${movId}/acreditar`, {
+        cliente_id: acreditarCli.id,
+        fecha_acred: acrFecha,
+      })
+      setMsg(`✓ Acreditado a ${acreditarCli.nombre}`)
+      cerrarAcreditar()
+      cargar()
+    } catch (e: any) {
+      setMsg(`✗ ${e.response?.data?.detail || 'Error al acreditar'}`)
+    } finally { setAcrConfirming(null) }
+  }
+
   const cargar = () => {
     setLoading(true)
     apiClient.client.get('/clientes/archivos')
@@ -224,19 +272,29 @@ export const Clientes: React.FC = () => {
                       const cliOpen = openCli[cliKey]
                       return (
                         <div key={cliente.id}>
-                          <button
-                            onClick={() => setOpenCli(o => ({ ...o, [cliKey]: !cliOpen }))}
-                            className="w-full flex items-center gap-2 pl-6 pr-3 py-2.5 hover:bg-gray-50 dark:hover:bg-slate-700/40 text-left transition-colors"
-                          >
-                            <ClienteAvatar nombre={cliente.nombre} size="sm" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold dark:text-white truncate">{cliente.nombre}</p>
-                              <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                                {cliente.total_archivos} archivo{cliente.total_archivos !== 1 ? 's' : ''}
-                              </p>
-                            </div>
-                            <span className="text-gray-400 text-xs">{cliOpen ? '▲' : '▼'}</span>
-                          </button>
+                          <div className="flex items-center gap-1 pl-6 pr-3 py-2.5 hover:bg-gray-50 dark:hover:bg-slate-700/40 transition-colors">
+                            <button
+                              onClick={() => setOpenCli(o => ({ ...o, [cliKey]: !cliOpen }))}
+                              className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                            >
+                              <ClienteAvatar nombre={cliente.nombre} size="sm" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold dark:text-white truncate">{cliente.nombre}</p>
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                                  {cliente.total_archivos} archivo{cliente.total_archivos !== 1 ? 's' : ''}
+                                </p>
+                              </div>
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); abrirAcreditar({ id: cliente.id, nombre: cliente.nombre }) }}
+                              className="px-2 py-1 text-[11px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded hover:bg-emerald-200 dark:hover:bg-emerald-900/60 font-medium flex-shrink-0"
+                              title="Acreditar transferencia desde comprobante"
+                            >
+                              💸 Acreditar
+                            </button>
+                            <button onClick={() => setOpenCli(o => ({ ...o, [cliKey]: !cliOpen }))}
+                              className="text-gray-400 text-xs px-1">{cliOpen ? '▲' : '▼'}</button>
+                          </div>
 
                           {cliOpen && cliente.meses.length === 0 && (
                             <div className="pl-12 py-2 text-xs text-gray-400">Carpeta vacía — conciliá una planilla para que aparezca acá</div>
@@ -305,6 +363,86 @@ export const Clientes: React.FC = () => {
       )}
 
       <PlanillaPanel planillaId={panelId} onClose={() => setPanelId(null)} />
+
+      {/* Modal: Acreditar comprobante */}
+      {acreditarCli && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3" onClick={cerrarAcreditar}>
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h2 className="text-base font-bold dark:text-white">Acreditar a {acreditarCli.nombre}</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Buscá el movimiento en el extracto a partir de los datos del comprobante.
+                </p>
+              </div>
+              <button onClick={cerrarAcreditar} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+            </div>
+
+            <div className="space-y-2 mb-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="label text-xs">Importe *</label>
+                  <input className="input-field" placeholder="500000" value={acrMonto} onChange={e => setAcrMonto(e.target.value)} autoFocus />
+                </div>
+                <div>
+                  <label className="label text-xs">Fecha *</label>
+                  <input type="date" className="input-field" value={acrFecha} onChange={e => setAcrFecha(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className="label text-xs">Código de referencia (opcional)</label>
+                <input className="input-field" placeholder="00194624" value={acrRef} onChange={e => setAcrRef(e.target.value)} />
+              </div>
+              <div>
+                <label className="label text-xs">Origen / titular (opcional)</label>
+                <input className="input-field" placeholder="Walter Daniel Leguisa o DNI 20221499" value={acrOrigen} onChange={e => setAcrOrigen(e.target.value)} />
+              </div>
+              <button onClick={buscarCandidatos} disabled={acrLoading || !acrMonto || !acrFecha}
+                className="w-full mt-1 px-3 py-2 text-sm font-medium bg-ml-blue text-white rounded-md hover:bg-ml-blue-dark disabled:opacity-40">
+                {acrLoading ? '⏳ Buscando...' : '🔍 Buscar coincidencias'}
+              </button>
+            </div>
+
+            {acrCandidatos.length > 0 && (
+              <div className="border-t dark:border-slate-700 pt-2">
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">
+                  {acrCandidatos.length} coincidencia{acrCandidatos.length !== 1 ? 's' : ''} encontrada{acrCandidatos.length !== 1 ? 's' : ''} · tocá la que corresponda
+                </p>
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {acrCandidatos.map(c => {
+                    const fechaTxt = c.fecha ? new Date(c.fecha + 'T00:00:00').toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit' }) : '?'
+                    const isMejor = c === acrCandidatos[0] && c.score >= 12
+                    return (
+                      <button key={c.id} onClick={() => confirmarAcreditacion(c.id)} disabled={acrConfirming === c.id}
+                        className={`w-full text-left p-2 rounded border ${isMejor ? 'border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-700' : 'border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/30'} disabled:opacity-50`}>
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-mono truncate dark:text-gray-200">{c.titular || '—'}</p>
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                              {fechaTxt} · orden {c.orden} · ext #{c.extracto_id}
+                              {c.razones?.length > 0 && <span className="ml-1 text-green-600 dark:text-green-400">· {c.razones.join(', ')}</span>}
+                            </p>
+                            {c.ya_acreditado_a_este_cliente && (
+                              <p className="text-[10px] text-amber-600 dark:text-amber-400">⚠ ya está acreditado a {acreditarCli.nombre}</p>
+                            )}
+                            {c.ya_acreditado_a_otro && (
+                              <p className="text-[10px] text-red-600 dark:text-red-400">⚠ ya acreditado a "{c.cliente_acreditado}" — confirmar pisa esa marca</p>
+                            )}
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-sm font-bold dark:text-white">${c.monto.toLocaleString('es-AR')}</p>
+                            {isMejor && <span className="text-[9px] text-green-600 dark:text-green-400">👍 mejor</span>}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

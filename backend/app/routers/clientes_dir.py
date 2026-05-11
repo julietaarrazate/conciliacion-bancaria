@@ -226,6 +226,186 @@ def get_archivos_por_cliente(db: Session = Depends(get_db),
     }
 
 
+@router.post("/{cliente_id}/buscar-movimiento")
+def buscar_movimiento_para_acreditar(
+    cliente_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Busca movimientos del extracto que podrian corresponder a un comprobante
+    de pago (Mercado Pago, Cuenta DNI, foto, etc).
+
+    Payload:
+      - monto: float (obligatorio)
+      - fecha: ISO date (obligatorio) — fecha del comprobante
+      - tolerancia_dias: int = 5 — ventana de busqueda
+      - referencia: str opcional — codigo de ref (ej "00194624")
+      - origen: str opcional — nombre/CUIT del que paga (ej "Walter Daniel Leguisa" o "20221499")
+
+    Devuelve lista de candidatos ordenados por score, donde el primero suele
+    ser el correcto. Si hay uno solo de score alto, el frontend lo acredita
+    directo. Si hay varios, muestra la lista.
+    """
+    import re
+    from datetime import timedelta
+    from app.models.cliente import Cliente
+
+    cli = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cli:
+        raise HTTPException(404, "Cliente no encontrado")
+
+    try:
+        monto = float(payload.get("monto") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "monto invalido")
+    if monto <= 0:
+        raise HTTPException(400, "monto obligatorio")
+
+    fecha_s = payload.get("fecha") or ""
+    if not fecha_s:
+        raise HTTPException(400, "fecha obligatoria")
+    try:
+        fecha_ref = datetime.fromisoformat(fecha_s).date() if "-" in fecha_s else \
+                    datetime.strptime(fecha_s, "%d/%m/%Y").date()
+    except ValueError:
+        raise HTTPException(400, "fecha invalida (usar YYYY-MM-DD o DD/MM/YYYY)")
+
+    tolerancia = int(payload.get("tolerancia_dias") or 5)
+    referencia = (payload.get("referencia") or "").strip()
+    origen = (payload.get("origen") or "").strip().lower()
+
+    # Limpiar referencia: solo digitos, sin ceros a la izquierda
+    ref_norm = re.sub(r"\D", "", referencia).lstrip("0") if referencia else ""
+
+    desde = fecha_ref - timedelta(days=tolerancia)
+    hasta = fecha_ref + timedelta(days=tolerancia)
+
+    q = db.query(MovimientoBanco).filter(
+        MovimientoBanco.fecha >= desde,
+        MovimientoBanco.fecha <= hasta,
+        MovimientoBanco.monto >= monto - 0.01,
+        MovimientoBanco.monto <= monto + 0.01,
+    )
+    if not current_user.is_superadmin:
+        q = q.filter(MovimientoBanco.organizacion_id == (current_user.organizacion_id or 1))
+
+    movs = q.all()
+
+    candidatos = []
+    for m in movs:
+        score = 0
+        razones = []
+
+        # Diferencia fecha (mas cerca = mejor)
+        dias = abs((m.fecha - fecha_ref).days) if m.fecha else 99
+        score += max(0, 10 - dias * 2)
+        if dias == 0: razones.append("fecha exacta")
+        elif dias <= 2: razones.append(f"fecha ±{dias}d")
+
+        titular_lower = (m.titular or "").lower()
+
+        # Match referencia (alto valor — el codigo de ref del comprobante suele
+        # estar en el titular o concepto)
+        if ref_norm and ref_norm in re.sub(r"\D", "", titular_lower):
+            score += 15
+            razones.append(f"ref {ref_norm}")
+
+        # Match origen (nombre o CUIT)
+        if origen:
+            origen_solo_dig = re.sub(r"\D", "", origen)
+            if origen_solo_dig and len(origen_solo_dig) >= 6 and origen_solo_dig in re.sub(r"\D", "", titular_lower):
+                score += 12
+                razones.append("CUIT/DNI match")
+            # Match palabras del nombre
+            palabras = [p for p in re.findall(r"[a-z]{3,}", origen) if p not in ("del", "de", "la", "los")]
+            matches_palabras = sum(1 for p in palabras if p in titular_lower)
+            if matches_palabras >= 1:
+                score += 4 * matches_palabras
+                razones.append(f"{matches_palabras} palabra(s) del origen")
+
+        # Penalizar movs ya acreditados a OTRO cliente
+        ya_acreditado_a_otro = (m.cliente_acreditado and m.cliente_acreditado != cli.nombre
+                                and m.cliente_acreditado.lower() != "no identificado")
+        if ya_acreditado_a_otro:
+            score -= 100  # baja al fondo pero todavia es visible para que ella decida
+
+        # Si ya esta acreditado a ESTE cliente, marcar
+        ya_este = m.cliente_acreditado and m.cliente_acreditado.lower() == cli.nombre.lower()
+
+        candidatos.append({
+            "id": m.id,
+            "extracto_id": m.extracto_id,
+            "orden": m.orden,
+            "fecha": m.fecha.isoformat() if m.fecha else None,
+            "titular": m.titular,
+            "monto": m.monto,
+            "saldo": m.saldo,
+            "cliente_acreditado": m.cliente_acreditado,
+            "ya_acreditado_a_este_cliente": ya_este,
+            "ya_acreditado_a_otro": ya_acreditado_a_otro,
+            "score": score,
+            "razones": razones,
+        })
+
+    candidatos.sort(key=lambda c: -c["score"])
+    return {"cliente": cli.nombre, "candidatos": candidatos[:20], "total": len(candidatos)}
+
+
+@router.post("/movimientos/{mov_id}/acreditar")
+def acreditar_movimiento_a_cliente(
+    mov_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Marca un movimiento como acreditado al cliente indicado, con la fecha indicada.
+    Usado desde el flujo "Acreditar comprobante".
+
+    Payload:
+      - cliente_id: int (obligatorio)
+      - fecha_acred: ISO date opcional (default = fecha del movimiento)
+    """
+    from app.models.cliente import Cliente
+    from app.services.auditoria import registrar_log
+
+    mov = db.query(MovimientoBanco).filter(MovimientoBanco.id == mov_id).first()
+    if not mov:
+        raise HTTPException(404, "Movimiento no encontrado")
+
+    cliente_id = payload.get("cliente_id")
+    cli = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cli:
+        raise HTTPException(404, "Cliente no encontrado")
+
+    fecha_s = payload.get("fecha_acred")
+    fecha_acred = None
+    if fecha_s:
+        try:
+            fecha_acred = datetime.fromisoformat(fecha_s).date()
+        except ValueError:
+            pass
+    if not fecha_acred:
+        fecha_acred = mov.fecha or datetime.now().date()
+
+    anterior = mov.cliente_acreditado
+    mov.cliente_acreditado = cli.nombre
+    mov.fecha_acred = fecha_acred
+    db.commit()
+
+    registrar_log(db, current_user.id, "movimientos_banco", mov.id, "ACREDITAR_MANUAL",
+                  {"cliente": cli.nombre, "fecha_acred": str(fecha_acred), "anterior": anterior})
+
+    return {
+        "ok": True,
+        "mov_id": mov.id,
+        "cliente": cli.nombre,
+        "fecha_acred": fecha_acred.isoformat(),
+    }
+
+
 @router.post("")
 def crear_cliente(payload: dict,
                   db: Session = Depends(get_db),
