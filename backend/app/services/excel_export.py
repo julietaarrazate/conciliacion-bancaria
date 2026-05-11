@@ -15,6 +15,18 @@ ML_YELLOW = PatternFill("solid", fgColor="FFE600")
 TITLE_FONT = Font(bold=True, size=14, color="333333")
 
 
+def _mes_a_int(v):
+    """Convierte el campo 'mes' a int para evitar el warning 'numero como texto'
+    en Excel. Si no es numerico (ej. None), devuelve None."""
+    if v is None:
+        return None
+    try:
+        n = int(float(str(v).strip()))
+        return n if 1 <= n <= 12 else None
+    except (ValueError, TypeError):
+        return None
+
+
 def _autosize(ws, max_col):
     """Ajustar ancho de columnas al contenido"""
     for col in range(1, max_col + 1):
@@ -57,7 +69,7 @@ def export_movimientos(extracto_nombre: str, movimientos: List[dict]) -> bytes:
         ws.cell(row=i, column=1, value=m.get("orden"))
         f = m.get("fecha")
         ws.cell(row=i, column=2, value=f).number_format = "DD/MM/YYYY"
-        ws.cell(row=i, column=3, value=m.get("mes"))
+        ws.cell(row=i, column=3, value=_mes_a_int(m.get("mes")))
         ws.cell(row=i, column=4, value=m.get("titular"))
         ws.cell(row=i, column=5, value=m.get("monto")).number_format = '"$"#,##0.00'
         s = m.get("saldo")
@@ -156,7 +168,7 @@ def export_planilla_conciliada(planilla_data: dict, movimientos_acreditados: Lis
         ws2.cell(row=i, column=2, value=m.get("orden"))
         f = m.get("fecha")
         ws2.cell(row=i, column=3, value=f).number_format = "DD/MM/YYYY"
-        ws2.cell(row=i, column=4, value=m.get("mes"))
+        ws2.cell(row=i, column=4, value=_mes_a_int(m.get("mes")))
         ws2.cell(row=i, column=5, value=m.get("titular"))
         ws2.cell(row=i, column=6, value=m.get("monto")).number_format = '"$"#,##0.00'
         s = m.get("saldo")
@@ -269,7 +281,7 @@ def export_extracto_contador(extracto_nombre: str, movimientos: List[dict]) -> b
 
         wr(1, m.get("orden"), align="center")
         wr(2, m.get("fecha"), "DD/MM/YYYY")
-        wr(3, m.get("mes"))
+        wr(3, _mes_a_int(m.get("mes")))
         wr(4, m.get("titular"))
         wr(5, m.get("monto"), '"$"#,##0.00', "right")
         saldo = m.get("saldo")
