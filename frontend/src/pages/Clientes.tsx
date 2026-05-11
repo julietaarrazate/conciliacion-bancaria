@@ -84,7 +84,8 @@ export const Clientes: React.FC = () => {
   // Modal acreditar comprobante
   const [acreditarCli, setAcreditarCli] = useState<{ id: number; nombre: string } | null>(null)
   const [acrMonto, setAcrMonto] = useState('')
-  const [acrFecha, setAcrFecha] = useState('')
+  const [acrFecha, setAcrFecha] = useState('')           // fecha de la transferencia
+  const [acrFechaAcred, setAcrFechaAcred] = useState('') // fecha en que yo acredito (default hoy)
   const [acrRef, setAcrRef] = useState('')
   const [acrOrigen, setAcrOrigen] = useState('')
   const [acrCandidatos, setAcrCandidatos] = useState<any[]>([])
@@ -94,21 +95,27 @@ export const Clientes: React.FC = () => {
   const abrirAcreditar = (cliente: { id: number; nombre: string }) => {
     setAcreditarCli(cliente)
     setAcrMonto(''); setAcrFecha(''); setAcrRef(''); setAcrOrigen('')
+    setAcrFechaAcred(new Date().toISOString().slice(0, 10)) // hoy por default
     setAcrCandidatos([])
   }
   const cerrarAcreditar = () => {
     setAcreditarCli(null); setAcrCandidatos([])
   }
   const buscarCandidatos = async () => {
-    if (!acreditarCli || !acrMonto || !acrFecha) return
+    if (!acreditarCli) return
+    // al menos uno de los campos debe tener valor
+    if (!acrMonto && !acrFecha && !acrRef && !acrOrigen) {
+      setMsg('✗ Ingresá al menos un campo: importe, fecha, referencia u origen')
+      return
+    }
     setAcrLoading(true); setMsg('')
     try {
-      const monto = parseFloat(acrMonto.replace(/\./g, '').replace(',', '.'))
-      const r = await apiClient.client.post(`/clientes/${acreditarCli.id}/buscar-movimiento`, {
-        monto, fecha: acrFecha, referencia: acrRef, origen: acrOrigen,
-      })
+      const body: any = { referencia: acrRef, origen: acrOrigen }
+      if (acrMonto) body.monto = parseFloat(acrMonto.replace(/\./g, '').replace(',', '.'))
+      if (acrFecha) body.fecha = acrFecha
+      const r = await apiClient.client.post(`/clientes/${acreditarCli.id}/buscar-movimiento`, body)
       setAcrCandidatos(r.data.candidatos || [])
-      if (!r.data.candidatos?.length) setMsg(`✗ No se encontró ningún movimiento de $${acrMonto} cerca del ${acrFecha}`)
+      if (!r.data.candidatos?.length) setMsg(`✗ No se encontró ningún movimiento con esos datos`)
     } catch (e: any) {
       setMsg(`✗ ${e.response?.data?.detail || 'Error buscando'}`)
     } finally { setAcrLoading(false) }
@@ -117,11 +124,13 @@ export const Clientes: React.FC = () => {
     if (!acreditarCli) return
     setAcrConfirming(movId)
     try {
+      // Usar la fecha de acreditacion explicita; si no, la fecha de la transferencia; si no, hoy
+      const fechaAcred = acrFechaAcred || acrFecha || new Date().toISOString().slice(0, 10)
       await apiClient.client.post(`/clientes/movimientos/${movId}/acreditar`, {
         cliente_id: acreditarCli.id,
-        fecha_acred: acrFecha,
+        fecha_acred: fechaAcred,
       })
-      setMsg(`✓ Acreditado a ${acreditarCli.nombre}`)
+      setMsg(`✓ Acreditado a ${acreditarCli.nombre}. Guardado en su carpeta.`)
       cerrarAcreditar()
       cargar()
     } catch (e: any) {
@@ -379,25 +388,34 @@ export const Clientes: React.FC = () => {
             </div>
 
             <div className="space-y-2 mb-3">
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 -mt-1 mb-1">
+                Todos los campos son opcionales · llená al menos uno
+              </p>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="label text-xs">Importe *</label>
+                  <label className="label text-xs">Importe</label>
                   <input className="input-field" placeholder="500000" value={acrMonto} onChange={e => setAcrMonto(e.target.value)} autoFocus />
                 </div>
                 <div>
-                  <label className="label text-xs">Fecha *</label>
+                  <label className="label text-xs">Fecha transferencia</label>
                   <input type="date" className="input-field" value={acrFecha} onChange={e => setAcrFecha(e.target.value)} />
                 </div>
               </div>
               <div>
-                <label className="label text-xs">Código de referencia (opcional)</label>
+                <label className="label text-xs">Código de referencia</label>
                 <input className="input-field" placeholder="00194624" value={acrRef} onChange={e => setAcrRef(e.target.value)} />
               </div>
               <div>
-                <label className="label text-xs">Origen / titular (opcional)</label>
+                <label className="label text-xs">Origen / titular</label>
                 <input className="input-field" placeholder="Walter Daniel Leguisa o DNI 20221499" value={acrOrigen} onChange={e => setAcrOrigen(e.target.value)} />
               </div>
-              <button onClick={buscarCandidatos} disabled={acrLoading || !acrMonto || !acrFecha}
+              <div className="border-t border-gray-200 dark:border-slate-700 pt-2">
+                <label className="label text-xs flex items-center gap-1">
+                  Fecha de acreditación <span className="text-gray-400 font-normal">(en qué día lo acreditás)</span>
+                </label>
+                <input type="date" className="input-field" value={acrFechaAcred} onChange={e => setAcrFechaAcred(e.target.value)} />
+              </div>
+              <button onClick={buscarCandidatos} disabled={acrLoading}
                 className="w-full mt-1 px-3 py-2 text-sm font-medium bg-ml-blue text-white rounded-md hover:bg-ml-blue-dark disabled:opacity-40">
                 {acrLoading ? '⏳ Buscando...' : '🔍 Buscar coincidencias'}
               </button>

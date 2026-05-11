@@ -256,53 +256,62 @@ def buscar_movimiento_para_acreditar(
     if not cli:
         raise HTTPException(404, "Cliente no encontrado")
 
+    # Todos los campos son opcionales individualmente, pero al menos UNO debe venir.
+    monto = None
     try:
-        monto = float(payload.get("monto") or 0)
+        m_raw = payload.get("monto")
+        if m_raw is not None and str(m_raw).strip() != "":
+            monto = float(m_raw)
+            if monto <= 0:
+                monto = None
     except (TypeError, ValueError):
-        raise HTTPException(400, "monto invalido")
-    if monto <= 0:
-        raise HTTPException(400, "monto obligatorio")
+        monto = None
 
-    fecha_s = payload.get("fecha") or ""
-    if not fecha_s:
-        raise HTTPException(400, "fecha obligatoria")
-    try:
-        fecha_ref = datetime.fromisoformat(fecha_s).date() if "-" in fecha_s else \
-                    datetime.strptime(fecha_s, "%d/%m/%Y").date()
-    except ValueError:
-        raise HTTPException(400, "fecha invalida (usar YYYY-MM-DD o DD/MM/YYYY)")
+    fecha_ref = None
+    fecha_s = (payload.get("fecha") or "").strip()
+    if fecha_s:
+        try:
+            fecha_ref = datetime.fromisoformat(fecha_s).date() if "-" in fecha_s else \
+                        datetime.strptime(fecha_s, "%d/%m/%Y").date()
+        except ValueError:
+            raise HTTPException(400, "fecha invalida (usar YYYY-MM-DD o DD/MM/YYYY)")
 
     tolerancia = int(payload.get("tolerancia_dias") or 5)
     referencia = (payload.get("referencia") or "").strip()
     origen = (payload.get("origen") or "").strip().lower()
-
-    # Limpiar referencia: solo digitos, sin ceros a la izquierda
     ref_norm = re.sub(r"\D", "", referencia).lstrip("0") if referencia else ""
 
-    desde = fecha_ref - timedelta(days=tolerancia)
-    hasta = fecha_ref + timedelta(days=tolerancia)
+    if not any([monto, fecha_ref, ref_norm, origen]):
+        raise HTTPException(400, "ingresa al menos uno: monto, fecha, referencia u origen")
 
-    q = db.query(MovimientoBanco).filter(
-        MovimientoBanco.fecha >= desde,
-        MovimientoBanco.fecha <= hasta,
-        MovimientoBanco.monto >= monto - 0.01,
-        MovimientoBanco.monto <= monto + 0.01,
-    )
+    # Construir query progresivamente con los filtros que SI vinieron
+    q = db.query(MovimientoBanco)
+    if monto is not None:
+        q = q.filter(MovimientoBanco.monto >= monto - 0.01,
+                     MovimientoBanco.monto <= monto + 0.01)
+    if fecha_ref is not None:
+        desde = fecha_ref - timedelta(days=tolerancia)
+        hasta = fecha_ref + timedelta(days=tolerancia)
+        q = q.filter(MovimientoBanco.fecha >= desde,
+                     MovimientoBanco.fecha <= hasta)
     if not current_user.is_superadmin:
         q = q.filter(MovimientoBanco.organizacion_id == (current_user.organizacion_id or 1))
 
-    movs = q.all()
+    # Si no vino monto ni fecha, limitamos a 500 movs y filtramos en Python por
+    # ref/origen (evita traer todo el extracto a memoria).
+    movs = q.limit(2000).all() if (monto is None and fecha_ref is None) else q.all()
 
     candidatos = []
     for m in movs:
         score = 0
         razones = []
 
-        # Diferencia fecha (mas cerca = mejor)
-        dias = abs((m.fecha - fecha_ref).days) if m.fecha else 99
-        score += max(0, 10 - dias * 2)
-        if dias == 0: razones.append("fecha exacta")
-        elif dias <= 2: razones.append(f"fecha ±{dias}d")
+        # Diferencia fecha (mas cerca = mejor) solo si vino fecha
+        if fecha_ref is not None:
+            dias = abs((m.fecha - fecha_ref).days) if m.fecha else 99
+            score += max(0, 10 - dias * 2)
+            if dias == 0: razones.append("fecha exacta")
+            elif dias <= 2: razones.append(f"fecha ±{dias}d")
 
         titular_lower = (m.titular or "").lower()
 
@@ -334,6 +343,11 @@ def buscar_movimiento_para_acreditar(
         # Si ya esta acreditado a ESTE cliente, marcar
         ya_este = m.cliente_acreditado and m.cliente_acreditado.lower() == cli.nombre.lower()
 
+        # Si solo se busco por ref/origen (sin monto ni fecha), descartar candidatos
+        # con score == 0 (no matchearon nada salvo el filtro vacio)
+        if score <= 0 and monto is None and fecha_ref is None and not ya_este:
+            continue
+
         candidatos.append({
             "id": m.id,
             "extracto_id": m.extracto_id,
@@ -350,7 +364,7 @@ def buscar_movimiento_para_acreditar(
         })
 
     candidatos.sort(key=lambda c: -c["score"])
-    return {"cliente": cli.nombre, "candidatos": candidatos[:20], "total": len(candidatos)}
+    return {"cliente": cli.nombre, "candidatos": candidatos[:50], "total": len(candidatos)}
 
 
 @router.post("/movimientos/{mov_id}/acreditar")
@@ -393,16 +407,84 @@ def acreditar_movimiento_a_cliente(
     anterior = mov.cliente_acreditado
     mov.cliente_acreditado = cli.nombre
     mov.fecha_acred = fecha_acred
-    db.commit()
+    db.flush()
+
+    # Crear una Planilla "manual" con 1 sola fila para que aparezca como archivo
+    # del dia en la carpeta del cliente (estructura /clientes).
+    # Si ya existe una planilla manual del mismo cliente del mismo dia, le agrego
+    # la fila ahi (asi no se llena de archivos sueltos).
+    from app.models.planilla import Planilla, PlanillaRow
+    from datetime import datetime as dt
+
+    planilla_id_creada = None
+    try:
+        # ventana del dia
+        inicio = dt.combine(fecha_acred, dt.min.time())
+        fin    = dt.combine(fecha_acred, dt.max.time())
+
+        planilla_existente = (
+            db.query(Planilla)
+              .filter(Planilla.cliente_id == cli.id,
+                      Planilla.fecha_carga >= inicio,
+                      Planilla.fecha_carga <= fin,
+                      Planilla.nombre_archivo.like("acreditacion manual%"))
+              .order_by(Planilla.id.desc())
+              .first()
+        )
+
+        if planilla_existente:
+            planilla = planilla_existente
+        else:
+            planilla = Planilla(
+                cliente_id=cli.id,
+                extracto_id=mov.extracto_id,
+                usuario_id=current_user.id,
+                organizacion_id=mov.organizacion_id or 1,
+                nombre_archivo=f"acreditacion manual {fecha_acred.day}.{fecha_acred.month}",
+                fecha_carga=dt.combine(fecha_acred, dt.min.time()),
+            )
+            db.add(planilla)
+            db.flush()
+
+        # Evitar duplicar la fila si ya esta el mismo mov
+        ya = db.query(PlanillaRow).filter(
+            PlanillaRow.planilla_id == planilla.id,
+            PlanillaRow.orden_movimiento_acreditado == mov.id
+        ).first()
+        if not ya:
+            db.add(PlanillaRow(
+                planilla_id=planilla.id,
+                organizacion_id=planilla.organizacion_id,
+                monto=mov.monto,
+                cuit=None,
+                titular=mov.titular,
+                status="ok",
+                orden_movimiento_acreditado=mov.id,
+            ))
+        db.commit()
+        planilla_id_creada = planilla.id
+    except Exception as ex:
+        # Si falla la creacion de la planilla virtual, igual mantenemos
+        # el cliente_acreditado en el movimiento (lo importante)
+        db.rollback()
+        # Re-aplicar el cambio al movimiento (se perdio con rollback)
+        mov = db.query(MovimientoBanco).filter(MovimientoBanco.id == mov_id).first()
+        if mov:
+            mov.cliente_acreditado = cli.nombre
+            mov.fecha_acred = fecha_acred
+            db.commit()
+        print(f"[acreditar] Warning crear planilla manual: {ex}")
 
     registrar_log(db, current_user.id, "movimientos_banco", mov.id, "ACREDITAR_MANUAL",
-                  {"cliente": cli.nombre, "fecha_acred": str(fecha_acred), "anterior": anterior})
+                  {"cliente": cli.nombre, "fecha_acred": str(fecha_acred),
+                   "anterior": anterior, "planilla_id": planilla_id_creada})
 
     return {
         "ok": True,
         "mov_id": mov.id,
         "cliente": cli.nombre,
         "fecha_acred": fecha_acred.isoformat(),
+        "planilla_id": planilla_id_creada,
     }
 
 
