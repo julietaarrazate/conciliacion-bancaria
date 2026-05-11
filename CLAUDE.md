@@ -25,7 +25,7 @@ Email: julietaarrazate@gmail.com (superadmin del sistema)
 API keys para deploy:
 - Render API key: rnd_8Kqkb028Ochfw6eSOYZR3v2O7Cv2
 - Render service ID: srv-d7pqt81j2pic73c0c6fg
-- Vercel token: vcp_5vau9jj3k4E9Pn9yI3m4BMaWBWJSv5mNh3mU9Yd1mkHxbFmFub03rpK8
+- Vercel token: vcp_7WrBR4fh27c7GFUQXxsF4IhzCQbvigylOwnG7RtzUD2cuadbOL2lz0D9
 - Vercel project ID: prj_cVINkspVm6j3B1fxOrdU81B0ehWg
 
 Para push a GitHub:
@@ -250,5 +250,25 @@ Cambios incorporados en esta versión:
 - El repo se clona en /tmp para trabajar y se limpia al terminar.
 - Para deployar Render: usar curl con la API key arriba.
 - El token de GitHub NO tiene scope "workflow" — no se pueden crear GitHub Actions.
+
+### CRITICO — autor de commits para Vercel
+
+Vercel tiene activado **seatBlock COMMIT_AUTHOR_REQUIRED**: bloquea el build
+si el autor del commit NO es julietaarrazate@gmail.com (el dueño de la cuenta).
+Resultado: los pushes con otro autor pasan a GitHub pero Vercel los marca
+ERROR y sigue sirviendo el frontend viejo.
+
+**SOLUCION OBLIGATORIA** — todos los commits deben llevar:
+
+  git commit --author="Julieta Arrazate <julietaarrazate@gmail.com>" -m "..."
+
+Si te olvidas y ya commitaste con otro author, un commit vacio extra arregla:
+
+  git commit --allow-empty --author="Julieta Arrazate <julietaarrazate@gmail.com>" -m "trigger deploy"
+
+(Vercel deploya el HEAD; si el HEAD tiene el author correcto pasa el seat check.)
+
+Para desactivarlo de raiz: Vercel Dashboard → Settings → Spend Management →
+desactivar "Require commit author authorization".
 
 Generado — Proyecto iniciado Mayo 2026 | Autora: Julieta Arrazate
