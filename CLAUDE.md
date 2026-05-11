@@ -70,19 +70,25 @@ Diseño: Linear-inspired, Inter font, dark mode profundo (#0B0B0F)
   /app/models — Organizacion, User, Cliente, ExtractoBancario, MovimientoBanco,
                 Planilla, PlanillaRow, AuditoriaLog, PatronAprendido,
                 Liquidacion, LiquidacionDetalle, CierrePeriodo
-  /app/routers — auth, me, extractos, planillas, historial, auditoria,
-                 admin, clientes_dir, organizaciones, liquidaciones
+  /app/routers — auth, me, extractos (incluye conciliaciones_router),
+                 planillas, historial, auditoria, admin, clientes_dir,
+                 organizaciones, liquidaciones, caja
   /app/services — conciliacion.py, aprendizaje.py, excel_export.py,
                   extracto_merger.py, excel_parser.py
   seed.py — Crea org Caneland + usuarios
 
 /frontend — React 18 + TypeScript + Vite + TailwindCSS + PWA
-  /src/pages — Dashboard, Clientes, Movimientos, Historial, Bulk,
+  /src/pages — Dashboard, Clientes (jerarquia org→cliente→mes→archivos),
+               Movimientos, Conciliaciones (cross-extracto), Historial, Bulk,
                Auditoria, Usuarios, Perfil, Login, Organizaciones,
-               Liquidaciones
-  /src/components — Layout (drawer mobile), PlanillaPanel, FileUpload
+               Liquidaciones, Caja, OrdenDePago, Revision, Actividad
+  /src/components — Layout (drawer mobile), PlanillaPanel (editor estados +
+                    bulk edit), FileUpload
   /src/store — auth.ts, org.ts, theme.ts
   /src/services/api.ts — Todos los endpoints
+  /public/sw.js — Service worker manual (network-first, sin precache de
+                  assets); index.html tiene watchdog que limpia caches viejos
+                  si la app no monta en 8s (rescate PWA rotas)
 
 ---
 
@@ -171,6 +177,69 @@ Caneland: requiere_cierre_periodo: false — no le afecta.
 ## Clientes configurados (Caneland)
 
 Green, Tucu, David, Smt, Gwinn, Innova, Camparo, Alojando, Pinares, Paraguay
+(la lista crece — se pueden crear nuevos desde la pantalla /clientes con el
+botón "+ Nuevo cliente" de cada organización)
+
+---
+
+## Versión v2.1 — 2026-05-11 (snapshot estable)
+
+Tag git: v2.1 · commits clave: a642a5f, 1eb419f, fae2c18, 51cef80, 1488c8a, b7796207
+
+Cambios incorporados en esta versión:
+
+### Parser de extracto
+- Lee las columnas "Cliente acreditado" y "Fecha acred." que vienen en el Excel
+- Al re-subir el mismo extracto (mismo fingerprint), upsertea acreditaciones en
+  vez de tirar 409: se actualiza con los datos nuevos sin perder los viejos
+- Normaliza el campo "mes" a numero (1-12), no "Mayo 2026"
+
+### Merger UM
+- Match por (saldo, monto) con tolerancia 0.01 (cubre redondeos de float)
+- Asigna ordenes secuenciales: el mas nuevo del UM recibe max_orden + n,
+  el mas viejo de los nuevos recibe max_orden + 1
+- Detecta el corte automaticamente buscando el saldo del top del extracto
+  en el UM, ignora desde ahi para abajo
+- Migracion al boot que normaliza "mes" en movimientos viejos via SQL
+
+### Conciliaciones cross-extracto (nuevo)
+- Endpoint GET /conciliaciones lista TODAS las acreditaciones de TODOS los
+  extractos. Filtros: cliente, titular, rango fecha, rango monto
+- Endpoint GET /conciliaciones/export genera Excel con los filtros aplicados
+- Pagina /conciliaciones en el frontend con autocomplete de cliente, debounce
+  800ms y suma total acumulada
+
+### Clientes con jerarquia
+- GET /clientes/archivos devuelve organizaciones → clientes → año/mes → archivos
+- Compatibilidad legacy: devuelve tambien { clientes: [...] } plano para SW
+  cacheados viejos
+- POST /clientes crea cliente nuevo (dedup case-insensitive por org)
+- Pagina /clientes con 4 niveles desplegables y boton "+ Nuevo cliente"
+- "Caneland SA" siempre visible como carpeta raiz
+
+### Editor de estados
+- Boton "Revisar y editar estados" en Dashboard despues de conciliar
+- PlanillaPanel: edicion por fila + bulk edit (cambia estado a multiples filas
+  seleccionadas con checkbox)
+- Cada correccion alimenta PatronAprendido (IA Nivel 2)
+
+### Exports Excel — filas 15px
+- Altura fija 11.25pt (~15px) y wrap_text=False en todas las filas de datos
+- Aplicado en export_movimientos, export_extracto_contador, export_conciliaciones
+
+### Vista en pantalla — filas 15px
+- Clase .row-15 con CSS plano (height:15px + py:0 + leading:13px + text:11px)
+  con !important para ganar a la herencia de text-xs del table
+- Debounce de filtros: 400ms → 800ms (mas tiempo para escribir)
+- Columna "Mes" muestra solo el numero, derivado de la fecha
+
+### Mobile / PWA
+- Service worker reescrito: network-first puro, sin precache de assets
+- Sacado vite-plugin-pwa (causaba conflictos con el SW manual)
+- Eliminado manifest.json duplicado
+- Watchdog en index.html: si la app no monta en 8s, hace unregister del SW +
+  clear caches + reload (rescata PWAs viejas con cache roto)
+- accept="*/*" en file inputs (Android no muestra .xls/.xlsx en algunos cels)
 
 ---
 
