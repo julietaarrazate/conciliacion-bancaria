@@ -1,0 +1,48 @@
+{
+  "model": "claude-sonnet-4-5",
+  "permissions": {
+    "allow": [
+      "Bash(docker*)",
+      "Bash(git*)",
+      "Bash(pytest*)",
+      "Bash(alembic*)",
+      "Bash(uvicorn*)",
+      "Bash(npm*)",
+      "Bash(npx*)",
+      "Bash(python*)",
+      "Bash(pip*)",
+      "Bash(psql*)",
+      "Bash(grep*)",
+      "Bash(find*)",
+      "Bash(cat*)",
+      "Bash(ls*)",
+      "Bash(mkdir*)",
+      "Bash(cp*)",
+      "Bash(mv*)",
+      "Read(**)",
+      "Write(backend/**)",
+      "Write(frontend/**)",
+      "Write(mobile/**)",
+      "Write(database/**)",
+      "Write(docs/**)",
+      "Write(docker-compose.yml)",
+      "Write(.env.example)",
+      "Edit(backend/**)",
+      "Edit(frontend/**)",
+      "Edit(mobile/**)",
+      "Edit(database/**)",
+      "Edit(docs/**)",
+      "Edit(CLAUDE.md)",
+      "Edit(backend/CLAUDE.md)",
+      "Edit(frontend/CLAUDE.md)",
+      "Edit(mobile/CLAUDE.md)",
+      "Edit(database/CLAUDE.md)"
+    ],
+    "deny": [
+      "Bash(rm -rf*)",
+      "Bash(drop database*)",
+      "Bash(DELETE FROM*)",
+      "Write(.env)"
+    ]
+  }
+}
