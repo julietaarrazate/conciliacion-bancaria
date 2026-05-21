@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from sqlalchemy import DateTime, ForeignKey, Numeric, String
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -21,7 +21,9 @@ class Reconciliation(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     statement: Mapped["BankStatement"] = relationship("BankStatement")  # noqa: F821
-    items: Mapped[list["ReconciliationItem"]] = relationship("ReconciliationItem", back_populates="reconciliation")
+    items: Mapped[list["ReconciliationItem"]] = relationship(
+        "ReconciliationItem", back_populates="reconciliation", cascade="all, delete-orphan"
+    )
 
 
 class ReconciliationItem(Base):
@@ -31,8 +33,15 @@ class ReconciliationItem(Base):
     reconciliation_id: Mapped[int] = mapped_column(ForeignKey("reconciliations.id"), index=True)
     bank_transaction_id: Mapped[int | None] = mapped_column(ForeignKey("bank_transactions.id"))
     accounting_entry_id: Mapped[int | None] = mapped_column(ForeignKey("accounting_entries.id"))
+    # NUEVO: vínculo opcional con el movimiento de planilla destino (resuelve "acreditación manual a planilla aparte")
+    planilla_movimiento_id: Mapped[int | None] = mapped_column(
+        ForeignKey("movimientos_planilla.id", ondelete="SET NULL")
+    )
     # auto = algoritmo, manual = usuario
     match_type: Mapped[str] = mapped_column(String(20), default="manual")
+    # acreditado | no_esta | faltan_datos | duplicado | pendiente
+    estado: Mapped[str] = mapped_column(String(20), default="acreditado", index=True)
+    observacion: Mapped[str | None] = mapped_column(Text)
     matched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

@@ -98,10 +98,14 @@ Importar extracto → Auto-matching → Revisión manual → Confirmar → Cerra
 ### Entidades principales
 - `BankAccount` (cuenta bancaria)
 - `BankStatement` (extracto mensual)
-- `BankTransaction` (línea del extracto)
-- `AccountingEntry` (asiento contable)
+- `BankTransaction` (línea del extracto, ahora con `cliente_id`, `planilla_movimiento_id`, `estado`)
+- `AccountingEntry` (asiento contable interno del extracto — legacy)
 - `Reconciliation` (proceso de conciliación)
-- `ReconciliationItem` (match individual)
+- `ReconciliationItem` (match individual, con `estado` y `planilla_movimiento_id`)
+- `Cliente` (independiente — se puede crear sin conciliación previa)
+- `PlanillaCliente` + `MovimientoPlanilla` (planillas persistentes, no se borran con extracto)
+- `Cheque`, `Pago`, `Gasto` (operaciones que generan asiento automático)
+- `CuentaContable` + `AsientoContable` + `LineaAsiento` (contabilidad Debe/Haber)
 
 ---
 
@@ -150,3 +154,4 @@ cd frontend && npm test
 > Agregar una línea por sesión con fecha y resumen de lo hecho
 
 - `2026-05-21` — Configuración inicial del proyecto y Claude Code
+- `2026-05-21` — Refactor mayor: clientes/planillas independientes, sincronización extracto↔planilla, estados (no_esta/faltan_datos), edición/borrado de acreditaciones, módulo contable completo (cheques/pagos/gastos + libro diario/mayor/sumas/balance), UM manual y export CSV.

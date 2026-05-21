@@ -18,4 +18,18 @@ class BankTransaction(Base):
     reference: Mapped[str | None] = mapped_column(String(100))
     is_reconciled: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Vínculo opcional con cliente y movimiento de planilla (no cascade desde extracto)
+    cliente_id: Mapped[int | None] = mapped_column(ForeignKey("clientes.id", ondelete="SET NULL"), index=True)
+    planilla_movimiento_id: Mapped[int | None] = mapped_column(
+        ForeignKey("movimientos_planilla.id", ondelete="SET NULL"), index=True
+    )
+    # pendiente | acreditado | no_esta | faltan_datos | duplicado
+    estado: Mapped[str] = mapped_column(String(20), default="pendiente", index=True)
+    # info de duplicado/acreditacion previa: fecha original (cuando estado=duplicado y en realidad ya fue acreditado)
+    fecha_acreditacion_original: Mapped[date | None] = mapped_column(Date)
+    # Es una UM agregada manualmente (no provino del archivo de importación)
+    es_manual: Mapped[bool] = mapped_column(Boolean, default=False)
+
     statement: Mapped["BankStatement"] = relationship("BankStatement", back_populates="transactions")  # noqa: F821
+    cliente: Mapped["Cliente"] = relationship("Cliente")  # noqa: F821
+    planilla_movimiento: Mapped["MovimientoPlanilla"] = relationship("MovimientoPlanilla")  # noqa: F821
