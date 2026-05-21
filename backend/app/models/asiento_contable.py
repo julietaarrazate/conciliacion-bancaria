@@ -11,6 +11,8 @@ class AsientoContable(Base):
     __tablename__ = "asientos_contables"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # número correlativo del asiento (asignado al crear)
+    numero: Mapped[int] = mapped_column(default=0, index=True)
     fecha: Mapped[date] = mapped_column(Date, index=True)
     descripcion: Mapped[str] = mapped_column(Text)
     # módulo origen: acreditacion | cheque | pago | gasto | manual

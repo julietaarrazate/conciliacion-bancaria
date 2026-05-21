@@ -36,7 +36,9 @@ async def create_pago(
     pago = Pago(**body.model_dump())
     db.add(pago)
     await db.flush()
-    await asiento_pago_cliente(db, pago.fecha, pago.monto, pago.medio, pago.id)
+    await asiento_pago_cliente(
+        db, pago.fecha, pago.monto, pago.medio, pago.id, pago.cliente_id,
+    )
     await db.commit()
     await db.refresh(pago)
     return pago

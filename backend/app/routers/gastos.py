@@ -4,10 +4,11 @@ from sqlalchemy import select
 
 from app.core.database import get_db
 from app.dependencies import get_current_user
+from app.models.cuenta_contable import CuentaContable
 from app.models.gasto import Gasto
 from app.models.user import User
 from app.schemas.operaciones import GastoCreate, GastoResponse
-from app.services.accounting_service import asiento_gasto
+from app.services.accounting_service import asiento_gasto, COD_GASTOS_BANCARIOS
 
 router = APIRouter()
 
@@ -32,7 +33,16 @@ async def create_gasto(
     gasto = Gasto(**body.model_dump())
     db.add(gasto)
     await db.flush()
-    await asiento_gasto(db, gasto.fecha, gasto.monto, gasto.medio, gasto.concepto, gasto.id)
+
+    # Resolver código de la cuenta de gasto (si se especificó cuenta_gasto_id)
+    cuenta_codigo = COD_GASTOS_BANCARIOS
+    if gasto.cuenta_gasto_id:
+        cuenta = await db.get(CuentaContable, gasto.cuenta_gasto_id)
+        if cuenta:
+            cuenta_codigo = cuenta.codigo
+    await asiento_gasto(
+        db, gasto.fecha, gasto.monto, gasto.medio, gasto.concepto, gasto.id, cuenta_codigo,
+    )
     await db.commit()
     await db.refresh(gasto)
     return gasto

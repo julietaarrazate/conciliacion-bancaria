@@ -42,7 +42,8 @@ async def create_cheque(
     db.add(cheque)
     await db.flush()
     await asiento_cheque_carga(
-        db, cheque.fecha_emision, cheque.monto, cheque.comision, cheque.numero, cheque.id
+        db, cheque.fecha_emision, cheque.monto, cheque.comision,
+        cheque.numero, cheque.id, cheque.cliente_id,
     )
     await db.commit()
     await db.refresh(cheque)
@@ -86,7 +87,7 @@ async def rechazar_cheque(
     cheque.estado = "rechazado"
     cheque.motivo_rechazo = body.motivo
     await asiento_cheque_rechazo(
-        db, cheque.fecha_cobro, cheque.monto, cheque.numero, cheque.id
+        db, cheque.fecha_cobro, cheque.monto, cheque.numero, cheque.id, cheque.cliente_id,
     )
     await db.commit()
     await db.refresh(cheque)

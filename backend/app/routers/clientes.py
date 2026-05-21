@@ -9,6 +9,7 @@ from app.models.planilla import PlanillaCliente
 from app.models.user import User
 from app.schemas.cliente import ClienteCreate, ClienteResponse, ClienteUpdate
 from app.schemas.planilla import PlanillaResponse
+from app.services.accounting_service import crear_cuenta_para_cliente
 
 router = APIRouter()
 
@@ -32,9 +33,12 @@ async def create_cliente(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Crear cliente nuevo, sin requerir conciliación previa."""
+    """Crear cliente nuevo, sin requerir conciliación previa.
+    Auto-genera su sub-cuenta contable bajo '2-1-2 Cliente'."""
     cliente = Cliente(**body.model_dump())
     db.add(cliente)
+    await db.flush()
+    await crear_cuenta_para_cliente(db, cliente.id, cliente.nombre)
     await db.commit()
     await db.refresh(cliente)
     return cliente

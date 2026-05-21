@@ -9,13 +9,31 @@ class CuentaContableResponse(BaseModel):
     nombre: str
     tipo: str
     naturaleza: str
+    nivel: int = 1
+    parent_id: int | None = None
+    imputable: bool = False
+    cliente_id: int | None = None
 
     model_config = {"from_attributes": True}
+
+
+class CuentaTreeNode(BaseModel):
+    id: int
+    codigo: str
+    nombre: str
+    tipo: str
+    naturaleza: str
+    nivel: int
+    imputable: bool
+    cliente_id: int | None = None
+    saldo: Decimal = Decimal("0")
+    hijas: list["CuentaTreeNode"] = []
 
 
 class LineaAsientoResponse(BaseModel):
     id: int
     cuenta_id: int
+    cuenta_codigo: str | None = None
     cuenta_nombre: str | None = None
     debe: Decimal
     haber: Decimal
@@ -25,6 +43,7 @@ class LineaAsientoResponse(BaseModel):
 
 class AsientoResponse(BaseModel):
     id: int
+    numero: int = 0
     fecha: date
     descripcion: str
     origen: str
@@ -37,6 +56,7 @@ class AsientoResponse(BaseModel):
 
 class MayorRow(BaseModel):
     fecha: date
+    asiento_numero: int
     descripcion: str
     debe: Decimal
     haber: Decimal
@@ -47,6 +67,7 @@ class SumasSaldosRow(BaseModel):
     cuenta_id: int
     codigo: str
     nombre: str
+    nivel: int
     suma_debe: Decimal
     suma_haber: Decimal
     saldo_deudor: Decimal
@@ -58,4 +79,6 @@ class BalanceRow(BaseModel):
     codigo: str
     nombre: str
     tipo: str
+    nivel: int
+    parent_id: int | None
     saldo: Decimal
