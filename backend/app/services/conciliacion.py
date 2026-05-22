@@ -174,6 +174,14 @@ def _score_identidad(
         score = 12 + _bonus_fecha(fecha_planilla, mov.fecha, dias_tolerancia)
         return score
 
+    # ── CUIT planilla como substring de dígitos del mov ────────
+    # Cubre formatos "20.112.233.440", "20-11223344-0", pegado a texto, etc.
+    if cuit_plan and len(cuit_plan) >= 10:
+        digitos_mov = re.sub(r'\D', '', titular_mov)
+        if cuit_plan in digitos_mov:
+            score = 12 + _bonus_fecha(fecha_planilla, mov.fecha, dias_tolerancia)
+            return score
+
     # ── CBU/CVU exacto ─────────────────────────────────────────
     cbu_mov = extraer_cbu(titular_mov)
     if cbu_plan and cbu_mov and cbu_plan == cbu_mov:
@@ -199,13 +207,19 @@ def _score_identidad(
     if titular_plan:
         norm_plan = normalizar_nombre(titular_plan)
         norm_mov  = normalizar_nombre(titular_mov)
-        palabras = [p for p in norm_plan.split() if len(p) > 3 and p.isalpha()]
+        # >=3 para no filtrar nombres cortos (Ana, Leo, Sol, etc.)
+        palabras = [p for p in norm_plan.split() if len(p) >= 3 and p.isalpha()]
 
         if len(palabras) >= 2:
             patron2 = ' '.join(palabras[:2])
             if patron2 in norm_mov:
+                # Ambas palabras en orden exacto → match fuerte
                 score += 5
+            elif all(p in norm_mov for p in palabras[:2]):
+                # Ambas palabras presentes, distinto orden (GARCIA JUAN vs JUAN GARCIA)
+                score += 4
             elif palabras[0] in norm_mov:
+                # Solo la primera palabra → match débil
                 score += 3
         elif len(palabras) == 1:
             if palabras[0] in norm_mov:

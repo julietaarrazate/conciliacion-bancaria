@@ -138,12 +138,33 @@ def conciliar(
     if not planilla:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planilla no encontrada")
 
+    # Si la planilla no tiene extracto (fue borrado), usar el más reciente de la org
     if not planilla.extracto_id:
-        raise HTTPException(status_code=400, detail="Esta planilla no está vinculada a un extracto activo. Cargá el extracto primero.")
-
-    extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == planilla.extracto_id).first()
-    if not extracto:
-        raise HTTPException(status_code=400, detail="El extracto de esta planilla ya no existe.")
+        extracto = (
+            db.query(ExtractoBancario)
+            .filter(ExtractoBancario.organizacion_id == (planilla.organizacion_id or 1))
+            .order_by(ExtractoBancario.fecha_creacion.desc())
+            .first()
+        )
+        if not extracto:
+            raise HTTPException(status_code=400, detail="No hay extractos cargados para esta organización. Cargá un extracto primero.")
+        # Re-vincular la planilla al extracto activo
+        planilla.extracto_id = extracto.id
+        db.flush()
+    else:
+        extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == planilla.extracto_id).first()
+        if not extracto:
+            # extracto_id apunta a algo borrado → buscar el más reciente
+            extracto = (
+                db.query(ExtractoBancario)
+                .filter(ExtractoBancario.organizacion_id == (planilla.organizacion_id or 1))
+                .order_by(ExtractoBancario.fecha_creacion.desc())
+                .first()
+            )
+            if not extracto:
+                raise HTTPException(status_code=400, detail="El extracto ya no existe y no hay otros cargados.")
+            planilla.extracto_id = extracto.id
+            db.flush()
 
     movimientos = extracto.movimientos
 
