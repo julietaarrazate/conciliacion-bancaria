@@ -364,7 +364,7 @@ def export_para_contador(
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
 
-    movs = sorted(extracto.movimientos, key=lambda m: (m.fecha or "", m.orden or 0))
+    movs = sorted(extracto.movimientos, key=lambda m: (m.fecha.isoformat() if m.fecha else "", m.orden or 0))
     data = [
         {
             "orden": m.orden,

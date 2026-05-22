@@ -321,7 +321,20 @@ class ApiClient {
   }
 
   async exportExtractoContador(extractoId: number): Promise<void> {
-    const res = await this.client.get(`/extractos/${extractoId}/export-contador`, { responseType: 'blob' })
+    let res: any
+    try {
+      res = await this.client.get(`/extractos/${extractoId}/export-contador`, { responseType: 'blob' })
+    } catch (err: any) {
+      // Blob error response: read text to surface backend message
+      if (err.response?.data instanceof Blob) {
+        const text = await err.response.data.text()
+        try {
+          const parsed = JSON.parse(text)
+          err.response.data = parsed
+        } catch { /* not JSON, leave as-is */ }
+      }
+      throw err
+    }
     const url = URL.createObjectURL(res.data)
     const a = document.createElement('a')
     const cd = res.headers['content-disposition'] || ''

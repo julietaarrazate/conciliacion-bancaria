@@ -297,7 +297,16 @@ export const Dashboard: React.FC = () => {
                 📊 Ver y filtrar movimientos
               </button>
               <button
-                onClick={() => apiClient.exportExtractoContador(extractoId)}
+                onClick={async () => {
+                  if (!extractoId) return
+                  setError('')
+                  try {
+                    await apiClient.exportExtractoContador(extractoId)
+                  } catch (err: any) {
+                    const msg = err.response?.data?.detail || err.message || 'Error al exportar'
+                    setError(`Export falló: ${msg}`)
+                  }
+                }}
                 className="w-full mt-2 flex items-center justify-center gap-2 px-3 py-2 text-sm text-green-700 dark:text-green-400 border border-green-600 dark:border-green-700 rounded-md hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors font-medium"
               >
                 📤 Exportar para contador (.xlsx)
