@@ -259,7 +259,8 @@ def buscar_match(
     fecha_planilla: Optional[date],
     movimientos: List[MovimientoBanco],
     procesados: set,
-    org_config: Dict[str, Any]
+    org_config: Dict[str, Any],
+    cliente_nombre: str = "",
 ) -> Tuple[Optional[MovimientoBanco], str]:
     """
     Busca el movimiento bancario que mejor coincide con la fila de planilla.
@@ -282,7 +283,12 @@ def buscar_match(
         return None, "no está"
 
     no_usados = [m for m in candidatos if m.id not in procesados]
-    libres    = [m for m in no_usados  if es_libre(m.cliente_acreditado)]
+    cliente_norm = cliente_nombre.strip().lower() if cliente_nombre else ""
+    libres = [
+        m for m in no_usados
+        if es_libre(m.cliente_acreditado)
+        or (cliente_norm and (m.cliente_acreditado or '').strip().lower() == cliente_norm)
+    ]
 
     if not libres:
         if not no_usados:
@@ -384,6 +390,13 @@ def conciliar_planilla(
         "filas_procesadas": 0
     }
 
+    # Pre-cargar en procesados todos los movimientos ya asignados a filas "ok"
+    # antes de iterar, sin importar el orden de las filas en la planilla.
+    if solo_pendientes:
+        for row in planilla_rows:
+            if row.status == "ok" and row.orden_movimiento_acreditado:
+                procesados.add(row.orden_movimiento_acreditado)
+
     for row in planilla_rows:
         res["filas_procesadas"] += 1
         # Modo re-conciliar: proteger filas ya ok y seguir con las demás
@@ -409,7 +422,8 @@ def conciliar_planilla(
             fecha_planilla=fecha_fila,
             movimientos=movimientos,
             procesados=procesados,
-            org_config=config
+            org_config=config,
+            cliente_nombre=cliente_nombre,
         )
 
         # ── Nivel 2: consultar patrones aprendidos antes de fallar ──────────
