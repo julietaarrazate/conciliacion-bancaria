@@ -484,12 +484,15 @@ export const Movimientos: React.FC = () => {
                     <td className="px-2 text-right font-mono text-gray-400 dark:text-gray-500">
                       {m.saldo != null ? fmtARS(m.saldo) : '—'}
                     </td>
-                    <td className="px-2 cursor-pointer" onClick={() => openAcredModal(m)} title="Clic para acreditar / editar">
+                    <td className="px-2 cursor-pointer group/cliente" onClick={() => openAcredModal(m)} title="Clic para acreditar o editar">
                       {m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
-                        ? <span className="pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium hover:bg-green-200 dark:hover:bg-green-900/70 transition-colors">{m.cliente_acreditado}</span>
-                        : <span className="text-ml-blue dark:text-blue-400 text-[10px] font-medium hover:underline">+ Acreditar</span>}
+                        ? <span className="inline-flex items-center gap-0.5 pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium group-hover/cliente:bg-green-200 dark:group-hover/cliente:bg-green-800/60 transition-colors">
+                            {m.cliente_acreditado}
+                            <span className="opacity-0 group-hover/cliente:opacity-50 text-[9px]">✏</span>
+                          </span>
+                        : <span className="text-ml-blue dark:text-blue-400 text-[10px] font-medium group-hover/cliente:underline">＋ Acreditar</span>}
                     </td>
-                    <td className="px-2 whitespace-nowrap text-gray-500 dark:text-gray-400 cursor-pointer" onClick={() => openAcredModal(m)} title="Clic para editar acreditación">
+                    <td className="px-2 whitespace-nowrap text-gray-500 dark:text-gray-400 cursor-pointer hover:text-ml-blue dark:hover:text-blue-400 transition-colors" onClick={() => openAcredModal(m)} title="Clic para editar acreditación">
                       {fmtDate(m.fecha_acred)}
                     </td>
                     <td className="px-1 text-center">

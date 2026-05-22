@@ -58,7 +58,7 @@ export const Dashboard: React.FC = () => {
   }
 
   const handleDeleteExtracto = async (id: number) => {
-    if (!confirm('¿Borrar este extracto? También se borran las planillas conciliadas con él.')) return
+    if (!confirm('¿Borrar este extracto?\n\nLos movimientos se eliminan, pero las planillas conciliadas quedan conservadas como historial (no se borran).')) return
     try {
       await apiClient.deleteExtracto(id)
       const data = await apiClient.listExtractos()
