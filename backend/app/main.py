@@ -14,6 +14,7 @@ from app.routers import auth, extractos, planillas, me, admin, auditoria, histor
 from app.routers import organizaciones
 from app.routers import liquidaciones
 from app.routers import caja
+from app.routers import contabilidad
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog
 from app.models.organizacion import Organizacion
 
@@ -169,7 +170,82 @@ def _init_db():
     except Exception as ex:
         print(f"[db] Warning seed org: {ex}")
 
-    # 6. Seed usuarios
+    # 6. Seed contabilidad (plan de cuentas + reglas)
+    try:
+        from app.database import SessionLocal as SL
+        from app.models.contabilidad import PlanCuenta, ReglaContable
+        db = SL()
+        if db.query(PlanCuenta).filter(PlanCuenta.organizacion_id == 1).count() == 0:
+            plan = [
+                # (codigo, nombre, tipo, parent_codigo, nivel)
+                ("1-0-0-0", "Activo",               "activo",    None,      1),
+                ("2-0-0-0", "Pasivo",               "pasivo",    None,      1),
+                ("3-0-0-0", "Resultado",            "resultado", None,      1),
+                ("1-1-0-0", "Activo Corriente",     None, "1-0-0-0",        2),
+                ("1-2-0-0", "Activo no corriente",  None, "1-0-0-0",        2),
+                ("2-1-0-0", "Pasivo Corriente",     None, "2-0-0-0",        2),
+                ("3-1-0-0", "Ingresos",             None, "3-0-0-0",        2),
+                ("3-2-0-0", "Gastos",               None, "3-0-0-0",        2),
+                ("1-1-1-0", "Disponibilidades",     None, "1-1-0-0",        3),
+                ("1-1-2-0", "Créditos",             None, "1-1-0-0",        3),
+                ("1-2-1-0", "Bienes de Uso",        None, "1-2-0-0",        3),
+                ("2-1-1-0", "Pasivo a Confirmar",   None, "2-1-0-0",        3),
+                ("2-1-2-0", "Cliente",              None, "2-1-0-0",        3),
+                ("3-1-1-0", "Comisiones",           None, "3-1-0-0",        3),
+                ("3-1-2-0", "Operaciones de cambio",None, "3-1-0-0",        3),
+                ("3-2-1-0", "Impuesto déb y créd",  None, "3-2-0-0",        3),
+                ("3-2-2-0", "Gastos bancarios",     None, "3-2-0-0",        3),
+                ("1-1-1-1", "Caja chica",           None, "1-1-1-0",        4),
+                ("1-1-1-2", "Efectivo",             None, "1-1-1-0",        4),
+                ("1-1-1-3", "Banco",                None, "1-1-1-0",        4),
+                ("2-1-1-1", "No identificado",      None, "2-1-1-0",        4),
+                ("2-1-2-1", "Green",                None, "2-1-2-0",        4),
+                ("2-1-2-2", "Tucu",                 None, "2-1-2-0",        4),
+                ("2-1-2-3", "Alojando",             None, "2-1-2-0",        4),
+            ]
+            code_to_id = {}
+            for codigo, nombre, tipo, parent_codigo, nivel in plan:
+                parent_id = code_to_id.get(parent_codigo) if parent_codigo else None
+                c = PlanCuenta(
+                    codigo=codigo, nombre=nombre, tipo=tipo,
+                    parent_id=parent_id, nivel=nivel,
+                    activo=True, organizacion_id=1
+                )
+                db.add(c)
+                db.flush()
+                code_to_id[codigo] = c.id
+            db.commit()
+            print(f"[db] Plan de cuentas sembrado ({len(plan)} cuentas)")
+
+            reglas = [
+                # (evento, descripcion, debe_codigo, haber_codigo)
+                ("carga_extracto",          "Carga extracto bancario",          "1-1-1-3", "2-1-0-0"),
+                ("carga_planilla",          "Acreditación planilla cliente",    "2-1-0-0", "2-1-2-0"),
+                ("carga_planilla_comision", "Comisión sobre planilla",          "2-1-0-0", "3-1-1-0"),
+                ("carga_efectivo",          "Carga cobro en efectivo",          "1-1-1-2", "1-1-1-3"),
+                ("carga_cheque",            "Carga cheque cliente",             "1-1-2-0", "2-1-2-0"),
+                ("carga_cheque_comision",   "Comisión sobre cheque",            "1-1-2-0", "3-1-1-0"),
+                ("acred_rechazo_banco",     "Acred/rechazo cheque — banco",     "1-1-1-3", "1-1-2-0"),
+                ("acred_rechazo_pasivo",    "Acred/rechazo cheque — cliente",   "2-1-2-0", "1-1-2-0"),
+                ("pago_cliente_banco",      "Pago cliente por banco",           "2-1-2-0", "1-1-1-3"),
+                ("pago_cliente_efectivo",   "Pago cliente en efectivo",         "2-1-2-0", "1-1-1-2"),
+                ("asig_gasto_banco",        "Gasto pagado por banco",           "3-2-0-0", "1-1-1-3"),
+                ("asig_gasto_efectivo",     "Gasto pagado en efectivo",         "3-2-0-0", "1-1-1-2"),
+            ]
+            for evento, descripcion, debe_codigo, haber_codigo in reglas:
+                db.add(ReglaContable(
+                    evento=evento, descripcion=descripcion,
+                    cuenta_debe_id=code_to_id[debe_codigo],
+                    cuenta_haber_id=code_to_id[haber_codigo],
+                    activo=True, organizacion_id=1
+                ))
+            db.commit()
+            print(f"[db] Reglas contables sembradas ({len(reglas)} reglas)")
+        db.close()
+    except Exception as ex:
+        print(f"[db] Warning seed contabilidad: {ex}")
+
+    # 7. Seed usuarios
     try:
         from app.database import SessionLocal as SL
         from app.models.user import User as U, RoleEnum
@@ -296,6 +372,7 @@ app.include_router(clientes_dir.router)
 app.include_router(organizaciones.router)
 app.include_router(liquidaciones.router)
 app.include_router(caja.router)
+app.include_router(contabilidad.router)
 
 
 @app.get("/")
