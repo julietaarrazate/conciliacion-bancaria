@@ -272,10 +272,14 @@ def buscar_match(
 
     if not libres:
         if not no_usados:
-            primer = candidatos[0]
-            fecha_s = primer.fecha_acred.strftime('%d/%m') if primer.fecha_acred else '?'
-            return None, f"acreditado {fecha_s}"
-        return None, "duplicado"
+            # Todos los candidatos ya fueron usados en esta misma corrida:
+            # la misma fila aparece dos veces en esta planilla → duplicado real
+            return None, "duplicado"
+        # Hay candidatos no usados en esta corrida pero todos ya tienen cliente_acreditado:
+        # el movimiento ya fue acreditado en una corrida anterior
+        primer = next((m for m in no_usados if m.fecha_acred), no_usados[0])
+        fecha_s = primer.fecha_acred.strftime('%d/%m') if primer.fecha_acred else '?'
+        return None, f"acreditado {fecha_s}"
 
     # Regla fundamental para extractos de alto volumen:
     #   - Monto UNICO (aparece 1 sola vez) → acreditar directo, no hay ambiguedad
