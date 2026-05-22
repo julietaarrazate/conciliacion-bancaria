@@ -157,12 +157,13 @@ class ApiClient {
 
   async conciliarPlanilla(
     planillaId: number,
-    fechaAcred: string = 'hoy'
+    fechaAcred: string = 'hoy',
+    soloPendientes = false
   ): Promise<ConciliacionResultado> {
     const res = await this.client.post(
       `/planillas/${planillaId}/conciliar`,
       {},
-      { params: { fecha_acred: fechaAcred } }
+      { params: { fecha_acred: fechaAcred, solo_pendientes: soloPendientes } }
     )
     return res.data
   }

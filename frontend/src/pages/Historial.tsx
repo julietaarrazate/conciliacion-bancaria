@@ -14,6 +14,10 @@ export const Historial: React.FC = () => {
   const [savingId, setSavingId] = useState<number | null>(null)
   const [panelId, setPanelId] = useState<number | null>(null)
   const [msg, setMsg] = useState('')
+  const [recModal, setRecModal] = useState<PlanillaHistorialItem | null>(null)
+  const [recFecha, setRecFecha] = useState(new Date().toISOString().split('T')[0])
+  const [recRunning, setRecRunning] = useState(false)
+  const [recError, setRecError] = useState('')
 
   const load = async (f = filter) => {
     setLoading(true)
@@ -58,6 +62,21 @@ export const Historial: React.FC = () => {
     setDownloadingId(id)
     try { await apiClient.downloadPlanillaConciliada(id) }
     finally { setDownloadingId(null) }
+  }
+
+  const handleReconciliar = async () => {
+    if (!recModal) return
+    setRecRunning(true)
+    setRecError('')
+    try {
+      const r = await apiClient.conciliarPlanilla(recModal.id, recFecha, true)
+      setMsg(`✓ Re-conciliación de ${recModal.cliente_nombre}: ${r.acreditadas} acreditadas, ${r.no_encontradas} no encontradas`)
+      setRecModal(null)
+      load(filter)
+    } catch (err: any) {
+      setRecError(err.response?.data?.detail || 'Error al re-conciliar')
+    }
+    setRecRunning(false)
   }
 
   const totalAcred = items.reduce((s, i) => s + i.acreditadas, 0)
@@ -163,6 +182,13 @@ export const Historial: React.FC = () => {
                     👁️ Ver / Editar
                   </button>
                   <button
+                    onClick={() => { setRecFecha(new Date().toISOString().split('T')[0]); setRecError(''); setRecModal(it) }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 font-medium active:scale-95"
+                    title="Re-conciliar: busca movimientos nuevos para las filas que no estaban"
+                  >
+                    🔄 Re-conciliar
+                  </button>
+                  <button
                     onClick={() => handleDownload(it.id)}
                     disabled={downloadingId === it.id}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 font-medium disabled:opacity-40 active:scale-95"
@@ -198,6 +224,61 @@ export const Historial: React.FC = () => {
         onClose={() => setPanelId(null)}
         onDelete={async id => { await apiClient.deletePlanilla(id); setPanelId(null); load(filter) }}
       />
+
+      {/* ── Modal re-conciliar ───────────────────────────── */}
+      {recModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={() => setRecModal(null)}>
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-5 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold dark:text-white mb-1">🔄 Re-conciliar planilla</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+              <strong>{recModal.cliente_nombre}</strong> · {recModal.nombre_archivo}
+              <br />
+              Solo re-procesa las filas <em>no acreditadas</em>. Las que ya están OK no se tocan.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="label text-xs">Fecha de acreditación</label>
+                <div className="flex gap-2 mb-1">
+                  <button
+                    onClick={() => setRecFecha(new Date().toISOString().split('T')[0])}
+                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${recFecha === new Date().toISOString().split('T')[0] ? 'bg-ml-blue text-white border-ml-blue' : 'border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 dark:text-gray-300'}`}
+                  >
+                    Hoy
+                  </button>
+                  <button
+                    onClick={() => { const d = new Date(); d.setDate(d.getDate()-1); setRecFecha(d.toISOString().split('T')[0]) }}
+                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${recFecha === (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0] })() ? 'bg-ml-blue text-white border-ml-blue' : 'border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 dark:text-gray-300'}`}
+                  >
+                    Ayer
+                  </button>
+                </div>
+                <input
+                  type="date"
+                  className="input-field text-xs"
+                  value={recFecha}
+                  onChange={e => setRecFecha(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {recError && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{recError}</p>}
+
+            <div className="flex gap-2 mt-5 justify-end">
+              <button onClick={() => setRecModal(null)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded hover:bg-gray-50 dark:hover:bg-slate-700">
+                Cancelar
+              </button>
+              <button
+                onClick={handleReconciliar}
+                disabled={recRunning || !recFecha}
+                className="px-4 py-1.5 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50"
+              >
+                {recRunning ? '⏳ Procesando...' : '🔄 Re-conciliar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

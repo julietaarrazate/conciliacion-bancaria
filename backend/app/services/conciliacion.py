@@ -353,7 +353,8 @@ def conciliar_planilla(
     cliente_nombre: str,
     fecha_acred_str: str,
     org_config: Optional[Dict[str, Any]] = None,
-    org_id: int = 1
+    org_id: int = 1,
+    solo_pendientes: bool = False,
 ) -> dict:
     from datetime import datetime, timedelta
 
@@ -371,6 +372,12 @@ def conciliar_planilla(
 
     for row in planilla_rows:
         res["filas_procesadas"] += 1
+        # Modo re-conciliar: proteger filas ya ok y seguir con las demás
+        if solo_pendientes and row.status == "ok":
+            res["acreditadas"] += 1
+            if row.orden_movimiento_acreditado:
+                procesados.add(row.orden_movimiento_acreditado)
+            continue
         monto = parse_importe(row.monto)
         if monto is None:
             row.status = "faltan datos"

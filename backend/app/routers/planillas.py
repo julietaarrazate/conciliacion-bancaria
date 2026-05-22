@@ -129,20 +129,23 @@ async def upload_planilla(
 def conciliar(
     planilla_id: int,
     fecha_acred: str = Query("hoy", description="Fecha de acreditación: 'hoy', 'ayer', o fecha ISO"),
+    solo_pendientes: bool = Query(False, description="Si True, solo re-procesa filas no-ok (preserva correcciones manuales)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permission("reconcile"))
 ):
     planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
     if not planilla:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Planilla no encontrada"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planilla no encontrada")
 
-    movimientos = db.query(ExtractoBancario).filter(
-        ExtractoBancario.id == planilla.extracto_id
-    ).first().movimientos
+    if not planilla.extracto_id:
+        raise HTTPException(status_code=400, detail="Esta planilla no está vinculada a un extracto activo. Cargá el extracto primero.")
+
+    extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == planilla.extracto_id).first()
+    if not extracto:
+        raise HTTPException(status_code=400, detail="El extracto de esta planilla ya no existe.")
+
+    movimientos = extracto.movimientos
 
     org_id = planilla.organizacion_id or 1
     org_config = _get_org_config(db, org_id)
@@ -155,7 +158,8 @@ def conciliar(
             cliente_nombre=planilla.cliente.nombre,
             fecha_acred_str=fecha_acred,
             org_config=org_config,
-            org_id=org_id
+            org_id=org_id,
+            solo_pendientes=solo_pendientes,
         )
 
         registrar_log(
