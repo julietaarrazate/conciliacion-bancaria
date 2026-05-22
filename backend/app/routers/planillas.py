@@ -324,6 +324,15 @@ def patch_row_status(
     row.status = nuevo_status
     if "comentario" in payload:
         row.comentario_revision = payload["comentario"]
+    # Guardar fecha_acred directamente en la fila (independiente del movimiento)
+    if "fecha_acred" in payload and payload["fecha_acred"]:
+        from datetime import date as _date
+        try:
+            row.fecha_acred = _date.fromisoformat(payload["fecha_acred"])
+        except Exception:
+            pass
+    elif nuevo_status in ("no está", "duplicado", "faltan datos", "pendiente"):
+        row.fecha_acred = None
 
     # ── Aprendizaje: registrar toda correccion manual para alimentar IA ──
     if status_anterior != nuevo_status and row.orden_movimiento_acreditado:
@@ -534,7 +543,7 @@ def get_planilla_detalle(
             "orden_movimiento_acreditado": r.orden_movimiento_acreditado,
             "mov_titular": mov.titular if mov else None,
             "mov_fecha": mov.fecha if mov else None,
-            "mov_fecha_acred": mov.fecha_acred if mov else None,
+            "mov_fecha_acred": (mov.fecha_acred if mov else None) or r.fecha_acred,
         })
 
     statuses = [r.status for r in p.rows]

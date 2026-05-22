@@ -49,12 +49,14 @@ def list_extractos(skip: int = 0, limit: int = 50,
     total = q.count()
     rows = q.order_by(desc(ExtractoBancario.fecha_creacion)).offset(skip).limit(limit).all()
     items = [{"id": e.id, "nombre_archivo": e.nombre_archivo,
-              "fecha_creacion": e.fecha_creacion, "total_movimientos": len(e.movimientos)} for e in rows]
+              "fecha_creacion": e.fecha_creacion, "total_movimientos": len(e.movimientos),
+              "banco": e.banco or "Banco Macro"} for e in rows]
     return {"total": total, "items": items}
 
 
 @router.post("/upload", response_model=ExtractoBancarioResponse)
 async def upload_extracto(file: UploadFile = File(...),
+                          banco: str = Query("Banco Macro"),
                           db: Session = Depends(get_db),
                           current_user: User = Depends(get_current_user)):
     ext = os.path.splitext(file.filename or '')[1].lower()
@@ -95,13 +97,15 @@ async def upload_extracto(file: UploadFile = File(...),
                     actualizados += 1
                 if fecha_nueva and not m.fecha_acred:
                     m.fecha_acred = fecha_nueva
+            if banco and banco != "Banco Macro" and not existente.banco:
+                existente.banco = banco
             db.commit()
             db.refresh(existente)
             registrar_log(db, current_user.id, "extractos_bancarios", existente.id, "UPSERT_ACRED",
                           {"archivo": file.filename, "actualizados": actualizados})
             return existente
 
-        extracto = ExtractoBancario(nombre_archivo=file.filename, creado_por=current_user.id, fingerprint=fp)
+        extracto = ExtractoBancario(nombre_archivo=file.filename, creado_por=current_user.id, fingerprint=fp, banco=banco)
         db.add(extracto)
         db.flush()
         for m in movs:

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Text, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -47,8 +47,9 @@ class PlanillaRow(Base):
     # Estados base: "pendiente", "ok", "no está", "duplicado", "faltan datos", "acreditado DD/MM"
     # Estados ricos: "PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA", "VENCIDO", "EN_REVISION"
     status = Column(String, nullable=False)
-    monto_acreditado = Column(Float, nullable=True)  # para PAGO_PARCIAL / CONCILIADO_CON_DIFERENCIA
-    comentario_revision = Column(Text, nullable=True)  # para EN_REVISION
+    fecha_acred = Column(Date, nullable=True)
+    monto_acreditado = Column(Float, nullable=True)
+    comentario_revision = Column(Text, nullable=True)
     orden_movimiento_acreditado = Column(Integer, ForeignKey("movimientos_banco.id"), nullable=True)
 
     # Relationships

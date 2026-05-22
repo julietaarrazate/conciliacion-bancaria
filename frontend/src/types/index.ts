@@ -89,6 +89,7 @@ export interface ExtractoHistorialItem {
   usuario_nombre: string
   total_movimientos: number
   acreditados: number
+  banco?: string
 }
 
 export interface AuditoriaLog {
@@ -113,6 +114,7 @@ export interface ExtractoListItem {
   nombre_archivo: string
   fecha_creacion: string
   total_movimientos: number
+  banco?: string
 }
 
 export interface MovimientoFiltrado {

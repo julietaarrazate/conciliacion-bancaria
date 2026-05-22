@@ -12,6 +12,7 @@ class ExtractoBancario(Base):
     fecha_creacion = Column(DateTime, default=datetime.utcnow)
     fecha_extracto = Column(Date, nullable=True)
     fingerprint = Column(String, nullable=True, index=True)
+    banco = Column(String, nullable=True, default="Banco Macro")
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
 
     # Relationships

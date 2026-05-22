@@ -35,6 +35,7 @@ export const Dashboard: React.FC = () => {
   const [fechaAcred, setFechaAcred] = useState<string>(
     new Date().toISOString().split('T')[0]
   )
+  const [banco, setBanco] = useState('Banco Macro')
   const [umCorteDetectado, setUmCorteDetectado] = useState<number | null>(null)
   const [umCorteManual, setUmCorteManual] = useState<string>('')
   const [umFile, setUmFile] = useState<File | null>(null)
@@ -139,7 +140,7 @@ export const Dashboard: React.FC = () => {
     setError('')
     setSuccess('')
     try {
-      const data = await apiClient.uploadExtraco(file)
+      const data = await apiClient.uploadExtraco(file, banco)
       setExtractoId(data.id)
       setExtractoNombre(data.nombre_archivo)
       setSuccess(`Extracto cargado: ${data.movimientos.length} movimientos`)
@@ -343,6 +344,22 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
           )}
+
+          <div className="mb-3">
+            <label className="label">Banco</label>
+            <input
+              list="bancos-list"
+              className="input-field"
+              value={banco}
+              onChange={e => setBanco(e.target.value)}
+              placeholder="Banco Macro"
+            />
+            <datalist id="bancos-list">
+              {['Banco Macro','Banco Nación','BBVA','Santander','Galicia','HSBC','Brubank','Mercado Pago'].map(b => (
+                <option key={b} value={b} />
+              ))}
+            </datalist>
+          </div>
 
           <FileUpload
             onFileSelected={handleUploadExtraco}

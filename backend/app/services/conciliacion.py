@@ -443,6 +443,7 @@ def conciliar_planilla(
                 except Exception:
                     mov.fecha_acred = datetime.now().date()
 
+            row.fecha_acred = mov.fecha_acred
             row.orden_movimiento_acreditado = mov.id
             procesados.add(mov.id)
             res["acreditadas"] += 1

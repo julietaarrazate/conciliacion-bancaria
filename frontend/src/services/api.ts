@@ -116,12 +116,13 @@ class ApiClient {
   }
 
   // Extractos endpoints
-  async uploadExtraco(file: File): Promise<ExtractoBancario> {
+  async uploadExtraco(file: File, banco: string = 'Banco Macro'): Promise<ExtractoBancario> {
     const formData = new FormData()
     formData.append('file', file)
 
     const res = await this.client.post('/extractos/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: { banco }
     })
     return res.data
   }

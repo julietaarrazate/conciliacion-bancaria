@@ -26,6 +26,7 @@ class ExtractoHistorialItem(BaseModel):
     usuario_nombre: str
     total_movimientos: int
     acreditados: int = 0
+    banco: Optional[str] = "Banco Macro"
 
     class Config:
         from_attributes = True

@@ -12,72 +12,67 @@ function fmtDatetime(s: string) {
   } catch { return s }
 }
 
-interface GroupMes {
-  mes: number      // 1-12
-  label: string
-  items: ExtractoHistorialItem[]
-}
-interface GroupAnio {
-  anio: number
-  meses: GroupMes[]
-}
+interface GroupMes   { mes: number; label: string; items: ExtractoHistorialItem[] }
+interface GroupAnio  { anio: number; meses: GroupMes[] }
+interface GroupBanco { banco: string; anios: GroupAnio[] }
 
-function agrupar(items: ExtractoHistorialItem[]): GroupAnio[] {
-  const map: Record<number, Record<number, ExtractoHistorialItem[]>> = {}
+function agrupar(items: ExtractoHistorialItem[]): GroupBanco[] {
+  const map: Record<string, Record<number, Record<number, ExtractoHistorialItem[]>>> = {}
   for (const e of items) {
+    const banco = e.banco || 'Banco Macro'
     const d = new Date(e.fecha_creacion.endsWith('Z') ? e.fecha_creacion : e.fecha_creacion + 'Z')
     const anio = d.getFullYear()
     const mes  = d.getMonth() + 1
-    if (!map[anio]) map[anio] = {}
-    if (!map[anio][mes]) map[anio][mes] = []
-    map[anio][mes].push(e)
+    if (!map[banco]) map[banco] = {}
+    if (!map[banco][anio]) map[banco][anio] = {}
+    if (!map[banco][anio][mes]) map[banco][anio][mes] = []
+    map[banco][anio][mes].push(e)
   }
-  return Object.keys(map)
-    .map(Number)
-    .sort((a, b) => b - a)
-    .map(anio => ({
+  return Object.keys(map).sort().map(banco => ({
+    banco,
+    anios: Object.keys(map[banco]).map(Number).sort((a, b) => b - a).map(anio => ({
       anio,
-      meses: Object.keys(map[anio])
-        .map(Number)
-        .sort((a, b) => b - a)
-        .map(mes => ({
-          mes,
-          label: `${MESES[mes - 1]} ${anio}`,
-          items: map[anio][mes],
-        }))
+      meses: Object.keys(map[banco][anio]).map(Number).sort((a, b) => b - a).map(mes => ({
+        mes,
+        label: `${MESES[mes - 1]} ${anio}`,
+        items: map[banco][anio][mes],
+      }))
     }))
+  }))
 }
 
 export const ExtractosArchivo: React.FC = () => {
   const navigate = useNavigate()
-  const [items, setItems]       = useState<ExtractoHistorialItem[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [openAnios, setOpenAnios] = useState<Set<number>>(new Set())
-  const [openMeses, setOpenMeses] = useState<Set<string>>(new Set())
-  const [dlError, setDlError]   = useState('')
+  const [items, setItems]         = useState<ExtractoHistorialItem[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [openBancos, setOpenBancos] = useState<Set<string>>(new Set())
+  const [openAnios, setOpenAnios] = useState<Set<string>>(new Set())   // `${banco}-${anio}`
+  const [openMeses, setOpenMeses] = useState<Set<string>>(new Set())   // `${banco}-${anio}-${mes}`
+  const [dlError, setDlError]     = useState('')
   const [dlLoading, setDlLoading] = useState<number | null>(null)
 
   useEffect(() => {
     apiClient.getHistorialExtractos({ limit: 200 }).then(d => {
       setItems(d.items)
-      // Abrir el año y mes más reciente por defecto
       const grupos = agrupar(d.items)
       if (grupos.length > 0) {
-        const g = grupos[0]
-        setOpenAnios(new Set([g.anio]))
-        if (g.meses.length > 0) {
-          setOpenMeses(new Set([`${g.anio}-${g.meses[0].mes}`]))
+        const gb = grupos[0]
+        setOpenBancos(new Set([gb.banco]))
+        if (gb.anios.length > 0) {
+          const ga = gb.anios[0]
+          setOpenAnios(new Set([`${gb.banco}-${ga.anio}`]))
+          if (ga.meses.length > 0) {
+            setOpenMeses(new Set([`${gb.banco}-${ga.anio}-${ga.meses[0].mes}`]))
+          }
         }
       }
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
 
-  const toggleAnio = (anio: number) =>
-    setOpenAnios(s => { const n = new Set(s); n.has(anio) ? n.delete(anio) : n.add(anio); return n })
-
-  const toggleMes = (key: string) =>
-    setOpenMeses(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
+  const toggle = <T extends string | number>(set: Set<T>, val: T): Set<T> => {
+    const n = new Set(set); n.has(val) ? n.delete(val) : n.add(val); return n
+  }
 
   const handleDownload = async (e: ExtractoHistorialItem) => {
     setDlError('')
@@ -98,7 +93,7 @@ export const ExtractosArchivo: React.FC = () => {
         <div>
           <h1 className="text-xl font-bold text-ml-text dark:text-white">Archivo de Extractos</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Todos los extractos bancarios cargados, organizados por fecha · descargá el conciliado en cualquier momento
+            Organizados por banco · año · mes — descargá el conciliado en cualquier momento
           </p>
         </div>
       </div>
@@ -120,101 +115,124 @@ export const ExtractosArchivo: React.FC = () => {
           </button>
         </div>
       ) : (
-        <div className="space-y-2">
-          {grupos.map(({ anio, meses }) => {
-            const anioOpen = openAnios.has(anio)
-            const totalAnio = meses.reduce((s, m) => s + m.items.length, 0)
-            const acredAnio = meses.reduce((s, m) => s + m.items.reduce((ss, e) => ss + e.acreditados, 0), 0)
+        <div className="space-y-3">
+          {grupos.map(({ banco, anios }) => {
+            const bancoOpen = openBancos.has(banco)
+            const totalBanco = anios.reduce((s, a) => s + a.meses.reduce((ss, m) => ss + m.items.length, 0), 0)
 
             return (
-              <div key={anio} className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
-                {/* Año */}
+              <div key={banco} className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                {/* Banco */}
                 <button
-                  onClick={() => toggleAnio(anio)}
-                  className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-750 text-left transition-colors"
+                  onClick={() => setOpenBancos(toggle(openBancos, banco))}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 bg-ml-blue/5 dark:bg-slate-800 hover:bg-ml-blue/10 dark:hover:bg-slate-750 text-left transition-colors"
                 >
+                  <span className="text-base">🏦</span>
                   <span className="text-sm font-bold text-ml-text dark:text-white flex-1">
-                    {anioOpen ? '▼' : '▶'} {anio}
+                    {bancoOpen ? '▼' : '▶'} {banco}
                   </span>
                   <span className="text-xs text-gray-400 dark:text-gray-500">
-                    {totalAnio} extracto{totalAnio !== 1 ? 's' : ''} · {acredAnio} acreditaciones
+                    {totalBanco} extracto{totalBanco !== 1 ? 's' : ''}
                   </span>
                 </button>
 
-                {anioOpen && (
+                {bancoOpen && (
                   <div className="divide-y divide-gray-100 dark:divide-slate-700">
-                    {meses.map(({ mes, label, items: mesItems }) => {
-                      const mesKey = `${anio}-${mes}`
-                      const mesOpen = openMeses.has(mesKey)
-                      const acredMes = mesItems.reduce((s, e) => s + e.acreditados, 0)
-                      const movsMes  = mesItems.reduce((s, e) => s + e.total_movimientos, 0)
+                    {anios.map(({ anio, meses }) => {
+                      const anioKey = `${banco}-${anio}`
+                      const anioOpen = openAnios.has(anioKey)
+                      const totalAnio = meses.reduce((s, m) => s + m.items.length, 0)
 
                       return (
-                        <div key={mesKey}>
-                          {/* Mes */}
+                        <div key={anio}>
+                          {/* Año */}
                           <button
-                            onClick={() => toggleMes(mesKey)}
-                            className="w-full flex items-center gap-3 px-6 py-2.5 bg-white dark:bg-slate-800/50 hover:bg-gray-50 dark:hover:bg-slate-700/50 text-left transition-colors"
+                            onClick={() => setOpenAnios(toggle(openAnios, anioKey))}
+                            className="w-full flex items-center gap-3 px-6 py-2.5 bg-gray-50 dark:bg-slate-800/60 hover:bg-gray-100 dark:hover:bg-slate-700/60 text-left transition-colors"
                           >
-                            <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 flex-1">
-                              {mesOpen ? '▼' : '▶'} 📅 {label}
+                            <span className="text-xs font-bold text-ml-text dark:text-white flex-1">
+                              {anioOpen ? '▼' : '▶'} {anio}
                             </span>
                             <span className="text-[11px] text-gray-400">
-                              {mesItems.length} archivo{mesItems.length !== 1 ? 's' : ''} · {movsMes.toLocaleString('es-AR')} movimientos · {acredMes} acreditados
+                              {totalAnio} extracto{totalAnio !== 1 ? 's' : ''}
                             </span>
                           </button>
 
-                          {/* Extractos del mes */}
-                          {mesOpen && (
-                            <div className="bg-white dark:bg-slate-900/30">
-                              {mesItems.map(e => {
-                                const pct = e.total_movimientos > 0
-                                  ? Math.round((e.acreditados / e.total_movimientos) * 100)
-                                  : 0
+                          {anioOpen && (
+                            <div className="divide-y divide-gray-50 dark:divide-slate-700/50">
+                              {meses.map(({ mes, label, items: mesItems }) => {
+                                const mesKey = `${banco}-${anio}-${mes}`
+                                const mesOpen = openMeses.has(mesKey)
+                                const acredMes = mesItems.reduce((s, e) => s + e.acreditados, 0)
+                                const movsMes  = mesItems.reduce((s, e) => s + e.total_movimientos, 0)
 
                                 return (
-                                  <div
-                                    key={e.id}
-                                    className="flex items-center gap-3 px-8 py-2.5 border-b border-gray-50 dark:border-slate-700/50 last:border-0 hover:bg-blue-50/30 dark:hover:bg-slate-700/30 transition-colors"
-                                  >
-                                    <span className="text-lg select-none">📄</span>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-medium text-ml-text dark:text-gray-200 truncate" title={e.nombre_archivo}>
-                                        {e.nombre_archivo}
-                                      </p>
-                                      <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
-                                        Subido {fmtDatetime(e.fecha_creacion)} · por {e.usuario_nombre}
-                                      </p>
-                                    </div>
-
-                                    {/* Stats */}
-                                    <div className="hidden sm:flex items-center gap-3 text-[11px]">
-                                      <span className="text-gray-500 dark:text-gray-400">
-                                        {e.total_movimientos.toLocaleString('es-AR')} movs
+                                  <div key={mesKey}>
+                                    {/* Mes */}
+                                    <button
+                                      onClick={() => setOpenMeses(toggle(openMeses, mesKey))}
+                                      className="w-full flex items-center gap-3 px-8 py-2 bg-white dark:bg-slate-800/30 hover:bg-gray-50 dark:hover:bg-slate-700/40 text-left transition-colors"
+                                    >
+                                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 flex-1">
+                                        {mesOpen ? '▼' : '▶'} 📅 {label}
                                       </span>
-                                      <span className={`font-medium ${pct >= 80 ? 'text-green-600 dark:text-green-400' : pct >= 40 ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-400'}`}>
-                                        {e.acreditados} acred. ({pct}%)
+                                      <span className="text-[11px] text-gray-400">
+                                        {mesItems.length} archivo{mesItems.length !== 1 ? 's' : ''} · {movsMes.toLocaleString('es-AR')} movs · {acredMes} acred.
                                       </span>
-                                    </div>
+                                    </button>
 
-                                    {/* Acciones */}
-                                    <div className="flex gap-1.5 ml-2">
-                                      <button
-                                        onClick={() => navigate(`/movimientos?extracto=${e.id}`)}
-                                        className="px-2.5 py-1 text-[11px] text-ml-blue border border-ml-blue/30 rounded-md hover:bg-ml-blue/5 dark:hover:bg-ml-blue/10 transition-colors whitespace-nowrap"
-                                        title="Ver movimientos"
-                                      >
-                                        📊 Ver
-                                      </button>
-                                      <button
-                                        onClick={() => handleDownload(e)}
-                                        disabled={dlLoading === e.id}
-                                        className="px-2.5 py-1 text-[11px] bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors whitespace-nowrap"
-                                        title="Descargar extracto conciliado (.xlsx)"
-                                      >
-                                        {dlLoading === e.id ? '⏳' : '⬇️'} .xlsx
-                                      </button>
-                                    </div>
+                                    {/* Extractos del mes */}
+                                    {mesOpen && (
+                                      <div className="bg-white dark:bg-slate-900/30">
+                                        {mesItems.map(e => {
+                                          const pct = e.total_movimientos > 0
+                                            ? Math.round((e.acreditados / e.total_movimientos) * 100)
+                                            : 0
+
+                                          return (
+                                            <div
+                                              key={e.id}
+                                              className="flex items-center gap-3 px-10 py-2.5 border-b border-gray-50 dark:border-slate-700/50 last:border-0 hover:bg-blue-50/30 dark:hover:bg-slate-700/30 transition-colors"
+                                            >
+                                              <span className="text-lg select-none">📄</span>
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-medium text-ml-text dark:text-gray-200 truncate" title={e.nombre_archivo}>
+                                                  {e.nombre_archivo}
+                                                </p>
+                                                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                                                  Subido {fmtDatetime(e.fecha_creacion)} · {e.usuario_nombre}
+                                                </p>
+                                              </div>
+
+                                              <div className="hidden sm:flex items-center gap-3 text-[11px]">
+                                                <span className="text-gray-500 dark:text-gray-400">
+                                                  {e.total_movimientos.toLocaleString('es-AR')} movs
+                                                </span>
+                                                <span className={`font-medium ${pct >= 80 ? 'text-green-600 dark:text-green-400' : pct >= 40 ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-400'}`}>
+                                                  {e.acreditados} acred. ({pct}%)
+                                                </span>
+                                              </div>
+
+                                              <div className="flex gap-1.5 ml-2">
+                                                <button
+                                                  onClick={() => navigate(`/movimientos?extracto=${e.id}`)}
+                                                  className="px-2.5 py-1 text-[11px] text-ml-blue border border-ml-blue/30 rounded-md hover:bg-ml-blue/5 dark:hover:bg-ml-blue/10 transition-colors whitespace-nowrap"
+                                                >
+                                                  📊 Ver
+                                                </button>
+                                                <button
+                                                  onClick={() => handleDownload(e)}
+                                                  disabled={dlLoading === e.id}
+                                                  className="px-2.5 py-1 text-[11px] bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                                                >
+                                                  {dlLoading === e.id ? '⏳' : '⬇️'} .xlsx
+                                                </button>
+                                              </div>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    )}
                                   </div>
                                 )
                               })}

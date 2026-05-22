@@ -82,6 +82,8 @@ def _init_db():
         "ALTER TABLE planilla_rows ADD COLUMN comentario_revision TEXT",
         "ALTER TABLE movimientos_banco ADD COLUMN um_lote INTEGER DEFAULT NULL",
         "ALTER TABLE planillas ALTER COLUMN extracto_id DROP NOT NULL",
+        "ALTER TABLE planilla_rows ADD COLUMN fecha_acred DATE",
+        "ALTER TABLE extractos_bancarios ADD COLUMN banco VARCHAR DEFAULT 'Banco Macro'",
     ]
     for sql in migrations:
         try:
@@ -115,6 +117,7 @@ def _init_db():
         "UPDATE movimientos_banco SET organizacion_id=1 WHERE organizacion_id IS NULL",
         "UPDATE planillas SET organizacion_id=1 WHERE organizacion_id IS NULL",
         "UPDATE planilla_rows SET organizacion_id=1 WHERE organizacion_id IS NULL",
+        "UPDATE extractos_bancarios SET banco='Banco Macro' WHERE banco IS NULL",
     ]
     for sql in backfills:
         try:

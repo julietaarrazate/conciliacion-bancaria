@@ -165,6 +165,7 @@ def list_extractos(
                 usuario_nombre=e.creado_por_user.full_name,
                 total_movimientos=len(e.movimientos),
                 acreditados=acred,
+                banco=e.banco or "Banco Macro",
             )
         )
 
