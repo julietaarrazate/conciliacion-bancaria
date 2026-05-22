@@ -133,6 +133,8 @@ export interface MergeUMResult {
   agregados: number
   duplicados: number
   total_recibido: number
+  corte_metodo?: string
+  corte_saldo_detectado?: number
 }
 
 export interface MovimientosFiltros {

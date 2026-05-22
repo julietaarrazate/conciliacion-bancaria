@@ -270,9 +270,12 @@ class ApiClient {
     await this.client.delete(`/planillas/rows/${rowId}`)
   }
 
-  async appendUM(extractoId: number, file: File): Promise<MergeUMResult> {
+  async appendUM(extractoId: number, file: File, corteSaldo?: number): Promise<MergeUMResult> {
     const formData = new FormData()
     formData.append('file', file)
+    if (corteSaldo !== undefined) {
+      formData.append('corte_saldo', String(corteSaldo))
+    }
     const res = await this.client.post(
       `/extractos/${extractoId}/agregar-um`,
       formData,

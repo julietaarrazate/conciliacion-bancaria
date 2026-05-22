@@ -56,6 +56,8 @@ class MergeUMResponse(BaseModel):
     agregados: int
     duplicados: int
     total_recibido: int
+    corte_metodo: Optional[str] = None
+    corte_saldo_detectado: Optional[float] = None
 
 
 class MovimientosFiltradosResponse(BaseModel):

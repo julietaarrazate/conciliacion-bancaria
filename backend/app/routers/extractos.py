@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_, or_, text
@@ -197,9 +197,13 @@ def delete_todos_extractos(db: Session = Depends(get_db),
 
 
 @router.post("/{extracto_id}/agregar-um", response_model=MergeUMResponse)
-async def agregar_ultimos_movimientos(extracto_id: int, file: UploadFile = File(...),
-                                      db: Session = Depends(get_db),
-                                      current_user: User = Depends(get_current_user)):
+async def agregar_ultimos_movimientos(
+    extracto_id: int,
+    file: UploadFile = File(...),
+    corte_saldo: Optional[float] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
@@ -212,7 +216,7 @@ async def agregar_ultimos_movimientos(extracto_id: int, file: UploadFile = File(
             tmp.write(await file.read())
             tmp_path = tmp.name
         parsed = parsear_extracto_bancario(tmp_path)
-        stats = mergear_movimientos(db, extracto_id, parsed["movimientos"])
+        stats = mergear_movimientos(db, extracto_id, parsed["movimientos"], corte_saldo=corte_saldo)
         registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "APPEND_UM",
                       {"archivo": file.filename, **stats})
         return {"extracto_id": extracto_id, **stats}

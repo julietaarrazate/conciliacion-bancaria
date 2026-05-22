@@ -35,6 +35,9 @@ export const Dashboard: React.FC = () => {
   const [fechaAcred, setFechaAcred] = useState<string>(
     new Date().toISOString().split('T')[0]
   )
+  const [umCorteDetectado, setUmCorteDetectado] = useState<number | null>(null)
+  const [umCorteManual, setUmCorteManual] = useState<string>('')
+  const [umFile, setUmFile] = useState<File | null>(null)
 
   useEffect(() => {
     setExtractoId(null)
@@ -112,7 +115,7 @@ export const Dashboard: React.FC = () => {
     }
   }
 
-  const handleUploadUM = async (file: File) => {
+  const handleUploadUM = async (file: File, corteSaldoOverride?: number) => {
     if (!extractoId) {
       setError('Cargá primero un extracto')
       return
@@ -121,17 +124,28 @@ export const Dashboard: React.FC = () => {
     setError('')
     setSuccess('')
     try {
-      const r = await apiClient.appendUM(extractoId, file)
+      const r = await apiClient.appendUM(extractoId, file, corteSaldoOverride)
+      setUmCorteDetectado(r.corte_saldo_detectado ?? null)
+      setUmFile(file)
+      const metodo = r.corte_metodo === 'manual' ? ' (corte manual)' : r.corte_metodo === 'fallback' ? ' ⚠️ corte por fallback — verificar' : ''
       setSuccess(
         r.agregados > 0
-          ? `UM agregado: ${r.agregados} movimientos nuevos sumados al extracto · ${r.duplicados} ya existían (corte de solapamiento detectado)`
-          : `UM procesado: no había movimientos nuevos — los ${r.duplicados} del archivo ya estaban en el extracto`
+          ? `UM agregado: ${r.agregados} movimientos nuevos · ${r.duplicados} ya existían${metodo}`
+          : `UM procesado: no había movimientos nuevos — ${r.duplicados} ya existían${metodo}`
       )
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error al cargar UM')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleReintentarUMConCorteManual = async () => {
+    if (!umFile) return
+    const saldo = parseFloat(umCorteManual.replace(/\./g, '').replace(',', '.'))
+    if (isNaN(saldo)) { setError('Ingresá un saldo válido para el corte manual'); return }
+    await handleUploadUM(umFile, saldo)
+    setUmCorteManual('')
   }
 
   const handleUploadPlanilla = async (file: File) => {
@@ -292,7 +306,29 @@ export const Dashboard: React.FC = () => {
                 <p className="text-xs text-ml-text-soft dark:text-gray-400 mb-2">
                   ¿Tenés Últimos Movimientos del banco? Sumalos sin duplicar:
                 </p>
-                <FileUpload onFileSelected={handleUploadUM} label="+ Agregar UM" />
+                <FileUpload onFileSelected={(f) => handleUploadUM(f)} label="+ Agregar UM" />
+                {umCorteDetectado && (
+                  <p className="text-xs text-ml-text-soft dark:text-gray-400 mt-2">
+                    Corte detectado en saldo <span className="font-mono font-medium">${umCorteDetectado.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
+                  </p>
+                )}
+                {umFile && (
+                  <div className="mt-2 flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={umCorteManual}
+                      onChange={(e) => setUmCorteManual(e.target.value)}
+                      placeholder="Saldo del corte manual ej: 99657675.21"
+                      className="flex-1 text-xs px-2 py-1.5 rounded border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-ml-text dark:text-gray-200 focus:outline-none focus:border-ml-blue"
+                    />
+                    <button
+                      onClick={handleReintentarUMConCorteManual}
+                      className="text-xs px-3 py-1.5 bg-ml-blue text-white rounded hover:bg-ml-blue/90 whitespace-nowrap"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                )}
               </div>
             </>
           )}
