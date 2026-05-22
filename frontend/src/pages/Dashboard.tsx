@@ -313,15 +313,31 @@ export const Dashboard: React.FC = () => {
                   <button
                     onClick={async () => {
                       if (!extractoId) return
-                      if (!confirm('¿Eliminar movimientos UM cargados? El extracto original no se toca. Luego podés re-subir el UM.')) return
                       setLoading(true)
+                      setError('')
                       try {
                         const r = await apiClient.deleteUM(extractoId)
                         setUmCorteDetectado(null)
                         setUmFile(null)
                         setSuccess(`UM limpiado: ${r.eliminados} movimientos eliminados. Ahora podés re-subir el UM.`)
                       } catch (err: any) {
-                        setError(err.response?.data?.detail || 'Error al limpiar UM')
+                        if (err.response?.status === 409) {
+                          const det = err.response.data?.detail
+                          const msg = typeof det === 'object' ? det.mensaje : det
+                          const total = typeof det === 'object' ? det.total : 0
+                          if (confirm(`${msg}\n\n¿Borrar los ${total} movimientos UM?`)) {
+                            try {
+                              const r = await apiClient.deleteUM(extractoId, true)
+                              setUmCorteDetectado(null)
+                              setUmFile(null)
+                              setSuccess(`UM limpiado: ${r.eliminados} movimientos eliminados.`)
+                            } catch (e2: any) {
+                              setError(e2.response?.data?.detail || 'Error al limpiar UM')
+                            }
+                          }
+                        } else {
+                          setError(err.response?.data?.detail || 'Error al limpiar UM')
+                        }
                       } finally {
                         setLoading(false)
                       }

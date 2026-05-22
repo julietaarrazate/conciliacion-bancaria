@@ -198,9 +198,11 @@ def delete_todos_extractos(db: Session = Depends(get_db),
 
 
 @router.delete("/{extracto_id}/movimientos-um")
-def eliminar_movimientos_um(extracto_id: int, db: Session = Depends(get_db),
+def eliminar_movimientos_um(extracto_id: int,
+                            forzar_todo: bool = Query(False),
+                            db: Session = Depends(get_db),
                             current_user: User = Depends(get_current_user)):
-    """Elimina solo el ultimo lote de UM cargado para ese extracto."""
+    """Elimina solo el ultimo lote de UM. Si no hay lotes asignados requiere forzar_todo=true."""
     extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
@@ -215,6 +217,16 @@ def eliminar_movimientos_um(extracto_id: int, db: Session = Depends(get_db),
         ).scalar()
 
         if max_lote is None:
+            if not forzar_todo:
+                total_um = db.query(func.count(MovimientoBanco.id)).filter(
+                    MovimientoBanco.extracto_id == extracto_id,
+                    MovimientoBanco.source == 'um'
+                ).scalar() or 0
+                raise HTTPException(409, {
+                    "code": "sin_lotes",
+                    "total": total_um,
+                    "mensaje": f"Este extracto tiene {total_um} movimientos UM cargados antes del sistema de lotes. No se puede identificar solo el último. ¿Borrar todos?"
+                })
             movs_query = db.query(MovimientoBanco).filter(
                 MovimientoBanco.extracto_id == extracto_id,
                 MovimientoBanco.source == 'um'

@@ -288,8 +288,8 @@ class ApiClient {
     return res.data
   }
 
-  async deleteUM(extractoId: number): Promise<{ ok: boolean; eliminados: number }> {
-    const res = await this.client.delete(`/extractos/${extractoId}/movimientos-um`)
+  async deleteUM(extractoId: number, forzarTodo = false): Promise<{ ok: boolean; eliminados: number }> {
+    const res = await this.client.delete(`/extractos/${extractoId}/movimientos-um${forzarTodo ? '?forzar_todo=true' : ''}`)
     return res.data
   }
 
