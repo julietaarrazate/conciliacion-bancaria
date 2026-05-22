@@ -541,10 +541,10 @@ def get_planilla_detalle(
     return {
         "id": p.id,
         "nombre_archivo": p.nombre_archivo,
-        "cliente_nombre": p.cliente.nombre,
-        "extracto_nombre": p.extracto.nombre_archivo,
+        "cliente_nombre": p.cliente.nombre if p.cliente else "—",
+        "extracto_nombre": p.extracto.nombre_archivo if p.extracto else "Sin extracto",
         "fecha_carga": p.fecha_carga,
-        "usuario_nombre": p.usuario.full_name,
+        "usuario_nombre": p.usuario.full_name if p.usuario else "—",
         "rows": rows_enriched,
         "total": len(statuses),
         "acreditadas": sum(1 for s in statuses if s == "ok"),

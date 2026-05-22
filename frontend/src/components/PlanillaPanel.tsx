@@ -77,6 +77,7 @@ const ESTADOS_DISPONIBLES = [
 export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }) => {
   const [detalle, setDetalle] = useState<Detalle | null>(null)
   const [loading, setLoading] = useState(false)
+  const [fetchError, setFetchError] = useState('')
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [showFilters, setShowFilters] = useState(false)
   const [editingRowId, setEditingRowId] = useState<number | null>(null)
@@ -87,12 +88,16 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
   const [bulkStatus, setBulkStatus] = useState('')
 
   useEffect(() => {
-    if (!planillaId) { setDetalle(null); setFilters(EMPTY_FILTERS); setSelectedRows(new Set()); return }
+    if (!planillaId) { setDetalle(null); setFetchError(''); setFilters(EMPTY_FILTERS); setSelectedRows(new Set()); return }
     setLoading(true)
+    setFetchError('')
     apiClient.client
       .get(`/planillas/${planillaId}/detalle`)
       .then(r => setDetalle(r.data))
-      .catch(() => setDetalle(null))
+      .catch((err: any) => {
+        setDetalle(null)
+        setFetchError(err.response?.data?.detail || `Error al cargar planilla #${planillaId}`)
+      })
       .finally(() => setLoading(false))
   }, [planillaId])
 
@@ -309,6 +314,11 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
         )}
 
         {loading && <div className="flex-1 flex items-center justify-center text-ml-text-soft">Cargando...</div>}
+        {!loading && fetchError && (
+          <div className="flex-1 flex items-center justify-center px-6 text-center">
+            <p className="text-red-500 text-sm">{fetchError}</p>
+          </div>
+        )}
 
         {detalle && (
           <div className="flex-1 overflow-auto min-h-0">
