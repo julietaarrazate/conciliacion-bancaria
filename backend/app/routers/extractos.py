@@ -409,6 +409,7 @@ def update_movimiento(
 
     campos_editables = {"titular", "monto", "fecha", "mes", "saldo", "orden",
                         "cliente_acreditado", "fecha_acred"}
+    acred_cambiado = False
     for campo, valor in payload.items():
         if campo not in campos_editables:
             continue
@@ -420,9 +421,29 @@ def update_movimiento(
                 continue
         if campo in ("fecha", "fecha_acred") and valor == "":
             valor = None
+        if campo in ("cliente_acreditado", "fecha_acred"):
+            acred_cambiado = True
         setattr(mov, campo, valor)
 
     db.commit()
+
+    # Sync planilla rows linked to this movement
+    if acred_cambiado:
+        from app.models.planilla import PlanillaRow
+        rows = db.query(PlanillaRow).filter(
+            PlanillaRow.orden_movimiento_acreditado == mov_id
+        ).all()
+        for row in rows:
+            if mov.cliente_acreditado:
+                row.status = "ok"
+                if mov.fecha_acred:
+                    row.fecha_acred = mov.fecha_acred
+            elif row.status == "ok":
+                row.status = "pendiente"
+                row.fecha_acred = None
+        if rows:
+            db.commit()
+
     db.refresh(mov)
     registrar_log(db, current_user.id, "movimientos_banco", mov_id, "UPDATE",
                   {"campos": list(payload.keys())})

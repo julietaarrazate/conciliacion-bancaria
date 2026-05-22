@@ -90,6 +90,10 @@ export const Movimientos: React.FC = () => {
   const [editModal, setEditModal] = useState<MovimientoFiltrado | null>(null)
   const [modalValues, setModalValues] = useState<Record<string, string>>({})
   const [modalSaving, setModalSaving] = useState(false)
+  const [modalError, setModalError] = useState('')
+  const [acredModal, setAcredModal] = useState<{ mov: MovimientoFiltrado; cliente: string; fecha: string } | null>(null)
+  const [acredSaving, setAcredSaving] = useState(false)
+  const [acredError, setAcredError] = useState('')
   const umRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -146,32 +150,76 @@ export const Movimientos: React.FC = () => {
   }
 
   const openModal = (m: MovimientoFiltrado) => {
+    setModalError('')
     setEditModal(m)
     setModalValues({
       titular: m.titular || '',
       monto: String(m.monto),
       fecha: m.fecha || '',
-      cliente_acreditado: m.cliente_acreditado || '',
-      fecha_acred: m.fecha_acred || '',
     })
   }
 
   const saveModal = async () => {
     if (!extractoId || !editModal) return
     setModalSaving(true)
+    setModalError('')
     try {
-      const payload: Record<string, unknown> = {
-        titular: modalValues.titular,
-        monto: parseFloat(modalValues.monto.replace(/\./g, '').replace(',', '.')),
-        fecha: modalValues.fecha || null,
-        cliente_acreditado: modalValues.cliente_acreditado || null,
-        fecha_acred: modalValues.fecha_acred || null,
-      }
+      const monto = parseFloat(modalValues.monto.replace(/\./g, '').replace(',', '.'))
+      const payload = { titular: modalValues.titular, monto, fecha: modalValues.fecha || null }
       await apiClient.updateMovimiento(extractoId, editModal.id, payload)
-      setMovimientos(prev => prev.map(x => x.id === editModal.id ? { ...x, ...payload, monto: payload.monto as number } : x))
+      setMovimientos(prev => prev.map(x => x.id === editModal.id ? { ...x, ...payload } : x))
       setEditModal(null)
-    } catch { /* silencioso */ }
+    } catch (err: any) {
+      setModalError(err.response?.data?.detail || 'Error al guardar')
+    }
     setModalSaving(false)
+  }
+
+  const openAcredModal = (m: MovimientoFiltrado) => {
+    setAcredError('')
+    setAcredModal({
+      mov: m,
+      cliente: m.cliente_acreditado || '',
+      fecha: m.fecha_acred || new Date().toISOString().split('T')[0],
+    })
+  }
+
+  const saveAcred = async () => {
+    if (!extractoId || !acredModal) return
+    setAcredSaving(true)
+    setAcredError('')
+    try {
+      await apiClient.updateMovimiento(extractoId, acredModal.mov.id, {
+        cliente_acreditado: acredModal.cliente || null,
+        fecha_acred: acredModal.fecha || null,
+      })
+      setMovimientos(prev => prev.map(x => x.id === acredModal.mov.id
+        ? { ...x, cliente_acreditado: acredModal.cliente || null, fecha_acred: acredModal.fecha || null }
+        : x))
+      setAcredModal(null)
+    } catch (err: any) {
+      setAcredError(err.response?.data?.detail || 'Error al guardar')
+    }
+    setAcredSaving(false)
+  }
+
+  const clearAcred = async () => {
+    if (!extractoId || !acredModal) return
+    setAcredSaving(true)
+    setAcredError('')
+    try {
+      await apiClient.updateMovimiento(extractoId, acredModal.mov.id, {
+        cliente_acreditado: null,
+        fecha_acred: null,
+      })
+      setMovimientos(prev => prev.map(x => x.id === acredModal.mov.id
+        ? { ...x, cliente_acreditado: null, fecha_acred: null }
+        : x))
+      setAcredModal(null)
+    } catch (err: any) {
+      setAcredError(err.response?.data?.detail || 'Error al quitar')
+    }
+    setAcredSaving(false)
   }
 
   const handleDeleteMovimiento = async (m: MovimientoFiltrado) => {
@@ -256,7 +304,10 @@ export const Movimientos: React.FC = () => {
           </button>
           {extractoId && (
             <button
-              onClick={() => apiClient.exportExtractoContador(extractoId)}
+              onClick={async () => {
+                try { await apiClient.exportExtractoContador(extractoId!) }
+                catch (err: any) { setUmMsg(`✗ Export: ${err.response?.data?.detail || err.message}`) }
+              }}
               className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
               title="Exportar extracto completo conciliado para el contador"
             >
@@ -433,16 +484,18 @@ export const Movimientos: React.FC = () => {
                     <td className="px-2 text-right font-mono text-gray-400 dark:text-gray-500">
                       {m.saldo != null ? fmtARS(m.saldo) : '—'}
                     </td>
-                    <td className="px-2">
+                    <td className="px-2 cursor-pointer" onClick={() => openAcredModal(m)} title="Clic para acreditar / editar">
                       {m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
-                        ? <span className="pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium">{m.cliente_acreditado}</span>
-                        : <span className="text-gray-300 dark:text-gray-600 text-[10px]">—</span>}
+                        ? <span className="pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium hover:bg-green-200 dark:hover:bg-green-900/70 transition-colors">{m.cliente_acreditado}</span>
+                        : <span className="text-ml-blue dark:text-blue-400 text-[10px] font-medium hover:underline">+ Acreditar</span>}
                     </td>
-                    <td className="px-2 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(m.fecha_acred)}</td>
+                    <td className="px-2 whitespace-nowrap text-gray-500 dark:text-gray-400 cursor-pointer" onClick={() => openAcredModal(m)} title="Clic para editar acreditación">
+                      {fmtDate(m.fecha_acred)}
+                    </td>
                     <td className="px-1 text-center">
                       <div className="flex gap-1 justify-center">
-                        <button onClick={() => openModal(m)} title="Editar" className="text-gray-400 hover:text-ml-blue dark:hover:text-blue-400 transition-colors">✏️</button>
-                        <button onClick={() => handleDeleteMovimiento(m)} title="Borrar" className="text-gray-400 hover:text-red-500 transition-colors">🗑</button>
+                        <button onClick={() => openModal(m)} title="Editar datos (titular, importe, fecha)" className="text-gray-400 hover:text-ml-blue dark:hover:text-blue-400 transition-colors">✏️</button>
+                        <button onClick={() => handleDeleteMovimiento(m)} title="Borrar movimiento" className="text-gray-400 hover:text-red-500 transition-colors">🗑</button>
                       </div>
                     </td>
                   </tr>
@@ -454,7 +507,7 @@ export const Movimientos: React.FC = () => {
       </div>
     </div>
 
-    {/* Modal edición de movimiento */}
+    {/* Modal edición completa (titular, importe, fecha del movimiento) */}
     {editModal && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditModal(null)}>
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-5 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
@@ -475,17 +528,8 @@ export const Movimientos: React.FC = () => {
               <input type="date" className="input-field text-xs" value={modalValues.fecha}
                 onChange={e => setModalValues(p => ({ ...p, fecha: e.target.value }))} />
             </div>
-            <div>
-              <label className="label text-xs">Cliente acreditado</label>
-              <input className="input-field text-xs" placeholder="Nombre del cliente" value={modalValues.cliente_acreditado}
-                onChange={e => setModalValues(p => ({ ...p, cliente_acreditado: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label text-xs">Fecha acreditación</label>
-              <input type="date" className="input-field text-xs" value={modalValues.fecha_acred}
-                onChange={e => setModalValues(p => ({ ...p, fecha_acred: e.target.value }))} />
-            </div>
           </div>
+          {modalError && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{modalError}</p>}
           <div className="flex gap-2 mt-5 justify-end">
             <button onClick={() => setEditModal(null)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded hover:bg-gray-50 dark:hover:bg-slate-700">
               Cancelar
@@ -493,6 +537,57 @@ export const Movimientos: React.FC = () => {
             <button onClick={saveModal} disabled={modalSaving}
               className="px-4 py-1.5 text-xs bg-ml-blue text-white rounded hover:bg-ml-blue/90 disabled:opacity-50">
               {modalSaving ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Modal rápido de acreditación */}
+    {acredModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setAcredModal(null)}>
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-5 w-full max-w-xs mx-4" onClick={e => e.stopPropagation()}>
+          <h3 className="text-sm font-semibold text-ml-text dark:text-gray-100 mb-1">
+            {acredModal.mov.cliente_acreditado ? 'Editar acreditación' : 'Acreditar movimiento'}
+          </h3>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-4 truncate" title={acredModal.mov.titular || ''}>
+            {acredModal.mov.titular} · {fmtARS(acredModal.mov.monto)}
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="label text-xs">Cliente</label>
+              <input
+                className="input-field text-xs" placeholder="Nombre del cliente" autoFocus
+                value={acredModal.cliente}
+                onChange={e => setAcredModal(p => p ? { ...p, cliente: e.target.value } : p)}
+                onKeyDown={e => { if (e.key === 'Enter' && acredModal.cliente) saveAcred() }}
+              />
+            </div>
+            <div>
+              <label className="label text-xs">Fecha de acreditación</label>
+              <input
+                type="date" className="input-field text-xs"
+                value={acredModal.fecha}
+                onChange={e => setAcredModal(p => p ? { ...p, fecha: e.target.value } : p)}
+              />
+            </div>
+          </div>
+          {acredError && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{acredError}</p>}
+          <div className="flex gap-2 mt-5">
+            {acredModal.mov.cliente_acreditado && (
+              <button onClick={clearAcred} disabled={acredSaving}
+                className="px-3 py-1.5 text-xs text-red-600 border border-red-300 dark:border-red-700 rounded hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50">
+                Quitar
+              </button>
+            )}
+            <div className="flex-1" />
+            <button onClick={() => setAcredModal(null)}
+              className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded hover:bg-gray-50 dark:hover:bg-slate-700">
+              Cancelar
+            </button>
+            <button onClick={saveAcred} disabled={acredSaving || !acredModal.cliente}
+              className="px-4 py-1.5 text-xs bg-ml-blue text-white rounded hover:bg-ml-blue/90 disabled:opacity-50">
+              {acredSaving ? 'Guardando...' : 'Guardar'}
             </button>
           </div>
         </div>
