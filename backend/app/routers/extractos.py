@@ -394,16 +394,54 @@ def update_movimiento(
     if not mov:
         raise HTTPException(404, "Movimiento no encontrado")
 
-    campos_editables = {"titular", "monto", "fecha", "mes", "saldo", "orden"}
+    campos_editables = {"titular", "monto", "fecha", "mes", "saldo", "orden",
+                        "cliente_acreditado", "fecha_acred"}
     for campo, valor in payload.items():
-        if campo in campos_editables and valor is not None:
-            setattr(mov, campo, valor)
+        if campo not in campos_editables:
+            continue
+        if campo in ("fecha", "fecha_acred") and isinstance(valor, str) and valor:
+            from datetime import date as date_type
+            try:
+                valor = date_type.fromisoformat(valor)
+            except ValueError:
+                continue
+        if campo in ("fecha", "fecha_acred") and valor == "":
+            valor = None
+        setattr(mov, campo, valor)
 
     db.commit()
     db.refresh(mov)
     registrar_log(db, current_user.id, "movimientos_banco", mov_id, "UPDATE",
                   {"campos": list(payload.keys())})
     return {"ok": True, "id": mov_id}
+
+
+@router.delete("/{extracto_id}/movimientos/{mov_id}")
+def delete_movimiento(
+    extracto_id: int,
+    mov_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.models.planilla import PlanillaRow
+    mov = db.query(MovimientoBanco).filter(
+        MovimientoBanco.id == mov_id,
+        MovimientoBanco.extracto_id == extracto_id
+    ).first()
+    if not mov:
+        raise HTTPException(404, "Movimiento no encontrado")
+    try:
+        db.query(PlanillaRow).filter(
+            PlanillaRow.orden_movimiento_acreditado == mov_id
+        ).update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
+        db.flush()
+        db.delete(mov)
+        db.commit()
+        registrar_log(db, current_user.id, "movimientos_banco", mov_id, "DELETE", {})
+        return {"ok": True}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Error al borrar movimiento: {str(e)}")
 
 
 @router.get("/{extracto_id}", response_model=ExtractoBancarioResponse)

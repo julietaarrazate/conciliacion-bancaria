@@ -88,6 +88,9 @@ export const Movimientos: React.FC = () => {
   const [tab, setTab] = useState<'todos' | 'um'>('todos')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editValues, setEditValues] = useState<Record<string, string>>({})
+  const [editModal, setEditModal] = useState<MovimientoFiltrado | null>(null)
+  const [modalValues, setModalValues] = useState<Record<string, string>>({})
+  const [modalSaving, setModalSaving] = useState(false)
   const umRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -145,6 +148,44 @@ export const Movimientos: React.FC = () => {
       ))
     } catch { /* silencioso */ }
     setEditingId(null)
+  }
+
+  const openModal = (m: MovimientoFiltrado) => {
+    setEditModal(m)
+    setModalValues({
+      titular: m.titular || '',
+      monto: String(m.monto),
+      fecha: m.fecha || '',
+      cliente_acreditado: m.cliente_acreditado || '',
+      fecha_acred: m.fecha_acred || '',
+    })
+  }
+
+  const saveModal = async () => {
+    if (!extractoId || !editModal) return
+    setModalSaving(true)
+    try {
+      const payload: Record<string, unknown> = {
+        titular: modalValues.titular,
+        monto: parseFloat(modalValues.monto.replace(/\./g, '').replace(',', '.')),
+        fecha: modalValues.fecha || null,
+        cliente_acreditado: modalValues.cliente_acreditado || null,
+        fecha_acred: modalValues.fecha_acred || null,
+      }
+      await apiClient.updateMovimiento(extractoId, editModal.id, payload)
+      setMovimientos(prev => prev.map(x => x.id === editModal.id ? { ...x, ...payload, monto: payload.monto as number } : x))
+      setEditModal(null)
+    } catch { /* silencioso */ }
+    setModalSaving(false)
+  }
+
+  const handleDeleteMovimiento = async (m: MovimientoFiltrado) => {
+    if (!extractoId) return
+    if (!confirm(`¿Borrar movimiento "${m.titular || m.orden}"? Esta acción no se puede deshacer.`)) return
+    try {
+      await apiClient.deleteMovimiento(extractoId, m.id)
+      setMovimientos(prev => prev.filter(x => x.id !== m.id))
+    } catch { /* silencioso */ }
   }
 
   const load = useCallback(async () => {
@@ -378,65 +419,92 @@ export const Movimientos: React.FC = () => {
                       </select>
                     </ExcelFilter>
                   </th>
+                  <th className="th-macro w-16 text-center"></th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
                 {filteredMovs.length === 0 ? (
-                  <tr><td colSpan={8} className="py-8 text-center text-gray-400">Sin resultados</td></tr>
-                ) : filteredMovs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(m => {
-                  const isEditing = editingId === m.id && tab === 'um'
-                  return (
-                    <tr key={m.id}
-                      onDoubleClick={() => tab === 'um' && m.source === 'um' && startEdit(m)}
-                      className={`transition-colors row-15 ${m.source === 'um' ? 'row-um' : 'hover:bg-gray-50 dark:hover:bg-slate-700/40'} ${tab === 'um' && m.source === 'um' ? 'cursor-pointer' : ''}`}>
-                      <td className="px-2 text-center text-gray-400 dark:text-gray-500 font-mono">{m.orden ?? '—'}</td>
-                      <td className="px-2 whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
-                      <td className="px-2 text-gray-500 dark:text-gray-400">{
-                        m.fecha ? new Date(m.fecha + 'T00:00:00').getMonth() + 1 : (m.mes || '—')
-                      }</td>
-                      <td className="px-2 max-w-[220px]">
-                        {isEditing ? (
-                          <input className="input-field !py-0 text-xs w-full" value={editValues.titular}
-                            onChange={e => setEditValues(p => ({ ...p, titular: e.target.value }))}
-                            onKeyDown={e => { if (e.key === 'Enter') saveEdit(m); if (e.key === 'Escape') setEditingId(null) }}
-                            autoFocus />
-                        ) : (
-                          <p className="truncate dark:text-gray-200" title={m.titular || ''}>{m.titular || '—'}</p>
-                        )}
-                      </td>
-                      <td className="px-2 text-right font-mono font-semibold dark:text-white">
-                        {isEditing ? (
-                          <input className="input-field !py-0 text-xs text-right w-24" value={editValues.monto}
-                            onChange={e => setEditValues(p => ({ ...p, monto: e.target.value }))}
-                            onKeyDown={e => { if (e.key === 'Enter') saveEdit(m); if (e.key === 'Escape') setEditingId(null) }} />
-                        ) : fmtARS(m.monto)}
-                      </td>
-                      <td className="px-2 text-right font-mono text-gray-400 dark:text-gray-500">
-                        {m.saldo != null ? fmtARS(m.saldo) : '—'}
-                      </td>
-                      <td className="px-2">
-                        {m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
-                          ? <span className="pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium">{m.cliente_acreditado}</span>
-                          : <span className="text-gray-300 dark:text-gray-600 text-[10px]">—</span>}
-                      </td>
-                      <td className="px-2 whitespace-nowrap text-gray-500 dark:text-gray-400">
-                        {fmtDate(m.fecha_acred)}
-                        {isEditing && (
-                          <div className="flex gap-1 mt-0.5">
-                            <button onClick={() => saveEdit(m)} className="text-[10px] text-green-600 hover:underline">Guardar</button>
-                            <button onClick={() => setEditingId(null)} className="text-[10px] text-gray-400 hover:underline">X</button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
+                  <tr><td colSpan={9} className="py-8 text-center text-gray-400">Sin resultados</td></tr>
+                ) : filteredMovs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(m => (
+                  <tr key={m.id}
+                    className={`transition-colors row-15 ${m.source === 'um' ? 'row-um' : 'hover:bg-gray-50 dark:hover:bg-slate-700/40'}`}>
+                    <td className="px-2 text-center text-gray-400 dark:text-gray-500 font-mono">{m.orden ?? '—'}</td>
+                    <td className="px-2 whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
+                    <td className="px-2 text-gray-500 dark:text-gray-400">{
+                      m.fecha ? new Date(m.fecha + 'T00:00:00').getMonth() + 1 : (m.mes || '—')
+                    }</td>
+                    <td className="px-2 max-w-[220px]">
+                      <p className="truncate dark:text-gray-200" title={m.titular || ''}>{m.titular || '—'}</p>
+                    </td>
+                    <td className="px-2 text-right font-mono font-semibold dark:text-white">{fmtARS(m.monto)}</td>
+                    <td className="px-2 text-right font-mono text-gray-400 dark:text-gray-500">
+                      {m.saldo != null ? fmtARS(m.saldo) : '—'}
+                    </td>
+                    <td className="px-2">
+                      {m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
+                        ? <span className="pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium">{m.cliente_acreditado}</span>
+                        : <span className="text-gray-300 dark:text-gray-600 text-[10px]">—</span>}
+                    </td>
+                    <td className="px-2 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(m.fecha_acred)}</td>
+                    <td className="px-1 text-center">
+                      <div className="flex gap-1 justify-center">
+                        <button onClick={() => openModal(m)} title="Editar" className="text-gray-400 hover:text-ml-blue dark:hover:text-blue-400 transition-colors">✏️</button>
+                        <button onClick={() => handleDeleteMovimiento(m)} title="Borrar" className="text-gray-400 hover:text-red-500 transition-colors">🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
       </div>
     </div>
+
+    {/* Modal edición de movimiento */}
+    {editModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditModal(null)}>
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-5 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+          <h3 className="text-sm font-semibold text-ml-text dark:text-gray-100 mb-4">Editar movimiento</h3>
+          <div className="space-y-3">
+            <div>
+              <label className="label text-xs">Concepto / Titular</label>
+              <input className="input-field text-xs" value={modalValues.titular}
+                onChange={e => setModalValues(p => ({ ...p, titular: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label text-xs">Importe</label>
+              <input className="input-field text-xs" value={modalValues.monto}
+                onChange={e => setModalValues(p => ({ ...p, monto: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label text-xs">Fecha del movimiento</label>
+              <input type="date" className="input-field text-xs" value={modalValues.fecha}
+                onChange={e => setModalValues(p => ({ ...p, fecha: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label text-xs">Cliente acreditado</label>
+              <input className="input-field text-xs" placeholder="Nombre del cliente" value={modalValues.cliente_acreditado}
+                onChange={e => setModalValues(p => ({ ...p, cliente_acreditado: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label text-xs">Fecha acreditación</label>
+              <input type="date" className="input-field text-xs" value={modalValues.fecha_acred}
+                onChange={e => setModalValues(p => ({ ...p, fecha_acred: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex gap-2 mt-5 justify-end">
+            <button onClick={() => setEditModal(null)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded hover:bg-gray-50 dark:hover:bg-slate-700">
+              Cancelar
+            </button>
+            <button onClick={saveModal} disabled={modalSaving}
+              className="px-4 py-1.5 text-xs bg-ml-blue text-white rounded hover:bg-ml-blue/90 disabled:opacity-50">
+              {modalSaving ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   )
 }

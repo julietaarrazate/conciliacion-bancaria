@@ -243,6 +243,10 @@ class ApiClient {
     await this.client.patch(`/extractos/${extractoId}/movimientos/${movId}`, payload)
   }
 
+  async deleteMovimiento(extractoId: number, movId: number): Promise<void> {
+    await this.client.delete(`/extractos/${extractoId}/movimientos/${movId}`)
+  }
+
   async guardarEnCarpeta(planillaId: number): Promise<{ path?: string; blob: Blob }> {
     const res = await this.client.post(`/clientes/planillas/${planillaId}/guardar`, {}, { responseType: 'blob' })
     const savedPath = res.headers['x-saved-path'] as string | undefined
