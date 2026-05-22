@@ -39,6 +39,51 @@ export const Dashboard: React.FC = () => {
   const [umCorteManual, setUmCorteManual] = useState<string>('')
   const [umFile, setUmFile] = useState<File | null>(null)
 
+  // ── Carga masiva ──────────────────────────────────────────────
+  interface BulkItem {
+    id: string; file: File; clienteNombre: string
+    status: 'pending' | 'loading' | 'ok' | 'error'
+    resultado?: ConciliacionResultado; error?: string
+  }
+  const [tab, setTab] = useState<'individual' | 'masiva'>('individual')
+  const [bulkItems, setBulkItems] = useState<BulkItem[]>([])
+  const [bulkRunning, setBulkRunning] = useState(false)
+  const [bulkFecha, setBulkFecha] = useState(new Date().toISOString().split('T')[0])
+
+  const handleBulkFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    setBulkItems(prev => [...prev, ...files.map(f => ({
+      id: `${f.name}-${Date.now()}-${Math.random()}`,
+      file: f,
+      clienteNombre: f.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').trim(),
+      status: 'pending' as const
+    }))])
+    e.target.value = ''
+  }
+  const updateBulkItem = (id: string, patch: Partial<BulkItem>) =>
+    setBulkItems(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it))
+  const handleBulkRun = async () => {
+    if (!extractoId || bulkItems.length === 0) return
+    setBulkRunning(true)
+    for (const item of bulkItems) {
+      if (item.status === 'ok') continue
+      updateBulkItem(item.id, { status: 'loading', error: undefined })
+      try {
+        const planilla = await apiClient.uploadPlanilla(item.clienteNombre, extractoId, item.file)
+        const resultado = await apiClient.conciliarPlanilla(planilla.id, bulkFecha)
+        updateBulkItem(item.id, { status: 'ok', resultado })
+      } catch (err: any) {
+        updateBulkItem(item.id, { status: 'error', error: err.response?.data?.detail || 'Error' })
+      }
+    }
+    setBulkRunning(false)
+    apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then(d => setPlanillas(d.items))
+  }
+  const bulkPendingCount = bulkItems.filter(i => i.status === 'pending' || i.status === 'error').length
+  const bulkOkCount = bulkItems.filter(i => i.status === 'ok').length
+  const bulkTotalAcred = bulkItems.reduce((s, i) => s + (i.resultado?.acreditadas || 0), 0)
+  const bulkTotalFilas = bulkItems.reduce((s, i) => s + (i.resultado?.filas_procesadas || 0), 0)
+
   useEffect(() => {
     setExtractoId(null)
     setExtractoNombre('')
@@ -198,6 +243,21 @@ export const Dashboard: React.FC = () => {
         )}
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-slate-700">
+        {([['individual', '📄 Individual'], ['masiva', '📂 Carga masiva']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === key
+                ? 'border-ml-blue text-ml-blue dark:border-ml-green dark:text-ml-green'
+                : 'border-transparent text-ml-text-soft hover:text-ml-text dark:hover:text-gray-300'
+            }`}
+          >{label}</button>
+        ))}
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="kpi">
@@ -229,6 +289,7 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
+      {tab === 'individual' && (<>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Paso 1: Extracto */}
         <div className="card">
@@ -541,6 +602,125 @@ export const Dashboard: React.FC = () => {
           setPlanillas(d.items)
         }}
       />
+      </>)}
+
+      {/* ── Tab: Carga masiva ─────────────────────────────── */}
+      {tab === 'masiva' && (
+        <div className="space-y-4">
+          {/* Extracto selector */}
+          <div className="card">
+            <label className="label">Extracto bancario</label>
+            {extractos.length > 0 ? (
+              <select
+                className="input-field max-w-sm"
+                value={extractoId ?? ''}
+                onChange={e => {
+                  const id = Number(e.target.value)
+                  setExtractoId(id)
+                  setExtractoNombre(extractos.find(x => x.id === id)?.nombre_archivo || '')
+                }}
+              >
+                {extractos.map(e => (
+                  <option key={e.id} value={e.id}>#{e.id} · {e.nombre_archivo} ({e.total_movimientos} movs)</option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-sm text-amber-600 dark:text-amber-400">⚠ Cargá primero un extracto en la pestaña Individual</p>
+            )}
+          </div>
+
+          {/* Fecha + drop zone */}
+          <div className="card">
+            <div className="flex flex-wrap gap-4 items-end mb-4">
+              <div>
+                <label className="label">Fecha de acreditación</label>
+                <input type="date" className="input-field font-mono w-auto" value={bulkFecha} onChange={e => setBulkFecha(e.target.value)} />
+              </div>
+              <p className="text-xs text-gray-400 dark:text-zinc-600 pb-2">Todas las planillas se acreditarán con esta fecha</p>
+            </div>
+            <label className="block border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg p-6 text-center cursor-pointer hover:border-ml-blue dark:hover:border-ml-blue transition-colors">
+              <span className="text-3xl block mb-2">📂</span>
+              <span className="text-sm font-medium text-ml-text dark:text-white">Clic o arrastrá las planillas aquí</span>
+              <span className="text-xs text-ml-text-soft dark:text-gray-400 block mt-1">Podés seleccionar múltiples archivos a la vez</span>
+              <input type="file" accept="*/*" multiple hidden onChange={handleBulkFiles} />
+            </label>
+          </div>
+
+          {/* Lista de planillas */}
+          {bulkItems.length > 0 && (
+            <>
+              <div className="card p-0 overflow-hidden">
+                <div className="px-4 py-3 bg-ml-gray-bg dark:bg-slate-900 border-b dark:border-slate-700 flex justify-between items-center">
+                  <span className="text-sm font-medium dark:text-white">
+                    {bulkItems.length} planillas · {bulkOkCount} procesadas
+                    {bulkTotalFilas > 0 && ` · ${bulkTotalAcred}/${bulkTotalFilas} acreditadas`}
+                  </span>
+                  <button onClick={() => setBulkItems([])} className="text-xs text-red-600 dark:text-red-400 hover:underline" disabled={bulkRunning}>
+                    Limpiar todo
+                  </button>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b dark:border-slate-700">
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-ml-text-soft uppercase">Archivo</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-ml-text-soft uppercase">Cliente</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-ml-text-soft uppercase">Estado</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-ml-text-soft uppercase">Resultado</th>
+                      <th className="px-4 py-2 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y dark:divide-slate-700">
+                    {bulkItems.map(item => (
+                      <tr key={item.id} className="hover:bg-ml-gray-bg dark:hover:bg-slate-700/50">
+                        <td className="px-4 py-2.5 dark:text-gray-300 max-w-[200px] truncate">{item.file.name}</td>
+                        <td className="px-4 py-2.5">
+                          <input
+                            className="input-field !py-1 text-sm"
+                            value={item.clienteNombre}
+                            onChange={e => updateBulkItem(item.id, { clienteNombre: e.target.value })}
+                            disabled={bulkRunning || item.status === 'ok'}
+                            placeholder="Nombre cliente..."
+                          />
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          {item.status === 'pending' && <span className="badge badge-info">Pendiente</span>}
+                          {item.status === 'loading' && <span className="badge badge-warn">⏳ Procesando</span>}
+                          {item.status === 'ok' && <span className="badge badge-ok">✓ OK</span>}
+                          {item.status === 'error' && <span className="badge badge-error" title={item.error}>Error</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-center text-xs text-ml-text-soft dark:text-gray-400">
+                          {item.resultado
+                            ? <span><span className="text-green-600 font-bold">{item.resultado.acreditadas}</span>/{item.resultado.filas_procesadas}</span>
+                            : item.error ? <span className="text-red-500">{item.error.slice(0, 40)}</span>
+                            : '—'}
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          <button onClick={() => setBulkItems(prev => prev.filter(i => i.id !== item.id))} disabled={bulkRunning}
+                            className="text-ml-text-soft hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 disabled:opacity-30">✕</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleBulkRun}
+                  disabled={bulkRunning || bulkPendingCount === 0 || !extractoId}
+                  className="btn-yellow disabled:opacity-50"
+                >
+                  {bulkRunning ? '⏳ Conciliando...' : `⚡ Conciliar ${bulkPendingCount} planilla${bulkPendingCount !== 1 ? 's' : ''}`}
+                </button>
+                {bulkOkCount > 0 && (
+                  <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-4 py-2 rounded-md">
+                    ✓ {bulkOkCount} procesadas · {bulkTotalAcred} acreditadas de {bulkTotalFilas}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

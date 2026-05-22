@@ -9,7 +9,6 @@ import { Auditoria } from '@/pages/Auditoria'
 import { Usuarios } from '@/pages/Usuarios'
 import { Movimientos } from '@/pages/Movimientos'
 import { Conciliaciones } from '@/pages/Conciliaciones'
-import { Bulk } from '@/pages/Bulk'
 import { Clientes } from '@/pages/Clientes'
 import { ExtractosArchivo } from '@/pages/ExtractosArchivo'
 import { Perfil } from '@/pages/Perfil'
@@ -91,7 +90,7 @@ export function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/extractos-archivo" element={<ExtractosArchivo />} />
-          <Route path="/bulk" element={<Bulk />} />
+          <Route path="/bulk" element={<Navigate to="/dashboard" replace />} />
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/liquidaciones" element={
             <ProtectedRoute permission="manage_users">

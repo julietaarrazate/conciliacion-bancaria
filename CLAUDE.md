@@ -83,8 +83,10 @@ Diseño: Linear-inspired, Inter font, dark mode profundo (#0B0B0F)
   seed.py — Crea org Caneland + usuarios
 
 /frontend — React 18 + TypeScript + Vite + TailwindCSS + PWA
-  /src/pages — Dashboard, Clientes (jerarquia org→cliente→mes→archivos),
-               Movimientos, Conciliaciones (cross-extracto), Historial, Bulk,
+  /src/pages — Dashboard (tabs: Individual + Carga masiva),
+               Clientes (jerarquia org→cliente→mes→archivos),
+               ExtractosArchivo (jerarquia año→mes→extracto),
+               Movimientos, Conciliaciones (cross-extracto), Historial,
                Auditoria, Usuarios, Perfil, Login, Organizaciones,
                Liquidaciones, Caja, OrdenDePago, Revision, Actividad
   /src/components — Layout (drawer mobile), PlanillaPanel (editor estados +
@@ -206,6 +208,47 @@ Green, Tucu, David, Smt, Gwinn, Innova, Camparo, Alojando, Pinares, Paraguay
 botón "+ Nuevo cliente" de cada organización)
 
 ---
+
+## Versión v2.3 — 2026-05-22 (snapshot estable)
+
+Tag git: v2.3 · agrega sobre v2.2:
+
+### Exportacion y conciliacion mejoradas
+- Fix export extracto (sort None-safe en fechas, ya no falla silenciosamente)
+- Re-conciliar planillas desde Historial: boton "Reonciliar", elige fecha
+  (Hoy / Ayer / custom), solo re-procesa filas no acreditadas (solo_pendientes)
+- Bidireccional extracto ↔ planilla: acreditar un movimiento desde la vista
+  Movimientos actualiza la fila correspondiente en la planilla del cliente
+  y viceversa, todo en el mismo db.commit()
+
+### Vista Movimientos mejorada
+- Editar/quitar acreditaciones directas desde la tabla de movimientos
+  (click en cliente o fecha para abrir modal de acreditacion)
+- Filtro importe: detecta formato automaticamente (punto decimal, coma decimal,
+  separador de miles) y filtra exacto, no rango
+- Modales (editar movimiento + acreditar) siempre visibles — fix Fragment JSX
+- Delete extracto: bulk SQL en lugar de loop ORM (1800+ rows en <1s)
+
+### PlanillaPanel — Ver / Editar
+- Fix panel en blanco: detalle endpoint ya no crashea si el extracto fue borrado
+  (maneja null con fallbacks en extracto_nombre, cliente_nombre, usuario_nombre)
+- Fecha acred. en filas OK: ahora muestra row.fecha_acred como fallback cuando
+  el movimiento vinculado no tiene fecha_acred propio
+- Error visible si la carga falla (antes era pantalla en blanco sin aviso)
+
+### Carpeta de extractos
+- Nueva pagina /extractos-archivo: jerarquia año → mes → extracto, colapsable
+  igual que /clientes. Muestra movimientos totales y % acreditados.
+  Boton "Ver" lleva a /movimientos?extracto=ID, boton ".xlsx" descarga directo.
+
+### Carga masiva integrada al Conciliar
+- "Bulk" eliminado del menu, integrado como tab "📂 Carga masiva" en /dashboard
+- Tab "📄 Individual" conserva el flujo de 3 pasos existente
+- Carga masiva comparte el extracto activo seleccionado
+
+### Confirmacion de borrado corregida
+- Dialogo de borrar extracto ya no dice que borra planillas (no las borra, solo
+  desvincula los movimientos)
 
 ## Versión v2.2 — 2026-05-11 (snapshot estable)
 

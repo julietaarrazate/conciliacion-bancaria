@@ -534,7 +534,7 @@ def get_planilla_detalle(
             "orden_movimiento_acreditado": r.orden_movimiento_acreditado,
             "mov_titular": mov.titular if mov else None,
             "mov_fecha": mov.fecha if mov else None,
-            "mov_fecha_acred": mov.fecha_acred if mov else None,
+            "mov_fecha_acred": (mov.fecha_acred if mov else None) or r.fecha_acred,
         })
 
     statuses = [r.status for r in p.rows]
