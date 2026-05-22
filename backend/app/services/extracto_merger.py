@@ -69,6 +69,7 @@ def mergear_movimientos(
 
     existentes_idx = []
     max_orden = 0
+    max_lote = 0
     ancla_saldo: Optional[float] = None
     ancla_monto: Optional[float] = None
 
@@ -84,6 +85,8 @@ def mergear_movimientos(
             max_orden = orden
             ancla_saldo = _to_float(m.saldo)
             ancla_monto = _to_float(m.monto)
+        if m.um_lote and m.um_lote > max_lote:
+            max_lote = m.um_lote
 
     corte_idx: Optional[int] = None
     corte_metodo = "ninguno"
@@ -155,6 +158,7 @@ def mergear_movimientos(
     agregados = 0
     duplicados = len(movimientos_nuevos) - len(nuevos_a_agregar)
 
+    nuevo_lote = max_lote + 1
     n = len(nuevos_a_agregar)
     for idx, mov_data in enumerate(nuevos_a_agregar):
         orden_nuevo = max_orden + (n - idx)
@@ -175,6 +179,7 @@ def mergear_movimientos(
             cliente_acreditado=mov_data.get("cliente_acreditado"),
             fecha_acred=mov_data.get("fecha_acred"),
             source='um',
+            um_lote=nuevo_lote,
         ))
         agregados += 1
 

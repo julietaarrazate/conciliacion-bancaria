@@ -80,6 +80,7 @@ def _init_db():
         "ALTER TABLE planilla_rows ADD COLUMN referencia VARCHAR",
         "ALTER TABLE planilla_rows ADD COLUMN monto_acreditado FLOAT",
         "ALTER TABLE planilla_rows ADD COLUMN comentario_revision TEXT",
+        "ALTER TABLE movimientos_banco ADD COLUMN um_lote INTEGER DEFAULT NULL",
     ]
     for sql in migrations:
         try:

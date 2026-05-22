@@ -36,6 +36,7 @@ class MovimientoBanco(Base):
     cliente_acreditado = Column(String, nullable=True)
     fecha_acred = Column(Date, nullable=True)
     source = Column(String, nullable=True, default='extracto')
+    um_lote = Column(Integer, nullable=True)
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
 
     # Relationships

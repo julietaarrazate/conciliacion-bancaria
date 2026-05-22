@@ -199,19 +199,34 @@ def delete_todos_extractos(db: Session = Depends(get_db),
 @router.delete("/{extracto_id}/movimientos-um")
 def eliminar_movimientos_um(extracto_id: int, db: Session = Depends(get_db),
                             current_user: User = Depends(get_current_user)):
-    """Elimina todos los movimientos con source='um' del extracto para poder re-subir el UM desde cero."""
+    """Elimina solo el ultimo lote de UM cargado para ese extracto."""
     extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
     try:
-        n = db.query(MovimientoBanco).filter(
+        from sqlalchemy import func
+        max_lote = db.query(func.max(MovimientoBanco.um_lote)).filter(
             MovimientoBanco.extracto_id == extracto_id,
-            MovimientoBanco.source == 'um'
-        ).delete(synchronize_session="fetch")
+            MovimientoBanco.source == 'um',
+            MovimientoBanco.um_lote.isnot(None),
+        ).scalar()
+
+        if max_lote is None:
+            # Sin lote asignado (UM cargados antes de esta version): borrar todos los um
+            n = db.query(MovimientoBanco).filter(
+                MovimientoBanco.extracto_id == extracto_id,
+                MovimientoBanco.source == 'um'
+            ).delete(synchronize_session="fetch")
+        else:
+            n = db.query(MovimientoBanco).filter(
+                MovimientoBanco.extracto_id == extracto_id,
+                MovimientoBanco.um_lote == max_lote,
+            ).delete(synchronize_session="fetch")
+
         db.commit()
         registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "DELETE_UM",
-                      {"eliminados": n})
-        return {"ok": True, "eliminados": n}
+                      {"eliminados": n, "lote": max_lote})
+        return {"ok": True, "eliminados": n, "lote": max_lote}
     except Exception as e:
         db.rollback()
         raise HTTPException(500, f"Error al eliminar UM: {str(e)}")
