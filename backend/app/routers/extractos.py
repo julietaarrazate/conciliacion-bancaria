@@ -205,6 +205,8 @@ def eliminar_movimientos_um(extracto_id: int, db: Session = Depends(get_db),
         raise HTTPException(404, "Extracto no encontrado")
     try:
         from sqlalchemy import func
+        from app.models.planilla import PlanillaRow
+
         max_lote = db.query(func.max(MovimientoBanco.um_lote)).filter(
             MovimientoBanco.extracto_id == extracto_id,
             MovimientoBanco.source == 'um',
@@ -212,17 +214,24 @@ def eliminar_movimientos_um(extracto_id: int, db: Session = Depends(get_db),
         ).scalar()
 
         if max_lote is None:
-            # Sin lote asignado (UM cargados antes de esta version): borrar todos los um
-            n = db.query(MovimientoBanco).filter(
+            movs_query = db.query(MovimientoBanco).filter(
                 MovimientoBanco.extracto_id == extracto_id,
                 MovimientoBanco.source == 'um'
-            ).delete(synchronize_session="fetch")
+            )
         else:
-            n = db.query(MovimientoBanco).filter(
+            movs_query = db.query(MovimientoBanco).filter(
                 MovimientoBanco.extracto_id == extracto_id,
                 MovimientoBanco.um_lote == max_lote,
-            ).delete(synchronize_session="fetch")
+            )
 
+        ids_a_borrar = [m.id for m in movs_query.all()]
+        if ids_a_borrar:
+            db.query(PlanillaRow).filter(
+                PlanillaRow.orden_movimiento_acreditado.in_(ids_a_borrar)
+            ).update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
+            db.flush()
+
+        n = movs_query.delete(synchronize_session="fetch")
         db.commit()
         registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "DELETE_UM",
                       {"eliminados": n, "lote": max_lote})
