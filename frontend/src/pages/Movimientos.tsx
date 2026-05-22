@@ -67,10 +67,9 @@ interface ColFilter {
   fecha_desde: string
   fecha_hasta: string
   sin_acreditar: string
-  importe_min: string
-  importe_max: string
+  importe: string
 }
-const EMPTY: ColFilter = { cliente:'', cuit:'', titular:'', desde:'', hasta:'', fecha_desde:'', fecha_hasta:'', sin_acreditar:'', importe_min:'', importe_max:'' }
+const EMPTY: ColFilter = { cliente:'', cuit:'', titular:'', desde:'', hasta:'', fecha_desde:'', fecha_hasta:'', sin_acreditar:'', importe:'' }
 
 export const Movimientos: React.FC = () => {
   const [searchParams] = useSearchParams()
@@ -119,16 +118,12 @@ export const Movimientos: React.FC = () => {
 
   const filteredMovs = useMemo(() => {
     let m = tab === 'um' ? movimientos.filter(x => x.source === 'um') : movimientos
-    if (debouncedFilters.importe_min) {
-      const min = parseFloat(debouncedFilters.importe_min.replace(/\./g,'').replace(',','.'))
-      if (!isNaN(min)) m = m.filter(x => x.monto >= min)
-    }
-    if (debouncedFilters.importe_max) {
-      const max = parseFloat(debouncedFilters.importe_max.replace(/\./g,'').replace(',','.'))
-      if (!isNaN(max)) m = m.filter(x => x.monto <= max)
+    if (debouncedFilters.importe) {
+      const val = parseFloat(debouncedFilters.importe.replace(/\./g,'').replace(',','.'))
+      if (!isNaN(val)) m = m.filter(x => Math.abs(x.monto - val) < 0.01)
     }
     return m
-  }, [movimientos, debouncedFilters.importe_min, debouncedFilters.importe_max, tab])
+  }, [movimientos, debouncedFilters.importe, tab])
 
   const startEdit = (m: MovimientoFiltrado) => {
     setEditingId(m.id)
@@ -381,14 +376,11 @@ export const Movimientos: React.FC = () => {
                     </ExcelFilter>
                   </th>
 
-                  {/* Importe — con rango min/max */}
+                  {/* Importe — exacto */}
                   <th className="th-macro w-28 text-right">
-                    <ExcelFilter label="Importe" active={!!(filters.importe_min || filters.importe_max)} align="right">
-                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">Rango de importe</p>
-                      <label className="label text-xs">Mínimo</label>
-                      <input className="input-field text-xs mb-2" placeholder="0" value={filters.importe_min} onChange={e => set('importe_min', e.target.value)} />
-                      <label className="label text-xs">Máximo</label>
-                      <input className="input-field text-xs" placeholder="999999999" value={filters.importe_max} onChange={e => set('importe_max', e.target.value)} />
+                    <ExcelFilter label="Importe" active={!!filters.importe} align="right">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">Importe exacto</p>
+                      <input className="input-field text-xs" placeholder="ej: 128220.58" value={filters.importe} onChange={e => set('importe', e.target.value)} autoFocus />
                     </ExcelFilter>
                   </th>
 
