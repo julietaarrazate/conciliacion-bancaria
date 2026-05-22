@@ -192,6 +192,33 @@ def conciliar(
             cambios=resultado
         )
 
+        # Motor contable — asiento automático (fault-tolerant)
+        try:
+            from app.services.motor_contable import registrar_planilla
+            from datetime import datetime as _dt, timedelta as _td
+            if fecha_acred.lower() == 'hoy':
+                _fecha = _dt.now().date()
+            elif fecha_acred.lower() == 'ayer':
+                _fecha = (_dt.now() - _td(days=1)).date()
+            else:
+                try:
+                    _fecha = _dt.fromisoformat(fecha_acred).date()
+                except Exception:
+                    _fecha = _dt.now().date()
+            registrar_planilla(
+                db=db,
+                planilla_id=planilla_id,
+                org_id=org_id,
+                usuario_id=current_user.id,
+                cliente_nombre=planilla.cliente.nombre if planilla.cliente else "",
+                nombre_archivo=planilla.nombre_archivo or "",
+                rows=planilla.rows,
+                fecha_acred=_fecha,
+                solo_pendientes=solo_pendientes,
+            )
+        except Exception as _mc_ex:
+            print(f"[motor_contable] planilla hook: {_mc_ex}")
+
         return {
             "planilla_id": planilla_id,
             **resultado

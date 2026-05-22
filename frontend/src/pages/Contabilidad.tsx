@@ -19,6 +19,15 @@ interface ReglaItem {
   haber: { id: number; codigo: string; nombre: string }
 }
 
+interface AsientoItem {
+  id: number
+  fecha: string
+  descripcion: string | null
+  modulo: string | null
+  referencia_id: number | null
+  created_at: string
+}
+
 const TIPO_BADGE: Record<string, string> = {
   activo:    'border-blue-200 text-blue-600 dark:border-blue-800 dark:text-blue-400',
   pasivo:    'border-orange-200 text-orange-600 dark:border-orange-800 dark:text-orange-400',
@@ -31,19 +40,37 @@ const TIPO_TEXT: Record<string, string> = {
   resultado: 'text-green-700 dark:text-green-300',
 }
 
+function fmtDate(s: string) {
+  try {
+    return new Date(s.endsWith('Z') ? s : s + 'Z').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  } catch { return s }
+}
+
+const MODULO_LABEL: Record<string, string> = {
+  extracto: '🏦 Extracto',
+  planilla: '📋 Planilla',
+  caja:     '💵 Caja',
+  cheque:   '🗒️ Cheque',
+}
+
 export const Contabilidad: React.FC = () => {
-  const [cuentas, setCuentas] = useState<CuentaItem[]>([])
-  const [reglas, setReglas]   = useState<ReglaItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [tab, setTab]         = useState<'plan' | 'reglas'>('plan')
+  const [cuentas, setCuentas]   = useState<CuentaItem[]>([])
+  const [reglas, setReglas]     = useState<ReglaItem[]>([])
+  const [asientos, setAsientos] = useState<AsientoItem[]>([])
+  const [totalAsientos, setTotalAsientos] = useState(0)
+  const [loading, setLoading]   = useState(true)
+  const [tab, setTab]           = useState<'plan' | 'reglas' | 'diario'>('plan')
 
   useEffect(() => {
     Promise.all([
       apiClient.client.get('/contabilidad/plan-cuentas').then(r => r.data),
       apiClient.client.get('/contabilidad/reglas').then(r => r.data),
-    ]).then(([c, r]) => {
+      apiClient.client.get('/contabilidad/asientos?limit=100').then(r => r.data),
+    ]).then(([c, r, a]) => {
       setCuentas(c)
       setReglas(r)
+      setAsientos(a.items)
+      setTotalAsientos(a.total)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
@@ -84,8 +111,12 @@ export const Contabilidad: React.FC = () => {
         </p>
       </div>
 
-      <div className="flex gap-2 mb-4">
-        {(['plan', 'reglas'] as const).map(t => (
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {([
+          ['plan',   '📊 Plan de cuentas'],
+          ['reglas', '⚙️ Reglas contables'],
+          ['diario', `📒 Libro diario${totalAsientos > 0 ? ` (${totalAsientos})` : ''}`],
+        ] as const).map(([t, label]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -95,13 +126,48 @@ export const Contabilidad: React.FC = () => {
                 : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-700'
             }`}
           >
-            {t === 'plan' ? '📊 Plan de cuentas' : '⚙️ Reglas contables'}
+            {label}
           </button>
         ))}
       </div>
 
       {loading ? (
         <div className="py-16 text-center text-gray-400">Cargando...</div>
+      ) : tab === 'diario' ? (
+        <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
+          {asientos.length === 0 ? (
+            <div className="py-16 text-center text-gray-400">
+              <p className="text-3xl mb-2">📒</p>
+              <p className="text-sm">Sin asientos todavía.</p>
+              <p className="text-xs mt-1">Se generarán automáticamente al subir extractos y conciliar planillas.</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 dark:bg-slate-800">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium text-gray-600 dark:text-gray-400 w-8">#</th>
+                  <th className="text-left px-4 py-2 font-medium text-gray-600 dark:text-gray-400">Fecha</th>
+                  <th className="text-left px-4 py-2 font-medium text-gray-600 dark:text-gray-400">Módulo</th>
+                  <th className="text-left px-4 py-2 font-medium text-gray-600 dark:text-gray-400">Descripción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
+                {asientos.map(a => (
+                  <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
+                    <td className="px-4 py-2 text-gray-400 font-mono">{a.id}</td>
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmtDate(a.fecha)}</td>
+                    <td className="px-4 py-2">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400">
+                        {(a.modulo && MODULO_LABEL[a.modulo]) || a.modulo || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{a.descripcion || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       ) : tab === 'plan' ? (
         <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900/50">
           {raices.length === 0 ? (
