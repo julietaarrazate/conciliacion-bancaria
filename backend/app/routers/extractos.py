@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_, or_, text
+from sqlalchemy import desc, and_, or_, text, func
 from datetime import date, datetime
 from typing import Optional
 import tempfile, os, io, hashlib
@@ -428,13 +428,16 @@ def update_movimiento(
 
     db.commit()
 
-    # Sync planilla rows linked to this movement
+    # Sync planilla rows — bidireccional
     if acred_cambiado:
-        from app.models.planilla import PlanillaRow
-        rows = db.query(PlanillaRow).filter(
+        from app.models.planilla import PlanillaRow, Planilla
+        from app.models.cliente import Cliente
+
+        # 1. Actualizar filas ya vinculadas directamente a este movimiento
+        linked = db.query(PlanillaRow).filter(
             PlanillaRow.orden_movimiento_acreditado == mov_id
         ).all()
-        for row in rows:
+        for row in linked:
             if mov.cliente_acreditado:
                 row.status = "ok"
                 if mov.fecha_acred:
@@ -442,8 +445,36 @@ def update_movimiento(
             elif row.status == "ok":
                 row.status = "pendiente"
                 row.fecha_acred = None
-        if rows:
-            db.commit()
+                row.orden_movimiento_acreditado = None
+
+        # 2. Si se está acreditando a un cliente: buscar fila sin vincular
+        #    en sus planillas de este extracto con el mismo monto
+        if mov.cliente_acreditado and mov.monto is not None:
+            cliente = db.query(Cliente).filter(
+                func.lower(Cliente.nombre) == mov.cliente_acreditado.lower()
+            ).first()
+            if cliente:
+                planillas = db.query(Planilla).filter(
+                    Planilla.cliente_id == cliente.id,
+                    Planilla.extracto_id == mov.extracto_id
+                ).all()
+                mov_monto = abs(float(mov.monto))
+                for planilla in planillas:
+                    for row in planilla.rows:
+                        if row.status == "ok" or row.orden_movimiento_acreditado is not None:
+                            continue
+                        try:
+                            row_monto = abs(float(row.monto or 0))
+                        except (ValueError, TypeError):
+                            continue
+                        if abs(row_monto - mov_monto) < 0.01:
+                            row.status = "ok"
+                            row.orden_movimiento_acreditado = mov_id
+                            if mov.fecha_acred:
+                                row.fecha_acred = mov.fecha_acred
+                            break  # una fila por movimiento
+
+        db.commit()
 
     db.refresh(mov)
     registrar_log(db, current_user.id, "movimientos_banco", mov_id, "UPDATE",
