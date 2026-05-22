@@ -130,28 +130,29 @@ async def upload_extracto(file: UploadFile = File(...),
 @router.delete("/{extracto_id}")
 def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
                     current_user: User = Depends(get_current_user)):
-    """Elimina extracto, sus planillas y movimientos usando ORM (compatible SQLite+Postgres)."""
+    """Elimina el extracto y sus movimientos. Las planillas conciliadas se conservan como historial."""
     from app.models.planilla import PlanillaRow
 
     extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
 
-    nombre  = extracto.nombre_archivo
-    n_movs  = len(extracto.movimientos)
+    nombre   = extracto.nombre_archivo
+    n_movs   = len(extracto.movimientos)
     ids_movs = [m.id for m in extracto.movimientos]
 
     try:
-        # 1. Nullificar FK planilla_rows.orden_movimiento_acreditado usando ORM
+        # 1. Nullificar FK en planilla_rows (conservar planillas, solo desligar el movimiento)
         if ids_movs:
             db.query(PlanillaRow)\
               .filter(PlanillaRow.orden_movimiento_acreditado.in_(ids_movs))\
               .update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
             db.flush()
 
-        # 2. Borrar planillas y sus rows (cascade)
-        for p in list(extracto.planillas):
-            db.delete(p)
+        # 2. Desligar planillas del extracto (conservarlas como historial)
+        from app.models.planilla import Planilla
+        db.query(Planilla).filter(Planilla.extracto_id == extracto_id)\
+          .update({"extracto_id": None}, synchronize_session="fetch")
         db.flush()
 
         # 3. Borrar movimientos
@@ -165,7 +166,7 @@ def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
 
         registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "DELETE",
                       {"nombre": nombre, "movimientos": n_movs})
-        return {"ok": True, "mensaje": f"Extracto #{extracto_id} eliminado ({nombre})"}
+        return {"ok": True, "mensaje": f"Extracto #{extracto_id} eliminado. Planillas conservadas."}
     except Exception as e:
         db.rollback()
         raise HTTPException(500, f"Error al eliminar: {str(e)}")

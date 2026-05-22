@@ -15,7 +15,7 @@ class Planilla(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
-    extracto_id = Column(Integer, ForeignKey("extractos_bancarios.id"), nullable=False)
+    extracto_id = Column(Integer, ForeignKey("extractos_bancarios.id"), nullable=True)
     usuario_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
 

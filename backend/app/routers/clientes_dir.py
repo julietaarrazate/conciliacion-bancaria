@@ -409,49 +409,61 @@ def acreditar_movimiento_a_cliente(
     mov.fecha_acred = fecha_acred
     db.flush()
 
-    # Crear una Planilla "manual" con 1 sola fila para que aparezca como archivo
-    # del dia en la carpeta del cliente (estructura /clientes).
-    # Si ya existe una planilla manual del mismo cliente del mismo dia, le agrego
-    # la fila ahi (asi no se llena de archivos sueltos).
     from app.models.planilla import Planilla, PlanillaRow
     from datetime import datetime as dt
 
     planilla_id_creada = None
     try:
-        # ventana del dia
-        inicio = dt.combine(fecha_acred, dt.min.time())
-        fin    = dt.combine(fecha_acred, dt.max.time())
-
-        planilla_existente = (
-            db.query(Planilla)
+        # 1. Buscar si ya existe una fila para este movimiento en cualquier planilla del cliente
+        row_existente = (
+            db.query(PlanillaRow)
+              .join(Planilla, Planilla.id == PlanillaRow.planilla_id)
               .filter(Planilla.cliente_id == cli.id,
-                      Planilla.fecha_carga >= inicio,
-                      Planilla.fecha_carga <= fin,
-                      Planilla.nombre_archivo.like("acreditacion manual%"))
-              .order_by(Planilla.id.desc())
+                      PlanillaRow.orden_movimiento_acreditado == mov.id)
               .first()
         )
-
-        if planilla_existente:
-            planilla = planilla_existente
+        if row_existente:
+            # Actualizar la fila existente en la planilla original
+            row_existente.status = "ok"
+            row_existente.monto = mov.monto
+            row_existente.titular = row_existente.titular or mov.titular
+            db.commit()
+            planilla_id_creada = row_existente.planilla_id
         else:
-            planilla = Planilla(
-                cliente_id=cli.id,
-                extracto_id=mov.extracto_id,
-                usuario_id=current_user.id,
-                organizacion_id=mov.organizacion_id or 1,
-                nombre_archivo=f"acreditacion manual {fecha_acred.day}.{fecha_acred.month}",
-                fecha_carga=dt.combine(fecha_acred, dt.min.time()),
+            # 2. Buscar planilla original del cliente para este extracto (no manual)
+            planilla = (
+                db.query(Planilla)
+                  .filter(Planilla.cliente_id == cli.id,
+                          Planilla.extracto_id == mov.extracto_id,
+                          ~Planilla.nombre_archivo.like("acreditacion manual%"))
+                  .order_by(Planilla.id.desc())
+                  .first()
             )
-            db.add(planilla)
-            db.flush()
+            # 3. Si no hay planilla original, buscar o crear la manual del dia
+            if not planilla:
+                inicio = dt.combine(fecha_acred, dt.min.time())
+                fin    = dt.combine(fecha_acred, dt.max.time())
+                planilla = (
+                    db.query(Planilla)
+                      .filter(Planilla.cliente_id == cli.id,
+                              Planilla.fecha_carga >= inicio,
+                              Planilla.fecha_carga <= fin,
+                              Planilla.nombre_archivo.like("acreditacion manual%"))
+                      .order_by(Planilla.id.desc())
+                      .first()
+                )
+                if not planilla:
+                    planilla = Planilla(
+                        cliente_id=cli.id,
+                        extracto_id=mov.extracto_id,
+                        usuario_id=current_user.id,
+                        organizacion_id=mov.organizacion_id or 1,
+                        nombre_archivo=f"acreditacion manual {fecha_acred.day}.{fecha_acred.month}",
+                        fecha_carga=dt.combine(fecha_acred, dt.min.time()),
+                    )
+                    db.add(planilla)
+                    db.flush()
 
-        # Evitar duplicar la fila si ya esta el mismo mov
-        ya = db.query(PlanillaRow).filter(
-            PlanillaRow.planilla_id == planilla.id,
-            PlanillaRow.orden_movimiento_acreditado == mov.id
-        ).first()
-        if not ya:
             db.add(PlanillaRow(
                 planilla_id=planilla.id,
                 organizacion_id=planilla.organizacion_id,
@@ -461,19 +473,16 @@ def acreditar_movimiento_a_cliente(
                 status="ok",
                 orden_movimiento_acreditado=mov.id,
             ))
-        db.commit()
-        planilla_id_creada = planilla.id
+            db.commit()
+            planilla_id_creada = planilla.id
     except Exception as ex:
-        # Si falla la creacion de la planilla virtual, igual mantenemos
-        # el cliente_acreditado en el movimiento (lo importante)
         db.rollback()
-        # Re-aplicar el cambio al movimiento (se perdio con rollback)
         mov = db.query(MovimientoBanco).filter(MovimientoBanco.id == mov_id).first()
         if mov:
             mov.cliente_acreditado = cli.nombre
             mov.fecha_acred = fecha_acred
             db.commit()
-        print(f"[acreditar] Warning crear planilla manual: {ex}")
+        print(f"[acreditar] Warning: {ex}")
 
     registrar_log(db, current_user.id, "movimientos_banco", mov.id, "ACREDITAR_MANUAL",
                   {"cliente": cli.nombre, "fecha_acred": str(fecha_acred),

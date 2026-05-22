@@ -336,16 +336,34 @@ def patch_row_status(
         except Exception:
             pass
 
-    # Actualizar fecha de acreditación en el movimiento vinculado
-    if "fecha_acred" in payload and row.orden_movimiento_acreditado:
+    # Sync con el movimiento vinculado en el extracto
+    if row.orden_movimiento_acreditado:
         from app.models.extracto import MovimientoBanco as MB
-        from datetime import date
+        from datetime import date as date_type, datetime
         mov = db.query(MB).filter(MB.id == row.orden_movimiento_acreditado).first()
         if mov:
-            try:
-                mov.fecha_acred = date.fromisoformat(payload["fecha_acred"])
-            except Exception:
-                pass
+            if nuevo_status == "ok":
+                # Acreditar en el extracto
+                planilla = db.query(Planilla).filter(Planilla.id == row.planilla_id).first()
+                if planilla and planilla.cliente:
+                    mov.cliente_acreditado = planilla.cliente.nombre
+                if "fecha_acred" in payload:
+                    try:
+                        mov.fecha_acred = date_type.fromisoformat(payload["fecha_acred"])
+                    except Exception:
+                        pass
+                elif not mov.fecha_acred:
+                    mov.fecha_acred = datetime.utcnow().date()
+            elif nuevo_status in ("no está", "duplicado", "faltan datos", "pendiente"):
+                # Desacreditar en el extracto solo si este row era el que lo acreditó
+                if mov.cliente_acreditado:
+                    mov.cliente_acreditado = None
+                    mov.fecha_acred = None
+            elif "fecha_acred" in payload:
+                try:
+                    mov.fecha_acred = date_type.fromisoformat(payload["fecha_acred"])
+                except Exception:
+                    pass
 
     db.commit()
 
