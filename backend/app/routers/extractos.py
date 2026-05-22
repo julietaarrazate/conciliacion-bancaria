@@ -196,6 +196,27 @@ def delete_todos_extractos(db: Session = Depends(get_db),
         raise HTTPException(500, f"Error al limpiar: {str(e)}")
 
 
+@router.delete("/{extracto_id}/movimientos-um")
+def eliminar_movimientos_um(extracto_id: int, db: Session = Depends(get_db),
+                            current_user: User = Depends(get_current_user)):
+    """Elimina todos los movimientos con source='um' del extracto para poder re-subir el UM desde cero."""
+    extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
+    if not extracto:
+        raise HTTPException(404, "Extracto no encontrado")
+    try:
+        n = db.query(MovimientoBanco).filter(
+            MovimientoBanco.extracto_id == extracto_id,
+            MovimientoBanco.source == 'um'
+        ).delete(synchronize_session="fetch")
+        db.commit()
+        registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "DELETE_UM",
+                      {"eliminados": n})
+        return {"ok": True, "eliminados": n}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Error al eliminar UM: {str(e)}")
+
+
 @router.post("/{extracto_id}/agregar-um", response_model=MergeUMResponse)
 async def agregar_ultimos_movimientos(
     extracto_id: int,

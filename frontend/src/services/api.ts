@@ -284,6 +284,11 @@ class ApiClient {
     return res.data
   }
 
+  async deleteUM(extractoId: number): Promise<{ ok: boolean; eliminados: number }> {
+    const res = await this.client.delete(`/extractos/${extractoId}/movimientos-um`)
+    return res.data
+  }
+
   // Exportar Excel
   async downloadPlanillaConciliada(planillaId: number): Promise<void> {
     const res = await this.client.get(`/planillas/${planillaId}/download`, { responseType: 'blob' })

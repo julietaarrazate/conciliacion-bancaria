@@ -306,7 +306,32 @@ export const Dashboard: React.FC = () => {
                 <p className="text-xs text-ml-text-soft dark:text-gray-400 mb-2">
                   ¿Tenés Últimos Movimientos del banco? Sumalos sin duplicar:
                 </p>
-                <FileUpload onFileSelected={(f) => handleUploadUM(f)} label="+ Agregar UM" />
+                <div className="flex gap-2 items-center">
+                  <div className="flex-1">
+                    <FileUpload onFileSelected={(f) => handleUploadUM(f)} label="+ Agregar UM" />
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!extractoId) return
+                      if (!confirm('¿Eliminar movimientos UM cargados? El extracto original no se toca. Luego podés re-subir el UM.')) return
+                      setLoading(true)
+                      try {
+                        const r = await apiClient.deleteUM(extractoId)
+                        setUmCorteDetectado(null)
+                        setUmFile(null)
+                        setSuccess(`UM limpiado: ${r.eliminados} movimientos eliminados. Ahora podés re-subir el UM.`)
+                      } catch (err: any) {
+                        setError(err.response?.data?.detail || 'Error al limpiar UM')
+                      } finally {
+                        setLoading(false)
+                      }
+                    }}
+                    className="text-xs px-2 py-1.5 text-red-500 border border-red-300 dark:border-red-800 rounded hover:bg-red-50 dark:hover:bg-red-900/20 whitespace-nowrap"
+                    title="Limpiar UM para re-subir desde cero"
+                  >
+                    🗑 UM
+                  </button>
+                </div>
                 {umCorteDetectado && (
                   <p className="text-xs text-ml-text-soft dark:text-gray-400 mt-2">
                     Corte detectado en saldo <span className="font-mono font-medium">${umCorteDetectado.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
