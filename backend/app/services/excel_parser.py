@@ -254,7 +254,7 @@ def parsear_generico(ws, cols):
             "fecha":   fecha,
             "mes":     _mes_normalizado(mes_val, fecha),
             "titular": titular.strip() or None,
-            "monto":   abs(monto),
+            "monto":   monto,
             "saldo":   saldo,
             "cliente_acreditado": cliente_acred,
             "fecha_acred": fecha_acred,
