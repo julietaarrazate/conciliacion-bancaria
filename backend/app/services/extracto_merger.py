@@ -98,16 +98,45 @@ def mergear_movimientos(
                 break
 
     # 2. Ancla en el ultimo movimiento del extracto (max orden)
+    # Busca por todos los datos disponibles: saldo + monto + fecha + titular
+    # Cuantos mas campos coincidan, mas preciso el match.
     if corte_idx is None and ancla_saldo is not None:
+        ancla = max(existentes, key=lambda m: m.orden or 0)
+        ancla_fecha_iso = (
+            ancla.fecha.isoformat() if isinstance(ancla.fecha, date) else
+            (str(ancla.fecha) if ancla.fecha else "")
+        )
+        ancla_titular_norm = _normalizar_titular(ancla.titular)
+
+        mejor_idx: Optional[int] = None
+        mejor_score = 0
+
         for i, mov_data in enumerate(movimientos_nuevos):
             s = _to_float(mov_data.get("saldo"))
             m = _to_float(mov_data.get("monto"))
-            if (s is not None and abs(s - ancla_saldo) < 0.01
-                    and m is not None and ancla_monto is not None
-                    and abs(m - ancla_monto) < 0.01):
-                corte_idx = i
-                corte_metodo = "ancla"
-                break
+            fecha = mov_data.get("fecha")
+            fecha_iso = fecha.isoformat() if isinstance(fecha, date) else (str(fecha) if fecha else "")
+            titular_norm = _normalizar_titular(mov_data.get("titular"))
+
+            # saldo es obligatorio
+            if s is None or ancla_saldo is None or abs(s - ancla_saldo) >= 0.01:
+                continue
+
+            score = 1  # saldo ok
+            if m is not None and ancla_monto is not None and abs(m - ancla_monto) < 0.01:
+                score += 1
+            if ancla_fecha_iso and fecha_iso == ancla_fecha_iso:
+                score += 1
+            if ancla_titular_norm and titular_norm == ancla_titular_norm:
+                score += 1
+
+            if score > mejor_score:
+                mejor_score = score
+                mejor_idx = i
+
+        if mejor_idx is not None:
+            corte_idx = mejor_idx
+            corte_metodo = "ancla"
 
     # 3. Fallback: primer match generico
     if corte_idx is None:
