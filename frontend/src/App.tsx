@@ -11,6 +11,7 @@ import { Movimientos } from '@/pages/Movimientos'
 import { Conciliaciones } from '@/pages/Conciliaciones'
 import { Bulk } from '@/pages/Bulk'
 import { Clientes } from '@/pages/Clientes'
+import { ExtractosArchivo } from '@/pages/ExtractosArchivo'
 import { Perfil } from '@/pages/Perfil'
 import { Organizaciones } from '@/pages/Organizaciones'
 import { Actividad } from '@/pages/Actividad'
@@ -89,6 +90,7 @@ export function App() {
         >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/clientes" element={<Clientes />} />
+          <Route path="/extractos-archivo" element={<ExtractosArchivo />} />
           <Route path="/bulk" element={<Bulk />} />
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/liquidaciones" element={

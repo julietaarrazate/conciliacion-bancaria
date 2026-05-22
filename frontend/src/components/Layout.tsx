@@ -31,6 +31,7 @@ const Icon = {
 const navItems = [
   { to: '/dashboard',      label: 'Conciliar',     Icon: Icon.Bolt },
   { to: '/clientes',       label: 'Clientes',      Icon: Icon.Folder },
+  { to: '/extractos-archivo', label: 'Extractos',  Icon: Icon.Folder },
   { to: '/bulk',           label: 'Bulk',          Icon: Icon.Stack },
   { to: '/movimientos',    label: 'Movimientos',   Icon: Icon.Chart },
   { to: '/conciliaciones', label: 'Conciliaciones', Icon: Icon.Check },

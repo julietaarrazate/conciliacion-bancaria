@@ -88,6 +88,7 @@ export interface ExtractoHistorialItem {
   fecha_creacion: string
   usuario_nombre: string
   total_movimientos: number
+  acreditados: number
 }
 
 export interface AuditoriaLog {

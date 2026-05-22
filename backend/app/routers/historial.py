@@ -156,13 +156,15 @@ def list_extractos(
 
     items = []
     for e in extractos:
+        acred = sum(1 for m in e.movimientos if m.cliente_acreditado)
         items.append(
             ExtractoHistorialItem(
                 id=e.id,
                 nombre_archivo=e.nombre_archivo,
                 fecha_creacion=e.fecha_creacion,
                 usuario_nombre=e.creado_por_user.full_name,
-                total_movimientos=len(e.movimientos)
+                total_movimientos=len(e.movimientos),
+                acreditados=acred,
             )
         )
 

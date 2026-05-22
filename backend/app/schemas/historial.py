@@ -25,6 +25,7 @@ class ExtractoHistorialItem(BaseModel):
     fecha_creacion: datetime
     usuario_nombre: str
     total_movimientos: int
+    acreditados: int = 0
 
     class Config:
         from_attributes = True
