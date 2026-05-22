@@ -155,9 +155,10 @@ def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
           .update({"extracto_id": None}, synchronize_session="fetch")
         db.flush()
 
-        # 3. Borrar movimientos
-        for m in list(extracto.movimientos):
-            db.delete(m)
+        # 3. Borrar movimientos en bulk (una sola query)
+        db.query(MovimientoBanco).filter(
+            MovimientoBanco.extracto_id == extracto_id
+        ).delete(synchronize_session=False)
         db.flush()
 
         # 4. Borrar extracto

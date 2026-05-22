@@ -123,8 +123,19 @@ export const Movimientos: React.FC = () => {
   const filteredMovs = useMemo(() => {
     let m = tab === 'um' ? movimientos.filter(x => x.source === 'um') : movimientos
     if (debouncedFilters.importe) {
-      const val = parseFloat(debouncedFilters.importe.replace(/\./g,'').replace(',','.'))
-      if (!isNaN(val)) m = m.filter(x => Math.abs(x.monto - val) < 0.01)
+      const s = debouncedFilters.importe.trim()
+      let val: number
+      if (s.includes(',') && s.includes('.')) {
+        // Ambos: el último es el decimal
+        val = s.lastIndexOf(',') > s.lastIndexOf('.')
+          ? parseFloat(s.replace(/\./g, '').replace(',', '.'))   // "128.220,58"
+          : parseFloat(s.replace(/,/g, ''))                       // "128,220.58"
+      } else if (s.includes(',')) {
+        val = parseFloat(s.replace(',', '.'))                     // "128220,58"
+      } else {
+        val = parseFloat(s)                                       // "128220.58"
+      }
+      if (!isNaN(val)) m = m.filter(x => Math.abs(Math.abs(x.monto) - Math.abs(val)) < 0.01)
     }
     return m
   }, [movimientos, debouncedFilters.importe, tab])
@@ -279,6 +290,7 @@ export const Movimientos: React.FC = () => {
   const umCount = filteredMovs.filter(m => m.source === 'um').length
 
   return (
+    <>
     <div className="pl-1 pr-3 py-3 md:pl-2 md:pr-6 md:py-6 max-w-full">
       {/* Header */}
       <div className="flex flex-wrap items-start gap-2 mb-3">
@@ -596,5 +608,6 @@ export const Movimientos: React.FC = () => {
         </div>
       </div>
     )}
+    </>
   )
 }
