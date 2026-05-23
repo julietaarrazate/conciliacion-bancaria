@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func, text
 from typing import Optional
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models.user import User
-from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento
+from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
 
 router = APIRouter(prefix="/contabilidad", tags=["contabilidad"])
 
@@ -145,4 +146,159 @@ def get_asiento_detalle(
             }
             for l in a.lineas
         ],
+    }
+
+
+# ── Fase 3: Reportes contables ────────────────────────────────────────────────
+
+@router.get("/libro-mayor")
+def get_libro_mayor(
+    cuenta_id: int = Query(..., description="ID de la cuenta a consultar"),
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Movimientos de una cuenta con saldo acumulado (libro mayor)."""
+    oid = _org_id(current_user, org_id)
+    cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == cuenta_id).first()
+    if not cuenta:
+        raise HTTPException(404, "Cuenta no encontrada")
+
+    q = (
+        db.query(AsientoDetalle, Asiento)
+        .join(Asiento, AsientoDetalle.asiento_id == Asiento.id)
+        .filter(
+            AsientoDetalle.cuenta_id == cuenta_id,
+            Asiento.organizacion_id == oid,
+        )
+    )
+    if desde:
+        q = q.filter(Asiento.fecha >= desde)
+    if hasta:
+        q = q.filter(Asiento.fecha <= hasta)
+    q = q.order_by(Asiento.fecha, Asiento.id)
+
+    movimientos = []
+    saldo = 0.0
+    for detalle, asiento in q.all():
+        saldo += detalle.debe - detalle.haber
+        movimientos.append({
+            "fecha":       asiento.fecha,
+            "descripcion": asiento.descripcion,
+            "modulo":      asiento.modulo,
+            "debe":        detalle.debe,
+            "haber":       detalle.haber,
+            "saldo":       round(saldo, 2),
+        })
+
+    return {
+        "cuenta": {"id": cuenta.id, "codigo": cuenta.codigo, "nombre": cuenta.nombre, "tipo": cuenta.tipo},
+        "movimientos": movimientos,
+        "total_debe":  round(sum(m["debe"]  for m in movimientos), 2),
+        "total_haber": round(sum(m["haber"] for m in movimientos), 2),
+        "saldo_final": round(saldo, 2),
+    }
+
+
+@router.get("/sumas-saldo")
+def get_sumas_saldo(
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Sumas y saldo: total debe/haber por cuenta."""
+    oid = _org_id(current_user, org_id)
+
+    q = (
+        db.query(
+            PlanCuenta.id,
+            PlanCuenta.codigo,
+            PlanCuenta.nombre,
+            PlanCuenta.tipo,
+            PlanCuenta.nivel,
+            func.coalesce(func.sum(AsientoDetalle.debe),  0.0).label("total_debe"),
+            func.coalesce(func.sum(AsientoDetalle.haber), 0.0).label("total_haber"),
+        )
+        .join(AsientoDetalle, AsientoDetalle.cuenta_id == PlanCuenta.id)
+        .join(Asiento, AsientoDetalle.asiento_id == Asiento.id)
+        .filter(Asiento.organizacion_id == oid)
+    )
+    if desde:
+        q = q.filter(Asiento.fecha >= desde)
+    if hasta:
+        q = q.filter(Asiento.fecha <= hasta)
+    q = q.group_by(
+        PlanCuenta.id, PlanCuenta.codigo, PlanCuenta.nombre,
+        PlanCuenta.tipo, PlanCuenta.nivel,
+    ).order_by(PlanCuenta.codigo)
+
+    rows = []
+    for r in q.all():
+        debe  = round(float(r.total_debe),  2)
+        haber = round(float(r.total_haber), 2)
+        saldo = round(debe - haber, 2)
+        rows.append({
+            "id":     r.id,
+            "codigo": r.codigo,
+            "nombre": r.nombre,
+            "tipo":   r.tipo,
+            "nivel":  r.nivel,
+            "total_debe":    debe,
+            "total_haber":   haber,
+            "saldo_deudor":  max(saldo, 0),
+            "saldo_acreedor": max(-saldo, 0),
+        })
+    return rows
+
+
+@router.get("/balance")
+def get_balance(
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Balance simplificado: totales por tipo de cuenta."""
+    oid = _org_id(current_user, org_id)
+
+    q = (
+        db.query(
+            PlanCuenta.tipo,
+            func.coalesce(func.sum(AsientoDetalle.debe),  0.0).label("total_debe"),
+            func.coalesce(func.sum(AsientoDetalle.haber), 0.0).label("total_haber"),
+        )
+        .join(AsientoDetalle, AsientoDetalle.cuenta_id == PlanCuenta.id)
+        .join(Asiento, AsientoDetalle.asiento_id == Asiento.id)
+        .filter(Asiento.organizacion_id == oid, PlanCuenta.tipo.isnot(None))
+    )
+    if desde:
+        q = q.filter(Asiento.fecha >= desde)
+    if hasta:
+        q = q.filter(Asiento.fecha <= hasta)
+    q = q.group_by(PlanCuenta.tipo)
+
+    totales: dict = {}
+    for r in q.all():
+        debe  = round(float(r.total_debe),  2)
+        haber = round(float(r.total_haber), 2)
+        totales[r.tipo] = {
+            "total_debe":  debe,
+            "total_haber": haber,
+            "saldo":       round(debe - haber, 2),
+        }
+
+    activo    = totales.get("activo",    {}).get("saldo", 0)
+    pasivo    = totales.get("pasivo",    {}).get("saldo", 0)
+    resultado = totales.get("resultado", {}).get("saldo", 0)
+
+    return {
+        "activo":    totales.get("activo",    {"total_debe": 0, "total_haber": 0, "saldo": 0}),
+        "pasivo":    totales.get("pasivo",    {"total_debe": 0, "total_haber": 0, "saldo": 0}),
+        "resultado": totales.get("resultado", {"total_debe": 0, "total_haber": 0, "saldo": 0}),
+        "ecuacion_ok": round(activo, 2) == round(abs(pasivo) + abs(resultado), 2),
     }
