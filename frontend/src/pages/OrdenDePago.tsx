@@ -1,7 +1,6 @@
 ﻿import React, { useEffect, useRef, useState } from 'react'
 import { apiClient } from '@/services/api'
 
-const DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 200, 100]
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 
@@ -19,7 +18,6 @@ export const OrdenDePago: React.FC = () => {
     beneficiario: '',
     importe: '',
   })
-  const [dens, setDens] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [resultado, setResultado] = useState<any>(null)
   const [msg, setMsg] = useState('')
@@ -61,9 +59,7 @@ export const OrdenDePago: React.FC = () => {
     reader.readAsDataURL(file)
   }
 
-  const totalDens = DENOMINACIONES.reduce((s, d) => s + d * (parseInt(dens[String(d)]) || 0), 0)
   const importeNum = parseFloat(form.importe.replace(/\./g, '').replace(',', '.')) || 0
-  const dif = importeNum - totalDens
 
   const handleConfirmar = async () => {
     if (!form.cliente_id || !form.beneficiario || !form.importe) {
@@ -73,17 +69,11 @@ export const OrdenDePago: React.FC = () => {
     setSaving(true)
     setMsg('')
     try {
-      // Buscar cliente_id real
-      const clienteMatch = clientes.find(c => c.nombre === form.cliente_id || String(c.id) === form.cliente_id)
-      const densObj = Object.fromEntries(
-        Object.entries(dens).filter(([, v]) => parseInt(v) > 0).map(([k, v]) => [k, parseInt(v)])
-      )
       const res = await apiClient.client.post('/caja/op/registrar', {
         cliente_nombre: form.cliente_id,
         beneficiario: form.beneficiario,
         importe: importeNum,
         foto_base64: foto,
-        denominaciones: densObj
       })
       setResultado(res.data)
       setStep('exito')
@@ -123,7 +113,6 @@ export const OrdenDePago: React.FC = () => {
     setFoto(null)
     setFotoPreview(null)
     setForm({ cliente_id: '', beneficiario: '', importe: '' })
-    setDens({})
     setResultado(null)
     setMsg('')
   }
@@ -219,49 +208,6 @@ export const OrdenDePago: React.FC = () => {
                 value={form.importe}
                 onChange={e => setForm(p => ({ ...p, importe: e.target.value }))} />
             </div>
-          </div>
-
-          {/* Denominaciones usadas */}
-          <div className="card">
-            <h3 className="font-semibold text-sm dark:text-white mb-3">Billetes usados para este pago</h3>
-            <div className="space-y-2">
-              {DENOMINACIONES.map(d => {
-                const cant = parseInt(dens[String(d)]) || 0
-                return (
-                  <div key={d} className="flex items-center gap-3">
-                    <span className="text-sm font-mono text-gray-500 dark:text-zinc-400 w-20 text-right">
-                      ${d.toLocaleString('es-AR')}
-                    </span>
-                    <span className="text-gray-400 text-sm">×</span>
-                    <input type="number" min="0"
-                      className="input-field !w-20 text-center font-mono"
-                      value={dens[String(d)] || ''}
-                      placeholder="0"
-                      onChange={e => setDens(prev => ({ ...prev, [String(d)]: e.target.value }))} />
-                    <span className="text-sm font-mono text-gray-400 dark:text-zinc-500 flex-1 text-right">
-                      {cant > 0 ? fmt(d * cant) : ''}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-
-            {totalDens > 0 && (
-              <div className={`mt-3 pt-3 border-t border-ml-gray dark:border-ml-dark-border flex justify-between items-center`}>
-                <span className="text-sm font-semibold dark:text-white">Total en billetes</span>
-                <div className="text-right">
-                  <span className="font-mono font-bold dark:text-white">{fmt(totalDens)}</span>
-                  {importeNum > 0 && Math.abs(dif) > 0.5 && (
-                    <p className={`text-xs font-mono ${dif > 0 ? 'text-amber-500' : 'text-red-500'}`}>
-                      {dif > 0 ? `Faltan ${fmt(dif)}` : `Sobran ${fmt(Math.abs(dif))}`}
-                    </p>
-                  )}
-                  {importeNum > 0 && Math.abs(dif) <= 0.5 && (
-                    <p className="text-xs text-green-500 font-mono">✓ Exacto</p>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="flex gap-3">
