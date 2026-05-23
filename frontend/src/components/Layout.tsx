@@ -35,6 +35,7 @@ const navItems = [
   { to: '/movimientos',    label: 'Movimientos',   Icon: Icon.Chart },
   { to: '/conciliaciones', label: 'Conciliaciones', Icon: Icon.Check },
   { to: '/historial',      label: 'Historial',     Icon: Icon.List },
+  { to: '/cheques',       label: 'Cheques',     Icon: Icon.Check,  permission: 'reconcile' },
   { to: '/caja',          label: 'Caja',        Icon: Icon.Wallet, permission: 'reconcile' },
   { to: '/op',            label: 'Nueva OP',    Icon: Icon.Bolt, permission: 'reconcile' },
   { to: '/revision',       label: 'Revisión',      Icon: Icon.Flag, permission: 'reconcile' },

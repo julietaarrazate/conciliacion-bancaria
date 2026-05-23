@@ -19,6 +19,7 @@ import { Revision } from '@/pages/Revision'
 import { Caja } from '@/pages/Caja'
 import { OrdenDePago } from '@/pages/OrdenDePago'
 import { Contabilidad } from '@/pages/Contabilidad'
+import { Cheques } from '@/pages/Cheques'
 import { Layout } from '@/components/Layout'
 import { useThemeStore } from '@/store/theme'
 import '@/styles/index.css'
@@ -112,6 +113,7 @@ export function App() {
             </ProtectedRoute>
           } />
           <Route path="/contabilidad" element={<ProtectedRoute permission="manage_users"><Contabilidad /></ProtectedRoute>} />
+          <Route path="/cheques" element={<ProtectedRoute permission="reconcile"><Cheques /></ProtectedRoute>} />
           <Route path="/movimientos" element={<Movimientos />} />
           <Route path="/conciliaciones" element={<Conciliaciones />} />
           <Route path="/historial" element={<Historial />} />

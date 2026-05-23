@@ -104,6 +104,116 @@ def registrar_extracto(
         print(f"[motor_contable] Warning extracto {extracto_id}: {ex}")
 
 
+def registrar_cheque(
+    db: Session,
+    cheque_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    titular: str,
+    monto: float,
+    comision: float,
+    fecha: date,
+) -> None:
+    """Carga cheque: Créditos (D) / Pasivo cliente (H). Comisión opcional."""
+    try:
+        if _ya_existe(db, "cheque_carga", cheque_id, org_id):
+            return
+        regla = _get_regla(db, "carga_cheque", org_id)
+        if not regla or monto <= 0:
+            return
+        _crear_asiento(
+            db=db, regla=regla,
+            fecha=fecha,
+            descripcion=f"Cheque {titular or ''} — carga",
+            modulo="cheque_carga",
+            referencia_id=cheque_id,
+            org_id=org_id,
+            usuario_id=usuario_id,
+            monto=round(monto, 2),
+        )
+        if comision > 0:
+            regla_com = _get_regla(db, "carga_cheque_comision", org_id)
+            if regla_com:
+                _crear_asiento(
+                    db=db, regla=regla_com,
+                    fecha=fecha,
+                    descripcion=f"Cheque {titular or ''} — comisión",
+                    modulo="cheque_comision",
+                    referencia_id=cheque_id,
+                    org_id=org_id,
+                    usuario_id=usuario_id,
+                    monto=round(comision, 2),
+                )
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        print(f"[motor_contable] Warning cheque carga {cheque_id}: {ex}")
+
+
+def acreditar_cheque(
+    db: Session,
+    cheque_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    titular: str,
+    monto: float,
+    fecha: date,
+) -> None:
+    """Acreditación cheque: Banco (D) / Créditos (H)."""
+    try:
+        if _ya_existe(db, "cheque_acred", cheque_id, org_id):
+            return
+        regla = _get_regla(db, "acred_rechazo_banco", org_id)
+        if not regla or monto <= 0:
+            return
+        _crear_asiento(
+            db=db, regla=regla,
+            fecha=fecha,
+            descripcion=f"Cheque {titular or ''} — acreditado",
+            modulo="cheque_acred",
+            referencia_id=cheque_id,
+            org_id=org_id,
+            usuario_id=usuario_id,
+            monto=round(monto, 2),
+        )
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        print(f"[motor_contable] Warning cheque acred {cheque_id}: {ex}")
+
+
+def rechazar_cheque(
+    db: Session,
+    cheque_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    titular: str,
+    monto: float,
+    fecha: date,
+) -> None:
+    """Rechazo cheque: Pasivo cliente (D) / Créditos (H)."""
+    try:
+        if _ya_existe(db, "cheque_rechazo", cheque_id, org_id):
+            return
+        regla = _get_regla(db, "acred_rechazo_pasivo", org_id)
+        if not regla or monto <= 0:
+            return
+        _crear_asiento(
+            db=db, regla=regla,
+            fecha=fecha,
+            descripcion=f"Cheque {titular or ''} — rechazado",
+            modulo="cheque_rechazo",
+            referencia_id=cheque_id,
+            org_id=org_id,
+            usuario_id=usuario_id,
+            monto=round(monto, 2),
+        )
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        print(f"[motor_contable] Warning cheque rechazo {cheque_id}: {ex}")
+
+
 def registrar_planilla(
     db: Session,
     planilla_id: int,
