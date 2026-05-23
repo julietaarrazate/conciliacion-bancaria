@@ -27,6 +27,13 @@ interface AsientoItem {
   referencia_id: number | null
 }
 
+interface AsientoLinea {
+  id: number
+  cuenta: { id: number; codigo: string; nombre: string }
+  debe: number
+  haber: number
+}
+
 interface SumaRow {
   id: number
   codigo: string
@@ -93,6 +100,9 @@ export const Contabilidad: React.FC = () => {
   const [mayorCuentaId, setMayorCuentaId] = useState<number | ''>('')
   const [loading, setLoading]         = useState(true)
   const [loadingMayor, setLoadingMayor] = useState(false)
+  const [openAsientos, setOpenAsientos] = useState<Set<number>>(new Set())
+  const [asientoLineas, setAsientoLineas] = useState<Record<number, AsientoLinea[]>>({})
+  const [loadingLineas, setLoadingLineas] = useState<Set<number>>(new Set())
   const [tab, setTab]                 = useState<Tab>('plan')
 
   useEffect(() => {
@@ -116,6 +126,28 @@ export const Contabilidad: React.FC = () => {
     apiClient.client.get(`/contabilidad/libro-mayor?cuenta_id=${id}`)
       .then(r => { setLibroMayor(r.data); setLoadingMayor(false) })
       .catch(() => setLoadingMayor(false))
+  }
+
+  const toggleAsiento = (id: number) => {
+    const next = new Set(openAsientos)
+    if (next.has(id)) {
+      next.delete(id)
+      setOpenAsientos(next)
+    } else {
+      next.add(id)
+      setOpenAsientos(next)
+      if (!asientoLineas[id]) {
+        setLoadingLineas(prev => new Set(prev).add(id))
+        apiClient.client.get(`/contabilidad/asientos/${id}`)
+          .then(r => {
+            setAsientoLineas(prev => ({ ...prev, [id]: r.data.lineas }))
+            setLoadingLineas(prev => { const s = new Set(prev); s.delete(id); return s })
+          })
+          .catch(() => {
+            setLoadingLineas(prev => { const s = new Set(prev); s.delete(id); return s })
+          })
+      }
+    }
   }
 
   const raices = cuentas.filter(c => c.nivel === 1)
@@ -224,25 +256,73 @@ export const Contabilidad: React.FC = () => {
             <table className="w-full text-xs">
               <thead className="bg-gray-50 dark:bg-slate-800">
                 <tr>
-                  <th className="text-left px-4 py-2 font-medium text-gray-500 w-8">#</th>
-                  <th className="text-left px-4 py-2 font-medium text-gray-500">Fecha</th>
-                  <th className="text-left px-4 py-2 font-medium text-gray-500">Módulo</th>
-                  <th className="text-left px-4 py-2 font-medium text-gray-500">Descripción</th>
+                  <th className="w-6 px-2 py-2"></th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-500 w-8">#</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-500">Fecha</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-500">Módulo</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-500">Descripción</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
-                {asientos.map(a => (
-                  <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
-                    <td className="px-4 py-2 text-gray-400 font-mono">{a.id}</td>
-                    <td className="px-4 py-2 whitespace-nowrap">{fmtDate(a.fecha)}</td>
-                    <td className="px-4 py-2">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500">
-                        {(a.modulo && MODULO_LABEL[a.modulo]) || a.modulo || '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{a.descripcion || '—'}</td>
-                  </tr>
-                ))}
+              <tbody>
+                {asientos.map(a => {
+                  const isOpen = openAsientos.has(a.id)
+                  const isLoading = loadingLineas.has(a.id)
+                  const lineas = asientoLineas[a.id]
+                  return (
+                    <React.Fragment key={a.id}>
+                      <tr
+                        className="border-b border-gray-100 dark:border-slate-700/50 hover:bg-gray-50 dark:hover:bg-slate-800/40 cursor-pointer select-none"
+                        onClick={() => toggleAsiento(a.id)}
+                      >
+                        <td className="px-2 py-2 text-gray-400 text-center">{isOpen ? '▾' : '▸'}</td>
+                        <td className="px-3 py-2 text-gray-400 font-mono">{a.id}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">{fmtDate(a.fecha)}</td>
+                        <td className="px-3 py-2">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500">
+                            {(a.modulo && MODULO_LABEL[a.modulo]) || a.modulo || '—'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{a.descripcion || '—'}</td>
+                      </tr>
+                      {isOpen && (
+                        <tr className="border-b border-gray-100 dark:border-slate-700/50 bg-gray-50/60 dark:bg-slate-800/30">
+                          <td colSpan={5} className="px-6 py-2">
+                            {isLoading ? (
+                              <p className="text-gray-400 py-1">Cargando...</p>
+                            ) : !lineas || lineas.length === 0 ? (
+                              <p className="text-gray-400 py-1">Sin líneas</p>
+                            ) : (
+                              <table className="w-full text-[11px]">
+                                <thead>
+                                  <tr className="text-gray-400">
+                                    <th className="text-left font-medium pr-3 py-0.5 w-20">Código</th>
+                                    <th className="text-left font-medium pr-3 py-0.5">Cuenta</th>
+                                    <th className="text-right font-medium pr-3 py-0.5 w-24 text-blue-500">Debe</th>
+                                    <th className="text-right font-medium py-0.5 w-24 text-orange-500">Haber</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {lineas.map(l => (
+                                    <tr key={l.id}>
+                                      <td className="font-mono text-gray-400 pr-3 py-0.5">{l.cuenta.codigo}</td>
+                                      <td className="text-gray-700 dark:text-gray-300 pr-3 py-0.5">{l.cuenta.nombre}</td>
+                                      <td className="text-right font-mono text-blue-700 dark:text-blue-300 pr-3 py-0.5">
+                                        {l.debe > 0 ? fmtNum(l.debe) : ''}
+                                      </td>
+                                      <td className="text-right font-mono text-orange-700 dark:text-orange-300 py-0.5">
+                                        {l.haber > 0 ? fmtNum(l.haber) : ''}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
               </tbody>
             </table>
           )}
