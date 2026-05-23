@@ -216,7 +216,7 @@ export const Contabilidad: React.FC = () => {
       ) : tab === 'reglas' ? (
         <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
           {reglas.length === 0 ? <p className="text-center py-8 text-gray-400 text-sm">Sin reglas</p> : (
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto"><table className="w-full text-xs min-w-[480px]">
               <thead className="bg-gray-50 dark:bg-slate-800">
                 <tr>
                   <th className="text-left px-4 py-2 font-medium text-gray-600 dark:text-gray-400">Evento</th>
@@ -240,7 +240,7 @@ export const Contabilidad: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
 
@@ -253,7 +253,7 @@ export const Contabilidad: React.FC = () => {
               <p className="text-xs mt-1">Se generan automáticamente al subir extractos y conciliar planillas.</p>
             </div>
           ) : (
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto"><table className="w-full text-xs min-w-[420px]">
               <thead className="bg-gray-50 dark:bg-slate-800">
                 <tr>
                   <th className="w-6 px-2 py-2"></th>
@@ -324,7 +324,7 @@ export const Contabilidad: React.FC = () => {
                   )
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
 
@@ -335,7 +335,7 @@ export const Contabilidad: React.FC = () => {
               <p className="text-sm">Sin movimientos contables todavía.</p>
             </div>
           ) : (
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto"><table className="w-full text-xs min-w-[500px]">
               <thead className="bg-gray-50 dark:bg-slate-800">
                 <tr>
                   <th className="text-left px-4 py-2 font-medium text-gray-500">Código</th>
@@ -358,7 +358,7 @@ export const Contabilidad: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
 
@@ -431,7 +431,7 @@ export const Contabilidad: React.FC = () => {
                   Saldo final: <span className="font-mono font-medium">{fmtNum(libroMayor.saldo_final)}</span>
                 </p>
               </div>
-              <table className="w-full text-xs">
+              <div className="overflow-x-auto"><table className="w-full text-xs min-w-[400px]">
                 <thead className="bg-gray-50 dark:bg-slate-800 border-t border-gray-100 dark:border-slate-700">
                   <tr>
                     <th className="text-left px-4 py-2 font-medium text-gray-500">Fecha</th>
@@ -460,7 +460,7 @@ export const Contabilidad: React.FC = () => {
                     <td className="px-4 py-2 text-right font-mono font-semibold">{fmtNum(libroMayor.saldo_final)}</td>
                   </tr>
                 </tfoot>
-              </table>
+              </table></div>
             </div>
           )}
         </div>

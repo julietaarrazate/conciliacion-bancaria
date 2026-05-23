@@ -275,7 +275,7 @@ export const Layout: React.FC = () => {
       </aside>
 
       {/* ── Contenido ──────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto text-ml-text dark:text-gray-200">
+      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden text-ml-text dark:text-gray-200">
         <Outlet />
       </main>
     </div>
