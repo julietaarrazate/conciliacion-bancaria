@@ -5,11 +5,14 @@ Siempre encapsulado en try/except: si falla, la operación principal NO se revie
 Idempotente: nunca crea dos asientos para el mismo (modulo, referencia_id, org_id).
 """
 
+import logging
 from datetime import date
 from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
+
+logger = logging.getLogger(__name__)
 
 
 def _get_regla(db: Session, evento: str, org_id: int) -> Optional[ReglaContable]:
@@ -101,7 +104,7 @@ def registrar_extracto(
         db.commit()
     except Exception as ex:
         db.rollback()
-        print(f"[motor_contable] Warning extracto {extracto_id}: {ex}")
+        logger.warning("Error asiento extracto %s: %s", extracto_id, ex)
 
 
 def registrar_cheque(
@@ -147,7 +150,7 @@ def registrar_cheque(
         db.commit()
     except Exception as ex:
         db.rollback()
-        print(f"[motor_contable] Warning cheque carga {cheque_id}: {ex}")
+        logger.warning("Error asiento cheque carga %s: %s", cheque_id, ex)
 
 
 def acreditar_cheque(
@@ -179,7 +182,7 @@ def acreditar_cheque(
         db.commit()
     except Exception as ex:
         db.rollback()
-        print(f"[motor_contable] Warning cheque acred {cheque_id}: {ex}")
+        logger.warning("Error asiento cheque acred %s: %s", cheque_id, ex)
 
 
 def rechazar_cheque(
@@ -211,7 +214,7 @@ def rechazar_cheque(
         db.commit()
     except Exception as ex:
         db.rollback()
-        print(f"[motor_contable] Warning cheque rechazo {cheque_id}: {ex}")
+        logger.warning("Error asiento cheque rechazo %s: %s", cheque_id, ex)
 
 
 def registrar_op_pago(
@@ -244,7 +247,7 @@ def registrar_op_pago(
         db.commit()
     except Exception as ex:
         db.rollback()
-        print(f"[motor_contable] Warning op_pago {op_id}: {ex}")
+        logger.warning("Error asiento op_pago %s: %s", op_id, ex)
 
 
 def registrar_ingreso_efectivo(
@@ -296,7 +299,7 @@ def registrar_ingreso_efectivo(
             db.commit()
     except Exception as ex:
         db.rollback()
-        print(f"[motor_contable] Warning ingreso_efectivo arqueo {arqueo_id}: {ex}")
+        logger.warning("Error asiento ingreso_efectivo %s: %s", arqueo_id, ex)
 
 
 def registrar_pago(
@@ -331,7 +334,7 @@ def registrar_pago(
         db.commit()
     except Exception as ex:
         db.rollback()
-        print(f"[motor_contable] Warning pago {pago_id}: {ex}")
+        logger.warning("Error asiento pago %s: %s", pago_id, ex)
 
 
 def registrar_gasto(
@@ -365,7 +368,7 @@ def registrar_gasto(
         db.commit()
     except Exception as ex:
         db.rollback()
-        print(f"[motor_contable] Warning gasto {gasto_id}: {ex}")
+        logger.warning("Error asiento gasto %s: %s", gasto_id, ex)
 
 
 def registrar_planilla(
@@ -457,4 +460,4 @@ def registrar_planilla(
         db.commit()
     except Exception as ex:
         db.rollback()
-        print(f"[motor_contable] Warning planilla {planilla_id}: {ex}")
+        logger.warning("Error asiento planilla %s: %s", planilla_id, ex)

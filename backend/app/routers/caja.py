@@ -1,7 +1,10 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import date, datetime
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models.caja import ArqueoDiario, OrdenDePago, DENOMINACIONES, denominaciones_vacias
@@ -116,7 +119,7 @@ def update_arqueo(
                 fecha=arqueo.fecha,
             )
         except Exception as _mc_ex:
-            print(f"[motor_contable] ingreso_efectivo hook: {_mc_ex}")
+            logger.warning("motor_contable ingreso_efectivo: %s", _mc_ex)
 
     return _arqueo_response(arqueo)
 
@@ -246,7 +249,7 @@ def registrar_op(
             fecha=fecha,
         )
     except Exception as _mc_ex:
-        print(f"[motor_contable] op_pago hook: {_mc_ex}")
+        logger.warning("motor_contable op_pago: %s", _mc_ex)
 
     return {
         "ok": True,

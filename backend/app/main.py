@@ -1,3 +1,4 @@
+import logging
 import threading
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -9,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
 from app.config import get_settings
+from app.logging_config import setup_logging
 from app.database import engine, Base
 from app.routers import auth, extractos, planillas, me, admin, auditoria, historial, clientes_dir
 from app.routers import organizaciones
@@ -21,6 +23,8 @@ from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planill
 from app.models.organizacion import Organizacion
 
 settings = get_settings()
+setup_logging(debug=settings.debug)
+logger = logging.getLogger(__name__)
 
 # Rate limiter — protección brute force
 limiter = Limiter(key_func=get_remote_address)
@@ -37,7 +41,7 @@ def _run_alembic():
         # Path absoluto: backend/alembic.ini (relativo a este archivo: backend/app/main.py)
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         alembic_ini = os.path.join(base_dir, "alembic.ini")
-        print(f"[alembic] buscando config en: {alembic_ini}")
+        logger.debug("alembic config: %s", alembic_ini)
 
         alembic_cfg = Config(alembic_ini)
 
@@ -49,12 +53,12 @@ def _run_alembic():
 
         if not ya_tiene_alembic:
             command.stamp(alembic_cfg, "head")
-            print("[alembic] DB existente sellada como baseline v001")
+            logger.info("DB sellada como baseline v001")
         else:
             command.upgrade(alembic_cfg, "head")
-            print("[alembic] migraciones aplicadas")
+            logger.info("migraciones Alembic aplicadas")
     except Exception as ex:
-        print(f"[alembic] Warning: {ex}")
+        logger.warning("Alembic error: %s", ex)
 
 
 def _init_db():
@@ -66,9 +70,9 @@ def _init_db():
     # 1. Crear tablas (incluye Organizacion)
     try:
         Base.metadata.create_all(bind=engine)
-        print("[db] Tablas OK")
+        logger.info("Tablas OK")
     except Exception as e:
-        print(f"[db] Warning tablas: {e}")
+        logger.error("Error creando tablas: %s", e)
         return
 
     # 1.5 Alembic — versionar la DB
@@ -99,7 +103,7 @@ def _init_db():
                 conn.execute(text(sql))
                 conn.commit()
         except Exception as ex:
-            print(f"[db] Index warning: {ex}")
+            logger.debug("Index ya existe (ignorado): %s", ex)
 
     # 3. Migraciones de columnas — todas idempotentes (IF NOT EXISTS no disponible en todos los Postgres,
     #    se usa try/except para ignorar "column already exists")
@@ -143,9 +147,9 @@ def _init_db():
                   AND (mes IS NULL OR mes !~ '^[0-9]{1,2}$' OR LENGTH(mes) > 2)
             """))
             conn.commit()
-        print("[db] mes normalizado a numero (1-12)")
+        logger.info("mes normalizado a numero (1-12)")
     except Exception as ex:
-        print(f"[db] Warning normalize mes: {ex}")
+        logger.warning("Error normalizando mes: %s", ex)
 
     # 3. Backfill organizacion_id=1 en tablas existentes (Caneland)
     backfills = [
@@ -167,7 +171,7 @@ def _init_db():
                 conn.execute(text(sql))
                 conn.commit()
         except Exception as ex:
-            print(f"[db] Warning backfill: {ex}")
+            logger.warning("Backfill error: %s", ex)
 
     # 4. Backfill fingerprints
     try:
@@ -183,10 +187,10 @@ def _init_db():
             e.fingerprint = hashlib.sha256(raw.encode()).hexdigest()[:16]
         if sin_fp:
             db.commit()
-            print(f"[db] fingerprint calculado para {len(sin_fp)} extracto(s)")
+            logger.info("fingerprint calculado para %d extracto(s)", len(sin_fp))
         db.close()
     except Exception as ex:
-        print(f"[db] Warning fingerprint: {ex}")
+        logger.warning("Error calculando fingerprints: %s", ex)
 
     # 5. Seed Organizacion Caneland (id=1)
     try:
@@ -206,10 +210,10 @@ def _init_db():
             }
             db.add(Org(id=1, nombre="Caneland SA", plan="pro", configuracion=config_caneland, activo=True))
             db.commit()
-            print("[db] Organización Caneland SA creada (id=1)")
+            logger.info("Organización Caneland SA creada (id=1)")
         db.close()
     except Exception as ex:
-        print(f"[db] Warning seed org: {ex}")
+        logger.warning("Error seed org: %s", ex)
 
     # 6. Seed contabilidad (plan de cuentas + reglas)
     # Checks plan_cuentas and reglas_contables INDEPENDENTLY so a partial
@@ -280,7 +284,7 @@ def _init_db():
                 code_to_id[codigo] = c.id
             db.commit()
             n_cuentas = len(PLAN)
-            print(f"[db] Plan de cuentas sembrado ({n_cuentas} cuentas)")
+            logger.info("Plan de cuentas sembrado (%d cuentas)", n_cuentas)
         else:
             # Build code→id map from existing rows (needed for reglas seed below)
             code_to_id = {c.codigo: c.id for c in db.query(PlanCuenta).filter(PlanCuenta.organizacion_id == 1).all()}
@@ -289,7 +293,7 @@ def _init_db():
         if n_reglas == 0 and code_to_id:
             for evento, descripcion, debe_codigo, haber_codigo in REGLAS:
                 if debe_codigo not in code_to_id or haber_codigo not in code_to_id:
-                    print(f"[db] Warning: cuenta {debe_codigo} o {haber_codigo} no encontrada para regla {evento}")
+                    logger.warning("Cuenta %s o %s no encontrada para regla %s", debe_codigo, haber_codigo, evento)
                     continue
                 db.add(ReglaContable(
                     evento=evento, descripcion=descripcion,
@@ -298,12 +302,12 @@ def _init_db():
                     activo=True, organizacion_id=1
                 ))
             db.commit()
-            print(f"[db] Reglas contables sembradas ({len(REGLAS)} reglas)")
+            logger.info("Reglas contables sembradas (%d reglas)", len(REGLAS))
 
-        print(f"[db] Contabilidad: {n_cuentas} cuentas, {db.query(ReglaContable).filter(ReglaContable.organizacion_id==1).count()} reglas")
+        logger.info("Contabilidad: %d cuentas, %d reglas", n_cuentas, db.query(ReglaContable).filter(ReglaContable.organizacion_id==1).count())
         db.close()
     except Exception as ex:
-        print(f"[db] Warning seed contabilidad: {ex}")
+        logger.warning("Error seed contabilidad: %s", ex)
 
     # 7. Backfill contabilidad — genera asientos para extractos/planillas existentes
     try:
@@ -353,12 +357,12 @@ def _init_db():
                 n_plan += 1
 
         if n_ext or n_plan:
-            print(f"[db] Backfill contabilidad: {n_ext} extracto(s), {n_plan} planilla(s)")
+            logger.info("Backfill contabilidad: %d extracto(s), %d planilla(s)", n_ext, n_plan)
         else:
-            print("[db] Backfill contabilidad: todo al dia")
+            logger.info("Backfill contabilidad: todo al dia")
         db.close()
     except Exception as ex:
-        print(f"[db] Warning backfill contabilidad: {ex}")
+        logger.warning("Error backfill contabilidad: %s", ex)
 
     # 8. Seed usuarios
     try:
@@ -382,17 +386,17 @@ def _init_db():
                     is_superadmin=True,
                     organizacion_id=1
                 ))
-                print(f"[db] Superadmin {julieta_email} creado")
+                logger.info("Superadmin %s creado", julieta_email)
             else:
                 # Siempre actualizar password y flags desde el env var
                 julieta.hashed_password = get_password_hash(julieta_pwd)
                 julieta.is_superadmin = True
                 julieta.is_active = True
                 julieta.role = RoleEnum.ADMIN.value
-                print(f"[db] Superadmin {julieta_email} actualizado")
+                logger.info("Superadmin %s actualizado", julieta_email)
             db.commit()
         else:
-            print("[db] AVISO: SUPERADMIN_PASSWORD no definida")
+            logger.warning("SUPERADMIN_PASSWORD no definida — superadmin no creado")
 
         # Migrar admin@caneland.com → admin@julieta.com si existe el viejo
         old = db.query(U).filter(U.email == "admin@caneland.com").first()
@@ -400,7 +404,7 @@ def _init_db():
             old.email = "admin@julieta.com"
             old.full_name = "Administrador"
             db.commit()
-            print("[db] admin@caneland.com → admin@julieta.com")
+            logger.info("admin@caneland.com migrado a admin@julieta.com")
 
         # Usuarios demo — solo en entorno de desarrollo
         if settings.debug:
@@ -422,17 +426,16 @@ def _init_db():
                     created += 1
             if created:
                 db.commit()
-                print(f"[db] {created} usuario(s) demo creado(s)")
+                logger.info("%d usuario(s) demo creado(s)", created)
         db.close()
     except Exception as ex:
-        print(f"[db] Warning seed users: {ex}")
+        logger.warning("Error seed users: %s", ex)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not settings.debug and settings.secret_key == "dev-secret-key-CAMBIAR-en-produccion":
-        print("[SECURITY] ADVERTENCIA CRITICA: SECRET_KEY usa el valor por defecto. "
-              "Seteá la variable de entorno SECRET_KEY en Render con un valor secreto único.")
+        logger.critical("SECRET_KEY usa el valor por defecto — seteá SECRET_KEY en Render")
     t = threading.Thread(target=_init_db, daemon=True)
     t.start()
     yield

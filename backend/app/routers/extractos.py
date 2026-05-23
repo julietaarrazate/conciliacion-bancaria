@@ -20,10 +20,12 @@ from app.services.excel_parser import parsear_extracto_bancario
 from app.services.extracto_merger import mergear_movimientos
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_movimientos, export_extracto_contador
+import logging
 from app.middleware.auth import get_current_user
 from app.config import get_settings
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/extractos", tags=["extractos"])
 
 
@@ -139,13 +141,13 @@ async def upload_extracto(file: UploadFile = File(...),
                 movimientos=extracto.movimientos,
             )
         except Exception as _mc_ex:
-            print(f"[motor_contable] extracto hook: {_mc_ex}")
+            logger.warning("motor_contable extracto: %s", _mc_ex)
         return extracto
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        print(f"[extractos] upload error: {e}")
+        logger.error("upload error: %s", e)
         raise HTTPException(400, "Error al procesar el archivo. Verificá el formato y volvé a intentar.")
     finally:
         if tmp_path and os.path.exists(tmp_path):
@@ -195,7 +197,7 @@ def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
         return {"ok": True, "mensaje": f"Extracto #{extracto_id} eliminado. Planillas conservadas."}
     except Exception as e:
         db.rollback()
-        print(f"[extractos] delete error: {e}")
+        logger.error("delete extracto: %s", e)
         raise HTTPException(500, "Error al eliminar el extracto. Intentá de nuevo.")
 
 
@@ -221,7 +223,7 @@ def delete_todos_extractos(db: Session = Depends(get_db),
         return {"ok": True, "mensaje": f"Limpieza completa: {n_extractos} extractos, {n_planillas} planillas, {n_movs} movimientos eliminados"}
     except Exception as e:
         db.rollback()
-        print(f"[extractos] limpiar error: {e}")
+        logger.error("limpiar extractos: %s", e)
         raise HTTPException(500, "Error al limpiar. Intentá de nuevo.")
 
 
@@ -279,7 +281,7 @@ def eliminar_movimientos_um(extracto_id: int,
         return {"ok": True, "eliminados": n, "lote": max_lote}
     except Exception as e:
         db.rollback()
-        print(f"[extractos] eliminar UM error: {e}")
+        logger.error("eliminar UM: %s", e)
         raise HTTPException(500, "Error al eliminar movimientos UM. Intentá de nuevo.")
 
 
@@ -314,7 +316,7 @@ async def agregar_ultimos_movimientos(
         raise
     except Exception as e:
         db.rollback()
-        print(f"[extractos] procesar UM error: {e}")
+        logger.error("procesar UM: %s", e)
         raise HTTPException(400, "Error al procesar el archivo UM. Verificá el formato y volvé a intentar.")
     finally:
         if tmp_path and os.path.exists(tmp_path):
@@ -539,7 +541,7 @@ def delete_movimiento(
         return {"ok": True}
     except Exception as e:
         db.rollback()
-        print(f"[extractos] borrar movimiento error: {e}")
+        logger.error("borrar movimiento: %s", e)
         raise HTTPException(500, "Error al borrar el movimiento. Intentá de nuevo.")
 
 

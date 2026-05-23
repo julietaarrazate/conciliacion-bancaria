@@ -1,7 +1,10 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
 import tempfile
 import os
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models.planilla import Planilla, PlanillaRow
@@ -116,7 +119,7 @@ async def upload_planilla(
 
     except Exception as e:
         db.rollback()
-        print(f"[planillas] upload error: {e}")
+        logger.error("upload error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Error al procesar la planilla. Verificá el formato del archivo."
@@ -222,7 +225,7 @@ def conciliar(
                 comision_pct=comision_pct,
             )
         except Exception as _mc_ex:
-            print(f"[motor_contable] planilla hook: {_mc_ex}")
+            logger.warning("motor_contable planilla: %s", _mc_ex)
 
         return {
             "planilla_id": planilla_id,
@@ -231,7 +234,7 @@ def conciliar(
 
     except Exception as e:
         db.rollback()
-        print(f"[planillas] conciliar error: {e}")
+        logger.error("conciliar error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error en la conciliación. Revisá los datos e intentá de nuevo."

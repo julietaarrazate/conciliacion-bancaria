@@ -6,7 +6,10 @@ Solo funciona cuando el backend corre en la PC local.
 En produccion (Render) simplemente devuelve el archivo para descargar.
 """
 
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 import platform
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
@@ -118,9 +121,9 @@ def guardar_planilla_en_carpeta(
             with open(ruta_final, 'wb') as f:
                 f.write(xlsx)
             saved_path = ruta_final
-            print(f"[clientes] Guardado en: {ruta_final}")
+            logger.info("Guardado en: %s", ruta_final)
         except Exception as e:
-            print(f"[clientes] Warning al guardar: {e}")
+            logger.warning("Error guardando planilla local: %s", e)
 
     headers = {"Content-Disposition": f'attachment; filename="{nombre_archivo}"'}
     if saved_path:
@@ -482,7 +485,7 @@ def acreditar_movimiento_a_cliente(
             mov.cliente_acreditado = cli.nombre
             mov.fecha_acred = fecha_acred
             db.commit()
-        print(f"[acreditar] Warning: {ex}")
+        logger.warning("Error acreditar: %s", ex)
 
     registrar_log(db, current_user.id, "movimientos_banco", mov.id, "ACREDITAR_MANUAL",
                   {"cliente": cli.nombre, "fecha_acred": str(fecha_acred),
@@ -562,7 +565,7 @@ def borrar_cliente(cliente_id: int,
         }
     except Exception as e:
         db.rollback()
-        print(f"[clientes] borrar error: {e}")
+        logger.error("Error borrar cliente: %s", e)
         raise HTTPException(500, "Error al borrar el cliente. Intentá de nuevo.")
 
 
