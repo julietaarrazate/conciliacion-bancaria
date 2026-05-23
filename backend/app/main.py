@@ -29,11 +29,17 @@ limiter = Limiter(key_func=get_remote_address)
 def _run_alembic():
     """Aplica migraciones pendientes. Si la DB nunca tuvo Alembic, la sella como baseline."""
     try:
+        import os
         from alembic import command
         from alembic.config import Config
         from sqlalchemy import text
 
-        alembic_cfg = Config("alembic.ini")
+        # Path absoluto: backend/alembic.ini (relativo a este archivo: backend/app/main.py)
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        alembic_ini = os.path.join(base_dir, "alembic.ini")
+        print(f"[alembic] buscando config en: {alembic_ini}")
+
+        alembic_cfg = Config(alembic_ini)
 
         with engine.connect() as conn:
             result = conn.execute(text(
