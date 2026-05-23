@@ -17,7 +17,6 @@ class PlanCuenta(Base):
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
     created_at    = Column(DateTime, default=datetime.utcnow)
 
-    hijos         = relationship("PlanCuenta", foreign_keys=[parent_id], backref="padre")
     organizacion  = relationship("Organizacion", foreign_keys=[organizacion_id])
 
 
