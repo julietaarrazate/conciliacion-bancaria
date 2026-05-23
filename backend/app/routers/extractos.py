@@ -21,7 +21,9 @@ from app.services.extracto_merger import mergear_movimientos
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_movimientos, export_extracto_contador
 from app.middleware.auth import get_current_user
+from app.config import get_settings
 
+settings = get_settings()
 router = APIRouter(prefix="/extractos", tags=["extractos"])
 
 
@@ -66,8 +68,11 @@ async def upload_extracto(file: UploadFile = File(...),
         raise HTTPException(400, "Formatos aceptados: .xlsx, .xls, .csv")
     tmp_path = None
     try:
+        content = await file.read()
+        if len(content) > settings.max_file_size:
+            raise HTTPException(413, f"El archivo supera el límite de {settings.max_file_size // (1024 * 1024)} MB.")
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            tmp.write(await file.read())
+            tmp.write(content)
             tmp_path = tmp.name
 
         parsed = parsear_extracto_bancario(tmp_path)
@@ -140,7 +145,8 @@ async def upload_extracto(file: UploadFile = File(...),
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(400, f"Error al procesar archivo: {str(e)}")
+        print(f"[extractos] upload error: {e}")
+        raise HTTPException(400, "Error al procesar el archivo. Verificá el formato y volvé a intentar.")
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
@@ -189,7 +195,8 @@ def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
         return {"ok": True, "mensaje": f"Extracto #{extracto_id} eliminado. Planillas conservadas."}
     except Exception as e:
         db.rollback()
-        raise HTTPException(500, f"Error al eliminar: {str(e)}")
+        print(f"[extractos] delete error: {e}")
+        raise HTTPException(500, "Error al eliminar el extracto. Intentá de nuevo.")
 
 
 @router.delete("")
@@ -214,7 +221,8 @@ def delete_todos_extractos(db: Session = Depends(get_db),
         return {"ok": True, "mensaje": f"Limpieza completa: {n_extractos} extractos, {n_planillas} planillas, {n_movs} movimientos eliminados"}
     except Exception as e:
         db.rollback()
-        raise HTTPException(500, f"Error al limpiar: {str(e)}")
+        print(f"[extractos] limpiar error: {e}")
+        raise HTTPException(500, "Error al limpiar. Intentá de nuevo.")
 
 
 @router.delete("/{extracto_id}/movimientos-um")
@@ -271,7 +279,8 @@ def eliminar_movimientos_um(extracto_id: int,
         return {"ok": True, "eliminados": n, "lote": max_lote}
     except Exception as e:
         db.rollback()
-        raise HTTPException(500, f"Error al eliminar UM: {str(e)}")
+        print(f"[extractos] eliminar UM error: {e}")
+        raise HTTPException(500, "Error al eliminar movimientos UM. Intentá de nuevo.")
 
 
 @router.post("/{extracto_id}/agregar-um", response_model=MergeUMResponse)
@@ -290,8 +299,11 @@ async def agregar_ultimos_movimientos(
         raise HTTPException(400, "Formatos aceptados: .xlsx, .xls, .csv")
     tmp_path = None
     try:
+        content = await file.read()
+        if len(content) > settings.max_file_size:
+            raise HTTPException(413, f"El archivo supera el límite de {settings.max_file_size // (1024 * 1024)} MB.")
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            tmp.write(await file.read())
+            tmp.write(content)
             tmp_path = tmp.name
         parsed = parsear_extracto_bancario(tmp_path)
         stats = mergear_movimientos(db, extracto_id, parsed["movimientos"], corte_saldo=corte_saldo)
@@ -302,7 +314,8 @@ async def agregar_ultimos_movimientos(
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(400, f"Error al procesar UM: {str(e)}")
+        print(f"[extractos] procesar UM error: {e}")
+        raise HTTPException(400, "Error al procesar el archivo UM. Verificá el formato y volvé a intentar.")
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
@@ -526,7 +539,8 @@ def delete_movimiento(
         return {"ok": True}
     except Exception as e:
         db.rollback()
-        raise HTTPException(500, f"Error al borrar movimiento: {str(e)}")
+        print(f"[extractos] borrar movimiento error: {e}")
+        raise HTTPException(500, "Error al borrar el movimiento. Intentá de nuevo.")
 
 
 @router.get("/{extracto_id}", response_model=ExtractoBancarioResponse)

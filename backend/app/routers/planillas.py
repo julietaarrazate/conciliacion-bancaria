@@ -116,9 +116,10 @@ async def upload_planilla(
 
     except Exception as e:
         db.rollback()
+        print(f"[planillas] upload error: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error al procesar planilla: {str(e)}"
+            detail="Error al procesar la planilla. Verificá el formato del archivo."
         )
     finally:
         if os.path.exists(tmp_path):
@@ -230,9 +231,10 @@ def conciliar(
 
     except Exception as e:
         db.rollback()
+        print(f"[planillas] conciliar error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error en conciliación: {str(e)}"
+            detail="Error en la conciliación. Revisá los datos e intentá de nuevo."
         )
 
 

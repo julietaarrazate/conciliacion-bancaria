@@ -368,26 +368,27 @@ def _init_db():
             db.commit()
             print("[db] admin@caneland.com → admin@julieta.com")
 
-        # Usuarios demo
-        seeds_demo = [
-            ("admin@julieta.com", "admin123", "Administrador", RoleEnum.ADMIN, False),
-        ]
-        created = 0
-        for email, pwd, name, role, superadmin in seeds_demo:
-            if not db.query(U).filter(U.email == email).first():
-                db.add(U(
-                    email=email,
-                    full_name=name,
-                    hashed_password=get_password_hash(pwd),
-                    role=role.value,
-                    is_active=True,
-                    is_superadmin=superadmin,
-                    organizacion_id=1
-                ))
-                created += 1
-        if created:
-            db.commit()
-            print(f"[db] {created} usuario(s) demo creado(s)")
+        # Usuarios demo — solo en entorno de desarrollo
+        if settings.debug:
+            seeds_demo = [
+                ("admin@julieta.com", "admin123", "Administrador", RoleEnum.ADMIN, False),
+            ]
+            created = 0
+            for email, pwd, name, role, superadmin in seeds_demo:
+                if not db.query(U).filter(U.email == email).first():
+                    db.add(U(
+                        email=email,
+                        full_name=name,
+                        hashed_password=get_password_hash(pwd),
+                        role=role.value,
+                        is_active=True,
+                        is_superadmin=superadmin,
+                        organizacion_id=1
+                    ))
+                    created += 1
+            if created:
+                db.commit()
+                print(f"[db] {created} usuario(s) demo creado(s)")
         db.close()
     except Exception as ex:
         print(f"[db] Warning seed users: {ex}")
@@ -395,6 +396,9 @@ def _init_db():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not settings.debug and settings.secret_key == "dev-secret-key-CAMBIAR-en-produccion":
+        print("[SECURITY] ADVERTENCIA CRITICA: SECRET_KEY usa el valor por defecto. "
+              "Seteá la variable de entorno SECRET_KEY en Render con un valor secreto único.")
     t = threading.Thread(target=_init_db, daemon=True)
     t.start()
     yield

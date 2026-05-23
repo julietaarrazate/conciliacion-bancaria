@@ -562,7 +562,8 @@ def borrar_cliente(cliente_id: int,
         }
     except Exception as e:
         db.rollback()
-        raise HTTPException(500, f"Error al borrar: {str(e)}")
+        print(f"[clientes] borrar error: {e}")
+        raise HTTPException(500, "Error al borrar el cliente. Intentá de nuevo.")
 
 
 @router.post("")
