@@ -245,7 +245,62 @@ def _init_db():
     except Exception as ex:
         print(f"[db] Warning seed contabilidad: {ex}")
 
-    # 7. Seed usuarios
+    # 7. Backfill contabilidad — genera asientos para extractos/planillas existentes
+    try:
+        from app.database import SessionLocal as SL
+        from app.models.extracto import ExtractoBancario as Ext
+        from app.models.planilla import Planilla as Plan
+        from app.models.contabilidad import Asiento as A
+        from app.services.motor_contable import registrar_extracto, registrar_planilla
+        from datetime import date as _date
+
+        db = SL()
+
+        # IDs que ya tienen asiento (para no duplicar)
+        ids_ext  = {r[0] for r in db.query(A.referencia_id).filter(A.modulo == "extracto").all()}
+        ids_plan = {r[0] for r in db.query(A.referencia_id).filter(A.modulo == "planilla").all()}
+
+        # Backfill extractos
+        n_ext = 0
+        for e in db.query(Ext).filter(Ext.organizacion_id == 1).all():
+            if e.id not in ids_ext:
+                registrar_extracto(
+                    db=db, extracto_id=e.id,
+                    org_id=e.organizacion_id or 1,
+                    usuario_id=e.creado_por,
+                    nombre_archivo=e.nombre_archivo or "",
+                    movimientos=e.movimientos,
+                )
+                n_ext += 1
+
+        # Backfill planillas
+        n_plan = 0
+        for p in db.query(Plan).filter(Plan.organizacion_id == 1).all():
+            if p.id not in ids_plan:
+                try:
+                    fecha = p.fecha_carga.date() if p.fecha_carga else _date.today()
+                except Exception:
+                    fecha = _date.today()
+                registrar_planilla(
+                    db=db, planilla_id=p.id,
+                    org_id=p.organizacion_id or 1,
+                    usuario_id=p.usuario_id,
+                    cliente_nombre=p.cliente.nombre if p.cliente else "",
+                    nombre_archivo=p.nombre_archivo or "",
+                    rows=p.rows,
+                    fecha_acred=fecha,
+                )
+                n_plan += 1
+
+        if n_ext or n_plan:
+            print(f"[db] Backfill contabilidad: {n_ext} extracto(s), {n_plan} planilla(s)")
+        else:
+            print("[db] Backfill contabilidad: todo al dia")
+        db.close()
+    except Exception as ex:
+        print(f"[db] Warning backfill contabilidad: {ex}")
+
+    # 8. Seed usuarios
     try:
         from app.database import SessionLocal as SL
         from app.models.user import User as U, RoleEnum
