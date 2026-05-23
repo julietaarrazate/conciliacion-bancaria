@@ -74,21 +74,27 @@ Diseño: Linear-inspired, Inter font, dark mode profundo (#0B0B0F)
 /backend — FastAPI + SQLAlchemy + PostgreSQL
   /app/models — Organizacion, User, Cliente, ExtractoBancario, MovimientoBanco,
                 Planilla, PlanillaRow, AuditoriaLog, PatronAprendido,
-                Liquidacion, LiquidacionDetalle, CierrePeriodo
+                Liquidacion, LiquidacionDetalle, CierrePeriodo,
+                Cheque, Pago, Gasto, ArqueoDiario, OrdenDePago,
+                PlanCuenta, ReglaContable, Asiento, AsientoDetalle
   /app/routers — auth, me, extractos (incluye conciliaciones_router),
                  planillas, historial, auditoria, admin, clientes_dir,
-                 organizaciones, liquidaciones, caja
+                 organizaciones, liquidaciones, caja, cheques,
+                 pagos_gastos, contabilidad
   /app/services — conciliacion.py, aprendizaje.py, excel_export.py,
-                  extracto_merger.py, excel_parser.py
+                  extracto_merger.py, excel_parser.py, motor_contable.py
   seed.py — Crea org Caneland + usuarios
 
 /frontend — React 18 + TypeScript + Vite + TailwindCSS + PWA
-  /src/pages — Dashboard (tabs: Individual + Carga masiva),
+  /src/pages — Dashboard (tabs: Individual + Carga masiva, campo Comisión%),
                Clientes (jerarquia org→cliente→mes→archivos),
                ExtractosArchivo (jerarquia año→mes→extracto),
                Movimientos, Conciliaciones (cross-extracto), Historial,
                Auditoria, Usuarios, Perfil, Login, Organizaciones,
-               Liquidaciones, Caja, OrdenDePago, Revision, Actividad
+               Liquidaciones, Caja (calendario diario + historial),
+               OrdenDePago (foto+WhatsApp, sin denominaciones),
+               Cheques, PagosGastos, Contabilidad,
+               Revision, Actividad
   /src/components — Layout (drawer mobile), PlanillaPanel (editor estados +
                     bulk edit), FileUpload
   /src/store — auth.ts, org.ts, theme.ts
@@ -206,6 +212,50 @@ Caneland: requiere_cierre_periodo: false — no le afecta.
 Green, Tucu, David, Smt, Gwinn, Innova, Camparo, Alojando, Pinares, Paraguay
 (la lista crece — se pueden crear nuevos desde la pantalla /clientes con el
 botón "+ Nuevo cliente" de cada organización)
+
+---
+
+## Versión v2.4 — 2026-05-23 (snapshot estable)
+
+Tag git: v2.4 · agrega sobre v2.3:
+
+### Módulo Cheques
+- CRUD completo: GET/POST /cheques, PATCH /cheques/{id}, DELETE /cheques/{id}
+- Flujos: POST /cheques/{id}/acreditar y /rechazar
+- Foto comprobante: POST/GET/DELETE /cheques/{id}/foto (base64, compresión canvas)
+- Importación masiva: POST /cheques/importar (Excel flexible, mapeo de columnas)
+- Motor contable: carga_cheque, acred_rechazo_banco, acred_rechazo_pasivo, carga_cheque_comision
+- Página /cheques: tabla con filtros, stats, paginación, visor de foto, import Excel
+
+### Módulo Pagos y Gastos
+- GET/POST /pagos, PATCH /pagos/{id} (admin+), DELETE /pagos/{id} (admin+)
+- GET/POST /gastos, PATCH /gastos/{id} (admin+), DELETE /gastos/{id} (admin+)
+- Motor contable: pago_cliente_banco/efectivo, asig_gasto_banco/efectivo
+- Página /pagos-gastos: tabs Pagos/Gastos, modal crear+editar, botones ✏✕ solo para admin/superadmin
+- Modo claro/oscuro: todos los colores usan pares light/dark (white/5 → bg-white dark:bg-white/5)
+
+### Módulo Caja — calendario diario
+- Arqueo guardado por día (no se borra), historial 60 días navegable
+- Header de fecha en 2 filas: flechas + fecha corta en mobile, larga en desktop
+- Panel historial: click en fila navega al día, dot verde/rojo = cruce
+- OP de proveedor ahora genera asiento: Gastos(D) / Efectivo(H) via asig_gasto_efectivo
+- Pesos_agregados genera asiento: Efectivo(D) / Banco(H) via carga_efectivo (upsert)
+- Denominaciones eliminadas del form de OP — solo se registran en el arqueo manual
+
+### Módulo Contabilidad (Fase 1+2)
+- 4 tablas: plan_cuentas (24 nodos), reglas_contables (12 reglas), asientos, asiento_detalle
+- Motor contable conectado a TODOS los módulos: extractos, planillas, cheques, pagos, gastos, OPs, efectivo
+- Reglas sembradas: carga_extracto, carga_planilla, carga_planilla_comision, carga_efectivo,
+  carga_cheque, carga_cheque_comision, acred_rechazo_banco, acred_rechazo_pasivo,
+  pago_cliente_banco, pago_cliente_efectivo, asig_gasto_banco, asig_gasto_efectivo
+- Comisión de planilla: campo "Comisión %" en Dashboard → genera asiento carga_planilla_comision
+- Reportes: GET /contabilidad/sumas-saldo, /balance, /libro-mayor
+- Página /contabilidad: 6 tabs en grid 3×2 — Plan de cuentas, Reglas, Libro diario (fila 1) /
+  Sumas y saldo, Balance, Libro mayor (fila 2)
+
+### Fixes de zona horaria
+- Todos los exports Excel y fecha_acred usan ZoneInfo('America/Argentina/Buenos_Aires')
+- Reemplazado datetime.utcnow() por datetime.now(_ARG) en planillas, extractos, excel_export
 
 ---
 

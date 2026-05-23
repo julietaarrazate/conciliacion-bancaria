@@ -36,6 +36,7 @@ export const Dashboard: React.FC = () => {
     new Date().toISOString().split('T')[0]
   )
   const [banco, setBanco] = useState('Banco Macro')
+  const [comisionPct, setComisionPct] = useState('')
   const [umCorteDetectado, setUmCorteDetectado] = useState<number | null>(null)
   const [umCorteManual, setUmCorteManual] = useState<string>('')
   const [umFile, setUmFile] = useState<File | null>(null)
@@ -209,7 +210,7 @@ export const Dashboard: React.FC = () => {
         extractoId,
         file
       )
-      const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred)
+      const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred, false, parseFloat(comisionPct) || 0)
       setResultado(r)
       setSuccess(`Conciliación completa: ${r.acreditadas}/${r.filas_procesadas} acreditadas`)
       apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then((d) => setPlanillas(d.items))
@@ -494,6 +495,21 @@ export const Dashboard: React.FC = () => {
             />
             <p className="mt-1 text-xs text-gray-400 dark:text-zinc-600">
               Con esta fecha se registran los movimientos acreditados
+            </p>
+          </div>
+
+          <div className="mb-3">
+            <label className="label">Comisión % <span className="text-gray-400 dark:text-zinc-600 font-normal">(opcional)</span></label>
+            <input
+              type="number" min="0" max="100" step="0.01"
+              className="input-field font-mono"
+              value={comisionPct}
+              onChange={(e) => setComisionPct(e.target.value)}
+              placeholder="0"
+              disabled={!extractoId}
+            />
+            <p className="mt-1 text-xs text-gray-400 dark:text-zinc-600">
+              % sobre el total acreditado — se registra en contabilidad
             </p>
           </div>
 

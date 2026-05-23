@@ -214,6 +214,91 @@ def rechazar_cheque(
         print(f"[motor_contable] Warning cheque rechazo {cheque_id}: {ex}")
 
 
+def registrar_op_pago(
+    db: Session,
+    op_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    beneficiario: str,
+    cliente_nombre: str,
+    monto: float,
+    fecha: date,
+) -> None:
+    """OP de caja: Gastos (D) / Efectivo (H)."""
+    try:
+        if _ya_existe(db, "caja_op", op_id, org_id):
+            return
+        regla = _get_regla(db, "asig_gasto_efectivo", org_id)
+        if not regla or monto <= 0:
+            return
+        _crear_asiento(
+            db=db, regla=regla,
+            fecha=fecha,
+            descripcion=f"OP: {beneficiario} ({cliente_nombre})",
+            modulo="caja_op",
+            referencia_id=op_id,
+            org_id=org_id,
+            usuario_id=usuario_id,
+            monto=round(monto, 2),
+        )
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        print(f"[motor_contable] Warning op_pago {op_id}: {ex}")
+
+
+def registrar_ingreso_efectivo(
+    db: Session,
+    arqueo_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    monto: float,
+    fecha: date,
+) -> None:
+    """Reposición de efectivo (banco → caja): Efectivo (D) / Banco (H).
+    Upsert: si ya existe para este arqueo actualiza el monto."""
+    try:
+        if monto <= 0:
+            return
+        regla = _get_regla(db, "carga_efectivo", org_id)
+        if not regla:
+            return
+        existente = (
+            db.query(Asiento)
+            .filter(
+                Asiento.modulo == "caja_efectivo",
+                Asiento.referencia_id == arqueo_id,
+                Asiento.organizacion_id == org_id,
+            )
+            .first()
+        )
+        if existente:
+            for linea in existente.lineas:
+                if linea.cuenta_id == regla.cuenta_debe_id:
+                    linea.debe  = monto
+                    linea.haber = 0.0
+                else:
+                    linea.haber = monto
+                    linea.debe  = 0.0
+            existente.fecha = fecha
+            db.commit()
+        else:
+            _crear_asiento(
+                db=db, regla=regla,
+                fecha=fecha,
+                descripcion="Reposición efectivo desde banco",
+                modulo="caja_efectivo",
+                referencia_id=arqueo_id,
+                org_id=org_id,
+                usuario_id=usuario_id,
+                monto=round(monto, 2),
+            )
+            db.commit()
+    except Exception as ex:
+        db.rollback()
+        print(f"[motor_contable] Warning ingreso_efectivo arqueo {arqueo_id}: {ex}")
+
+
 def registrar_pago(
     db: Session,
     pago_id: int,
@@ -293,8 +378,10 @@ def registrar_planilla(
     rows,
     fecha_acred: date,
     solo_pendientes: bool = False,
+    comision_pct: float = 0.0,
 ) -> None:
     """Asiento al conciliar una planilla: Pasivo Corriente (D) / Cliente (H).
+    Si comision_pct > 0 genera un segundo asiento de comisión.
     En re-conciliación (solo_pendientes), actualiza el monto si ya existe."""
     try:
         regla = _get_regla(db, "carga_planilla", org_id)
@@ -315,30 +402,58 @@ def registrar_planilla(
         )
 
         if existente and solo_pendientes:
-            # Actualizar lineas existentes con el nuevo total
             for linea in existente.lineas:
-                if linea.debe > 0:
-                    linea.debe = total
-                if linea.haber > 0:
-                    linea.haber = total
+                if linea.cuenta_id == regla.cuenta_debe_id:
+                    linea.debe = total; linea.haber = 0.0
+                else:
+                    linea.haber = total; linea.debe = 0.0
             existente.fecha = fecha_acred
-            db.commit()
-            return
+        elif not existente:
+            _crear_asiento(
+                db=db, regla=regla,
+                fecha=fecha_acred,
+                descripcion=f"{cliente_nombre} — {nombre_archivo}",
+                modulo="planilla",
+                referencia_id=planilla_id,
+                org_id=org_id,
+                usuario_id=usuario_id,
+                monto=total,
+            )
 
-        if existente:
-            return  # primera conciliación ya registrada, no duplicar
+        # Comisión opcional
+        if comision_pct > 0:
+            comision_monto = round(total * comision_pct / 100, 2)
+            if comision_monto > 0:
+                regla_com = _get_regla(db, "carga_planilla_comision", org_id)
+                if regla_com:
+                    existente_com = (
+                        db.query(Asiento)
+                        .filter(
+                            Asiento.modulo == "planilla_comision",
+                            Asiento.referencia_id == planilla_id,
+                            Asiento.organizacion_id == org_id,
+                        )
+                        .first()
+                    )
+                    if existente_com and solo_pendientes:
+                        for linea in existente_com.lineas:
+                            if linea.cuenta_id == regla_com.cuenta_debe_id:
+                                linea.debe = comision_monto; linea.haber = 0.0
+                            else:
+                                linea.haber = comision_monto; linea.debe = 0.0
+                        existente_com.fecha = fecha_acred
+                    elif not existente_com:
+                        _crear_asiento(
+                            db=db, regla=regla_com,
+                            fecha=fecha_acred,
+                            descripcion=f"{cliente_nombre} — comisión {comision_pct}%",
+                            modulo="planilla_comision",
+                            referencia_id=planilla_id,
+                            org_id=org_id,
+                            usuario_id=usuario_id,
+                            monto=comision_monto,
+                        )
 
-        _crear_asiento(
-            db=db,
-            regla=regla,
-            fecha=fecha_acred,
-            descripcion=f"{cliente_nombre} — {nombre_archivo}",
-            modulo="planilla",
-            referencia_id=planilla_id,
-            org_id=org_id,
-            usuario_id=usuario_id,
-            monto=total,
-        )
         db.commit()
     except Exception as ex:
         db.rollback()

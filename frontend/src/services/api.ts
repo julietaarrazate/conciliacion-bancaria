@@ -159,13 +159,12 @@ class ApiClient {
   async conciliarPlanilla(
     planillaId: number,
     fechaAcred: string = 'hoy',
-    soloPendientes = false
+    soloPendientes = false,
+    comisionPct = 0
   ): Promise<ConciliacionResultado> {
-    const res = await this.client.post(
-      `/planillas/${planillaId}/conciliar`,
-      {},
-      { params: { fecha_acred: fechaAcred, solo_pendientes: soloPendientes } }
-    )
+    const params: Record<string, any> = { fecha_acred: fechaAcred, solo_pendientes: soloPendientes }
+    if (comisionPct > 0) params.comision_pct = comisionPct
+    const res = await this.client.post(`/planillas/${planillaId}/conciliar`, {}, { params })
     return res.data
   }
 

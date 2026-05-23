@@ -130,6 +130,7 @@ def conciliar(
     planilla_id: int,
     fecha_acred: str = Query("hoy", description="Fecha de acreditación: 'hoy', 'ayer', o fecha ISO"),
     solo_pendientes: bool = Query(False, description="Si True, solo re-procesa filas no-ok (preserva correcciones manuales)"),
+    comision_pct: float = Query(0.0, description="Porcentaje de comisión sobre el total acreditado (ej: 1.5 = 1.5%)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permission("reconcile"))
@@ -217,6 +218,7 @@ def conciliar(
                 rows=planilla.rows,
                 fecha_acred=_fecha,
                 solo_pendientes=solo_pendientes,
+                comision_pct=comision_pct,
             )
         except Exception as _mc_ex:
             print(f"[motor_contable] planilla hook: {_mc_ex}")

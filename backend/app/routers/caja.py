@@ -98,8 +98,26 @@ def update_arqueo(
     if "notas" in payload:
         arqueo.notas = payload["notas"]
 
+    pesos_nuevos = float(payload.get("pesos_agregados", arqueo.pesos_agregados or 0))
     db.commit()
     db.refresh(arqueo)
+
+    # Motor contable — reposición de efectivo cuando se registran pesos_agregados
+    if "pesos_agregados" in payload and pesos_nuevos > 0:
+        try:
+            from app.services.motor_contable import registrar_ingreso_efectivo
+            from zoneinfo import ZoneInfo
+            registrar_ingreso_efectivo(
+                db=db,
+                arqueo_id=arqueo.id,
+                org_id=org_id,
+                usuario_id=current_user.id,
+                monto=pesos_nuevos,
+                fecha=arqueo.fecha,
+            )
+        except Exception as _mc_ex:
+            print(f"[motor_contable] ingreso_efectivo hook: {_mc_ex}")
+
     return _arqueo_response(arqueo)
 
 
@@ -213,6 +231,22 @@ def registrar_op(
         "beneficiario": beneficiario,
         "importe": importe
     })
+
+    # Motor contable — asiento automático (fault-tolerant)
+    try:
+        from app.services.motor_contable import registrar_op_pago
+        registrar_op_pago(
+            db=db,
+            op_id=op.id,
+            org_id=org_id,
+            usuario_id=current_user.id,
+            beneficiario=beneficiario,
+            cliente_nombre=cliente.nombre,
+            monto=importe,
+            fecha=fecha,
+        )
+    except Exception as _mc_ex:
+        print(f"[motor_contable] op_pago hook: {_mc_ex}")
 
     return {
         "ok": True,
