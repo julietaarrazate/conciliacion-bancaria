@@ -214,6 +214,75 @@ def rechazar_cheque(
         print(f"[motor_contable] Warning cheque rechazo {cheque_id}: {ex}")
 
 
+def registrar_pago(
+    db: Session,
+    pago_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    concepto: str,
+    cliente_nombre: str,
+    monto: float,
+    medio: str,
+    fecha: date,
+) -> None:
+    """Pago a cliente: Pasivo cliente (D) / Banco o Efectivo (H)."""
+    try:
+        if _ya_existe(db, "pago", pago_id, org_id):
+            return
+        evento = "pago_cliente_banco" if medio == "banco" else "pago_cliente_efectivo"
+        regla = _get_regla(db, evento, org_id)
+        if not regla or monto <= 0:
+            return
+        _crear_asiento(
+            db=db, regla=regla,
+            fecha=fecha,
+            descripcion=f"Pago {cliente_nombre or concepto or ''} — {medio}",
+            modulo="pago",
+            referencia_id=pago_id,
+            org_id=org_id,
+            usuario_id=usuario_id,
+            monto=round(monto, 2),
+        )
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        print(f"[motor_contable] Warning pago {pago_id}: {ex}")
+
+
+def registrar_gasto(
+    db: Session,
+    gasto_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    concepto: str,
+    monto: float,
+    medio: str,
+    fecha: date,
+) -> None:
+    """Gasto operativo: Gastos (D) / Banco o Efectivo (H)."""
+    try:
+        if _ya_existe(db, "gasto", gasto_id, org_id):
+            return
+        evento = "asig_gasto_banco" if medio == "banco" else "asig_gasto_efectivo"
+        regla = _get_regla(db, evento, org_id)
+        if not regla or monto <= 0:
+            return
+        _crear_asiento(
+            db=db, regla=regla,
+            fecha=fecha,
+            descripcion=f"Gasto: {concepto or ''}",
+            modulo="gasto",
+            referencia_id=gasto_id,
+            org_id=org_id,
+            usuario_id=usuario_id,
+            monto=round(monto, 2),
+        )
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        print(f"[motor_contable] Warning gasto {gasto_id}: {ex}")
+
+
 def registrar_planilla(
     db: Session,
     planilla_id: int,

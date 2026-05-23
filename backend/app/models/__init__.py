@@ -9,6 +9,7 @@ from .liquidacion import Liquidacion, LiquidacionDetalle, CierrePeriodo
 from .caja import ArqueoDiario, OrdenDePago
 from .contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
 from .cheque import Cheque
+from .pago import Pago, Gasto
 
 __all__ = [
     "Organizacion", "User", "Cliente",
@@ -18,5 +19,5 @@ __all__ = [
     "Liquidacion", "LiquidacionDetalle", "CierrePeriodo",
     "ArqueoDiario", "OrdenDePago",
     "PlanCuenta", "ReglaContable", "Asiento", "AsientoDetalle",
-    "Cheque",
+    "Cheque", "Pago", "Gasto",
 ]
