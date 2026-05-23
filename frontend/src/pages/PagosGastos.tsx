@@ -35,8 +35,8 @@ interface Gasto {
 interface ClienteOpt { id: number; nombre: string }
 
 const MEDIO_BADGE: Record<string, string> = {
-  banco:    'bg-blue-500/15 text-blue-400',
-  efectivo: 'bg-emerald-500/15 text-emerald-400',
+  banco:    'bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400',
+  efectivo: 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
 }
 
 const inputClass = "w-full bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
@@ -111,8 +111,8 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-gray-400">
-          {total} pago{total !== 1 ? 's' : ''} · Total visible: <span className="text-gray-200 font-medium">{fmt(totalMonto)}</span>
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          {total} pago{total !== 1 ? 's' : ''} · Total visible: <span className="text-gray-800 dark:text-gray-200 font-medium">{fmt(totalMonto)}</span>
         </div>
         <button onClick={() => { setShowForm(true); setMsg('') }}
           className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
@@ -125,31 +125,31 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <select value={filtroCliente} onChange={e => { setFiltroCliente(e.target.value); setSkip(0) }}
-          className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none">
+          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none">
           <option value="">Todos los clientes</option>
           {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </select>
         <select value={filtroMedio} onChange={e => { setFiltroMedio(e.target.value); setSkip(0) }}
-          className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none">
+          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none">
           <option value="">Banco y efectivo</option>
           <option value="banco">Banco</option>
           <option value="efectivo">Efectivo</option>
         </select>
         <input type="date" value={filtroDesde} onChange={e => { setFiltroDesde(e.target.value); setSkip(0) }}
-          className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none" />
+          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none" />
         <input type="date" value={filtroHasta} onChange={e => { setFiltroHasta(e.target.value); setSkip(0) }}
-          className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none" />
+          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none" />
         {(filtroCliente || filtroMedio || filtroDesde || filtroHasta) && (
           <button onClick={() => { setFiltroCliente(''); setFiltroMedio(''); setFiltroDesde(''); setFiltroHasta(''); setSkip(0) }}
-            className="text-xs text-gray-400 hover:text-gray-200 px-2">Limpiar</button>
+            className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 px-2">Limpiar</button>
         )}
       </div>
 
-      <div className="rounded-xl overflow-hidden border border-white/8">
+      <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-white/8">
         <div className="overflow-x-auto">
           <table className="w-full text-xs min-w-[600px]">
             <thead>
-              <tr className="bg-white/4 text-left text-gray-400">
+              <tr className="bg-gray-50 dark:bg-white/4 text-left text-gray-500 dark:text-gray-400">
                 <th className="px-3 py-2 font-medium">Fecha</th>
                 <th className="px-3 py-2 font-medium">Cliente</th>
                 <th className="px-3 py-2 font-medium">Concepto</th>
@@ -165,18 +165,18 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
               ) : pagos.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-8 text-gray-500">Sin pagos registrados</td></tr>
               ) : pagos.map((p, i) => (
-                <tr key={p.id} className={`border-t border-white/5 hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-white/1'}`}>
-                  <td className="px-3 py-2 text-gray-300">{fmtDate(p.fecha)}</td>
-                  <td className="px-3 py-2 text-gray-200">{p.cliente_nombre || <span className="text-gray-500">—</span>}</td>
-                  <td className="px-3 py-2 text-gray-300">{p.concepto || '—'}</td>
+                <tr key={p.id} className={`border-t border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-gray-50/40 dark:bg-white/1'}`}>
+                  <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{fmtDate(p.fecha)}</td>
+                  <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{p.cliente_nombre || <span className="text-gray-400">—</span>}</td>
+                  <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{p.concepto || '—'}</td>
                   <td className="px-3 py-2">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${MEDIO_BADGE[p.medio] || ''}`}>{p.medio}</span>
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-100">{fmt(p.monto)}</td>
-                  <td className="px-3 py-2 text-gray-400">{p.referencia || '—'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-gray-800 dark:text-gray-100">{fmt(p.monto)}</td>
+                  <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{p.referencia || '—'}</td>
                   <td className="px-3 py-2">
                     <button onClick={() => handleDelete(p.id)}
-                      className="px-2 py-0.5 bg-white/5 hover:bg-red-600/20 text-gray-400 hover:text-red-400 rounded text-xs transition-colors">✕</button>
+                      className="px-2 py-0.5 bg-gray-100 dark:bg-white/5 hover:bg-red-100 dark:hover:bg-red-600/20 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded text-xs transition-colors">✕</button>
                   </td>
                 </tr>
               ))}
@@ -186,13 +186,13 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
       </div>
 
       {total > LIMIT && (
-        <div className="flex items-center justify-between text-xs text-gray-400">
+        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
           <span>{skip + 1}–{Math.min(skip + LIMIT, total)} de {total}</span>
           <div className="flex gap-2">
             <button disabled={skip === 0} onClick={() => setSkip(s => Math.max(0, s - LIMIT))}
-              className="px-3 py-1 bg-white/5 rounded disabled:opacity-40 hover:bg-white/10">← Anterior</button>
+              className="px-3 py-1 bg-gray-100 dark:bg-white/5 rounded disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-white/10">← Anterior</button>
             <button disabled={skip + LIMIT >= total} onClick={() => setSkip(s => s + LIMIT)}
-              className="px-3 py-1 bg-white/5 rounded disabled:opacity-40 hover:bg-white/10">Siguiente →</button>
+              className="px-3 py-1 bg-gray-100 dark:bg-white/5 rounded disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-white/10">Siguiente →</button>
           </div>
         </div>
       )}
@@ -329,8 +329,8 @@ const GastosTab: React.FC = () => {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-gray-400">
-          {total} gasto{total !== 1 ? 's' : ''} · Total visible: <span className="text-gray-200 font-medium">{fmt(totalMonto)}</span>
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          {total} gasto{total !== 1 ? 's' : ''} · Total visible: <span className="text-gray-800 dark:text-gray-200 font-medium">{fmt(totalMonto)}</span>
         </div>
         <button onClick={() => { setShowForm(true); setMsg('') }}
           className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
@@ -343,33 +343,33 @@ const GastosTab: React.FC = () => {
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <select value={filtroCategoria} onChange={e => { setFiltroCategoria(e.target.value); setSkip(0) }}
-          className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none">
+          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none">
           <option value="">Todas las categorías</option>
           <option value="impuestos">Impuestos déb/créd</option>
           <option value="bancarios">Gastos bancarios</option>
           <option value="otros">Otros</option>
         </select>
         <select value={filtroMedio} onChange={e => { setFiltroMedio(e.target.value); setSkip(0) }}
-          className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none">
+          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none">
           <option value="">Banco y efectivo</option>
           <option value="banco">Banco</option>
           <option value="efectivo">Efectivo</option>
         </select>
         <input type="date" value={filtroDesde} onChange={e => { setFiltroDesde(e.target.value); setSkip(0) }}
-          className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none" />
+          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none" />
         <input type="date" value={filtroHasta} onChange={e => { setFiltroHasta(e.target.value); setSkip(0) }}
-          className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none" />
+          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none" />
         {(filtroCategoria || filtroMedio || filtroDesde || filtroHasta) && (
           <button onClick={() => { setFiltroCategoria(''); setFiltroMedio(''); setFiltroDesde(''); setFiltroHasta(''); setSkip(0) }}
-            className="text-xs text-gray-400 hover:text-gray-200 px-2">Limpiar</button>
+            className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 px-2">Limpiar</button>
         )}
       </div>
 
-      <div className="rounded-xl overflow-hidden border border-white/8">
+      <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-white/8">
         <div className="overflow-x-auto">
           <table className="w-full text-xs min-w-[600px]">
             <thead>
-              <tr className="bg-white/4 text-left text-gray-400">
+              <tr className="bg-gray-50 dark:bg-white/4 text-left text-gray-500 dark:text-gray-400">
                 <th className="px-3 py-2 font-medium">Fecha</th>
                 <th className="px-3 py-2 font-medium">Concepto</th>
                 <th className="px-3 py-2 font-medium">Categoría</th>
@@ -385,18 +385,18 @@ const GastosTab: React.FC = () => {
               ) : gastos.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-8 text-gray-500">Sin gastos registrados</td></tr>
               ) : gastos.map((g, i) => (
-                <tr key={g.id} className={`border-t border-white/5 hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-white/1'}`}>
-                  <td className="px-3 py-2 text-gray-300">{fmtDate(g.fecha)}</td>
-                  <td className="px-3 py-2 text-gray-200">{g.concepto}</td>
-                  <td className="px-3 py-2 text-gray-400">{g.categoria || '—'}</td>
+                <tr key={g.id} className={`border-t border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-gray-50/40 dark:bg-white/1'}`}>
+                  <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{fmtDate(g.fecha)}</td>
+                  <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{g.concepto}</td>
+                  <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{g.categoria || '—'}</td>
                   <td className="px-3 py-2">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${MEDIO_BADGE[g.medio] || ''}`}>{g.medio}</span>
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-100">{fmt(g.monto)}</td>
-                  <td className="px-3 py-2 text-gray-400">{g.referencia || '—'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-gray-800 dark:text-gray-100">{fmt(g.monto)}</td>
+                  <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{g.referencia || '—'}</td>
                   <td className="px-3 py-2">
                     <button onClick={() => handleDelete(g.id)}
-                      className="px-2 py-0.5 bg-white/5 hover:bg-red-600/20 text-gray-400 hover:text-red-400 rounded text-xs transition-colors">✕</button>
+                      className="px-2 py-0.5 bg-gray-100 dark:bg-white/5 hover:bg-red-100 dark:hover:bg-red-600/20 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded text-xs transition-colors">✕</button>
                   </td>
                 </tr>
               ))}
@@ -406,13 +406,13 @@ const GastosTab: React.FC = () => {
       </div>
 
       {total > LIMIT && (
-        <div className="flex items-center justify-between text-xs text-gray-400">
+        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
           <span>{skip + 1}–{Math.min(skip + LIMIT, total)} de {total}</span>
           <div className="flex gap-2">
             <button disabled={skip === 0} onClick={() => setSkip(s => Math.max(0, s - LIMIT))}
-              className="px-3 py-1 bg-white/5 rounded disabled:opacity-40 hover:bg-white/10">← Anterior</button>
+              className="px-3 py-1 bg-gray-100 dark:bg-white/5 rounded disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-white/10">← Anterior</button>
             <button disabled={skip + LIMIT >= total} onClick={() => setSkip(s => s + LIMIT)}
-              className="px-3 py-1 bg-white/5 rounded disabled:opacity-40 hover:bg-white/10">Siguiente →</button>
+              className="px-3 py-1 bg-gray-100 dark:bg-white/5 rounded disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-white/10">Siguiente →</button>
           </div>
         </div>
       )}
@@ -498,16 +498,16 @@ export const PagosGastos: React.FC = () => {
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
       <div>
-        <h1 className="text-xl font-semibold text-gray-100">Pagos y Gastos</h1>
+        <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">Pagos y Gastos</h1>
         <p className="text-xs text-gray-500 mt-0.5">Registro contable de pagos a clientes y gastos operativos</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-white/4 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 bg-gray-100 dark:bg-white/4 p-1 rounded-lg w-fit">
         {(['pagos', 'gastos'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-1.5 text-sm rounded-md transition-colors capitalize ${
-              tab === t ? 'bg-white/10 text-gray-100' : 'text-gray-400 hover:text-gray-200'
+              tab === t ? 'bg-white dark:bg-white/10 text-gray-800 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}>
             {t === 'pagos' ? 'Pagos a clientes' : 'Gastos operativos'}
           </button>
