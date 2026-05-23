@@ -83,7 +83,7 @@ def registrar_extracto(
         regla = _get_regla(db, "carga_extracto", org_id)
         if not regla:
             return
-        total = sum(_monto(m.monto) for m in movimientos if _monto(m.monto) > 0)
+        total = sum(abs(_monto(m.monto)) for m in movimientos)
         if total <= 0:
             return
         hoy = date.today()

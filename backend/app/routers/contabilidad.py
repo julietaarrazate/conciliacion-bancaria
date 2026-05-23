@@ -11,6 +11,21 @@ from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoD
 router = APIRouter(prefix="/contabilidad", tags=["contabilidad"])
 
 
+@router.get("/stats")
+def get_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Estado del módulo contable: conteos para diagnóstico."""
+    oid = current_user.organizacion_id or 1
+    return {
+        "plan_cuentas":    db.query(PlanCuenta).filter(PlanCuenta.organizacion_id == oid).count(),
+        "reglas":          db.query(ReglaContable).filter(ReglaContable.organizacion_id == oid).count(),
+        "asientos":        db.query(Asiento).filter(Asiento.organizacion_id == oid).count(),
+        "asiento_detalle": db.query(AsientoDetalle).count(),
+    }
+
+
 def _org_id(current_user: User, org_id: Optional[int]) -> int:
     if current_user.is_superadmin and org_id:
         return org_id
