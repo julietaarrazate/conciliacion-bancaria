@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { apiClient } from '@/services/api'
 
 const fmt = (n: number) =>
@@ -21,13 +21,11 @@ interface Cheque {
   fecha_acred: string | null
   estado: 'pendiente' | 'acreditado' | 'rechazado'
   notas: string | null
+  tiene_foto: boolean
   created_at: string
 }
 
-interface ClienteOpt {
-  id: number
-  nombre: string
-}
+interface ClienteOpt { id: number; nombre: string }
 
 const ESTADO_BADGE: Record<string, string> = {
   pendiente:  'bg-yellow-500/15 text-yellow-400',
@@ -39,6 +37,17 @@ const emptyForm = (): Partial<Cheque> => ({
   cliente_id: null, numero: '', banco_origen: '', titular: '',
   monto: 0, comision: 0, fecha_emision: '', fecha_deposito: '', notas: '',
 })
+
+const inputClass = "w-full bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
+
+// Convert file to base64
+const toBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 
 export const Cheques: React.FC = () => {
   const [cheques, setCheques]     = useState<Cheque[]>([])
@@ -54,14 +63,27 @@ export const Cheques: React.FC = () => {
   const [skip, setSkip]                   = useState(0)
   const LIMIT = 50
 
-  const [showForm, setShowForm]       = useState(false)
-  const [formData, setFormData]       = useState<Partial<Cheque>>(emptyForm())
-  const [saving, setSaving]           = useState(false)
+  // Form modal
+  const [showForm, setShowForm]     = useState(false)
+  const [formData, setFormData]     = useState<Partial<Cheque>>(emptyForm())
+  const [formFoto, setFormFoto]     = useState<string | null>(null)
+  const [saving, setSaving]         = useState(false)
+  const fotoInputRef                = useRef<HTMLInputElement>(null)
 
+  // Action modals
   const [acreditarId, setAcreditarId] = useState<number | null>(null)
   const [rechazarId, setRechazarId]   = useState<number | null>(null)
   const [actionDate, setActionDate]   = useState('')
   const [actioning, setActioning]     = useState(false)
+
+  // Photo viewer
+  const [verFotoId, setVerFotoId]   = useState<number | null>(null)
+  const [fotoData, setFotoData]     = useState<string | null>(null)
+  const [loadingFoto, setLoadingFoto] = useState(false)
+
+  // Import Excel
+  const [importando, setImportando] = useState(false)
+  const importRef                   = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -89,11 +111,18 @@ export const Cheques: React.FC = () => {
     }).catch(() => {})
   }, [])
 
+  const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const b64 = await toBase64(file)
+    setFormFoto(b64)
+  }
+
   const handleCreate = async () => {
     if (!formData.monto || formData.monto <= 0) { setMsg('El monto es requerido'); return }
     setSaving(true); setMsg('')
     try {
-      await apiClient.client.post('/cheques', {
+      const res = await apiClient.client.post('/cheques', {
         cliente_id:    formData.cliente_id || null,
         numero:        formData.numero || null,
         banco_origen:  formData.banco_origen || null,
@@ -104,10 +133,13 @@ export const Cheques: React.FC = () => {
         fecha_deposito: formData.fecha_deposito || null,
         notas:         formData.notas || null,
       })
-      setShowForm(false); setFormData(emptyForm()); load()
-    } catch (e: any) {
-      setMsg(e?.response?.data?.detail || 'Error al guardar')
-    } finally { setSaving(false) }
+      // Si hay foto, subirla
+      if (formFoto && res.data.id) {
+        await apiClient.client.post(`/cheques/${res.data.id}/foto`, { foto_base64: formFoto })
+      }
+      setShowForm(false); setFormData(emptyForm()); setFormFoto(null); load()
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al guardar') }
+    finally { setSaving(false) }
   }
 
   const handleAcreditar = async () => {
@@ -136,45 +168,71 @@ export const Cheques: React.FC = () => {
     catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al eliminar') }
   }
 
+  const handleVerFoto = async (id: number) => {
+    setVerFotoId(id); setFotoData(null); setLoadingFoto(true)
+    try {
+      const res = await apiClient.client.get(`/cheques/${id}/foto`)
+      setFotoData(res.data.foto_base64)
+    } catch { setFotoData(null) }
+    finally { setLoadingFoto(false) }
+  }
+
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportando(true); setMsg('')
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await apiClient.client.post('/cheques/importar', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      const { importados, errores } = res.data
+      setMsg(`✓ ${importados} cheque${importados !== 1 ? 's' : ''} importado${importados !== 1 ? 's' : ''}${errores.length ? ` · ${errores.length} error(es)` : ''}`)
+      load()
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al importar') }
+    finally { setImportando(false); if (importRef.current) importRef.current.value = '' }
+  }
+
   const pendientes  = cheques.filter(c => c.estado === 'pendiente')
   const totalPend   = pendientes.reduce((s, c) => s + c.monto, 0)
   const totalAcred  = cheques.filter(c => c.estado === 'acreditado').reduce((s, c) => s + c.monto, 0)
   const totalRech   = cheques.filter(c => c.estado === 'rechazado').reduce((s, c) => s + c.monto, 0)
 
-  const inputClass = "w-full bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
-
   const formField = (key: keyof Cheque, label: string, type = 'text') => (
     <div>
       <label className="block text-xs text-gray-400 mb-1">{label}</label>
-      <input
-        type={type}
-        value={(formData[key] as string | number) ?? ''}
-        onChange={e => setFormData(p => ({
-          ...p,
-          [key]: type === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value,
-        }))}
-        className={inputClass}
-      />
+      <input type={type} value={(formData[key] as string | number) ?? ''}
+        onChange={e => setFormData(p => ({ ...p, [key]: type === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value }))}
+        className={inputClass} />
     </div>
   )
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-gray-100">Cheques</h1>
           <p className="text-xs text-gray-500 mt-0.5">Registro y seguimiento de cheques de terceros</p>
         </div>
-        <button
-          onClick={() => { setShowForm(true); setFormData(emptyForm()); setMsg('') }}
-          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors"
-        >
-          + Nuevo cheque
-        </button>
+        <div className="flex gap-2">
+          <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportExcel} />
+          <button onClick={() => importRef.current?.click()} disabled={importando}
+            className="px-3 py-1.5 bg-white/8 hover:bg-white/12 text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-50">
+            {importando ? 'Importando…' : '↑ Importar Excel'}
+          </button>
+          <button onClick={() => { setShowForm(true); setFormData(emptyForm()); setFormFoto(null); setMsg('') }}
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
+            + Nuevo cheque
+          </button>
+        </div>
       </div>
 
       {msg && (
-        <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{msg}</div>
+        <div className={`text-sm rounded-lg px-3 py-2 border ${msg.startsWith('✓') ? 'text-green-400 bg-green-500/10 border-green-500/20' : 'text-red-400 bg-red-500/10 border-red-500/20'}`}>
+          {msg}
+        </div>
       )}
 
       {/* Stats */}
@@ -212,16 +270,14 @@ export const Cheques: React.FC = () => {
           className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none" />
         {(filtroEstado || filtroCliente || filtroDesde || filtroHasta) && (
           <button onClick={() => { setFiltroEstado(''); setFiltroCliente(''); setFiltroDesde(''); setFiltroHasta(''); setSkip(0) }}
-            className="text-xs text-gray-400 hover:text-gray-200 px-2">
-            Limpiar
-          </button>
+            className="text-xs text-gray-400 hover:text-gray-200 px-2">Limpiar</button>
         )}
       </div>
 
       {/* Table */}
       <div className="rounded-xl overflow-hidden border border-white/8">
         <div className="overflow-x-auto">
-          <table className="w-full text-xs min-w-[700px]">
+          <table className="w-full text-xs min-w-[720px]">
             <thead>
               <tr className="bg-white/4 text-left text-gray-400">
                 <th className="px-3 py-2 font-medium">Fecha dep.</th>
@@ -232,7 +288,7 @@ export const Cheques: React.FC = () => {
                 <th className="px-3 py-2 font-medium text-right">Monto</th>
                 <th className="px-3 py-2 font-medium text-right">Comisión</th>
                 <th className="px-3 py-2 font-medium">Estado</th>
-                <th className="px-3 py-2 font-medium">Fecha acred.</th>
+                <th className="px-3 py-2 font-medium">Acred.</th>
                 <th className="px-3 py-2 font-medium">Acciones</th>
               </tr>
             </thead>
@@ -245,34 +301,33 @@ export const Cheques: React.FC = () => {
                 <tr key={c.id} className={`border-t border-white/5 hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-white/1'}`}>
                   <td className="px-3 py-2 text-gray-300">{fmtDate(c.fecha_deposito)}</td>
                   <td className="px-3 py-2 text-gray-200">{c.cliente_nombre || <span className="text-gray-500">—</span>}</td>
-                  <td className="px-3 py-2 text-gray-300 max-w-[140px] truncate" title={c.titular || ''}>{c.titular || '—'}</td>
+                  <td className="px-3 py-2 text-gray-300 max-w-[130px] truncate" title={c.titular || ''}>{c.titular || '—'}</td>
                   <td className="px-3 py-2 text-gray-400">{c.banco_origen || '—'}</td>
                   <td className="px-3 py-2 text-gray-400">{c.numero || '—'}</td>
                   <td className="px-3 py-2 text-right font-mono text-gray-100">{fmt(c.monto)}</td>
                   <td className="px-3 py-2 text-right font-mono text-gray-400">{c.comision > 0 ? fmt(c.comision) : '—'}</td>
                   <td className="px-3 py-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[c.estado]}`}>
-                      {c.estado}
-                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[c.estado]}`}>{c.estado}</span>
                   </td>
                   <td className="px-3 py-2 text-gray-400">{fmtDate(c.fecha_acred)}</td>
                   <td className="px-3 py-2">
-                    {c.estado === 'pendiente' && (
-                      <div className="flex gap-1">
-                        <button onClick={() => { setAcreditarId(c.id); setActionDate('') }}
-                          className="px-2 py-0.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded text-xs transition-colors">
-                          Acreditar
-                        </button>
-                        <button onClick={() => { setRechazarId(c.id); setActionDate('') }}
-                          className="px-2 py-0.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-xs transition-colors">
-                          Rechazar
-                        </button>
-                        <button onClick={() => handleDelete(c.id)}
-                          className="px-2 py-0.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded text-xs transition-colors">
-                          ✕
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex gap-1">
+                      {c.tiene_foto && (
+                        <button onClick={() => handleVerFoto(c.id)}
+                          className="px-2 py-0.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 rounded text-xs transition-colors"
+                          title="Ver foto">📷</button>
+                      )}
+                      {c.estado === 'pendiente' && (
+                        <>
+                          <button onClick={() => { setAcreditarId(c.id); setActionDate('') }}
+                            className="px-2 py-0.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded text-xs transition-colors">Acreditar</button>
+                          <button onClick={() => { setRechazarId(c.id); setActionDate('') }}
+                            className="px-2 py-0.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-xs transition-colors">Rechazar</button>
+                          <button onClick={() => handleDelete(c.id)}
+                            className="px-2 py-0.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded text-xs transition-colors">✕</button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -326,6 +381,23 @@ export const Cheques: React.FC = () => {
                   onChange={e => setFormData(p => ({ ...p, notas: e.target.value }))}
                   className="w-full bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 resize-none" />
               </div>
+              {/* Foto del cheque */}
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">Foto del cheque (opcional)</label>
+                <div className="flex items-center gap-3">
+                  <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoChange} />
+                  <button type="button" onClick={() => fotoInputRef.current?.click()}
+                    className="px-3 py-1.5 bg-white/8 hover:bg-white/12 text-gray-300 text-sm rounded border border-white/10 transition-colors">
+                    📷 Sacar foto / subir imagen
+                  </button>
+                  {formFoto && (
+                    <div className="flex items-center gap-2">
+                      <img src={formFoto} alt="preview" className="h-10 w-10 object-cover rounded border border-white/10" />
+                      <button onClick={() => setFormFoto(null)} className="text-xs text-red-400 hover:text-red-300">✕ quitar</button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowForm(false)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200">Cancelar</button>
@@ -343,7 +415,7 @@ export const Cheques: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-[#16161A] border border-white/10 rounded-xl p-5 w-full max-w-sm space-y-4">
             <h2 className="text-base font-semibold text-gray-100">Acreditar cheque</h2>
-            <p className="text-sm text-gray-400">Se genera asiento: Banco (D) / Créditos (H).</p>
+            <p className="text-sm text-gray-400">Asiento: Banco (D) / Créditos (H).</p>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Fecha de acreditación</label>
               <input type="date" value={actionDate} onChange={e => setActionDate(e.target.value)} className={inputClass} />
@@ -353,7 +425,7 @@ export const Cheques: React.FC = () => {
               <button onClick={() => setAcreditarId(null)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200">Cancelar</button>
               <button onClick={handleAcreditar} disabled={actioning}
                 className="px-4 py-1.5 bg-green-600 hover:bg-green-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors">
-                {actioning ? 'Procesando…' : 'Confirmar acreditación'}
+                {actioning ? 'Procesando…' : 'Confirmar'}
               </button>
             </div>
           </div>
@@ -365,7 +437,7 @@ export const Cheques: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-[#16161A] border border-white/10 rounded-xl p-5 w-full max-w-sm space-y-4">
             <h2 className="text-base font-semibold text-gray-100">Rechazar cheque</h2>
-            <p className="text-sm text-gray-400">Se genera asiento: Pasivo cliente (D) / Créditos (H).</p>
+            <p className="text-sm text-gray-400">Asiento: Pasivo cliente (D) / Créditos (H).</p>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Fecha de rechazo</label>
               <input type="date" value={actionDate} onChange={e => setActionDate(e.target.value)} className={inputClass} />
@@ -375,9 +447,29 @@ export const Cheques: React.FC = () => {
               <button onClick={() => setRechazarId(null)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200">Cancelar</button>
               <button onClick={handleRechazar} disabled={actioning}
                 className="px-4 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors">
-                {actioning ? 'Procesando…' : 'Confirmar rechazo'}
+                {actioning ? 'Procesando…' : 'Confirmar'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Photo viewer modal */}
+      {verFotoId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => { setVerFotoId(null); setFotoData(null) }}>
+          <div className="bg-[#16161A] border border-white/10 rounded-xl p-4 max-w-lg w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-sm font-semibold text-gray-100">Comprobante del cheque</h2>
+              <button onClick={() => { setVerFotoId(null); setFotoData(null) }} className="text-gray-500 hover:text-gray-300 text-xl">×</button>
+            </div>
+            {loadingFoto ? (
+              <div className="text-center py-8 text-gray-400 text-sm">Cargando imagen…</div>
+            ) : fotoData ? (
+              <img src={fotoData} alt="comprobante" className="w-full rounded-lg object-contain max-h-[60vh]" />
+            ) : (
+              <div className="text-center py-8 text-gray-500 text-sm">No se pudo cargar la imagen</div>
+            )}
           </div>
         </div>
       )}

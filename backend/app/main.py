@@ -87,6 +87,7 @@ def _init_db():
         "ALTER TABLE planillas ALTER COLUMN extracto_id DROP NOT NULL",
         "ALTER TABLE planilla_rows ADD COLUMN fecha_acred DATE",
         "ALTER TABLE extractos_bancarios ADD COLUMN banco VARCHAR DEFAULT 'Banco Macro'",
+        "ALTER TABLE cheques ADD COLUMN foto_comprobante TEXT",
     ]
     for sql in migrations:
         try:

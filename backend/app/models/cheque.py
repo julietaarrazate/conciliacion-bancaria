@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -19,8 +19,9 @@ class Cheque(Base):
     fecha_deposito  = Column(Date, nullable=True)
     fecha_acred     = Column(Date, nullable=True)
     estado          = Column(String, nullable=False, default="pendiente")  # pendiente | acreditado | rechazado
-    notas           = Column(String, nullable=True)
-    usuario_id      = Column(Integer, ForeignKey("users.id"), nullable=True)
+    notas              = Column(String, nullable=True)
+    foto_comprobante   = Column(Text, nullable=True)  # base64 de la imagen
+    usuario_id         = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at      = Column(DateTime, default=datetime.utcnow)
 
     cliente      = relationship("Cliente", foreign_keys=[cliente_id])

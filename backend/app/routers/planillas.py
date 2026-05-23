@@ -196,15 +196,17 @@ def conciliar(
         try:
             from app.services.motor_contable import registrar_planilla
             from datetime import datetime as _dt, timedelta as _td
+            from zoneinfo import ZoneInfo as _ZI
+            _ARG = _ZI('America/Argentina/Buenos_Aires')
             if fecha_acred.lower() == 'hoy':
-                _fecha = _dt.now().date()
+                _fecha = _dt.now(_ARG).date()
             elif fecha_acred.lower() == 'ayer':
-                _fecha = (_dt.now() - _td(days=1)).date()
+                _fecha = (_dt.now(_ARG) - _td(days=1)).date()
             else:
                 try:
                     _fecha = _dt.fromisoformat(fecha_acred).date()
                 except Exception:
-                    _fecha = _dt.now().date()
+                    _fecha = _dt.now(_ARG).date()
             registrar_planilla(
                 db=db,
                 planilla_id=planilla_id,
@@ -401,6 +403,7 @@ def patch_row_status(
     if row.orden_movimiento_acreditado:
         from app.models.extracto import MovimientoBanco as MB
         from datetime import date as date_type, datetime
+        from zoneinfo import ZoneInfo
         mov = db.query(MB).filter(MB.id == row.orden_movimiento_acreditado).first()
         if mov:
             if nuevo_status == "ok":
@@ -414,7 +417,7 @@ def patch_row_status(
                     except Exception:
                         pass
                 elif not mov.fecha_acred:
-                    mov.fecha_acred = datetime.utcnow().date()
+                    mov.fecha_acred = datetime.now(ZoneInfo('America/Argentina/Buenos_Aires')).date()
             elif nuevo_status in ("no está", "duplicado", "faltan datos", "pendiente"):
                 # Desacreditar en el extracto solo si este row era el que lo acreditó
                 if mov.cliente_acreditado:

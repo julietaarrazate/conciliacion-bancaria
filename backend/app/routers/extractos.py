@@ -3,6 +3,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_, or_, text, func
 from datetime import date, datetime
+from zoneinfo import ZoneInfo as _ZI
+_ARG = _ZI('America/Argentina/Buenos_Aires')
 from typing import Optional
 import tempfile, os, io, hashlib
 
@@ -361,7 +363,7 @@ def export_movimientos_xlsx(extracto_id: int,
               "monto": m.monto, "saldo": m.saldo, "cliente_acreditado": m.cliente_acreditado,
               "fecha_acred": m.fecha_acred} for m in rows]
     data = export_movimientos(extracto.nombre_archivo, movs)
-    filename = f"movimientos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    filename = f"movimientos_{datetime.now(_ARG).strftime('%Y%m%d_%H%M')}.xlsx"
     return StreamingResponse(io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
@@ -398,7 +400,7 @@ def export_para_contador(
     ]
 
     xlsx = export_extracto_contador(extracto.nombre_archivo, data)
-    fecha_str = datetime.now().strftime('%Y%m%d')
+    fecha_str = datetime.now(_ARG).strftime('%Y%m%d')
     nombre_base = extracto.nombre_archivo.replace('.xlsx', '').replace('.XLSX', '')
     filename = f"{nombre_base}_conciliado_{fecha_str}.xlsx"
 
@@ -676,7 +678,7 @@ def export_conciliaciones(
     wb.save(buf)
     buf.seek(0)
 
-    fecha_str = datetime.now().strftime('%Y%m%d')
+    fecha_str = datetime.now(_ARG).strftime('%Y%m%d')
     filename = f"conciliaciones_{fecha_str}.xlsx"
     return StreamingResponse(buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

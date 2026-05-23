@@ -1,8 +1,10 @@
 from datetime import date, datetime
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional, List
+import base64, io
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+import openpyxl
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
@@ -52,6 +54,7 @@ def _cheque_dict(c: Cheque) -> dict:
         "fecha_acred":    c.fecha_acred,
         "estado":         c.estado,
         "notas":          c.notas,
+        "tiene_foto":     bool(c.foto_comprobante),
         "created_at":     c.created_at,
     }
 
@@ -253,3 +256,180 @@ def eliminar_cheque(
     db.delete(c)
     db.commit()
     return {"ok": True}
+
+
+# ── Foto comprobante ─────────────────────────────────────────────
+
+class FotoIn(BaseModel):
+    foto_base64: str
+
+
+@router.post("/{cheque_id}/foto")
+def subir_foto(
+    cheque_id: int,
+    body: FotoIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    oid = current_user.organizacion_id or 1
+    c = db.query(Cheque).filter(Cheque.id == cheque_id).first()
+    if not c:
+        raise HTTPException(404, "Cheque no encontrado")
+    if not current_user.is_superadmin and c.organizacion_id != oid:
+        raise HTTPException(403, "Sin acceso")
+    c.foto_comprobante = body.foto_base64
+    db.commit()
+    return {"ok": True, "tiene_foto": True}
+
+
+@router.get("/{cheque_id}/foto")
+def ver_foto(
+    cheque_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    oid = current_user.organizacion_id or 1
+    c = db.query(Cheque).filter(Cheque.id == cheque_id).first()
+    if not c:
+        raise HTTPException(404, "Cheque no encontrado")
+    if not current_user.is_superadmin and c.organizacion_id != oid:
+        raise HTTPException(403, "Sin acceso")
+    if not c.foto_comprobante:
+        raise HTTPException(404, "Sin foto")
+    return {"cheque_id": cheque_id, "foto_base64": c.foto_comprobante}
+
+
+@router.delete("/{cheque_id}/foto")
+def eliminar_foto(
+    cheque_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    oid = current_user.organizacion_id or 1
+    c = db.query(Cheque).filter(Cheque.id == cheque_id).first()
+    if not c:
+        raise HTTPException(404, "Cheque no encontrado")
+    if not current_user.is_superadmin and c.organizacion_id != oid:
+        raise HTTPException(403, "Sin acceso")
+    c.foto_comprobante = None
+    db.commit()
+    return {"ok": True}
+
+
+# ── Importación masiva por Excel ─────────────────────────────────
+# Columnas esperadas (case-insensitive, cualquier orden):
+# titular | banco_origen | numero | monto | comision | fecha_emision | fecha_deposito | cliente | notas
+
+def _parse_date(v) -> Optional[date]:
+    if v is None:
+        return None
+    if isinstance(v, date):
+        return v
+    try:
+        return date.fromisoformat(str(v)[:10])
+    except Exception:
+        return None
+
+
+@router.post("/importar")
+async def importar_excel(
+    file: UploadFile = File(...),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Importa cheques desde un Excel. Columnas: titular, banco_origen, numero,
+    monto, comision (opcional), fecha_emision (opcional), fecha_deposito (opcional),
+    cliente (nombre o id, opcional), notas (opcional)."""
+    oid = _org_id(current_user, org_id)
+    ext = (file.filename or '').lower().split('.')[-1]
+    if ext not in ('xlsx', 'xls'):
+        raise HTTPException(400, "Solo se aceptan archivos .xlsx o .xls")
+
+    content = await file.read()
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+    except Exception as e:
+        raise HTTPException(400, f"No se pudo leer el archivo: {e}")
+
+    if not rows:
+        raise HTTPException(400, "El archivo está vacío")
+
+    # Mapear encabezados
+    headers = [str(h).strip().lower() if h is not None else '' for h in rows[0]]
+    COL = {
+        'titular':        next((i for i, h in enumerate(headers) if 'titular' in h), None),
+        'banco_origen':   next((i for i, h in enumerate(headers) if 'banco' in h), None),
+        'numero':         next((i for i, h in enumerate(headers) if 'numer' in h or 'cheque' in h), None),
+        'monto':          next((i for i, h in enumerate(headers) if 'monto' in h or 'importe' in h), None),
+        'comision':       next((i for i, h in enumerate(headers) if 'comis' in h), None),
+        'fecha_emision':  next((i for i, h in enumerate(headers) if 'emisi' in h), None),
+        'fecha_deposito': next((i for i, h in enumerate(headers) if 'deposito' in h or 'depósito' in h or 'dep' in h), None),
+        'cliente':        next((i for i, h in enumerate(headers) if 'cliente' in h), None),
+        'notas':          next((i for i, h in enumerate(headers) if 'nota' in h or 'observ' in h), None),
+    }
+    if COL['monto'] is None:
+        raise HTTPException(400, "Columna 'monto' requerida no encontrada")
+
+    # Cache de clientes
+    clientes_cache: dict[str, int] = {
+        c.nombre.lower(): c.id
+        for c in db.query(Cliente).filter(Cliente.organizacion_id == oid).all()
+    }
+
+    importados, errores = 0, []
+    for i, row in enumerate(rows[1:], start=2):
+        try:
+            monto_raw = row[COL['monto']] if COL['monto'] is not None else None
+            if not monto_raw:
+                continue
+            monto = float(str(monto_raw).replace(',', '.').replace('$', '').strip())
+            if monto <= 0:
+                continue
+
+            cliente_id = None
+            if COL['cliente'] is not None and row[COL['cliente']]:
+                cv = str(row[COL['cliente']]).strip()
+                if cv.isdigit():
+                    cliente_id = int(cv)
+                else:
+                    cliente_id = clientes_cache.get(cv.lower())
+
+            comision = 0.0
+            if COL['comision'] is not None and row[COL['comision']]:
+                try:
+                    comision = float(str(row[COL['comision']]).replace(',', '.').replace('$', '').strip())
+                except Exception:
+                    pass
+
+            c = Cheque(
+                organizacion_id=oid,
+                cliente_id=cliente_id,
+                titular=str(row[COL['titular']]).strip() if COL['titular'] is not None and row[COL['titular']] else None,
+                banco_origen=str(row[COL['banco_origen']]).strip() if COL['banco_origen'] is not None and row[COL['banco_origen']] else None,
+                numero=str(row[COL['numero']]).strip() if COL['numero'] is not None and row[COL['numero']] else None,
+                monto=monto,
+                comision=comision,
+                fecha_emision=_parse_date(row[COL['fecha_emision']]) if COL['fecha_emision'] is not None else None,
+                fecha_deposito=_parse_date(row[COL['fecha_deposito']]) if COL['fecha_deposito'] is not None else date.today(),
+                notas=str(row[COL['notas']]).strip() if COL['notas'] is not None and row[COL['notas']] else None,
+                estado="pendiente",
+                usuario_id=current_user.id,
+            )
+            db.add(c)
+            db.flush()
+            registrar_cheque(
+                db=db, cheque_id=c.id, org_id=oid,
+                usuario_id=current_user.id,
+                titular=c.titular or "",
+                monto=c.monto, comision=c.comision,
+                fecha=c.fecha_deposito or date.today(),
+            )
+            importados += 1
+        except Exception as ex:
+            errores.append(f"Fila {i}: {ex}")
+
+    db.commit()
+    return {"importados": importados, "errores": errores}

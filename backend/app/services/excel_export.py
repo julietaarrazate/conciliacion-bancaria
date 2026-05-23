@@ -3,9 +3,16 @@
 import io
 from typing import List
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+
+_ARG = ZoneInfo('America/Argentina/Buenos_Aires')
+
+def _now() -> datetime:
+    """Hora actual en zona horaria Argentina."""
+    return datetime.now(_ARG)
 
 THIN = Side(style="thin", color="CCCCCC")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -60,7 +67,7 @@ def export_movimientos(extracto_nombre: str, movimientos: List[dict]) -> bytes:
     # Titulo
     ws.cell(row=1, column=1, value="Movimientos del extracto").font = TITLE_FONT
     ws.cell(row=2, column=1, value=f"Extracto: {extracto_nombre}").font = Font(italic=True, color="666666")
-    ws.cell(row=3, column=1, value=f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}").font = Font(italic=True, color="666666")
+    ws.cell(row=3, column=1, value=f"Generado: {_now().strftime('%d/%m/%Y %H:%M')}").font = Font(italic=True, color="666666")
 
     headers = ["Orden", "Fecha", "Mes", "Titular", "Importe", "Saldo", "Cliente acreditado", "Fecha acred."]
     _hdr(ws, 5, headers)
@@ -113,7 +120,7 @@ def export_planilla_conciliada(planilla_data: dict, movimientos_acreditados: Lis
 
     ws1.cell(row=1, column=1, value=f"Cliente: {planilla_data['cliente_nombre']}").font = TITLE_FONT
     ws1.cell(row=2, column=1, value=f"Archivo: {planilla_data['nombre_archivo']}").font = Font(italic=True, color="666666")
-    ws1.cell(row=3, column=1, value=f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}").font = Font(italic=True, color="666666")
+    ws1.cell(row=3, column=1, value=f"Generado: {_now().strftime('%d/%m/%Y %H:%M')}").font = Font(italic=True, color="666666")
 
     # Hoja 1: columnas del cliente + movimiento del extracto + Estado AL FINAL
     h1 = ["#", "Importe", "CUIT", "Titular planilla", "Orden mov.", "Titular extracto", "Fecha mov.", "Fecha acred.", "Estado"]
@@ -206,7 +213,7 @@ def export_extracto_contador(extracto_nombre: str, movimientos: List[dict]) -> b
     THIN_BLUE    = Side(style="thin", color="3483FA")
     BORDER_BLUE  = Border(bottom=THIN_BLUE)
 
-    now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
+    now_str = _now().strftime('%d/%m/%Y %H:%M')
 
     # Ordenar: mayor orden primero (último movimiento arriba, como el original)
     movs_sorted = sorted(
@@ -368,7 +375,7 @@ def export_historial_planillas(planillas: List[dict]) -> bytes:
     ws.title = "Historial"
 
     ws.cell(row=1, column=1, value="Historial de reconciliaciones").font = TITLE_FONT
-    ws.cell(row=2, column=1, value=f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}").font = Font(italic=True, color="666666")
+    ws.cell(row=2, column=1, value=f"Generado: {_now().strftime('%d/%m/%Y %H:%M')}").font = Font(italic=True, color="666666")
 
     headers = ["Cliente", "Archivo", "Fecha carga", "Usuario", "Total filas", "Acreditadas", "No encontradas", "Duplicadas", "Sin datos", "% acred."]
     _hdr(ws, 4, headers)
@@ -401,7 +408,7 @@ def export_historial_planillas(planillas: List[dict]) -> bytes:
 def export_backup_completo(org_nombre: str, planillas: List[dict], extractos: List[dict]) -> bytes:
     """Backup completo: Hoja1=planillas conciliadas, Hoja2=extractos"""
     wb = openpyxl.Workbook()
-    now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
+    now_str = _now().strftime('%d/%m/%Y %H:%M')
 
     # ── Hoja 1: Planillas ──────────────────────────────────────
     ws1 = wb.active
@@ -461,7 +468,7 @@ def export_liquidacion_excel(liquidacion, revisiones) -> bytes:
         "aprobada": PatternFill("solid", fgColor="D1FAE5"),
         "pagada":   PatternFill("solid", fgColor="DBEAFE"),
     }
-    now_str = dt.now().strftime('%d/%m/%Y %H:%M')
+    now_str = _now().strftime('%d/%m/%Y %H:%M')
     wb = openpyxl.Workbook()
 
     # ── Hoja 1: Resumen ejecutivo ─────────────────────────────────────────
@@ -574,7 +581,7 @@ def export_eft_historial(ops: list, periodo: str = "") -> bytes:
     GREEN_HEADER = PatternFill("solid", fgColor="92D050")  # verde del original
     GREEN_FONT   = Font(bold=True, color="FFFFFF", size=11)
     MONEY_FMT    = '"$"#,##0.00'
-    now_str      = datetime.now().strftime('%d/%m/%Y %H:%M')
+    now_str      = _now().strftime('%d/%m/%Y %H:%M')
 
     wb = openpyxl.Workbook()
 
