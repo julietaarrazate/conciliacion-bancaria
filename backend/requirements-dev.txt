@@ -1,0 +1,6 @@
+# Dependencias solo para desarrollo y testing local — NO se instalan en Render
+-r requirements.txt
+
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.27.2

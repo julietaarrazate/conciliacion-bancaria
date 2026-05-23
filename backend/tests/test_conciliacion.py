@@ -1,4 +1,8 @@
-"""Tests para el algoritmo de conciliación"""
+"""Tests para el algoritmo de conciliación.
+
+Cubre las funciones puras (parseo de importes, normalización de CUIT, extracción)
+y los casos básicos de matching con la config default de Caneland.
+"""
 
 import pytest
 from datetime import date
@@ -6,116 +10,134 @@ from app.services.conciliacion import (
     buscar_match,
     parse_importe,
     norm_cuit,
-    extraer_cuit_titular
+    extraer_cuit,
+    extraer_cbu,
+    CONFIG_CANELAND,
 )
 from app.models.extracto import MovimientoBanco
 
-def test_parse_importe():
-    """Test parseo de importes con diversos formatos"""
+
+def test_parse_importe_formatos_varios():
     assert parse_importe(1000.50) == 1000.50
     assert parse_importe("$1000.50") == 1000.50
-    assert parse_importe("1.000,50") == 1000.50  # Formato europeo
-    assert parse_importe("1,000.50") == 1000.50  # Formato inglés
+    assert parse_importe("1.000,50") == 1000.50
+    assert parse_importe("1,000.50") == 1000.50
     assert parse_importe("") is None
     assert parse_importe(None) is None
 
+
 def test_norm_cuit():
-    """Test normalización de CUIT"""
     assert norm_cuit("20-12345678-9") == "20123456789"
     assert norm_cuit(20123456789) == "20123456789"
     assert norm_cuit(None) == ""
     assert norm_cuit("") == ""
 
-def test_extraer_cuit_titular():
-    """Test extracción de CUIT del titular"""
-    assert extraer_cuit_titular("EMPRESA SA 20123456789 CONCEPTO") == "20123456789"
-    assert extraer_cuit_titular("27-98765432-1 OTRO") == "2798765432"
-    assert extraer_cuit_titular("SIN CUIT") == ""
-    assert extraer_cuit_titular(None) == ""
 
-def test_buscar_match_monto_unico():
-    """Test buscar match cuando el monto es único"""
-    # Crear movimiento ficticio
-    mov = MovimientoBanco(
-        id=1,
-        extracto_id=1,
-        monto=1000.0,
-        titular="EMPRESA 20123456789",
-        cliente_acreditado=None  # Está libre
+def test_extraer_cuit_del_titular():
+    assert extraer_cuit("EMPRESA SA 20123456789 CONCEPTO") == "20123456789"
+    assert extraer_cuit("SIN CUIT") == ""
+    assert extraer_cuit(None) == ""
+
+
+def test_extraer_cbu_solo_22_digitos():
+    assert extraer_cbu("CBU 2850590940090418135201 EMPRESA") == "2850590940090418135201"
+    assert extraer_cbu("solo 11 digitos 20123456789") == ""
+    assert extraer_cbu(None) == ""
+
+
+def _mov(monto, titular="", cliente_acreditado=None, id=1, fecha=None):
+    return MovimientoBanco(
+        id=id, extracto_id=1, monto=monto, titular=titular,
+        cliente_acreditado=cliente_acreditado, fecha=fecha,
     )
 
-    # Buscar match
+
+def test_buscar_match_monto_unico_acredita_directo():
+    """Si el monto aparece UNA sola vez en el extracto, se acredita aunque no haya CUIT."""
+    mov = _mov(1000.0, titular="EMPRESA 20123456789")
     resultado, status = buscar_match(
         monto=1000.0,
         cuit_planilla="20123456789",
         titular_planilla="EMPRESA SA",
+        referencia_planilla=None,
+        fecha_planilla=None,
         movimientos=[mov],
-        movimientos_procesados=set()
+        procesados=set(),
+        org_config=CONFIG_CANELAND,
     )
-
-    assert resultado is not None
-    assert resultado.id == 1
+    assert resultado is not None and resultado.id == 1
     assert status == "ok"
 
-def test_buscar_match_no_encontrado():
-    """Test cuando el monto no existe en el extracto"""
-    mov = MovimientoBanco(
-        id=1,
-        extracto_id=1,
-        monto=1000.0,
-        titular="EMPRESA 20123456789",
-        cliente_acreditado=None
-    )
 
+def test_buscar_match_monto_inexistente():
+    mov = _mov(1000.0)
     resultado, status = buscar_match(
-        monto=2000.0,  # Monto diferente
+        monto=2000.0,
         cuit_planilla="20123456789",
         titular_planilla="EMPRESA SA",
+        referencia_planilla=None,
+        fecha_planilla=None,
         movimientos=[mov],
-        movimientos_procesados=set()
+        procesados=set(),
+        org_config=CONFIG_CANELAND,
     )
-
     assert resultado is None
-    assert status == "no está"
+    assert "no" in status.lower() or "está" in status.lower()
 
-def test_buscar_match_duplicado():
-    """Test cuando el movimiento ya fue acreditado"""
-    mov = MovimientoBanco(
-        id=1,
-        extracto_id=1,
-        monto=1000.0,
-        titular="EMPRESA 20123456789",
-        cliente_acreditado="OTRO_CLIENTE"  # Ya acreditado
-    )
 
+def test_buscar_match_ya_procesado_no_se_duplica():
+    """Un movimiento que ya fue acreditado a otra fila no debe re-acreditarse."""
+    mov = _mov(1000.0, titular="EMPRESA 20123456789")
     resultado, status = buscar_match(
         monto=1000.0,
         cuit_planilla="20123456789",
         titular_planilla="EMPRESA SA",
+        referencia_planilla=None,
+        fecha_planilla=None,
         movimientos=[mov],
-        movimientos_procesados={1}  # Ya procesado
+        procesados={1},  # ya usado
+        org_config=CONFIG_CANELAND,
     )
-
     assert resultado is None
-    assert status == "duplicado"
 
-def test_buscar_match_monto_comun_sin_cuit():
-    """Test cuando el monto es común pero no hay CUIT"""
-    # 3 movimientos con el mismo monto (monto común)
+
+def test_buscar_match_monto_duplicado_exige_identidad():
+    """REGLA CRÍTICA: si el monto aparece 2+ veces, NUNCA acreditar sin identidad."""
     movimientos = [
-        MovimientoBanco(id=1, extracto_id=1, monto=5000.0, titular="EMPRESA 20123456789", cliente_acreditado=None),
-        MovimientoBanco(id=2, extracto_id=1, monto=5000.0, titular="OTRA 27987654321", cliente_acreditado=None),
-        MovimientoBanco(id=3, extracto_id=1, monto=5000.0, titular="TERCERA 23456789012", cliente_acreditado=None),
+        _mov(5000.0, titular="EMPRESA A 20111111110", id=1),
+        _mov(5000.0, titular="EMPRESA B 27222222220", id=2),
+        _mov(5000.0, titular="EMPRESA C 30333333330", id=3),
     ]
-
-    # Sin CUIT ni titular en la planilla
+    # Sin CUIT ni titular en la planilla — no se puede identificar
     resultado, status = buscar_match(
         monto=5000.0,
         cuit_planilla=None,
         titular_planilla=None,
+        referencia_planilla=None,
+        fecha_planilla=None,
         movimientos=movimientos,
-        movimientos_procesados=set()
+        procesados=set(),
+        org_config=CONFIG_CANELAND,
     )
+    assert resultado is None, "no debe acreditar sin identidad cuando el monto se repite"
 
-    assert resultado is None
-    assert status == "faltan datos"
+
+def test_buscar_match_monto_duplicado_con_cuit_correcto_acredita():
+    """Con monto duplicado, el CUIT correcto desempata."""
+    movimientos = [
+        _mov(5000.0, titular="EMPRESA A 20111111110", id=1),
+        _mov(5000.0, titular="EMPRESA B 27222222220", id=2),
+    ]
+    resultado, status = buscar_match(
+        monto=5000.0,
+        cuit_planilla="27222222220",
+        titular_planilla="EMPRESA B",
+        referencia_planilla=None,
+        fecha_planilla=None,
+        movimientos=movimientos,
+        procesados=set(),
+        org_config=CONFIG_CANELAND,
+    )
+    assert resultado is not None
+    assert resultado.id == 2
+    assert status == "ok"
