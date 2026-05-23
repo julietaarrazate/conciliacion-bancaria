@@ -14,6 +14,11 @@ const fmtDayLabel = (iso: string) => {
   return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+const fmtDayLabelShort = (iso: string) => {
+  const d = new Date(iso + 'T12:00:00')
+  return d.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' })
+}
+
 interface Arqueo {
   id: number
   fecha: string
@@ -156,15 +161,21 @@ export const Caja: React.FC = () => {
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
 
-      {/* Header con navegación de fechas */}
-      <div className="flex items-center justify-between gap-2">
+      {/* Header con navegación de fechas — dos filas */}
+      <div className="space-y-2">
+        {/* Fila 1: flechas + fecha */}
         <div className="flex items-center gap-2">
           <button onClick={prevDay}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-gray-200 transition-colors text-sm">
+            className="p-1.5 rounded-lg bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors text-sm shrink-0">
             ←
           </button>
-          <div>
-            <h1 className="text-lg font-bold dark:text-white capitalize">{fmtDayLabel(selectedDate)}</h1>
+          <div className="flex-1 min-w-0">
+            <h1 className="font-bold dark:text-white capitalize leading-tight text-sm sm:hidden">
+              {fmtDayLabelShort(selectedDate)}
+            </h1>
+            <h1 className="font-bold dark:text-white capitalize leading-tight text-base hidden sm:block">
+              {fmtDayLabel(selectedDate)}
+            </h1>
             {!isToday && (
               <button onClick={() => setSelectedDate(today())}
                 className="text-xs text-indigo-400 hover:text-indigo-300">
@@ -173,19 +184,20 @@ export const Caja: React.FC = () => {
             )}
           </div>
           <button onClick={nextDay} disabled={isToday}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-gray-200 transition-colors text-sm disabled:opacity-30">
+            className="p-1.5 rounded-lg bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors text-sm disabled:opacity-30 shrink-0">
             →
           </button>
         </div>
-        <div className="flex items-center gap-2">
+        {/* Fila 2: controles */}
+        <div className="flex items-center gap-2 flex-wrap">
           <input type="date" value={selectedDate} max={today()}
             onChange={e => e.target.value && setSelectedDate(e.target.value)}
-            className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs text-gray-300 focus:outline-none" />
+            className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 text-xs text-gray-600 dark:text-gray-300 focus:outline-none" />
           <button onClick={() => { setShowHistorial(v => !v); if (!showHistorial) loadHistorial() }}
-            className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 text-xs rounded-lg transition-colors">
-            {showHistorial ? 'Ocultar historial' : 'Ver historial'}
+            className="px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 text-xs rounded-lg transition-colors">
+            {showHistorial ? 'Ocultar' : 'Historial'}
           </button>
-          <button onClick={() => load()} className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 text-xs rounded-lg">
+          <button onClick={() => load()} className="px-2.5 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 text-xs rounded-lg">
             ↺
           </button>
         </div>

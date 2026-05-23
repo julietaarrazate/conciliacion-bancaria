@@ -127,12 +127,45 @@ def crear_pago(
     return _pago_dict(p)
 
 
+@router.patch("/pagos/{pago_id}")
+def actualizar_pago(
+    pago_id: int,
+    body: PagoIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not (current_user.is_superadmin or current_user.role == "admin"):
+        raise HTTPException(403, "Se requiere rol admin o superadmin")
+    oid = current_user.organizacion_id or 1
+    p = db.query(Pago).filter(Pago.id == pago_id).first()
+    if not p:
+        raise HTTPException(404, "Pago no encontrado")
+    if not current_user.is_superadmin and p.organizacion_id != oid:
+        raise HTTPException(403, "Sin acceso")
+    if body.monto is not None and body.monto <= 0:
+        raise HTTPException(400, "El monto debe ser mayor a 0")
+    if body.medio not in ("banco", "efectivo"):
+        raise HTTPException(400, "Medio inválido")
+    p.cliente_id = body.cliente_id
+    p.concepto   = body.concepto
+    p.monto      = body.monto
+    p.medio      = body.medio
+    p.fecha      = body.fecha
+    p.referencia = body.referencia
+    p.notas      = body.notas
+    db.commit()
+    db.refresh(p)
+    return _pago_dict(p)
+
+
 @router.delete("/pagos/{pago_id}")
 def eliminar_pago(
     pago_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if not (current_user.is_superadmin or current_user.role == "admin"):
+        raise HTTPException(403, "Se requiere rol admin o superadmin")
     oid = current_user.organizacion_id or 1
     p = db.query(Pago).filter(Pago.id == pago_id).first()
     if not p:
@@ -240,12 +273,45 @@ def crear_gasto(
     return _gasto_dict(g)
 
 
+@router.patch("/gastos/{gasto_id}")
+def actualizar_gasto(
+    gasto_id: int,
+    body: GastoIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not (current_user.is_superadmin or current_user.role == "admin"):
+        raise HTTPException(403, "Se requiere rol admin o superadmin")
+    oid = current_user.organizacion_id or 1
+    g = db.query(Gasto).filter(Gasto.id == gasto_id).first()
+    if not g:
+        raise HTTPException(404, "Gasto no encontrado")
+    if not current_user.is_superadmin and g.organizacion_id != oid:
+        raise HTTPException(403, "Sin acceso")
+    if body.monto <= 0:
+        raise HTTPException(400, "El monto debe ser mayor a 0")
+    if body.medio not in ("banco", "efectivo"):
+        raise HTTPException(400, "Medio inválido")
+    g.concepto   = body.concepto
+    g.categoria  = body.categoria
+    g.monto      = body.monto
+    g.medio      = body.medio
+    g.fecha      = body.fecha
+    g.referencia = body.referencia
+    g.notas      = body.notas
+    db.commit()
+    db.refresh(g)
+    return _gasto_dict(g)
+
+
 @router.delete("/gastos/{gasto_id}")
 def eliminar_gasto(
     gasto_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if not (current_user.is_superadmin or current_user.role == "admin"):
+        raise HTTPException(403, "Se requiere rol admin o superadmin")
     oid = current_user.organizacion_id or 1
     g = db.query(Gasto).filter(Gasto.id == gasto_id).first()
     if not g:

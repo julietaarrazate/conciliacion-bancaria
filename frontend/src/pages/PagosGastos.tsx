@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { apiClient } from '@/services/api'
+import { useAuthStore } from '@/store/auth'
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n)
@@ -40,16 +41,18 @@ const MEDIO_BADGE: Record<string, string> = {
 }
 
 const inputClass = "w-full bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
+const filterClass = "bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none"
 
 // ── Pagos tab ────────────────────────────────────────────────────
 
-const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
+const PagosTab: React.FC<{ clientes: ClienteOpt[]; canEdit: boolean }> = ({ clientes, canEdit }) => {
   const [pagos, setPagos]         = useState<Pago[]>([])
   const [total, setTotal]         = useState(0)
   const [loading, setLoading]     = useState(true)
   const [msg, setMsg]             = useState('')
   const [showForm, setShowForm]   = useState(false)
   const [saving, setSaving]       = useState(false)
+  const [editingPago, setEditingPago] = useState<Pago | null>(null)
 
   const [filtroCliente, setFiltroCliente] = useState('')
   const [filtroMedio, setFiltroMedio]     = useState('')
@@ -58,10 +61,8 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
   const [skip, setSkip]                   = useState(0)
   const LIMIT = 50
 
-  const [form, setForm] = useState({
-    cliente_id: '', concepto: '', monto: '', medio: 'banco',
-    fecha: '', referencia: '', notas: '',
-  })
+  const emptyForm = { cliente_id: '', concepto: '', monto: '', medio: 'banco', fecha: '', referencia: '', notas: '' }
+  const [form, setForm] = useState(emptyForm)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -94,10 +95,45 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
         notas:      form.notas || null,
       })
       setShowForm(false)
-      setForm({ cliente_id: '', concepto: '', monto: '', medio: 'banco', fecha: '', referencia: '', notas: '' })
+      setForm(emptyForm)
       load()
     } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al guardar') }
     finally { setSaving(false) }
+  }
+
+  const handleUpdate = async () => {
+    if (!editingPago) return
+    if (!form.monto || parseFloat(form.monto) <= 0) { setMsg('El monto es requerido'); return }
+    setSaving(true); setMsg('')
+    try {
+      await apiClient.client.patch(`/pagos/${editingPago.id}`, {
+        cliente_id: form.cliente_id ? parseInt(form.cliente_id) : null,
+        concepto:   form.concepto || null,
+        monto:      parseFloat(form.monto),
+        medio:      form.medio,
+        fecha:      form.fecha || null,
+        referencia: form.referencia || null,
+        notas:      form.notas || null,
+      })
+      setEditingPago(null)
+      setForm(emptyForm)
+      load()
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al guardar') }
+    finally { setSaving(false) }
+  }
+
+  const openEdit = (p: Pago) => {
+    setForm({
+      cliente_id: p.cliente_id ? String(p.cliente_id) : '',
+      concepto:   p.concepto   || '',
+      monto:      String(p.monto),
+      medio:      p.medio,
+      fecha:      p.fecha      || '',
+      referencia: p.referencia || '',
+      notas:      p.notas      || '',
+    })
+    setMsg('')
+    setEditingPago(p)
   }
 
   const handleDelete = async (id: number) => {
@@ -107,6 +143,7 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
   }
 
   const totalMonto = pagos.reduce((s, p) => s + p.monto, 0)
+  const isFormOpen = showForm || !!editingPago
 
   return (
     <div className="space-y-4">
@@ -124,21 +161,17 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
-        <select value={filtroCliente} onChange={e => { setFiltroCliente(e.target.value); setSkip(0) }}
-          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none">
+        <select value={filtroCliente} onChange={e => { setFiltroCliente(e.target.value); setSkip(0) }} className={filterClass}>
           <option value="">Todos los clientes</option>
           {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </select>
-        <select value={filtroMedio} onChange={e => { setFiltroMedio(e.target.value); setSkip(0) }}
-          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none">
+        <select value={filtroMedio} onChange={e => { setFiltroMedio(e.target.value); setSkip(0) }} className={filterClass}>
           <option value="">Banco y efectivo</option>
           <option value="banco">Banco</option>
           <option value="efectivo">Efectivo</option>
         </select>
-        <input type="date" value={filtroDesde} onChange={e => { setFiltroDesde(e.target.value); setSkip(0) }}
-          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none" />
-        <input type="date" value={filtroHasta} onChange={e => { setFiltroHasta(e.target.value); setSkip(0) }}
-          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none" />
+        <input type="date" value={filtroDesde} onChange={e => { setFiltroDesde(e.target.value); setSkip(0) }} className={filterClass} />
+        <input type="date" value={filtroHasta} onChange={e => { setFiltroHasta(e.target.value); setSkip(0) }} className={filterClass} />
         {(filtroCliente || filtroMedio || filtroDesde || filtroHasta) && (
           <button onClick={() => { setFiltroCliente(''); setFiltroMedio(''); setFiltroDesde(''); setFiltroHasta(''); setSkip(0) }}
             className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 px-2">Limpiar</button>
@@ -156,14 +189,14 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
                 <th className="px-3 py-2 font-medium">Medio</th>
                 <th className="px-3 py-2 font-medium text-right">Monto</th>
                 <th className="px-3 py-2 font-medium">Referencia</th>
-                <th className="px-3 py-2 font-medium"></th>
+                {canEdit && <th className="px-3 py-2 font-medium w-16"></th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="text-center py-8 text-gray-500">Cargando…</td></tr>
+                <tr><td colSpan={canEdit ? 7 : 6} className="text-center py-8 text-gray-500">Cargando…</td></tr>
               ) : pagos.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-8 text-gray-500">Sin pagos registrados</td></tr>
+                <tr><td colSpan={canEdit ? 7 : 6} className="text-center py-8 text-gray-500">Sin pagos registrados</td></tr>
               ) : pagos.map((p, i) => (
                 <tr key={p.id} className={`border-t border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-gray-50/40 dark:bg-white/1'}`}>
                   <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{fmtDate(p.fecha)}</td>
@@ -174,10 +207,16 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-gray-800 dark:text-gray-100">{fmt(p.monto)}</td>
                   <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{p.referencia || '—'}</td>
-                  <td className="px-3 py-2">
-                    <button onClick={() => handleDelete(p.id)}
-                      className="px-2 py-0.5 bg-gray-100 dark:bg-white/5 hover:bg-red-100 dark:hover:bg-red-600/20 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded text-xs transition-colors">✕</button>
-                  </td>
+                  {canEdit && (
+                    <td className="px-3 py-2">
+                      <div className="flex gap-1">
+                        <button onClick={() => openEdit(p)}
+                          className="px-2 py-0.5 bg-gray-100 dark:bg-white/5 hover:bg-indigo-100 dark:hover:bg-indigo-600/20 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded text-xs transition-colors">✏</button>
+                        <button onClick={() => handleDelete(p.id)}
+                          className="px-2 py-0.5 bg-gray-100 dark:bg-white/5 hover:bg-red-100 dark:hover:bg-red-600/20 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded text-xs transition-colors">✕</button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -197,13 +236,14 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
         </div>
       )}
 
-      {showForm && (
+      {/* Create / Edit modal */}
+      {isFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+          onClick={e => e.target === e.currentTarget && (setShowForm(false), setEditingPago(null))}>
           <div className="bg-[#16161A] border border-white/10 rounded-xl p-5 w-full max-w-md space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-100">Registrar pago</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
+              <h2 className="text-base font-semibold text-gray-100">{editingPago ? 'Editar pago' : 'Registrar pago'}</h2>
+              <button onClick={() => { setShowForm(false); setEditingPago(null) }} className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
             </div>
             {msg && <p className="text-xs text-red-400">{msg}</p>}
             <p className="text-xs text-gray-500">Asiento: Pasivo cliente (D) / {form.medio === 'banco' ? 'Banco' : 'Efectivo'} (H)</p>
@@ -245,10 +285,10 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowForm(false)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200">Cancelar</button>
-              <button onClick={handleCreate} disabled={saving}
+              <button onClick={() => { setShowForm(false); setEditingPago(null) }} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200">Cancelar</button>
+              <button onClick={editingPago ? handleUpdate : handleCreate} disabled={saving}
                 className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors">
-                {saving ? 'Guardando…' : 'Guardar'}
+                {saving ? 'Guardando…' : editingPago ? 'Guardar cambios' : 'Guardar'}
               </button>
             </div>
           </div>
@@ -260,13 +300,14 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[] }> = ({ clientes }) => {
 
 // ── Gastos tab ───────────────────────────────────────────────────
 
-const GastosTab: React.FC = () => {
+const GastosTab: React.FC<{ canEdit: boolean }> = ({ canEdit }) => {
   const [gastos, setGastos]       = useState<Gasto[]>([])
   const [total, setTotal]         = useState(0)
   const [loading, setLoading]     = useState(true)
   const [msg, setMsg]             = useState('')
   const [showForm, setShowForm]   = useState(false)
   const [saving, setSaving]       = useState(false)
+  const [editingGasto, setEditingGasto] = useState<Gasto | null>(null)
 
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [filtroMedio, setFiltroMedio]         = useState('')
@@ -275,10 +316,8 @@ const GastosTab: React.FC = () => {
   const [skip, setSkip]                       = useState(0)
   const LIMIT = 50
 
-  const [form, setForm] = useState({
-    concepto: '', categoria: '', monto: '', medio: 'banco',
-    fecha: '', referencia: '', notas: '',
-  })
+  const emptyForm = { concepto: '', categoria: '', monto: '', medio: 'banco', fecha: '', referencia: '', notas: '' }
+  const [form, setForm] = useState(emptyForm)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -312,10 +351,46 @@ const GastosTab: React.FC = () => {
         notas:      form.notas || null,
       })
       setShowForm(false)
-      setForm({ concepto: '', categoria: '', monto: '', medio: 'banco', fecha: '', referencia: '', notas: '' })
+      setForm(emptyForm)
       load()
     } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al guardar') }
     finally { setSaving(false) }
+  }
+
+  const handleUpdate = async () => {
+    if (!editingGasto) return
+    if (!form.concepto.trim()) { setMsg('El concepto es requerido'); return }
+    if (!form.monto || parseFloat(form.monto) <= 0) { setMsg('El monto es requerido'); return }
+    setSaving(true); setMsg('')
+    try {
+      await apiClient.client.patch(`/gastos/${editingGasto.id}`, {
+        concepto:   form.concepto,
+        categoria:  form.categoria || null,
+        monto:      parseFloat(form.monto),
+        medio:      form.medio,
+        fecha:      form.fecha || null,
+        referencia: form.referencia || null,
+        notas:      form.notas || null,
+      })
+      setEditingGasto(null)
+      setForm(emptyForm)
+      load()
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al guardar') }
+    finally { setSaving(false) }
+  }
+
+  const openEdit = (g: Gasto) => {
+    setForm({
+      concepto:   g.concepto,
+      categoria:  g.categoria  || '',
+      monto:      String(g.monto),
+      medio:      g.medio,
+      fecha:      g.fecha      || '',
+      referencia: g.referencia || '',
+      notas:      g.notas      || '',
+    })
+    setMsg('')
+    setEditingGasto(g)
   }
 
   const handleDelete = async (id: number) => {
@@ -325,6 +400,7 @@ const GastosTab: React.FC = () => {
   }
 
   const totalMonto = gastos.reduce((s, g) => s + g.monto, 0)
+  const isFormOpen = showForm || !!editingGasto
 
   return (
     <div className="space-y-4">
@@ -342,23 +418,19 @@ const GastosTab: React.FC = () => {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
-        <select value={filtroCategoria} onChange={e => { setFiltroCategoria(e.target.value); setSkip(0) }}
-          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none">
+        <select value={filtroCategoria} onChange={e => { setFiltroCategoria(e.target.value); setSkip(0) }} className={filterClass}>
           <option value="">Todas las categorías</option>
           <option value="impuestos">Impuestos déb/créd</option>
           <option value="bancarios">Gastos bancarios</option>
           <option value="otros">Otros</option>
         </select>
-        <select value={filtroMedio} onChange={e => { setFiltroMedio(e.target.value); setSkip(0) }}
-          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none">
+        <select value={filtroMedio} onChange={e => { setFiltroMedio(e.target.value); setSkip(0) }} className={filterClass}>
           <option value="">Banco y efectivo</option>
           <option value="banco">Banco</option>
           <option value="efectivo">Efectivo</option>
         </select>
-        <input type="date" value={filtroDesde} onChange={e => { setFiltroDesde(e.target.value); setSkip(0) }}
-          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none" />
-        <input type="date" value={filtroHasta} onChange={e => { setFiltroHasta(e.target.value); setSkip(0) }}
-          className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none" />
+        <input type="date" value={filtroDesde} onChange={e => { setFiltroDesde(e.target.value); setSkip(0) }} className={filterClass} />
+        <input type="date" value={filtroHasta} onChange={e => { setFiltroHasta(e.target.value); setSkip(0) }} className={filterClass} />
         {(filtroCategoria || filtroMedio || filtroDesde || filtroHasta) && (
           <button onClick={() => { setFiltroCategoria(''); setFiltroMedio(''); setFiltroDesde(''); setFiltroHasta(''); setSkip(0) }}
             className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 px-2">Limpiar</button>
@@ -376,14 +448,14 @@ const GastosTab: React.FC = () => {
                 <th className="px-3 py-2 font-medium">Medio</th>
                 <th className="px-3 py-2 font-medium text-right">Monto</th>
                 <th className="px-3 py-2 font-medium">Referencia</th>
-                <th className="px-3 py-2 font-medium"></th>
+                {canEdit && <th className="px-3 py-2 font-medium w-16"></th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="text-center py-8 text-gray-500">Cargando…</td></tr>
+                <tr><td colSpan={canEdit ? 7 : 6} className="text-center py-8 text-gray-500">Cargando…</td></tr>
               ) : gastos.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-8 text-gray-500">Sin gastos registrados</td></tr>
+                <tr><td colSpan={canEdit ? 7 : 6} className="text-center py-8 text-gray-500">Sin gastos registrados</td></tr>
               ) : gastos.map((g, i) => (
                 <tr key={g.id} className={`border-t border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-gray-50/40 dark:bg-white/1'}`}>
                   <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{fmtDate(g.fecha)}</td>
@@ -394,10 +466,16 @@ const GastosTab: React.FC = () => {
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-gray-800 dark:text-gray-100">{fmt(g.monto)}</td>
                   <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{g.referencia || '—'}</td>
-                  <td className="px-3 py-2">
-                    <button onClick={() => handleDelete(g.id)}
-                      className="px-2 py-0.5 bg-gray-100 dark:bg-white/5 hover:bg-red-100 dark:hover:bg-red-600/20 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded text-xs transition-colors">✕</button>
-                  </td>
+                  {canEdit && (
+                    <td className="px-3 py-2">
+                      <div className="flex gap-1">
+                        <button onClick={() => openEdit(g)}
+                          className="px-2 py-0.5 bg-gray-100 dark:bg-white/5 hover:bg-indigo-100 dark:hover:bg-indigo-600/20 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded text-xs transition-colors">✏</button>
+                        <button onClick={() => handleDelete(g.id)}
+                          className="px-2 py-0.5 bg-gray-100 dark:bg-white/5 hover:bg-red-100 dark:hover:bg-red-600/20 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded text-xs transition-colors">✕</button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -417,13 +495,14 @@ const GastosTab: React.FC = () => {
         </div>
       )}
 
-      {showForm && (
+      {/* Create / Edit modal */}
+      {isFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+          onClick={e => e.target === e.currentTarget && (setShowForm(false), setEditingGasto(null))}>
           <div className="bg-[#16161A] border border-white/10 rounded-xl p-5 w-full max-w-md space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-100">Registrar gasto</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
+              <h2 className="text-base font-semibold text-gray-100">{editingGasto ? 'Editar gasto' : 'Registrar gasto'}</h2>
+              <button onClick={() => { setShowForm(false); setEditingGasto(null) }} className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
             </div>
             {msg && <p className="text-xs text-red-400">{msg}</p>}
             <p className="text-xs text-gray-500">Asiento: Gastos (D) / {form.medio === 'banco' ? 'Banco' : 'Efectivo'} (H)</p>
@@ -467,10 +546,10 @@ const GastosTab: React.FC = () => {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowForm(false)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200">Cancelar</button>
-              <button onClick={handleCreate} disabled={saving}
+              <button onClick={() => { setShowForm(false); setEditingGasto(null) }} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200">Cancelar</button>
+              <button onClick={editingGasto ? handleUpdate : handleCreate} disabled={saving}
                 className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors">
-                {saving ? 'Guardando…' : 'Guardar'}
+                {saving ? 'Guardando…' : editingGasto ? 'Guardar cambios' : 'Guardar'}
               </button>
             </div>
           </div>
@@ -485,6 +564,8 @@ const GastosTab: React.FC = () => {
 export const PagosGastos: React.FC = () => {
   const [tab, setTab]           = useState<'pagos' | 'gastos'>('pagos')
   const [clientes, setClientes] = useState<ClienteOpt[]>([])
+  const { hasPermission }       = useAuthStore()
+  const canEdit                 = hasPermission('manage_users')
 
   useEffect(() => {
     apiClient.client.get('/clientes/archivos').then(r => {
@@ -514,7 +595,9 @@ export const PagosGastos: React.FC = () => {
         ))}
       </div>
 
-      {tab === 'pagos' ? <PagosTab clientes={clientes} /> : <GastosTab />}
+      {tab === 'pagos'
+        ? <PagosTab clientes={clientes} canEdit={canEdit} />
+        : <GastosTab canEdit={canEdit} />}
     </div>
   )
 }
