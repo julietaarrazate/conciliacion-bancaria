@@ -26,6 +26,31 @@ settings = get_settings()
 limiter = Limiter(key_func=get_remote_address)
 
 
+def _run_alembic():
+    """Aplica migraciones pendientes. Si la DB nunca tuvo Alembic, la sella como baseline."""
+    try:
+        from alembic import command
+        from alembic.config import Config
+        from sqlalchemy import text
+
+        alembic_cfg = Config("alembic.ini")
+
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name='alembic_version')"
+            ))
+            ya_tiene_alembic = result.scalar()
+
+        if not ya_tiene_alembic:
+            command.stamp(alembic_cfg, "head")
+            print("[alembic] DB existente sellada como baseline v001")
+        else:
+            command.upgrade(alembic_cfg, "head")
+            print("[alembic] migraciones aplicadas")
+    except Exception as ex:
+        print(f"[alembic] Warning: {ex}")
+
+
 def _init_db():
     """Crea tablas, migraciones y seed en background — no bloquea el arranque."""
     import hashlib, os
@@ -39,6 +64,9 @@ def _init_db():
     except Exception as e:
         print(f"[db] Warning tablas: {e}")
         return
+
+    # 1.5 Alembic — versionar la DB
+    _run_alembic()
 
     # 2. Índices de performance (CREATE INDEX IF NOT EXISTS — idempotente)
     indexes = [

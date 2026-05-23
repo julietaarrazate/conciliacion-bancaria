@@ -28,3 +28,6 @@ requests==2.32.3
 
 # Rate limiting (proteccion brute force)
 slowapi==0.1.9
+
+# Migraciones de base de datos
+alembic==1.14.0
