@@ -189,9 +189,17 @@ Caneland: requiere_cierre_periodo: false — no le afecta.
 ### Pendientes de seguridad (roadmap)
 - 2FA opcional para superadmin
 - Tabla de JWT revocados (hoy un token comprometido vive 8hs)
-- Backups documentados: como hacer snapshot manual de Neon antes de cambios grandes
+- Bloqueo por inactividad / biometria en mobile (PWA reabre logueada)
 - Procedimiento de rotacion de credenciales (que hacer si se compromete una key)
 - Sanitizar logs (verificar que no escupan datos sensibles)
+- Cron de backup automatico del JSON a S3/Drive (hoy es manual)
+
+### Backup y recuperacion (ver BACKUP_Y_RECUPERACION.md en raiz)
+- Snapshot manual de Neon antes de cambios grandes (2 min)
+- Point-in-Time Recovery: 7 dias en plan gratuito
+- Export JSON completo: GET /admin/organizaciones/{id}/backup-completo
+- Export sistema completo: GET /admin/organizaciones/backup-completo-todo
+- Procedimiento + plan de desastre documentados en BACKUP_Y_RECUPERACION.md
 
 ---
 
@@ -212,6 +220,108 @@ Caneland: requiere_cierre_periodo: false — no le afecta.
 Green, Tucu, David, Smt, Gwinn, Innova, Camparo, Alojando, Pinares, Paraguay
 (la lista crece — se pueden crear nuevos desde la pantalla /clientes con el
 botón "+ Nuevo cliente" de cada organización)
+
+---
+
+## Versión v2.5 — 2026-05-24 (hardening: seguridad, observabilidad, recovery)
+
+Sin tag git aun. Agrega sobre v2.4 una capa completa de robustez productiva,
+sin cambios funcionales para el usuario final (todo bajo el capot).
+
+### Seguridad
+- Mensajes de error genericos al usuario: ya no se expone `str(e)` con paths
+  internos, stack traces o nombres de librerias. El error real va a logs.
+- SECRET_KEY validada al boot: si esta en el valor por defecto en produccion,
+  log critico avisando al admin (Render ya tenia env var seteada).
+- Usuario demo `admin@julieta.com/admin123` solo se crea con DEBUG=true.
+  Antes se sembraba en cada deploy de produccion.
+- Validacion de tamaño de archivo antes de leerlo a memoria (50 MB max).
+  Previene DoS por upload de archivo gigante.
+
+### Alembic — migraciones versionadas de DB
+- `backend/alembic.ini` + `backend/alembic/env.py` con `DATABASE_URL` del entorno.
+- Auto-stamp on first boot: si la DB no tiene `alembic_version` la sella como
+  baseline v001 sin ejecutar SQL. Si ya esta, aplica las migraciones pendientes.
+- Migraciones aplicadas:
+  - `001_baseline.py`: vacia, representa el estado al incorporar Alembic
+  - `002_soft_delete.py`: agrega `deleted_at` a extractos_bancarios y planillas
+- Los `ALTER TABLE` viejos de `main.py` se mantienen como red de seguridad
+  (idempotentes con try/except). Limpiarlos cuando se valide 100% Alembic.
+
+### Logging estructurado (reemplaza 56 print())
+- `backend/app/logging_config.py`: setup central con niveles INFO/WARNING/ERROR.
+- Cada modulo usa `logger = logging.getLogger(__name__)`.
+- Formato: `2026-05-24 12:34:56 [LEVEL] app.routers.extractos: mensaje`
+- Permite filtrar por nivel y modulo en Render logs.
+- PYTHONUNBUFFERED=1 en render.yaml para que los logs salgan al instante.
+
+### Performance — N+1 queries eliminados
+- `joinedload(usuario)` en `/auditoria` (antes 1 query por log).
+- `joinedload(cliente) + selectinload(rows)` en `/auditoria/insights`.
+- `joinedload + selectinload` en backup de organizaciones.
+- `selectinload(rows)` en panel actividad por org.
+- Impacto: `/admin/organizaciones/{id}/backup` paso de ~200 queries a 3 con 50 planillas.
+
+### Backup completo en JSON (ver BACKUP_Y_RECUPERACION.md)
+- Servicio `backend/app/services/backup_service.py`: `export_org_backup(db, org_id)`
+  devuelve dict con TODAS las tablas (extractos+movs, planillas+rows, cheques,
+  pagos, gastos, caja+OPs, liquidaciones, contabilidad+lineas, patrones IA,
+  auditoria ultimos 50k logs).
+- NUNCA exporta `hashed_password` (verificado por test).
+- Aislamiento por organizacion_id.
+- Endpoints:
+  - `GET /admin/organizaciones/{id}/backup-completo` -> JSON por org
+  - `GET /admin/organizaciones/backup-completo-todo` -> JSON con todas las orgs
+- Doc `BACKUP_Y_RECUPERACION.md` en raiz: 4 tipos de backup, procedimientos,
+  comandos curl, calendario, plan de desastre.
+
+### Soft delete (papelera de reciclaje)
+- Columna `deleted_at` en `extractos_bancarios` y `planillas` (via Alembic 002).
+- DELETE /extractos/{id} y DELETE /planillas/{id} ahora hacen soft delete:
+  marcan `deleted_at = now()` pero conservan datos y relaciones.
+- Listados (GET /extractos, /historial) filtran `deleted_at IS NULL`.
+- Nuevo router `/admin/papelera`:
+  - `GET /admin/papelera` -> lista borrados agrupados por tipo
+  - `POST /admin/papelera/restaurar/{tipo}/{id}` -> quita deleted_at
+  - `DELETE /admin/papelera/purgar/{tipo}/{id}?confirmar=BORRAR` -> borrado definitivo
+- Pagina frontend `/papelera` (permission manage_users) con tabla, restaurar
+  y purgar (pide escribir 'BORRAR' como confirmacion).
+
+### Reversion contable (preserva trazabilidad al borrar)
+- Nueva funcion `motor_contable.reversar_asientos(modulo, ref_id, org_id, ...)`:
+  crea asiento con debe<->haber invertidos y modulo `{original}_reverso`.
+  NO borra el original — ambos quedan en el libro para auditoria.
+- Idempotente: si ya existe un reverso para ese asiento, no crea otro.
+- Conectado a:
+  - DELETE /pagos/{id} -> reversa modulo 'pago'
+  - DELETE /gastos/{id} -> reversa modulo 'gasto'
+  - DELETE /cheques/{id} -> reversa 'cheque_carga' y 'cheque_comision'
+  - POST /admin/papelera/purgar/extracto -> reversa 'extracto'
+  - POST /admin/papelera/purgar/planilla -> reversa 'planilla' y 'planilla_comision'
+- Trazabilidad: descripcion del reverso dice quien lo elimino y por que.
+
+### Testing — 49 tests cubriendo logica financiera critica
+- `tests/test_motor_contable.py` (22 tests):
+  happy path, idempotencia, regla faltante, monto cero/negativo, comisiones,
+  re-conciliacion (solo_pendientes), upsert efectivo, invariante de partida
+  doble en todo asiento, reversion (6 tests).
+- `tests/test_conciliacion.py` (9 tests, reescrito):
+  parseo importes, normalizacion CUIT/CBU, matching monto unico, regla
+  critica de monto duplicado con/sin identidad, deduplicacion.
+- `tests/test_backup_service.py` (10 tests):
+  contenido completo, NUNCA exporta passwords (verificacion paranoica),
+  serializable a JSON, estructura anidada correcta, aislamiento multi-tenant.
+- `tests/test_soft_delete.py` (8 tests):
+  marca deleted_at, queries filtradas, restauracion, ciclo completo sin
+  perdida de datos.
+- `backend/requirements-dev.txt` separa pytest de prod (no se instala en Render).
+
+### Mobile UX
+- Fix de seleccion de texto al tocar UI: `body { user-select: none }` con
+  excepciones para input, textarea, td, .monto, code, pre, .selectable.
+- Long-press en cards/botones ya no abre menu copy ni resalta texto.
+- Sigue funcionando seleccionar montos en tablas e inputs editables.
+- `-webkit-tap-highlight-color: transparent` quita el flash gris azulado.
 
 ---
 
