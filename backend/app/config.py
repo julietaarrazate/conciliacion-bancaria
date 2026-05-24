@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     backup_minute: int = 0
     backup_enabled: bool = True   # apagable via env var sin tocar codigo
 
+    # URL del frontend en produccion — se usa para armar links en emails
+    # (recuperacion de contraseña, etc). Se puede sobreescribir con FRONTEND_URL.
+    frontend_url: str = "https://conciliacion-bancaria-ten.vercel.app"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -13,15 +13,12 @@ Para habilitarlo en Render: settear RESEND_API_KEY en las env vars.
 Si esta vacio, el scheduler simplemente no arranca (modo dev/opt-in).
 """
 
-import base64
 import gzip
-import io
 import json
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
-import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -31,6 +28,7 @@ from app.models.organizacion import Organizacion
 from app.models.user import User
 from app.services.backup_service import export_org_backup
 from app.services.auditoria import registrar_log
+from app.services.email_sender import send_email
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -136,9 +134,10 @@ def run_backup_job() -> Dict[str, Any]:
         filename = f"conciliacion_backup_{fecha_str}.json.gz"
         resumen = _resumen_humano(payload)
 
-        _enviar_email(
-            asunto=f"Backup diario · {fecha_str}",
-            cuerpo_html=_html_email(fecha_str, resumen, len(gz_bytes), len(body_bytes)),
+        send_email(
+            to=settings.backup_email_to,
+            subject=f"Backup diario · {fecha_str}",
+            html=_html_email(fecha_str, resumen, len(gz_bytes), len(body_bytes)),
             attachment_name=filename,
             attachment_bytes=gz_bytes,
         )
@@ -225,23 +224,4 @@ def _html_email(fecha: str, resumen: Dict[str, int], gz_size: int, json_size: in
 """.strip()
 
 
-def _enviar_email(asunto: str, cuerpo_html: str, attachment_name: str, attachment_bytes: bytes) -> None:
-    """Manda email via Resend HTTP API (https://resend.com/docs/api-reference/emails/send-email)."""
-    url = "https://api.resend.com/emails"
-    headers = {
-        "Authorization": f"Bearer {settings.resend_api_key}",
-        "Content-Type": "application/json",
-    }
-    body = {
-        "from": settings.backup_email_from,
-        "to": [settings.backup_email_to],
-        "subject": asunto,
-        "html": cuerpo_html,
-        "attachments": [{
-            "filename": attachment_name,
-            "content": base64.b64encode(attachment_bytes).decode("ascii"),
-        }],
-    }
-    r = requests.post(url, headers=headers, json=body, timeout=60)
-    if r.status_code >= 300:
-        raise RuntimeError(f"Resend devolvio {r.status_code}: {r.text[:300]}")
+# envio de email centralizado en app/services/email_sender.py

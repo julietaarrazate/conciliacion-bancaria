@@ -115,6 +115,19 @@ class ApiClient {
     return res.data
   }
 
+  async forgotPassword(email: string): Promise<{ ok: boolean; mensaje: string }> {
+    const res = await this.client.post('/auth/forgot-password', { email })
+    return res.data
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ ok: boolean; mensaje: string }> {
+    const res = await this.client.post('/auth/reset-password', {
+      token,
+      new_password: newPassword,
+    })
+    return res.data
+  }
+
   // Extractos endpoints
   async uploadExtraco(file: File, banco: string = 'Banco Macro'): Promise<ExtractoBancario> {
     const formData = new FormData()

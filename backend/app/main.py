@@ -21,7 +21,7 @@ from app.routers import cheques
 from app.routers import pagos_gastos
 from app.routers import papelera
 from app.routers import backup_admin
-from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog
+from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.organizacion import Organizacion
 
 settings = get_settings()

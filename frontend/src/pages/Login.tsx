@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
 
@@ -141,6 +141,15 @@ export const Login: React.FC = () => {
                 ? <span className="font-mono tracking-widest">cargando...</span>
                 : 'Ingresar'}
             </button>
+
+            <div className="text-center pt-2">
+              <Link
+                to="/recuperar-password"
+                className="text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-green transition-colors"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
           </form>
         </div>
 

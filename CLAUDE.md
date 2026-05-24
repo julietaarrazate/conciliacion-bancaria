@@ -223,6 +223,60 @@ botón "+ Nuevo cliente" de cada organización)
 
 ---
 
+## Versión v2.8 — 2026-05-24 (Recuperacion de contraseña por email)
+
+Sin tag git. Agrega el flujo "Olvidé mi contraseña" para que cualquier
+usuario pueda resetearse solo, sin tener que entrar a la DB.
+
+### Backend
+- Modelo `PasswordResetToken` (`app/models/password_reset.py`): guarda solo
+  `token_hash` (sha256 hex), `user_id`, `created_at`, `expires_at`,
+  `used_at`, `requested_ip`. El token plano nunca se guarda — viaja solo
+  por email. Si la DB se filtra, los tokens no se pueden usar.
+- Migracion Alembic `003_password_reset.py` crea la tabla con indices.
+- `app/services/password_reset.py`:
+  - `crear_token_y_enviar_email(db, email, ip)`: genera token con
+    `secrets.token_urlsafe(32)`, hashea, guarda, manda email con link
+    `{frontend_url}/restablecer-password?token=PLANO`. TTL 1h.
+  - `validar_y_cambiar_password(db, token, nueva)`: hashea el token,
+    valida (no usado, no expirado, user activo), cambia password, marca
+    token como usado e invalida los OTROS tokens del mismo user
+    (defense-in-depth).
+- `app/services/email_sender.py`: servicio compartido que centraliza el
+  envio via Resend. Lo usan el scheduler de backup y el reset de password.
+  Refactor: `backup_scheduler` ya no duplica esa logica.
+- Endpoints en `app/routers/auth.py`:
+  - `POST /auth/forgot-password` (body `{email}`):
+    * Rate limit `3/hour` por IP
+    * SIEMPRE responde 200 con el mismo mensaje, exista o no el email —
+      asi el endpoint no se puede usar para descubrir cuentas
+  - `POST /auth/reset-password` (body `{token, new_password}`):
+    * Rate limit `10/hour` por IP
+    * Mensajes de error genericos
+    * Registra `PASSWORD_RESET` en auditoria
+- Settings nueva: `frontend_url` (default `https://conciliacion-bancaria-ten.vercel.app`)
+  para construir el link del email. Sobreescribible con env var `FRONTEND_URL`.
+
+### Frontend
+- Nueva pagina `RecuperarPassword.tsx` (`/recuperar-password`): form con
+  email, llama `apiClient.forgotPassword(email)`, muestra mensaje neutro
+  despues de enviar (no confirma si el email existe).
+- Nueva pagina `RestablecerPassword.tsx` (`/restablecer-password?token=xxx`):
+  lee token del query param, pide password + confirmacion (min 8 chars),
+  llama `apiClient.resetPassword(token, password)`, redirige a `/login`
+  con success. Si falta token, muestra error y link para pedir uno nuevo.
+- `Login.tsx`: agregado link "¿Olvidaste tu contraseña?" debajo del boton
+  Ingresar.
+- Ambas paginas son publicas (no requieren auth) y comparten el diseño
+  visual del Login.
+
+### Setup
+Nada. Si `RESEND_API_KEY` ya esta seteada (para el backup), el flujo de
+reset funciona automaticamente. Si no, el endpoint queda en silencio
+(devuelve 200 pero no manda email).
+
+---
+
 ## Versión v2.7 — 2026-05-24 (Backup automatico diario por email)
 
 Sin tag git. Agrega backup automatico sin tocar el flujo de la app.

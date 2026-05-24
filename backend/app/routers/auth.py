@@ -1,4 +1,6 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from slowapi import Limiter
@@ -7,11 +9,27 @@ from slowapi.util import get_remote_address
 from app.database import get_db
 from app.schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse
 from app.services.auth import register_user, authenticate_user, create_access_token
+from app.services.password_reset import (
+    crear_token_y_enviar_email,
+    validar_y_cambiar_password,
+)
+from app.services.auditoria import registrar_log
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
 limiter = Limiter(key_func=get_remote_address)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=20, max_length=128)
+    new_password: str = Field(..., min_length=6, max_length=200)
+
 
 @router.post("/register", response_model=UserResponse)
 @limiter.limit("5/minute")
@@ -24,6 +42,7 @@ def register(request: Request, user_data: UserRegister, db: Session = Depends(ge
             detail="El email ya está registrado"
         )
     return user
+
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("10/minute")
@@ -47,3 +66,61 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
         "token_type": "bearer",
         "user": user
     }
+
+
+@router.post("/forgot-password")
+@limiter.limit("3/hour")
+def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Envia email con link de reset si el email existe.
+
+    Responde SIEMPRE 200 con el mismo mensaje, exista o no el email — asi
+    el endpoint no se puede usar para descubrir cuales emails estan registrados.
+    Rate limit: 3 pedidos por hora por IP (suficiente para uso real, blockea bots).
+    """
+    ip = get_remote_address(request)
+    try:
+        crear_token_y_enviar_email(db, payload.email, requested_ip=ip)
+    except Exception as ex:
+        logger.error("forgot-password: error inesperado: %s", ex, exc_info=True)
+
+    return {
+        "ok": True,
+        "mensaje": (
+            "Si el email está registrado, te llegará un link para cambiar la contraseña. "
+            "Revisá tu bandeja de entrada (y spam) en los proximos minutos."
+        ),
+    }
+
+
+@router.post("/reset-password")
+@limiter.limit("10/hour")
+def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Valida el token y setea la nueva contraseña.
+
+    Errores genericos para no leakear si el token existia o no.
+    """
+    user = validar_y_cambiar_password(db, payload.token, payload.new_password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El link expiró o ya fue usado. Pedí uno nuevo desde 'Olvidé mi contraseña'.",
+        )
+
+    # Auditoria: registramos el cambio (uno mismo es el actor)
+    try:
+        registrar_log(
+            db, user.id, "users", user.id, "PASSWORD_RESET",
+            {"via": "email", "ip": get_remote_address(request)},
+        )
+    except Exception:
+        pass
+
+    return {"ok": True, "mensaje": "Contraseña actualizada. Ya podes iniciar sesión."}

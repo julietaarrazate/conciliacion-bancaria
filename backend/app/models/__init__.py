@@ -10,6 +10,7 @@ from .caja import ArqueoDiario, OrdenDePago
 from .contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
 from .cheque import Cheque
 from .pago import Pago, Gasto
+from .password_reset import PasswordResetToken
 
 __all__ = [
     "Organizacion", "User", "Cliente",
@@ -20,4 +21,5 @@ __all__ = [
     "ArqueoDiario", "OrdenDePago",
     "PlanCuenta", "ReglaContable", "Asiento", "AsientoDetalle",
     "Cheque", "Pago", "Gasto",
+    "PasswordResetToken",
 ]

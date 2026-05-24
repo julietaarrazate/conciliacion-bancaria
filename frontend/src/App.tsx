@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useAuthStore } from '@/store/auth'
 import { apiClient } from '@/services/api'
 import { Login } from '@/pages/Login'
+import { RecuperarPassword } from '@/pages/RecuperarPassword'
+import { RestablecerPassword } from '@/pages/RestablecerPassword'
 import { Dashboard } from '@/pages/Dashboard'
 import { Historial } from '@/pages/Historial'
 import { Auditoria } from '@/pages/Auditoria'
@@ -84,6 +86,8 @@ export function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/recuperar-password" element={<RecuperarPassword />} />
+        <Route path="/restablecer-password" element={<RestablecerPassword />} />
 
         <Route
           element={
