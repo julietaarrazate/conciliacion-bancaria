@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
 
@@ -562,7 +563,11 @@ const GastosTab: React.FC<{ canEdit: boolean }> = ({ canEdit }) => {
 // ── Página principal ─────────────────────────────────────────────
 
 export const PagosGastos: React.FC = () => {
-  const [tab, setTab]           = useState<'pagos' | 'gastos'>('pagos')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const compartido = searchParams.get('compartido')
+  const [tab, setTab]           = useState<'pagos' | 'gastos'>(
+    compartido === 'gasto' ? 'gastos' : 'pagos'
+  )
   const [clientes, setClientes] = useState<ClienteOpt[]>([])
   const { hasPermission }       = useAuthStore()
   const canEdit                 = hasPermission('manage_users')
@@ -574,6 +579,15 @@ export const PagosGastos: React.FC = () => {
       orgs.forEach(org => (org.clientes || []).forEach((c: any) => list.push({ id: c.id, nombre: c.nombre })))
       setClientes(list)
     }).catch(() => {})
+  }, [])
+
+  // Si vino por share target, limpiar el query (los archivos no se persisten
+  // aca, pero el tab ya se selecciono). El sessionStorage se limpia al cancelar.
+  useEffect(() => {
+    if (!compartido) return
+    const sp = new URLSearchParams(searchParams)
+    sp.delete('compartido')
+    setSearchParams(sp, { replace: true })
   }, [])
 
   return (

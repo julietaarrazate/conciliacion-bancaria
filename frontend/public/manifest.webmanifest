@@ -10,6 +10,22 @@
   "theme_color": "#FFE600",
   "categories": ["finance", "business", "productivity"],
   "lang": "es-AR",
+  "share_target": {
+    "action": "/compartir",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "files",
+          "accept": ["image/*", "application/pdf", ".pdf", ".jpg", ".jpeg", ".png", ".webp", ".heic"]
+        }
+      ]
+    }
+  },
   "icons": [
     {
       "src": "/icon-192.svg",

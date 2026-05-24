@@ -223,6 +223,52 @@ botón "+ Nuevo cliente" de cada organización)
 
 ---
 
+## Versión v2.6 — 2026-05-24 (Share Target — recibir archivos desde WhatsApp)
+
+Tag git: pendiente. Agrega sobre v2.5 la capacidad de recibir archivos
+compartidos desde otras apps (WhatsApp, Galeria, Drive) directamente en la PWA.
+
+### Share Target API (Web Manifest + Service Worker)
+- `manifest.webmanifest`: nuevo bloque `share_target` apuntando a `/compartir`
+  via POST multipart/form-data. Acepta `image/*`, `application/pdf`, `.jpg`,
+  `.jpeg`, `.png`, `.webp`, `.heic`. La PWA aparece como destino en el
+  menu "Compartir" del SO (Android Chrome).
+- `sw.js`: intercepta POST a `/compartir`, guarda los archivos en una Cache
+  llamada `conciliacion-share-inbox` con keys `/__share__/file-N` y un
+  `/__share__/meta` con metadatos (nombres, tipos, sizes). Despues redirige
+  con 303 a `/compartir?source=share`. Tambien sirve esa cache para GET.
+- El activate del SW preserva la share-inbox (no la borra junto a las viejas).
+- CACHE_NAME bumpeado a `conciliacion-shell-v4` para forzar reinstall.
+
+### Pagina /compartir
+- Nueva ruta `/compartir` (no requiere permiso especial, la usuaria ya esta
+  logueada en la PWA).
+- Al montarse, lee `/__share__/meta` y descarga los blobs. Convierte cada uno
+  a base64 dataUrl para mostrar preview (imagenes) o icono (PDF).
+- Botones para enrutar el archivo al modulo correcto:
+  - **Cheque** -> `/cheques?compartido=1` (abre modal de nuevo cheque con la foto cargada)
+  - **Pago** -> `/pagos-gastos?compartido=pago` (abre tab Pagos)
+  - **Gasto** -> `/pagos-gastos?compartido=gasto` (abre tab Gastos)
+  - **OP** -> `/op?compartido=1` (salta al paso "datos" con la foto cargada)
+- Los archivos viajan por `sessionStorage` (`compartido:archivos` como JSON con
+  dataUrls). Cada destino los lee, precarga el form y limpia el sessionStorage.
+
+### Integracion en modulos destino
+- `Cheques.tsx`: detecta `?compartido=1`, abre el modal "Nuevo cheque" con
+  `formFoto` precargada. Limpia el query param para no re-disparar al recargar.
+- `OrdenDePago.tsx`: detecta `?compartido=1`, salta al step `datos` con
+  `foto` y `fotoPreview` ya seteados.
+- `PagosGastos.tsx`: selecciona el tab (pagos/gastos) segun el query param.
+
+### Limitaciones
+- Funciona en Android (Chrome y Edge instalados como PWA). iOS Safari NO
+  soporta Web Share Target para archivos en PWAs (limitacion de Apple).
+- Requiere instalar la PWA: si la usuaria solo usa el browser, no aparece
+  como destino de "Compartir". Para que aparezca tiene que tocar "Agregar a
+  pantalla de inicio" la primera vez.
+
+---
+
 ## Versión v2.5 — 2026-05-24 (hardening: seguridad, observabilidad, recovery)
 
 Sin tag git aun. Agrega sobre v2.4 una capa completa de robustez productiva,

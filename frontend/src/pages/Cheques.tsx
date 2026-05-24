@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 
 const fmt = (n: number) =>
@@ -101,6 +102,35 @@ export const Cheques: React.FC = () => {
   }, [filtroEstado, filtroCliente, filtroDesde, filtroHasta, skip])
 
   useEffect(() => { load() }, [load])
+
+  // Recibir foto compartida desde WhatsApp (PWA share target)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (searchParams.get('compartido') !== '1') return
+    const destino = sessionStorage.getItem('compartido:destino')
+    const archivosRaw = sessionStorage.getItem('compartido:archivos')
+    if (destino !== 'cheque' || !archivosRaw) return
+    try {
+      const archivos = JSON.parse(archivosRaw) as { name: string; type: string; dataUrl: string }[]
+      const imagen = archivos.find(a => a.type.startsWith('image/')) || archivos[0]
+      if (imagen) {
+        setShowForm(true)
+        setFormData(emptyForm())
+        setFormFoto(imagen.dataUrl)
+        setMsg('')
+      }
+    } catch {}
+    sessionStorage.removeItem('compartido:destino')
+    sessionStorage.removeItem('compartido:archivos')
+    sessionStorage.removeItem('compartido:titulo')
+    sessionStorage.removeItem('compartido:texto')
+    sessionStorage.removeItem('compartido:ts')
+    // limpiar query para no re-disparar al recargar
+    const sp = new URLSearchParams(searchParams)
+    sp.delete('compartido')
+    setSearchParams(sp, { replace: true })
+  }, [searchParams, setSearchParams, navigate])
 
   useEffect(() => {
     apiClient.client.get('/clientes/archivos').then(r => {

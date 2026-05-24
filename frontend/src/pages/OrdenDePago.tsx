@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 
 const fmt = (n: number) =>
@@ -22,6 +23,32 @@ export const OrdenDePago: React.FC = () => {
   const [resultado, setResultado] = useState<any>(null)
   const [msg, setMsg] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('compartido') !== '1') return
+    const destino = sessionStorage.getItem('compartido:destino')
+    const archivosRaw = sessionStorage.getItem('compartido:archivos')
+    if (destino === 'op' && archivosRaw) {
+      try {
+        const archivos = JSON.parse(archivosRaw) as { name: string; type: string; dataUrl: string }[]
+        const imagen = archivos.find(a => a.type.startsWith('image/')) || archivos[0]
+        if (imagen && imagen.dataUrl) {
+          setFotoPreview(imagen.dataUrl)
+          setFoto(imagen.dataUrl)
+          setStep('datos')
+        }
+      } catch {}
+      sessionStorage.removeItem('compartido:destino')
+      sessionStorage.removeItem('compartido:archivos')
+      sessionStorage.removeItem('compartido:titulo')
+      sessionStorage.removeItem('compartido:texto')
+      sessionStorage.removeItem('compartido:ts')
+    }
+    const sp = new URLSearchParams(searchParams)
+    sp.delete('compartido')
+    setSearchParams(sp, { replace: true })
+  }, [searchParams, setSearchParams])
 
   useEffect(() => {
     apiClient.client.get('/clientes/archivos').then(r => {
