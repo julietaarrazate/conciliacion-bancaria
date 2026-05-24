@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logo Concepts</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0B0B0F; font-family: -apple-system, 'Inter', sans-serif; color: #e5e5e5; padding: 32px; }
+  h1 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: #555; margin-bottom: 40px; }
+  .row { display: flex; gap: 40px; flex-wrap: wrap; margin-bottom: 60px; }
+  .concept { display: flex; flex-direction: column; gap: 24px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: #555; }
+  .sizes { display: flex; align-items: center; gap: 24px; }
+  .sizes span { font-size: 10px; color: #333; margin-top: 6px; display: block; text-align: center; }
+  .on-light { background: #f4f4f5; padding: 12px; border-radius: 12px; display: flex; align-items: center; gap: 10px; }
+  .on-light .name { font-size: 13px; font-weight: 700; color: #18181B; font-family: 'JetBrains Mono', monospace; }
+  .divider { width: 100%; height: 1px; background: #1E1E26; margin: 8px 0 40px; }
+  h2 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  p { font-size: 12px; color: #666; max-width: 300px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>Conceptos de Logo</h1>
+
+<!-- ─── CONCEPTO A — Doble flecha ─────────────── -->
+<div style="margin-bottom:56px">
+  <h2>A — Reconciliación</h2>
+  <p style="margin-bottom:24px">Dos flechas que se encuentran y forman un check. Representa la acción de conciliar dos mundos (banco ↔ planilla). Formas redondeadas, feel fintech.</p>
+  <div class="row">
+    <div class="concept">
+      <span class="label">Dark mode</span>
+      <div class="sizes">
+        <!-- 128px -->
+        <div>
+          <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="128" height="128" rx="28" fill="#16161C"/>
+            <!-- Flecha izquierda → centro -->
+            <path d="M22 64 L60 64" stroke="#22C55E" stroke-width="7" stroke-linecap="round"/>
+            <path d="M48 50 L64 64 L48 78" stroke="#22C55E" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <!-- Check derecha -->
+            <path d="M66 64 L80 80 L108 44" stroke="#5E6AD2" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          <span>128px</span>
+        </div>
+        <!-- 48px -->
+        <div>
+          <svg width="48" height="48" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="128" height="128" rx="28" fill="#16161C"/>
+            <path d="M22 64 L60 64" stroke="#22C55E" stroke-width="7" stroke-linecap="round"/>
+            <path d="M48 50 L64 64 L48 78" stroke="#22C55E" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <path d="M66 64 L80 80 L108 44" stroke="#5E6AD2" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          <span>48px</span>
+        </div>
+        <!-- 28px -->
+        <div>
+          <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="128" height="128" rx="28" fill="#16161C"/>
+            <path d="M22 64 L60 64" stroke="#22C55E" stroke-width="7" stroke-linecap="round"/>
+            <path d="M48 50 L64 64 L48 78" stroke="#22C55E" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <path d="M66 64 L80 80 L108 44" stroke="#5E6AD2" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          <span>28px</span>
+        </div>
+      </div>
+      <!-- Header simulado -->
+      <div style="background:#111116; border-radius:10px; padding:14px 16px; display:flex; align-items:center; gap:10px; max-width:220px; border: 1px solid #1E1E26;">
+        <svg width="28" height="28" viewBox="0 0 128 128" fill="none"><rect width="128" height="128" rx="28" fill="#16161C"/><path d="M22 64 L60 64" stroke="#22C55E" stroke-width="7" stroke-linecap="round"/><path d="M48 50 L64 64 L48 78" stroke="#22C55E" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M66 64 L80 80 L108 44" stroke="#5E6AD2" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        <span style="font-weight:700;font-size:13px;font-family:monospace;letter-spacing:.03em">Conciliación</span>
+      </div>
+    </div>
+    <div class="concept">
+      <span class="label">Light mode</span>
+      <div class="on-light">
+        <svg width="28" height="28" viewBox="0 0 128 128" fill="none"><rect width="128" height="128" rx="28" fill="#FFE600"/><path d="M22 64 L60 64" stroke="#18181B" stroke-width="7" stroke-linecap="round"/><path d="M48 50 L64 64 L48 78" stroke="#18181B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M66 64 L80 80 L108 44" stroke="#5E6AD2" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        <span class="name">Conciliación</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ─── CONCEPTO B — Nodo C ───────────────────── -->
+<div style="margin-bottom:56px">
+  <h2>B — Monograma</h2>
+  <p style="margin-bottom:24px">Una C bold que también es un arco de progreso/porcentaje. Limpio, memorable, funciona como ícono de app en home screen. El arco verde representa el avance de conciliación.</p>
+  <div class="row">
+    <div class="concept">
+      <span class="label">Dark mode</span>
+      <div class="sizes">
+        <div>
+          <svg width="128" height="128" viewBox="0 0 128 128" fill="none">
+            <rect width="128" height="128" rx="28" fill="#16161C"/>
+            <!-- C shape (open circle) -->
+            <path d="M90 36 A42 42 0 1 0 90 92" stroke="#1E1E26" stroke-width="14" stroke-linecap="round" fill="none"/>
+            <!-- Progress arc (green, ~75%) -->
+            <path d="M90 36 A42 42 0 1 0 90 92" stroke="#22C55E" stroke-width="14" stroke-linecap="round" fill="none" stroke-dasharray="197" stroke-dashoffset="50"/>
+            <!-- Dot at end -->
+            <circle cx="90" cy="92" r="8" fill="#5E6AD2"/>
+          </svg>
+          <span>128px</span>
+        </div>
+        <div>
+          <svg width="48" height="48" viewBox="0 0 128 128" fill="none">
+            <rect width="128" height="128" rx="28" fill="#16161C"/>
+            <path d="M90 36 A42 42 0 1 0 90 92" stroke="#1E1E26" stroke-width="14" stroke-linecap="round" fill="none"/>
+            <path d="M90 36 A42 42 0 1 0 90 92" stroke="#22C55E" stroke-width="14" stroke-linecap="round" fill="none" stroke-dasharray="197" stroke-dashoffset="50"/>
+            <circle cx="90" cy="92" r="8" fill="#5E6AD2"/>
+          </svg>
+          <span>48px</span>
+        </div>
+        <div>
+          <svg width="28" height="28" viewBox="0 0 128 128" fill="none">
+            <rect width="128" height="128" rx="28" fill="#16161C"/>
+            <path d="M90 36 A42 42 0 1 0 90 92" stroke="#1E1E26" stroke-width="14" stroke-linecap="round" fill="none"/>
+            <path d="M90 36 A42 42 0 1 0 90 92" stroke="#22C55E" stroke-width="14" stroke-linecap="round" fill="none" stroke-dasharray="197" stroke-dashoffset="50"/>
+            <circle cx="90" cy="92" r="8" fill="#5E6AD2"/>
+          </svg>
+          <span>28px</span>
+        </div>
+      </div>
+      <div style="background:#111116; border-radius:10px; padding:14px 16px; display:flex; align-items:center; gap:10px; max-width:220px; border: 1px solid #1E1E26;">
+        <svg width="28" height="28" viewBox="0 0 128 128" fill="none"><rect width="128" height="128" rx="28" fill="#16161C"/><path d="M90 36 A42 42 0 1 0 90 92" stroke="#1E1E26" stroke-width="14" stroke-linecap="round" fill="none"/><path d="M90 36 A42 42 0 1 0 90 92" stroke="#22C55E" stroke-width="14" stroke-linecap="round" fill="none" stroke-dasharray="197" stroke-dashoffset="50"/><circle cx="90" cy="92" r="8" fill="#5E6AD2"/></svg>
+        <span style="font-weight:700;font-size:13px;font-family:monospace;letter-spacing:.03em">Conciliación</span>
+      </div>
+    </div>
+    <div class="concept">
+      <span class="label">Light mode</span>
+      <div class="on-light">
+        <svg width="28" height="28" viewBox="0 0 128 128" fill="none"><rect width="128" height="128" rx="28" fill="#FFE600"/><path d="M90 36 A42 42 0 1 0 90 92" stroke="#F5DC00" stroke-width="14" stroke-linecap="round" fill="none"/><path d="M90 36 A42 42 0 1 0 90 92" stroke="#18181B" stroke-width="14" stroke-linecap="round" fill="none" stroke-dasharray="197" stroke-dashoffset="50"/><circle cx="90" cy="92" r="8" fill="#5E6AD2"/></svg>
+        <span class="name">Conciliación</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ─── CONCEPTO C — Líneas paralelas + check ── -->
+<div style="margin-bottom:56px">
+  <h2>C — Match</h2>
+  <p style="margin-bottom:24px">Tres líneas horizontales (extracto bancario) con un check verde superpuesto. Iconografía directa: "revisé mis cuentas y cuadran". Más conservador, muy claro semánticamente.</p>
+  <div class="row">
+    <div class="concept">
+      <span class="label">Dark mode</span>
+      <div class="sizes">
+        <div>
+          <svg width="128" height="128" viewBox="0 0 128 128" fill="none">
+            <rect width="128" height="128" rx="28" fill="#16161C"/>
+            <!-- Líneas (extracto) -->
+            <line x1="22" y1="42" x2="106" y2="42" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/>
+            <line x1="22" y1="64" x2="106" y2="64" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/>
+            <line x1="22" y1="86" x2="106" y2="86" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/>
+            <!-- Check (acreditado) -->
+            <path d="M36 64 L56 84 L96 38" stroke="#22C55E" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          <span>128px</span>
+        </div>
+        <div>
+          <svg width="48" height="48" viewBox="0 0 128 128" fill="none">
+            <rect width="128" height="128" rx="28" fill="#16161C"/>
+            <line x1="22" y1="42" x2="106" y2="42" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/>
+            <line x1="22" y1="64" x2="106" y2="64" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/>
+            <line x1="22" y1="86" x2="106" y2="86" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/>
+            <path d="M36 64 L56 84 L96 38" stroke="#22C55E" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          <span>48px</span>
+        </div>
+        <div>
+          <svg width="28" height="28" viewBox="0 0 128 128" fill="none">
+            <rect width="128" height="128" rx="28" fill="#16161C"/>
+            <line x1="22" y1="42" x2="106" y2="42" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/>
+            <line x1="22" y1="64" x2="106" y2="64" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/>
+            <line x1="22" y1="86" x2="106" y2="86" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/>
+            <path d="M36 64 L56 84 L96 38" stroke="#22C55E" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          <span>28px</span>
+        </div>
+      </div>
+      <div style="background:#111116; border-radius:10px; padding:14px 16px; display:flex; align-items:center; gap:10px; max-width:220px; border: 1px solid #1E1E26;">
+        <svg width="28" height="28" viewBox="0 0 128 128" fill="none"><rect width="128" height="128" rx="28" fill="#16161C"/><line x1="22" y1="42" x2="106" y2="42" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/><line x1="22" y1="64" x2="106" y2="64" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/><line x1="22" y1="86" x2="106" y2="86" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/><path d="M36 64 L56 84 L96 38" stroke="#22C55E" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        <span style="font-weight:700;font-size:13px;font-family:monospace;letter-spacing:.03em">Conciliación</span>
+      </div>
+    </div>
+    <div class="concept">
+      <span class="label">Light mode</span>
+      <div class="on-light">
+        <svg width="28" height="28" viewBox="0 0 128 128" fill="none"><rect width="128" height="128" rx="28" fill="#18181B"/><line x1="22" y1="42" x2="106" y2="42" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/><line x1="22" y1="64" x2="106" y2="64" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/><line x1="22" y1="86" x2="106" y2="86" stroke="#2A2A35" stroke-width="8" stroke-linecap="round"/><path d="M36 64 L56 84 L96 38" stroke="#22C55E" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        <span class="name">Conciliación</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
