@@ -223,6 +223,65 @@ botón "+ Nuevo cliente" de cada organización)
 
 ---
 
+## Versión v2.7 — 2026-05-24 (Backup automatico diario por email)
+
+Sin tag git. Agrega backup automatico sin tocar el flujo de la app.
+
+### Scheduler interno (APScheduler)
+- `backend/app/services/backup_scheduler.py`: BackgroundScheduler que
+  corre dentro del mismo proceso de FastAPI. Cron diario a `03:00 ART`
+  (configurable via `BACKUP_HOUR_ART`).
+- Misfire grace de 1h: si el server estaba dormido al horario, igual
+  lo ejecuta cuando despierta (siempre que sea dentro de la hora).
+- max_instances=1 + coalesce=True: nunca se solapan dos backups.
+- Render free tier se mantiene despierto con UptimeRobot, por lo que
+  el cron dispara puntual.
+
+### Envio por email (Resend)
+- Generaa JSON completo (todas las orgs) usando `export_org_backup` ya existente
+- Lo gzippea (queda en ~10-30% del tamano original)
+- Lo manda como attachment a `BACKUP_EMAIL_TO` (default julietaarrazate@gmail.com)
+- Usa Resend HTTP API (https://resend.com), free tier 3000 emails/mes,
+  con remitente default `onboarding@resend.dev` (no requiere DNS).
+- Email HTML con resumen de tablas y conteos.
+- Si `RESEND_API_KEY` esta vacio, el scheduler simplemente no arranca
+  (modo dev / opt-in, no crashea).
+
+### Endpoints admin
+- `GET /admin/backup/status` -> estado: activo, configurado, hora del cron,
+  proximo run, ultimo intento/OK/error, tamano del ultimo backup.
+- `POST /admin/backup/run-now` -> dispara backup manual on-demand (util
+  para testear que llega el email sin esperar al cron).
+- Ambos requieren superadmin.
+
+### Auditoria
+- Cada ejecucion queda registrada en la tabla auditoria con accion
+  `BACKUP_AUTO_OK` o `BACKUP_AUTO_ERROR` y el detalle (tamano, orgs,
+  destinatario o mensaje de error).
+- El actor del log es el primer superadmin (Julieta).
+
+### Frontend
+- `/papelera` (admin) muestra una card arriba con:
+  - Estado del scheduler (verde/amarillo)
+  - Hora del cron, destinatario, proximo run
+  - Ultimo OK con timestamp y tamano
+  - Boton "Backup ahora" para disparar manualmente
+
+### Setup en produccion
+1. Crear cuenta en resend.com (gratis)
+2. Generar API key (re_xxxxx)
+3. En Render: env var `RESEND_API_KEY=re_xxxxx`
+4. Save & deploy. Listo, anda solo.
+
+### Por que email y no GitHub/S3
+- Cero infraestructura nueva (solo 1 env var)
+- Searchable y versionado por fecha en Gmail
+- Si el sistema cae, Gmail sigue funcionando (canal independiente)
+- Resend free tier ultrasobra (1 email/dia = 30/mes, hay 3000)
+- Si el backup crece >20MB en el futuro, cambiamos a storage externo.
+
+---
+
 ## Versión v2.6 — 2026-05-24 (Share Target — recibir archivos desde WhatsApp)
 
 Tag git: pendiente. Agrega sobre v2.5 la capacidad de recibir archivos

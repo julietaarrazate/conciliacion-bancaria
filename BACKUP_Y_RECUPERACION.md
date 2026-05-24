@@ -12,8 +12,58 @@ Procedimientos paso a paso para proteger los datos y recuperarse de incidentes.
 | **B. Point-in-Time Recovery** | Después de un error humano (restaurar a "5 minutos atrás") | 5 min | 100%, últimos 7 días |
 | **C. Export JSON completo** | Backup periódico para guardar fuera de Neon | 1 min | 100% por organización |
 | **D. Export Excel** | Para inspección humana o entrega al contador | 1 min | Planillas + extractos |
+| **E. Backup automatico por email** | Funciona solo, todos los días — el que recomendamos por default | 0 min | 100% todas las orgs |
 
-**Regla simple**: hacé **A** antes de cualquier cambio grande, y descargá **C** una vez por mes mínimo.
+**Regla simple**: tené prendido **E** (automático), hacé **A** antes de cualquier cambio grande.
+
+---
+
+## 1.5 Backup automatico diario por email (procedimiento E)
+
+Scheduler interno (APScheduler en el backend) que todos los días a las **03:00 ART**:
+1. Genera el JSON completo de TODAS las organizaciones
+2. Lo gzippea (queda en ~10-30% del tamaño original)
+3. Lo manda por email a `julietaarrazate@gmail.com` (configurable) con el `.json.gz` adjunto
+4. Lo registra en auditoria (`accion=BACKUP_AUTO_OK` o `BACKUP_AUTO_ERROR`)
+
+### Setup (una sola vez, en Render)
+
+1. Crear cuenta en [resend.com](https://resend.com) (gratis, 3000 emails/mes)
+2. **API Keys** → **Create API Key** → copiar el `re_xxxxxx`
+3. En Render: **conciliacion-api** → **Environment** → **Add env var**:
+   - `RESEND_API_KEY` = el token recién copiado
+4. Save & deploy. El servicio reinicia y el scheduler arranca solo.
+
+No requiere verificar dominio: usa el remitente default `onboarding@resend.dev`
+de Resend, que sirve para mandarte a vos misma.
+
+### Otras env vars opcionales
+
+- `BACKUP_EMAIL_TO` = destinatario (default: `julietaarrazate@gmail.com`)
+- `BACKUP_EMAIL_FROM` = remitente (default: `onboarding@resend.dev`)
+- `BACKUP_HOUR_ART` = hora ART (default: `3`)
+- `BACKUP_MINUTE` = minuto (default: `0`)
+- `BACKUP_ENABLED` = `false` para apagarlo sin borrar la API key
+
+### Verificación / control
+
+- Pantalla `/papelera` (admin) muestra una card con:
+  - Si está activo (verde) o pausado (amarillo)
+  - Hora del cron
+  - Último OK / último error con timestamp ART
+  - Tamaño del último backup enviado
+  - Botón **"Backup ahora"** para disparar uno manualmente (te llega en 5-10s)
+
+- O por API:
+  - `GET /admin/backup/status` → estado JSON
+  - `POST /admin/backup/run-now` → dispara manual
+
+### Restore desde el email
+
+1. Bajás el `.json.gz` del email
+2. `gunzip conciliacion_backup_YYYY-MM-DD.json.gz`
+3. Cargás el JSON con cualquier herramienta que parsee el formato
+   (estructura documentada en `app/services/backup_service.py`)
 
 ---
 

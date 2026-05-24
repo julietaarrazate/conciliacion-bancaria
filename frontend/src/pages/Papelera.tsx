@@ -21,12 +21,27 @@ interface PapeleraData {
   total: number
 }
 
+interface BackupStatus {
+  activo: boolean
+  configurado: boolean
+  habilitado: boolean
+  hora_art: string
+  destinatario: string
+  proximo_run: string | null
+  ultimo_intento: string | null
+  ultimo_ok: string | null
+  ultimo_error: string | null
+  tamano_bytes: number | null
+}
+
 export const Papelera: React.FC = () => {
   const [data, setData] = useState<PapeleraData | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionId, setActionId] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [backup, setBackup] = useState<BackupStatus | null>(null)
+  const [backupBusy, setBackupBusy] = useState(false)
 
   const cargar = async () => {
     setLoading(true)
@@ -40,7 +55,35 @@ export const Papelera: React.FC = () => {
     }
   }
 
-  useEffect(() => { cargar() }, [])
+  const cargarBackup = async () => {
+    try {
+      const res = await apiClient.client.get('/admin/backup/status')
+      setBackup(res.data)
+    } catch {
+      // si el endpoint no esta listo, simplemente no mostramos la card
+      setBackup(null)
+    }
+  }
+
+  const dispararBackup = async () => {
+    if (!window.confirm('¿Disparar un backup manual ahora? Va a llegar por email en unos segundos.')) return
+    setBackupBusy(true); setMensaje(null); setError(null)
+    try {
+      const res = await apiClient.client.post('/admin/backup/run-now')
+      if (res.data.ok) {
+        setMensaje(`Backup enviado a ${res.data.destinatario}. Revisá tu casilla.`)
+      } else {
+        setError(`Fallo el backup: ${res.data.ultimo_error || 'error desconocido'}`)
+      }
+      await cargarBackup()
+    } catch (ex: any) {
+      setError(ex?.response?.data?.detail || 'Error disparando backup')
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  useEffect(() => { cargar(); cargarBackup() }, [])
 
   const restaurar = async (tipo: string, id: number) => {
     const key = `${tipo}-${id}`
@@ -95,6 +138,49 @@ export const Papelera: React.FC = () => {
           Registros borrados — se pueden restaurar o purgar definitivamente.
         </p>
       </div>
+
+      {/* Card de estado del backup automatico */}
+      {backup && (
+        <div className="mb-4 p-3 rounded-lg border bg-white dark:bg-zinc-900 dark:border-zinc-800">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`inline-block w-2 h-2 rounded-full ${
+                  backup.activo ? 'bg-green-500' : 'bg-yellow-500'
+                }`} />
+                <span className="text-sm font-medium dark:text-zinc-100">
+                  Backup automatico {backup.activo ? 'activo' : (backup.configurado ? 'pausado' : 'no configurado')}
+                </span>
+              </div>
+              <div className="text-xs text-gray-500 dark:text-zinc-400 space-y-0.5">
+                {backup.activo ? (
+                  <div>Cron diario {backup.hora_art} ART · llega a {backup.destinatario}</div>
+                ) : !backup.configurado ? (
+                  <div>Falta setear <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded">RESEND_API_KEY</code> en Render para activarlo.</div>
+                ) : (
+                  <div>Deshabilitado por configuracion (backup_enabled=false).</div>
+                )}
+                {backup.ultimo_ok && (
+                  <div>Ultimo OK: {fmtFecha(backup.ultimo_ok)}{backup.tamano_bytes ? ` · ${(backup.tamano_bytes/1024).toFixed(1)} KB` : ''}</div>
+                )}
+                {backup.ultimo_error && (
+                  <div className="text-red-500">Ultimo error: {backup.ultimo_error}</div>
+                )}
+                {backup.proximo_run && (
+                  <div>Proximo: {fmtFecha(backup.proximo_run)}</div>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={dispararBackup}
+              disabled={backupBusy || !backup.configurado}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              {backupBusy ? 'Enviando…' : 'Backup ahora'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {mensaje && (
         <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm

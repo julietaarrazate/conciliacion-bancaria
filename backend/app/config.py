@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     max_file_size: int = 50 * 1024 * 1024   # 50 MB
     upload_dir: str = "/tmp/uploads"
 
+    # Backup automatico diario por email
+    # Si RESEND_API_KEY esta vacio, el scheduler no corre (modo dev / opt-in).
+    resend_api_key: str = ""
+    backup_email_to: str = "julietaarrazate@gmail.com"
+    backup_email_from: str = "onboarding@resend.dev"  # default de Resend, no requiere DNS
+    backup_hour_art: int = 3      # 03:00 ART (06:00 UTC)
+    backup_minute: int = 0
+    backup_enabled: bool = True   # apagable via env var sin tocar codigo
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

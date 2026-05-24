@@ -31,3 +31,6 @@ slowapi==0.1.9
 
 # Migraciones de base de datos
 alembic==1.13.3
+
+# Scheduler para backup automatico diario
+apscheduler==3.10.4

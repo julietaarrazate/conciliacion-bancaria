@@ -20,6 +20,7 @@ from app.routers import contabilidad
 from app.routers import cheques
 from app.routers import pagos_gastos
 from app.routers import papelera
+from app.routers import backup_admin
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog
 from app.models.organizacion import Organizacion
 
@@ -439,7 +440,17 @@ async def lifespan(app: FastAPI):
         logger.critical("SECRET_KEY usa el valor por defecto — seteá SECRET_KEY en Render")
     t = threading.Thread(target=_init_db, daemon=True)
     t.start()
+    # Scheduler de backup diario por email (no-op si RESEND_API_KEY no esta)
+    try:
+        from app.services.backup_scheduler import start_backup_scheduler, stop_backup_scheduler
+        start_backup_scheduler()
+    except Exception as ex:
+        logger.warning("No se pudo iniciar el backup scheduler: %s", ex)
     yield
+    try:
+        stop_backup_scheduler()
+    except Exception:
+        pass
 
 
 app = FastAPI(
@@ -499,6 +510,7 @@ app.include_router(contabilidad.router)
 app.include_router(cheques.router)
 app.include_router(pagos_gastos.router)
 app.include_router(papelera.router)
+app.include_router(backup_admin.router)
 
 
 @app.get("/")
