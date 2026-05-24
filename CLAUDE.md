@@ -223,6 +223,72 @@ botón "+ Nuevo cliente" de cada organización)
 
 ---
 
+## Versión v2.9 — 2026-05-24 (Resumen ejecutivo + estado de cuenta por cliente)
+
+Sin tag git. Agrega dos pantallas de analisis de alto valor para perfilar
+el sistema como herramienta de analista contable: dashboard ejecutivo del
+mes con comparativa al anterior, y estado de cuenta detallado por cliente
+con aging de pendientes.
+
+### Backend — nuevo router `/analisis`
+- `app/routers/analisis.py` con 3 endpoints:
+  - `GET /analisis/dashboard?anio&mes&org_id` — KPIs del periodo:
+    * conciliado / pendiente (sumas + cantidad de filas)
+    * tasa de conciliacion (% acreditado sobre reportado)
+    * movimientos del banco, cheques cargados, pagos, gastos
+    * variacion % vs mes anterior en cada KPI
+    * top 5 clientes del mes por monto OK
+    * resumen de cheques en cartera (pendientes/acreditados/rechazados)
+    * cheques proximos a vencer en 30 dias (con dias_para_vencer)
+  - `GET /analisis/clientes-aging?org_id` — saldo pendiente por cliente:
+    * total_pendiente (suma de filas no conciliadas)
+    * cheques_pendientes (suma y cantidad en cartera)
+    * total_operativo (planillas + cheques)
+    * buckets de antiguedad: 0-30 / 31-60 / 61-90 / +90 dias
+    * ordenado por total_operativo desc
+  - `GET /analisis/cliente/{id}/estado-cuenta?desde&hasta` — detalle:
+    * resumen del periodo (conciliado, pendiente, cheques, pagos)
+    * planillas con sus filas (status normalizado)
+    * cheques (pendientes/acreditados/rechazados con fechas)
+    * pagos hechos al cliente
+
+### Frontend
+- Nueva pagina `Resumen.tsx` (`/resumen`):
+  * 4 KPI cards grandes (Conciliado / Pendiente / Tasa / Movimientos banco)
+  * 4 sub-KPIs (Cheques, Pagos, Gastos, Diferencia neta)
+  * Variacion % vs mes anterior con flecha verde/roja segun direccion buena
+  * Top 5 clientes con barra de proporcion
+  * Cheques en cartera: 3 boxes (pendientes/acreditados/rechazados)
+  * Lista de cheques proximos a vencer (rojo si <= 7 dias)
+  * Navegacion ← Mes Anio → con flechas
+- Nueva pagina `EstadoCuenta.tsx` (`/clientes/:id/estado-cuenta`):
+  * Header con nombre + CUIT + selector de periodo (30/90/180/365 dias)
+  * 4 KPIs: conciliado, pendiente, cheques pendientes, pagos al cliente
+  * Tabs: Planillas / Cheques / Pagos
+  * Planillas colapsables: cada una abre sus filas con status badge
+  * Color de antiguedad: verde <=30d, ambar <=60d, rojo +60d
+- `Clientes.tsx`: agregado boton "📊 Estado" en cada fila de cliente que
+  lleva a `/clientes/:id/estado-cuenta`.
+- `Layout.tsx`: agregado item de menu "Resumen" en primer lugar.
+- `App.tsx`: rutas registradas, protegidas por auth.
+
+### Por que esta solucion
+- Cero costo extra (Render+Vercel ya pagados, sin servicios nuevos)
+- Aprovecha datos que ya guardamos (planillas, cheques, pagos, asientos)
+- Aporta lo que un analista contable usa diariamente: "que tan bien voy
+  este mes" + "que me debe cada cliente y desde cuando"
+- Endpoint diseñado con joins eficientes (joinedload/selectinload),
+  agregaciones SQL en vez de loops Python
+
+### Lo que no incluye (futuro)
+- Comparativa con N meses atras (solo vs mes inmediato anterior)
+- Export PDF/Excel del estado de cuenta (esta tabulado y se puede
+  copiar/imprimir desde el browser)
+- Reporte de cash flow proyectado (suma cheques por fecha de deposito)
+- Aging tambien para cheques (hoy solo planillas)
+
+---
+
 ## Versión v2.8 — 2026-05-24 (Recuperacion de contraseña por email)
 
 Sin tag git. Agrega el flujo "Olvidé mi contraseña" para que cualquier

@@ -370,6 +370,14 @@ export const Clientes: React.FC = () => {
                                 </p>
                               </div>
                             </button>
+                            <a
+                              href={`/clientes/${cliente.id}/estado-cuenta`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="px-2 py-1 text-[11px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded hover:bg-indigo-200 dark:hover:bg-indigo-900/60 font-medium flex-shrink-0"
+                              title="Ver estado de cuenta del cliente"
+                            >
+                              📊 Estado
+                            </a>
                             <button
                               onClick={(e) => { e.stopPropagation(); abrirAcreditar({ id: cliente.id, nombre: cliente.nombre }) }}
                               className="px-2 py-1 text-[11px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded hover:bg-emerald-200 dark:hover:bg-emerald-900/60 font-medium flex-shrink-0"

@@ -128,6 +128,24 @@ class ApiClient {
     return res.data
   }
 
+  // Analisis / reportes
+  async getDashboard(params?: { anio?: number; mes?: number; org_id?: number }): Promise<any> {
+    const res = await this.client.get('/analisis/dashboard', { params })
+    return res.data
+  }
+
+  async getClientesAging(orgId?: number): Promise<any> {
+    const res = await this.client.get('/analisis/clientes-aging', { params: { org_id: orgId } })
+    return res.data
+  }
+
+  async getEstadoCuentaCliente(clienteId: number, desde?: string, hasta?: string): Promise<any> {
+    const res = await this.client.get(`/analisis/cliente/${clienteId}/estado-cuenta`, {
+      params: { desde, hasta },
+    })
+    return res.data
+  }
+
   // Extractos endpoints
   async uploadExtraco(file: File, banco: string = 'Banco Macro'): Promise<ExtractoBancario> {
     const formData = new FormData()

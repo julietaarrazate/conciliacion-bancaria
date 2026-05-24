@@ -5,6 +5,8 @@ import { apiClient } from '@/services/api'
 import { Login } from '@/pages/Login'
 import { RecuperarPassword } from '@/pages/RecuperarPassword'
 import { RestablecerPassword } from '@/pages/RestablecerPassword'
+import { Resumen } from '@/pages/Resumen'
+import { EstadoCuenta } from '@/pages/EstadoCuenta'
 import { Dashboard } from '@/pages/Dashboard'
 import { Historial } from '@/pages/Historial'
 import { Auditoria } from '@/pages/Auditoria'
@@ -97,7 +99,9 @@ export function App() {
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/resumen" element={<Resumen />} />
           <Route path="/clientes" element={<Clientes />} />
+          <Route path="/clientes/:id/estado-cuenta" element={<EstadoCuenta />} />
           <Route path="/extractos-archivo" element={<ExtractosArchivo />} />
           <Route path="/bulk" element={<Navigate to="/dashboard" replace />} />
           <Route path="/perfil" element={<Perfil />} />
