@@ -16,6 +16,7 @@ from app.middleware.auth import get_current_user, require_superadmin
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_backup_completo
 from app.services.auth import get_password_hash
+from app.services.backup_service import export_org_backup
 
 router = APIRouter(prefix="/admin/organizaciones", tags=["organizaciones"])
 
@@ -151,6 +152,63 @@ def backup_organizacion(
     return StreamingResponse(
         io.BytesIO(xlsx),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/{org_id}/backup-completo")
+def backup_completo_json(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_superadmin)
+):
+    """Descarga backup JSON COMPLETO de la organización.
+
+    Incluye TODO: extractos, planillas, cheques, pagos, gastos, caja,
+    liquidaciones, contabilidad (asientos), auditoría, patrones IA.
+    Las contraseñas NO se incluyen. Es la fuente de verdad para restore.
+    """
+    import json
+    org = db.query(Organizacion).filter(Organizacion.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organización no encontrada")
+
+    data = export_org_backup(db, org_id)
+    payload = json.dumps(data, ensure_ascii=False, indent=2, default=str)
+
+    registrar_log(db, current_user.id, "organizaciones", org_id, "BACKUP_JSON",
+                  {"resumen": data["resumen"]})
+
+    fecha_str = datetime.now().strftime('%Y%m%d_%H%M')
+    filename = f"backup_completo_{org.nombre.replace(' ', '_')}_{fecha_str}.json"
+    return StreamingResponse(
+        io.BytesIO(payload.encode("utf-8")),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/backup-completo-todo")
+def backup_completo_todas_las_orgs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_superadmin)
+):
+    """Descarga backup JSON de TODAS las organizaciones en un solo archivo.
+    Solo para superadmin (Julieta). Útil antes de cambios grandes en el sistema."""
+    import json
+    orgs = db.query(Organizacion).all()
+    todo = {
+        "exportado_at": datetime.now().isoformat(),
+        "total_orgs": len(orgs),
+        "organizaciones": [export_org_backup(db, o.id) for o in orgs],
+    }
+    payload = json.dumps(todo, ensure_ascii=False, indent=2, default=str)
+
+    fecha_str = datetime.now().strftime('%Y%m%d_%H%M')
+    filename = f"backup_sistema_completo_{fecha_str}.json"
+    return StreamingResponse(
+        io.BytesIO(payload.encode("utf-8")),
+        media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
