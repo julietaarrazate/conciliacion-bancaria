@@ -21,6 +21,7 @@ import { OrdenDePago } from '@/pages/OrdenDePago'
 import { Contabilidad } from '@/pages/Contabilidad'
 import { Cheques } from '@/pages/Cheques'
 import { PagosGastos } from '@/pages/PagosGastos'
+import { Papelera } from '@/pages/Papelera'
 import { Layout } from '@/components/Layout'
 import { useThemeStore } from '@/store/theme'
 import '@/styles/index.css'
@@ -116,6 +117,7 @@ export function App() {
           <Route path="/contabilidad" element={<ProtectedRoute permission="manage_users"><Contabilidad /></ProtectedRoute>} />
           <Route path="/cheques" element={<ProtectedRoute permission="reconcile"><Cheques /></ProtectedRoute>} />
           <Route path="/pagos-gastos" element={<ProtectedRoute permission="reconcile"><PagosGastos /></ProtectedRoute>} />
+          <Route path="/papelera" element={<ProtectedRoute permission="manage_users"><Papelera /></ProtectedRoute>} />
           <Route path="/movimientos" element={<Movimientos />} />
           <Route path="/conciliaciones" element={<Conciliaciones />} />
           <Route path="/historial" element={<Historial />} />

@@ -172,6 +172,13 @@ def eliminar_pago(
         raise HTTPException(404, "Pago no encontrado")
     if not current_user.is_superadmin and p.organizacion_id != oid:
         raise HTTPException(403, "Sin acceso")
+
+    # Reverso contable ANTES de borrar (preserva trazabilidad)
+    from app.services.motor_contable import reversar_asientos
+    reversar_asientos(db, modulo="pago", referencia_id=pago_id,
+                      org_id=p.organizacion_id, usuario_id=current_user.id,
+                      motivo=f"Pago #{pago_id} eliminado por {current_user.email}")
+
     db.delete(p)
     db.commit()
     return {"ok": True}
@@ -318,6 +325,13 @@ def eliminar_gasto(
         raise HTTPException(404, "Gasto no encontrado")
     if not current_user.is_superadmin and g.organizacion_id != oid:
         raise HTTPException(403, "Sin acceso")
+
+    # Reverso contable ANTES de borrar (preserva trazabilidad)
+    from app.services.motor_contable import reversar_asientos
+    reversar_asientos(db, modulo="gasto", referencia_id=gasto_id,
+                      org_id=g.organizacion_id, usuario_id=current_user.id,
+                      motivo=f"Gasto #{gasto_id} eliminado por {current_user.email}")
+
     db.delete(g)
     db.commit()
     return {"ok": True}

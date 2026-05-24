@@ -461,3 +461,79 @@ def registrar_planilla(
     except Exception as ex:
         db.rollback()
         logger.warning("Error asiento planilla %s: %s", planilla_id, ex)
+
+
+# ─── Reversión contable ──────────────────────────────────────────────────────
+
+def reversar_asientos(
+    db: Session,
+    modulo: str,
+    referencia_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    motivo: str = "Reverso por baja del registro origen",
+) -> int:
+    """Crea asientos de reverso (debe↔haber invertidos) para los asientos del
+    modulo+referencia dados. NO borra los originales — la trazabilidad queda
+    completa en el libro: el asiento original más su reverso.
+
+    Idempotente: si ya existe un reverso para el mismo origen, no crea otro.
+    Devuelve la cantidad de reversos creados.
+    """
+    try:
+        originales = (
+            db.query(Asiento)
+            .filter(
+                Asiento.modulo == modulo,
+                Asiento.referencia_id == referencia_id,
+                Asiento.organizacion_id == org_id,
+            )
+            .all()
+        )
+        if not originales:
+            return 0
+
+        modulo_reverso = f"{modulo}_reverso"
+        creados = 0
+        for orig in originales:
+            # Idempotencia: no duplicar si ya hay un reverso para este asiento
+            ya_reversado = (
+                db.query(Asiento)
+                .filter(
+                    Asiento.modulo == modulo_reverso,
+                    Asiento.referencia_id == orig.id,
+                    Asiento.organizacion_id == org_id,
+                )
+                .first()
+            )
+            if ya_reversado:
+                continue
+
+            reverso = Asiento(
+                fecha=date.today(),
+                descripcion=f"REVERSO #{orig.id}: {orig.descripcion or ''} — {motivo}",
+                modulo=modulo_reverso,
+                referencia_id=orig.id,
+                organizacion_id=org_id,
+                usuario_id=usuario_id,
+            )
+            db.add(reverso)
+            db.flush()
+
+            # Invertir cada línea del original (debe ↔ haber)
+            for linea in orig.lineas:
+                db.add(AsientoDetalle(
+                    asiento_id=reverso.id,
+                    cuenta_id=linea.cuenta_id,
+                    debe=linea.haber,
+                    haber=linea.debe,
+                ))
+            creados += 1
+
+        if creados:
+            db.commit()
+        return creados
+    except Exception as ex:
+        db.rollback()
+        logger.warning("Error reversando %s/%s: %s", modulo, referencia_id, ex)
+        return 0

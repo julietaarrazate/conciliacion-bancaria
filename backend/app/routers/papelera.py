@@ -115,6 +115,8 @@ def purgar(
     if confirmar != "BORRAR":
         raise HTTPException(400, "Para purgar requiere ?confirmar=BORRAR en la URL")
 
+    from app.services.motor_contable import reversar_asientos
+
     if tipo == "extracto":
         item = db.query(ExtractoBancario).filter(
             ExtractoBancario.id == registro_id,
@@ -123,6 +125,12 @@ def purgar(
         if not item:
             raise HTTPException(404, "Extracto no encontrado en papelera")
         nombre = item.nombre_archivo
+
+        # Reverso contable ANTES de borrar (preserva trazabilidad)
+        reversar_asientos(db, modulo="extracto", referencia_id=registro_id,
+                          org_id=item.organizacion_id, usuario_id=current_user.id,
+                          motivo=f"Extracto purgado de papelera por {current_user.email}")
+
         # Desligar planillas y rows
         db.query(Planilla).filter(Planilla.extracto_id == registro_id)\
           .update({"extracto_id": None}, synchronize_session="fetch")
@@ -149,6 +157,15 @@ def purgar(
         if not item:
             raise HTTPException(404, "Planilla no encontrada en papelera")
         nombre = item.nombre_archivo
+
+        # Reverso contable ANTES de borrar (cubre asiento principal y comision)
+        reversar_asientos(db, modulo="planilla", referencia_id=registro_id,
+                          org_id=item.organizacion_id, usuario_id=current_user.id,
+                          motivo=f"Planilla purgada de papelera por {current_user.email}")
+        reversar_asientos(db, modulo="planilla_comision", referencia_id=registro_id,
+                          org_id=item.organizacion_id, usuario_id=current_user.id,
+                          motivo=f"Planilla purgada de papelera por {current_user.email}")
+
         db.delete(item)
         db.commit()
         registrar_log(db, current_user.id, "planillas", registro_id,

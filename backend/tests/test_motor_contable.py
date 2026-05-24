@@ -253,3 +253,82 @@ def test_partida_doble_siempre_balanceada(db):
         debe  = sum(l.debe  for l in a.lineas)
         haber = sum(l.haber for l in a.lineas)
         assert abs(debe - haber) < 0.01, f"Asiento {a.id} ({a.modulo}) desbalanceado: D={debe} H={haber}"
+
+
+# ─── Reversion contable ──────────────────────────────────────────────────────
+
+def test_reversar_crea_asiento_con_debe_haber_invertidos(db):
+    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", [_mov(1000)])
+    original = _asientos_de(db, "extracto", 1)[0]
+    debe_orig = [l.debe for l in original.lineas]
+    haber_orig = [l.haber for l in original.lineas]
+
+    creados = mc.reversar_asientos(db, "extracto", 1, ORG_ID, usuario_id=1)
+    assert creados == 1
+
+    reversos = db.query(Asiento).filter(Asiento.modulo == "extracto_reverso").all()
+    assert len(reversos) == 1
+    debe_rev = [l.debe for l in reversos[0].lineas]
+    haber_rev = [l.haber for l in reversos[0].lineas]
+    # Lo que era debe ahora es haber y viceversa
+    assert sorted(debe_rev) == sorted(haber_orig)
+    assert sorted(haber_rev) == sorted(debe_orig)
+
+
+def test_reversar_es_idempotente(db):
+    """Llamar reversar dos veces no debe crear dos reversos."""
+    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", [_mov(1000)])
+    mc.reversar_asientos(db, "extracto", 1, ORG_ID, usuario_id=1)
+    creados_2 = mc.reversar_asientos(db, "extracto", 1, ORG_ID, usuario_id=1)
+    assert creados_2 == 0
+    assert len(db.query(Asiento).filter(Asiento.modulo == "extracto_reverso").all()) == 1
+
+
+def test_reversar_sin_asientos_originales_no_hace_nada(db):
+    """Reversar algo que nunca tuvo asiento debe devolver 0 sin error."""
+    creados = mc.reversar_asientos(db, "pago", 9999, ORG_ID, usuario_id=1)
+    assert creados == 0
+
+
+def test_original_mas_reverso_neto_es_cero(db):
+    """Suma de original + reverso: el efecto neto sobre cada cuenta es 0."""
+    mc.registrar_planilla(db, 1, ORG_ID, 1, "Green", "x.xlsx",
+                          [_row(1000)], date(2026, 5, 23))
+    mc.reversar_asientos(db, "planilla", 1, ORG_ID, usuario_id=1)
+
+    # Sumar todos los movimientos de cada cuenta
+    saldos_por_cuenta: dict = {}
+    for a in db.query(Asiento).filter(Asiento.organizacion_id == ORG_ID).all():
+        for l in a.lineas:
+            saldos_por_cuenta.setdefault(l.cuenta_id, 0.0)
+            saldos_por_cuenta[l.cuenta_id] += (l.debe - l.haber)
+
+    for cuenta_id, saldo in saldos_por_cuenta.items():
+        assert abs(saldo) < 0.01, f"Cuenta {cuenta_id} quedó con saldo {saldo} (esperaba 0)"
+
+
+def test_reverso_mantiene_invariante_partida_doble(db):
+    """El asiento de reverso también debe tener debe == haber."""
+    fecha = date(2026, 5, 23)
+    mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=2500, comision=100, fecha=fecha)
+    mc.reversar_asientos(db, "cheque_carga", 1, ORG_ID, usuario_id=1)
+    mc.reversar_asientos(db, "cheque_comision", 1, ORG_ID, usuario_id=1)
+
+    reversos = db.query(Asiento).filter(Asiento.modulo.like("%_reverso")).all()
+    assert len(reversos) == 2
+    for r in reversos:
+        debe = sum(l.debe for l in r.lineas)
+        haber = sum(l.haber for l in r.lineas)
+        assert abs(debe - haber) < 0.01
+
+
+def test_reverso_referencia_al_asiento_original(db):
+    """Trazabilidad: el reverso debe apuntar al asiento original via referencia_id."""
+    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", [_mov(500)])
+    original = _asientos_de(db, "extracto", 1)[0]
+
+    mc.reversar_asientos(db, "extracto", 1, ORG_ID, usuario_id=1)
+    reverso = db.query(Asiento).filter(Asiento.modulo == "extracto_reverso").first()
+
+    assert reverso.referencia_id == original.id
+    assert "REVERSO" in (reverso.descripcion or "")

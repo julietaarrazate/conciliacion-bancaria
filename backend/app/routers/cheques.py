@@ -253,6 +253,16 @@ def eliminar_cheque(
         raise HTTPException(403, "Sin acceso")
     if c.estado != "pendiente":
         raise HTTPException(400, "Solo se pueden eliminar cheques pendientes")
+
+    # Reverso contable ANTES de borrar (preserva trazabilidad de la carga)
+    from app.services.motor_contable import reversar_asientos
+    reversar_asientos(db, modulo="cheque_carga", referencia_id=cheque_id,
+                      org_id=c.organizacion_id, usuario_id=current_user.id,
+                      motivo=f"Cheque #{cheque_id} eliminado por {current_user.email}")
+    reversar_asientos(db, modulo="cheque_comision", referencia_id=cheque_id,
+                      org_id=c.organizacion_id, usuario_id=current_user.id,
+                      motivo=f"Cheque #{cheque_id} eliminado por {current_user.email}")
+
     db.delete(c)
     db.commit()
     return {"ok": True}
