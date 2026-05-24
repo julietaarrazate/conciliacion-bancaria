@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { apiClient } from '@/services/api'
 
@@ -66,8 +67,14 @@ const fmtFecha = (s: string) => {
 }
 
 export const Clientes: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [orgs, setOrgs] = useState<OrgData[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Foto compartida desde WhatsApp para referenciar al acreditar
+  const [fotoRef, setFotoRef] = useState<string | null>(null)
+  const [fotoRefNombre, setFotoRefNombre] = useState<string>('')
+  const [fotoRefVisible, setFotoRefVisible] = useState(true)
   const [openOrg, setOpenOrg] = useState<Record<number, boolean>>({})
   const [openCli, setOpenCli] = useState<Record<string, boolean>>({})
   const [openMes, setOpenMes] = useState<Record<string, boolean>>({})
@@ -170,6 +177,31 @@ export const Clientes: React.FC = () => {
 
   useEffect(() => { cargar() }, [])
 
+  // Detectar comprobante compartido desde /compartir
+  useEffect(() => {
+    if (searchParams.get('compartido') !== 'acreditar') return
+    const archivosRaw = sessionStorage.getItem('compartido:archivos')
+    if (archivosRaw) {
+      try {
+        const archivos = JSON.parse(archivosRaw) as { name: string; type: string; dataUrl: string }[]
+        const imagen = archivos.find(a => a.type.startsWith('image/')) || archivos[0]
+        if (imagen) {
+          setFotoRef(imagen.dataUrl)
+          setFotoRefNombre(imagen.name || 'comprobante')
+          setFotoRefVisible(true)
+        }
+      } catch {}
+    }
+    sessionStorage.removeItem('compartido:destino')
+    sessionStorage.removeItem('compartido:archivos')
+    sessionStorage.removeItem('compartido:titulo')
+    sessionStorage.removeItem('compartido:texto')
+    sessionStorage.removeItem('compartido:ts')
+    const sp = new URLSearchParams(searchParams)
+    sp.delete('compartido')
+    setSearchParams(sp, { replace: true })
+  }, [searchParams, setSearchParams])
+
   const handleGuardar = async (id: number, clienteNombre: string) => {
     setSavingId(id)
     setMsg('')
@@ -233,6 +265,30 @@ export const Clientes: React.FC = () => {
           Carpetas de conciliaciones organizadas por organización · cliente · mes
         </p>
       </div>
+
+      {/* Panel de referencia: foto compartida desde WhatsApp */}
+      {fotoRef && fotoRefVisible && (
+        <div className="mb-3 border border-indigo-500/40 bg-indigo-500/10 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2">
+            <span className="text-xs text-indigo-300 font-medium">
+              💸 Comprobante recibido · tocá un cliente y luego "Acreditar"
+            </span>
+            <button onClick={() => setFotoRefVisible(false)} className="text-indigo-400 hover:text-indigo-200 text-lg leading-none">✕</button>
+          </div>
+          <img
+            src={fotoRef}
+            alt={fotoRefNombre}
+            className="w-full max-h-48 object-contain bg-black/20"
+            onClick={() => {
+              const w = window.open()
+              if (w) { w.document.write(`<img src="${fotoRef}" style="max-width:100%;height:auto">`) }
+            }}
+          />
+          <div className="px-3 py-1.5 text-[11px] text-indigo-400/70">
+            {fotoRefNombre} · tocá la imagen para ampliar
+          </div>
+        </div>
+      )}
 
       {msg && (
         <div className={`mb-3 px-3 py-2 rounded text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'}`}>
@@ -413,6 +469,15 @@ export const Clientes: React.FC = () => {
               </div>
               <button onClick={cerrarAcreditar} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
             </div>
+
+            {/* Foto de referencia dentro del modal si hay comprobante compartido */}
+            {fotoRef && (
+              <div className="mb-3 rounded-lg overflow-hidden border border-indigo-500/30 bg-black/20 cursor-pointer"
+                onClick={() => { const w = window.open(); if (w) w.document.write(`<img src="${fotoRef}" style="max-width:100%;height:auto">`) }}>
+                <img src={fotoRef} alt="comprobante" className="w-full max-h-32 object-contain" />
+                <div className="px-2 py-1 text-[10px] text-indigo-400/70">Comprobante compartido · tocá para ampliar</div>
+              </div>
+            )}
 
             <div className="space-y-2 mb-3">
               <p className="text-[11px] text-gray-500 dark:text-gray-400 -mt-1 mb-1">

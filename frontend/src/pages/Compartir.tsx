@@ -157,6 +157,21 @@ export const Compartir: React.FC = () => {
         </button>
 
         <button
+          onClick={() => irA('acreditar', '/clientes?compartido=acreditar')}
+          disabled={files.length === 0}
+          className="w-full flex items-center justify-between bg-indigo-600/20 hover:bg-indigo-600/30 disabled:opacity-40 disabled:cursor-not-allowed border border-indigo-500/40 rounded px-4 py-3 text-left transition"
+        >
+          <span className="flex items-center gap-3">
+            <span className="text-2xl">💸</span>
+            <span>
+              <div className="text-indigo-200 font-medium">Acreditar en extracto</div>
+              <div className="text-xs text-indigo-300/70">Comprobante de transferencia de cliente</div>
+            </span>
+          </span>
+          <span className="text-indigo-400">→</span>
+        </button>
+
+        <button
           onClick={() => irA('pago', '/pagos-gastos?compartido=pago')}
           disabled={files.length === 0}
           className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 rounded px-4 py-3 text-left transition"
