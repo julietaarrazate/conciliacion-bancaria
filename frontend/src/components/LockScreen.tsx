@@ -9,6 +9,8 @@ const MAX_ATTEMPTS = 5
 
 export const LockScreen: React.FC = () => {
   const unlock = useLockStore(s => s.unlock)
+  const biometricEnabled = useLockStore(s => s.biometricEnabled)
+  const unlockBiometric = useLockStore(s => s.unlockBiometric)
   const logout = useAuthStore(s => s.logout)
   const user = useAuthStore(s => s.user)
   const navigate = useNavigate()
@@ -16,6 +18,23 @@ export const LockScreen: React.FC = () => {
   const [shake, setShake] = useState(false)
   const [attempts, setAttempts] = useState(0)
   const [checking, setChecking] = useState(false)
+  const [bioTried, setBioTried] = useState(false)
+  const [bioRunning, setBioRunning] = useState(false)
+
+  // Auto-prompt biometric al abrir el lock screen (una sola vez)
+  useEffect(() => {
+    if (!biometricEnabled || bioTried) return
+    setBioTried(true)
+    setBioRunning(true)
+    unlockBiometric().finally(() => setBioRunning(false))
+  }, [biometricEnabled, bioTried, unlockBiometric])
+
+  const tryBiometric = async () => {
+    if (bioRunning) return
+    setBioRunning(true)
+    await unlockBiometric()
+    setBioRunning(false)
+  }
 
   useEffect(() => {
     if (pin.length !== PIN_LEN || checking) return
@@ -83,6 +102,23 @@ export const LockScreen: React.FC = () => {
           <p className="text-center text-xs text-red-500 dark:text-red-400 -mt-4">
             PIN incorrecto · {MAX_ATTEMPTS - attempts} intento{MAX_ATTEMPTS - attempts !== 1 ? 's' : ''} restante{MAX_ATTEMPTS - attempts !== 1 ? 's' : ''}
           </p>
+        )}
+
+        {biometricEnabled && (
+          <button
+            onClick={tryBiometric}
+            disabled={bioRunning}
+            className="mx-auto flex flex-col items-center gap-1.5 text-ml-text-soft dark:text-zinc-500 hover:text-ml-blue dark:hover:text-ml-green disabled:opacity-50 transition-colors group"
+          >
+            <span className="w-14 h-14 rounded-full border-2 border-current flex items-center justify-center group-active:scale-95 transition-transform">
+              <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.864 4.243A7.973 7.973 0 0112 3c2.21 0 4.21.895 5.657 2.343M3.873 9A8.97 8.97 0 003 12.001c0 1.652.42 3.206 1.157 4.563M7 21l3-3m4 3l-3-3m-2.5-7.5a3.5 3.5 0 117 0c0 2.485-1.5 5.5-3.5 7.5" />
+              </svg>
+            </span>
+            <span className="text-[11px] font-medium">
+              {bioRunning ? 'Esperando…' : 'Usar biometría'}
+            </span>
+          </button>
         )}
 
         <div className="grid grid-cols-3 gap-3 max-w-[260px] mx-auto">

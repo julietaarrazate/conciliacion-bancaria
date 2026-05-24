@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuthStore } from '@/store/auth'
-import { useLockStore } from '@/store/lock'
+import { useLockStore, isBiometricAvailable } from '@/store/lock'
 import { apiClient } from '@/services/api'
 import { toast } from '@/store/toast'
 
@@ -24,10 +24,32 @@ export const Perfil: React.FC = () => {
   const pinEnabled = useLockStore(s => s.enabled)
   const setupPin = useLockStore(s => s.setupPin)
   const removePin = useLockStore(s => s.removePin)
+  const biometricEnabled = useLockStore(s => s.biometricEnabled)
+  const enrollBiometric = useLockStore(s => s.enrollBiometric)
+  const disableBiometric = useLockStore(s => s.disableBiometric)
   const [pinModal, setPinModal] = useState<'activar' | 'desactivar' | null>(null)
   const [pin1, setPin1] = useState('')
   const [pin2, setPin2] = useState('')
   const [pinErr, setPinErr] = useState('')
+  const [bioAvailable, setBioAvailable] = useState(false)
+  const [bioBusy, setBioBusy] = useState(false)
+
+  useEffect(() => {
+    isBiometricAvailable().then(setBioAvailable)
+  }, [])
+
+  const handleActivarBio = async () => {
+    setBioBusy(true)
+    const r = await enrollBiometric()
+    setBioBusy(false)
+    if (r.ok) toast.success('Biometría activada')
+    else toast.error(r.error || 'No se pudo activar la biometría')
+  }
+
+  const handleDesactivarBio = () => {
+    disableBiometric()
+    toast.info('Biometría desactivada')
+  }
 
   const handleActivarPin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -172,6 +194,37 @@ export const Perfil: React.FC = () => {
           <button onClick={() => { setPinModal('activar'); setPin1(''); setPin2(''); setPinErr('') }} className="btn-yellow">
             Activar bloqueo con PIN
           </button>
+        )}
+
+        {/* Biometría — sólo si hay PIN activo y el dispositivo soporta */}
+        {pinEnabled && bioAvailable && (
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-ml-dark-border">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <p className="text-sm font-semibold dark:text-white">Huella / Face ID</p>
+                <p className="text-xs text-ml-text-soft dark:text-zinc-500 mt-0.5">
+                  Desbloqueá la app con la biometría del dispositivo en vez de tipear el PIN.
+                </p>
+              </div>
+              <span className={`badge ${biometricEnabled ? 'badge-ok' : 'badge-neutral'} shrink-0`}>
+                {biometricEnabled ? 'Activada' : 'Desactivada'}
+              </span>
+            </div>
+            {biometricEnabled ? (
+              <button onClick={handleDesactivarBio} className="btn-secondary">
+                Desactivar biometría
+              </button>
+            ) : (
+              <button onClick={handleActivarBio} disabled={bioBusy} className="btn-yellow">
+                {bioBusy ? 'Registrando...' : 'Activar biometría'}
+              </button>
+            )}
+          </div>
+        )}
+        {pinEnabled && !bioAvailable && (
+          <p className="mt-3 text-xs text-ml-text-soft dark:text-zinc-600 italic">
+            Tu dispositivo o navegador no soporta biometría (huella/Face ID).
+          </p>
         )}
       </div>
 
