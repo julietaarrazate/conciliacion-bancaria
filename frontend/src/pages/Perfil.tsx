@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { useAuthStore } from '@/store/auth'
+import { useLockStore } from '@/store/lock'
 import { apiClient } from '@/services/api'
+import { toast } from '@/store/toast'
 
 export const Perfil: React.FC = () => {
   const user = useAuthStore(s => s.user)
@@ -17,6 +19,34 @@ export const Perfil: React.FC = () => {
   const [showPw, setShowPw] = useState(false)
   const [pwMsg, setPwMsg] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
+
+  // PIN de bloqueo
+  const pinEnabled = useLockStore(s => s.enabled)
+  const setupPin = useLockStore(s => s.setupPin)
+  const removePin = useLockStore(s => s.removePin)
+  const [pinModal, setPinModal] = useState<'activar' | 'desactivar' | null>(null)
+  const [pin1, setPin1] = useState('')
+  const [pin2, setPin2] = useState('')
+  const [pinErr, setPinErr] = useState('')
+
+  const handleActivarPin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPinErr('')
+    if (pin1.length !== 4 || !/^\d{4}$/.test(pin1)) { setPinErr('El PIN debe tener 4 dígitos'); return }
+    if (pin1 !== pin2) { setPinErr('Los PINs no coinciden'); return }
+    await setupPin(pin1)
+    toast.success('Bloqueo con PIN activado')
+    setPinModal(null); setPin1(''); setPin2('')
+  }
+
+  const handleDesactivarPin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPinErr('')
+    const ok = await removePin(pin1)
+    if (!ok) { setPinErr('PIN incorrecto'); return }
+    toast.success('Bloqueo con PIN desactivado')
+    setPinModal(null); setPin1('')
+  }
 
   const handleSavePerfil = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -115,6 +145,93 @@ export const Perfil: React.FC = () => {
           </button>
         </form>
       </div>
+
+      {/* Bloqueo con PIN */}
+      <div className="card mt-4">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-base font-semibold dark:text-white">Bloqueo con PIN</h2>
+            <p className="text-xs text-ml-text-soft dark:text-zinc-500 mt-1">
+              Pide un PIN de 4 dígitos cuando minimices la app o pasen 5 minutos sin actividad. La sesión se mantiene.
+            </p>
+          </div>
+          <span className={`badge ${pinEnabled ? 'badge-ok' : 'badge-neutral'} shrink-0`}>
+            {pinEnabled ? 'Activado' : 'Desactivado'}
+          </span>
+        </div>
+        {pinEnabled ? (
+          <div className="flex gap-2">
+            <button onClick={() => { setPinModal('desactivar'); setPin1(''); setPinErr('') }} className="btn-secondary">
+              Desactivar
+            </button>
+            <button onClick={() => { setPinModal('activar'); setPin1(''); setPin2(''); setPinErr('') }} className="btn-ghost">
+              Cambiar PIN
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => { setPinModal('activar'); setPin1(''); setPin2(''); setPinErr('') }} className="btn-yellow">
+            Activar bloqueo con PIN
+          </button>
+        )}
+      </div>
+
+      {/* Modal PIN */}
+      {pinModal && (
+        <div className="fixed inset-0 bg-black/50 z-[150] flex items-center justify-center p-3" onClick={() => setPinModal(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-ml-dark-surface rounded-2xl p-5 w-full max-w-sm">
+            <h3 className="text-lg font-bold dark:text-white mb-1">
+              {pinModal === 'activar' ? 'Configurar PIN' : 'Desactivar PIN'}
+            </h3>
+            <p className="text-xs text-ml-text-soft dark:text-zinc-500 mb-4">
+              {pinModal === 'activar' ? 'Elegí un PIN numérico de 4 dígitos' : 'Ingresá tu PIN actual para confirmar'}
+            </p>
+            {pinErr && (
+              <div className="mb-3 px-3 py-2 rounded-lg text-sm bg-red-50 border border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-800/40 dark:text-red-400">
+                {pinErr}
+              </div>
+            )}
+            <form onSubmit={pinModal === 'activar' ? handleActivarPin : handleDesactivarPin} className="space-y-3">
+              <div>
+                <label className="label">{pinModal === 'activar' ? 'Nuevo PIN' : 'PIN actual'}</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="\d{4}"
+                  maxLength={4}
+                  autoFocus
+                  className="input-field text-center text-2xl tracking-[0.5em] font-mono"
+                  value={pin1}
+                  onChange={e => setPin1(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="••••"
+                />
+              </div>
+              {pinModal === 'activar' && (
+                <div>
+                  <label className="label">Repetí el PIN</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="\d{4}"
+                    maxLength={4}
+                    className="input-field text-center text-2xl tracking-[0.5em] font-mono"
+                    value={pin2}
+                    onChange={e => setPin2(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="••••"
+                  />
+                </div>
+              )}
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setPinModal(null)} className="btn-secondary flex-1">
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-yellow flex-1">
+                  {pinModal === 'activar' ? 'Activar' : 'Desactivar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

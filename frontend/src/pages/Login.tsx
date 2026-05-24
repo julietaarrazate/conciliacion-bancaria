@@ -2,11 +2,13 @@ import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
+import { useLockStore } from '@/store/lock'
 import { CuadraLogo } from '@/components/CuadraLogo'
 
 export const Login: React.FC = () => {
   const navigate = useNavigate()
   const { setUser, setToken } = useAuthStore()
+  const forceUnlock = useLockStore(s => s.forceUnlock)
 
   const [formData, setFormData] = useState({
     email: '',
@@ -25,6 +27,7 @@ export const Login: React.FC = () => {
       const response = await apiClient.login(formData.email, formData.password)
       setUser(response.user)
       setToken(response.access_token)
+      forceUnlock()
       navigate('/dashboard')
     } catch (err: any) {
       const detail = err.response?.data?.detail
@@ -40,6 +43,7 @@ export const Login: React.FC = () => {
             const response2 = await apiClient.login(formData.email, formData.password)
             setUser(response2.user)
             setToken(response2.access_token)
+            forceUnlock()
             setWaking(false)
             navigate('/dashboard')
             return
