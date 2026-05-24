@@ -106,7 +106,10 @@ export const Perfil: React.FC = () => {
 
   return (
     <div className="p-4 md:p-8 max-w-lg mx-auto">
-      <h1 className="text-xl md:text-2xl font-bold dark:text-white mb-6">Mi perfil</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl md:text-2xl font-bold dark:text-white">Mi perfil</h1>
+        <span className="text-[10px] font-mono text-ml-text-soft dark:text-zinc-600">build v3.0</span>
+      </div>
 
       {/* Datos personales */}
       <div className="card mb-4">
