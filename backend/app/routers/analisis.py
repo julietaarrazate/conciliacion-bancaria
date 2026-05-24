@@ -6,7 +6,7 @@ Tres bloques:
 - Estado de cuenta por cliente (vista detallada de un cliente)
 
 Todos los endpoints filtran por organizacion_id del usuario logueado
-(Caneland por default; superadmin puede pasar otro con ?org_id=N).
+(org principal por default; superadmin puede pasar otro con ?org_id=N).
 
 Filosofia de los KPIs:
 - "conciliado" = filas de planilla con status='ok'

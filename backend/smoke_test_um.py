@@ -28,7 +28,7 @@ def main():
     print("=" * 60)
 
     # login
-    r = requests.post(f"{BASE_URL}/auth/login", json={"email": "admin@caneland.com", "password": "admin123"})
+    r = requests.post(f"{BASE_URL}/auth/login", json={"email": "admin@demo.com", "password": "admin123"})
     if not r.ok:
         fail(f"login: {r.text}")
     token = r.json()["access_token"]

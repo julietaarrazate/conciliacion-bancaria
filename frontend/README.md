@@ -196,4 +196,4 @@ npm run build
 
 ## Licencia
 
-Privado - Caneland SA
+Privado - Organización A

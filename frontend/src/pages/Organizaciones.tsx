@@ -181,7 +181,6 @@ export const Organizaciones: React.FC = () => {
                         {org.plan}
                       </span>
                       {!org.activo && <span className="text-[10px] text-red-500">inactiva</span>}
-                      {org.id === 1 && <span className="text-[10px] text-blue-500 font-mono">caneland</span>}
                     </div>
                     <p className="text-xs text-gray-400 dark:text-zinc-500 font-mono mt-0.5">
                       match: {(org.configuracion?.match_rules || []).join(' + ')} ·

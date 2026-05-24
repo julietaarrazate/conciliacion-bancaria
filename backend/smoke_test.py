@@ -165,7 +165,7 @@ def main():
 
     wait_for_backend()
 
-    token = login("admin@caneland.com", "admin123")
+    token = login("admin@demo.com", "admin123")
     get_me(token)
 
     extracto_id = upload_extracto(token, EXTRACTO_PATH)

@@ -163,7 +163,7 @@ export const Clientes: React.FC = () => {
           }))
           data = [{
             id: 1,
-            nombre: 'Caneland SA',
+            nombre: 'Organización A',
             total_clientes: clientesViejos.length,
             clientes: clientesViejos,
           }]

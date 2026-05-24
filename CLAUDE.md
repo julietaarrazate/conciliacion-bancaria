@@ -83,7 +83,7 @@ Diseño: Linear-inspired, Inter font, dark mode profundo (#0B0B0F)
                  pagos_gastos, contabilidad
   /app/services — conciliacion.py, aprendizaje.py, excel_export.py,
                   extracto_merger.py, excel_parser.py, motor_contable.py
-  seed.py — Crea org Caneland + usuarios
+  seed.py — Crea org A + usuarios
 
 /frontend — React 18 + TypeScript + Vite + TailwindCSS + PWA
   /src/pages — Dashboard (tabs: Individual + Carga masiva, campo Comisión%),
@@ -140,12 +140,12 @@ Ver GET /auditoria/patrones y GET /auditoria/insights.
 
 ## Multi-tenant
 
-- Caneland SA = organizacion_id=1 (nunca cambia)
+- Organización A = organizacion_id=1 (nunca cambia)
 - Julieta es superadmin: ve y gestiona todas las orgs
 - Config de flujo por org (JSON): match_rules, tolerancia, estados, comisiones
 - Switcher de org en el sidebar (solo superadmin)
 
-Config Caneland (NO modificar):
+Config Organización A (NO modificar):
   match_rules: ["monto_cuit"]
   tolerancia_monto: 0.01
   dias_tolerancia_fecha: 5
@@ -159,7 +159,7 @@ Para orgs con comisiones y cierre de período.
 Flujo: Generar borrador → Aprobar → Marcar pagada
 Excel 3 hojas: resumen ejecutivo, detalle por cliente, log revisiones.
 POST /liquidaciones/periodos/cerrar valida EN_REVISION antes de cerrar.
-Caneland: requiere_cierre_periodo: false — no le afecta.
+Organización A: requiere_cierre_periodo: false — no le afecta.
 
 ---
 
@@ -215,7 +215,7 @@ Caneland: requiere_cierre_periodo: false — no le afecta.
 
 ---
 
-## Clientes configurados (Caneland)
+## Clientes configurados (Organización A)
 
 Green, Tucu, David, Smt, Gwinn, Innova, Camparo, Alojando, Pinares, Paraguay
 (la lista crece — se pueden crear nuevos desde la pantalla /clientes con el
@@ -686,7 +686,7 @@ Cambios incorporados en esta versión:
   cacheados viejos
 - POST /clientes crea cliente nuevo (dedup case-insensitive por org)
 - Pagina /clientes con 4 niveles desplegables y boton "+ Nuevo cliente"
-- "Caneland SA" siempre visible como carpeta raiz
+- "Organización A" siempre visible como carpeta raiz
 
 ### Editor de estados
 - Boton "Revisar y editar estados" en Dashboard despues de conciliar
@@ -717,7 +717,7 @@ Cambios incorporados en esta versión:
 ## IMPORTANTE para Claude
 
 - Todos los cambios van DIRECTO a GitHub. No hay nada en la PC local.
-- Caneland NUNCA se modifica — todos los cambios son aditivos.
+- Organización A NUNCA se modifica — todos los cambios son aditivos.
 - El repo se clona en /tmp para trabajar y se limpia al terminar.
 - Para deployar Render: usar curl con la API key arriba.
 - El token de GitHub NO tiene scope "workflow" — no se pueden crear GitHub Actions.

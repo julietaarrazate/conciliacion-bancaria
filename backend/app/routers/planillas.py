@@ -24,12 +24,12 @@ router = APIRouter(prefix="/planillas", tags=["planillas"])
 
 
 def _get_org_config(db: Session, organizacion_id: int) -> dict:
-    """Obtiene la config de la org. Si no existe, retorna config default (Caneland)."""
-    from app.services.conciliacion import CONFIG_CANELAND
+    """Obtiene la config de la org. Si no existe, retorna config default."""
+    from app.services.conciliacion import CONFIG_DEFAULT_ORG
     org = db.query(Organizacion).filter(Organizacion.id == organizacion_id).first()
     if org and org.configuracion:
         return org.configuracion
-    return CONFIG_CANELAND
+    return CONFIG_DEFAULT_ORG
 
 
 @router.post("/upload", response_model=PlanillaResponse)

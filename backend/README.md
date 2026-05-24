@@ -196,4 +196,4 @@ pytest tests/ -v
 
 ## Licencia
 
-Privado - Caneland SA
+Privado - Organización A

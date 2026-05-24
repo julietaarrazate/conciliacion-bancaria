@@ -1,7 +1,7 @@
 """Tests para el algoritmo de conciliación.
 
 Cubre las funciones puras (parseo de importes, normalización de CUIT, extracción)
-y los casos básicos de matching con la config default de Caneland.
+y los casos básicos de matching con la config default.
 """
 
 import pytest
@@ -12,7 +12,7 @@ from app.services.conciliacion import (
     norm_cuit,
     extraer_cuit,
     extraer_cbu,
-    CONFIG_CANELAND,
+    CONFIG_DEFAULT_ORG,
 )
 from app.models.extracto import MovimientoBanco
 
@@ -63,7 +63,7 @@ def test_buscar_match_monto_unico_acredita_directo():
         fecha_planilla=None,
         movimientos=[mov],
         procesados=set(),
-        org_config=CONFIG_CANELAND,
+        org_config=CONFIG_DEFAULT_ORG,
     )
     assert resultado is not None and resultado.id == 1
     assert status == "ok"
@@ -79,7 +79,7 @@ def test_buscar_match_monto_inexistente():
         fecha_planilla=None,
         movimientos=[mov],
         procesados=set(),
-        org_config=CONFIG_CANELAND,
+        org_config=CONFIG_DEFAULT_ORG,
     )
     assert resultado is None
     assert "no" in status.lower() or "está" in status.lower()
@@ -96,7 +96,7 @@ def test_buscar_match_ya_procesado_no_se_duplica():
         fecha_planilla=None,
         movimientos=[mov],
         procesados={1},  # ya usado
-        org_config=CONFIG_CANELAND,
+        org_config=CONFIG_DEFAULT_ORG,
     )
     assert resultado is None
 
@@ -117,7 +117,7 @@ def test_buscar_match_monto_duplicado_exige_identidad():
         fecha_planilla=None,
         movimientos=movimientos,
         procesados=set(),
-        org_config=CONFIG_CANELAND,
+        org_config=CONFIG_DEFAULT_ORG,
     )
     assert resultado is None, "no debe acreditar sin identidad cuando el monto se repite"
 
@@ -136,7 +136,7 @@ def test_buscar_match_monto_duplicado_con_cuit_correcto_acredita():
         fecha_planilla=None,
         movimientos=movimientos,
         procesados=set(),
-        org_config=CONFIG_CANELAND,
+        org_config=CONFIG_DEFAULT_ORG,
     )
     assert resultado is not None
     assert resultado.id == 2

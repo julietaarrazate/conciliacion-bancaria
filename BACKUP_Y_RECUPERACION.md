@@ -110,7 +110,7 @@ Este es el backup que guardás **fuera** de Neon, por si pasa algo grave con la 
 ```bash
 curl -X GET "https://conciliacion-api.onrender.com/admin/organizaciones/1/backup-completo" \
   -H "Authorization: Bearer TU_TOKEN_JWT" \
-  -o "backup_caneland_$(date +%Y%m%d).json"
+  -o "backup_org_$(date +%Y%m%d).json"
 ```
 
 **Para TODO el sistema** (solo superadmin):

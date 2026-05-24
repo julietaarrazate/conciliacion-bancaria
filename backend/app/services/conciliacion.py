@@ -1,7 +1,7 @@
 """
 Algoritmo de conciliacion bancaria — version mejorada.
 Soporta configuracion por organizacion (multi-tenant).
-Caneland sigue usando el algoritmo original (monto + CUIT/titular).
+Organización A sigue usando el algoritmo original (monto + CUIT/titular).
 """
 
 import re
@@ -356,8 +356,8 @@ def buscar_match(
     return None, f"no coincide ({n} mov. del mismo monto — revisar CUIT/CBU/titular)"
 
 
-# Config por defecto (Caneland — comportamiento original)
-CONFIG_CANELAND = {
+# Config por defecto (org principal — comportamiento original)
+CONFIG_DEFAULT_ORG = {
     "match_rules": ["monto_cuit"],
     "tolerancia_monto": 0.01,
     "dias_tolerancia_fecha": 5,  # cubre fin de semana + feriado (vie→lun + 1 dia)
@@ -378,7 +378,7 @@ def conciliar_planilla(
 ) -> dict:
     from datetime import datetime, timedelta
 
-    config = org_config or CONFIG_CANELAND
+    config = org_config or CONFIG_DEFAULT_ORG
     estados_habilitados = config.get("estados_habilitados", [])
 
     procesados = set()

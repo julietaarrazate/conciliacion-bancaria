@@ -154,7 +154,7 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error normalizando mes: %s", ex)
 
-    # 3. Backfill organizacion_id=1 en tablas existentes (Caneland)
+    # 3. Backfill organizacion_id=1 en tablas existentes (org principal)
     backfills = [
         "UPDATE users SET organizacion_id=1 WHERE organizacion_id IS NULL",
         "UPDATE clientes SET organizacion_id=1 WHERE organizacion_id IS NULL",
@@ -195,14 +195,14 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error calculando fingerprints: %s", ex)
 
-    # 5. Seed Organizacion Caneland (id=1)
+    # 5. Seed Organizacion principal (id=1)
     try:
         from app.database import SessionLocal as SL
         from app.models.organizacion import Organizacion as Org, CONFIG_DEFAULT
         db = SL()
-        caneland = db.query(Org).filter(Org.id == 1).first()
-        if not caneland:
-            config_caneland = {
+        org_principal = db.query(Org).filter(Org.id == 1).first()
+        if not org_principal:
+            config_org = {
                 "match_rules": ["monto_cuit"],
                 "tolerancia_monto": 0.01,
                 "dias_tolerancia_fecha": 5,
@@ -211,9 +211,9 @@ def _init_db():
                 "notificaciones_whatsapp": False,
                 "exportar_formato_contador": "excel_actual"
             }
-            db.add(Org(id=1, nombre="Caneland SA", plan="pro", configuracion=config_caneland, activo=True))
+            db.add(Org(id=1, nombre="Organización A", plan="pro", configuracion=config_org, activo=True))
             db.commit()
-            logger.info("Organización Caneland SA creada (id=1)")
+            logger.info("Organización A creada (id=1)")
         db.close()
     except Exception as ex:
         logger.warning("Error seed org: %s", ex)
@@ -400,14 +400,6 @@ def _init_db():
             db.commit()
         else:
             logger.warning("SUPERADMIN_PASSWORD no definida — superadmin no creado")
-
-        # Migrar admin@caneland.com → admin@julieta.com si existe el viejo
-        old = db.query(U).filter(U.email == "admin@caneland.com").first()
-        if old and not db.query(U).filter(U.email == "admin@julieta.com").first():
-            old.email = "admin@julieta.com"
-            old.full_name = "Administrador"
-            db.commit()
-            logger.info("admin@caneland.com migrado a admin@julieta.com")
 
         # Usuarios demo — solo en entorno de desarrollo
         if settings.debug:

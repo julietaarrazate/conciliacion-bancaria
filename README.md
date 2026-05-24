@@ -83,7 +83,7 @@ conciliacion-bancaria/
 3. Ejecutar conciliación (algoritmo configurable por organización)
 4. Revisar resultados y descargar Excel acreditado
 
-### Estados de Fila (Caneland)
+### Estados de Fila (Organización A)
 - **ok** — Coincidencia exacta encontrada
 - **no está** — Monto no existe en banco
 - **duplicado** — Ya fue acreditado antes

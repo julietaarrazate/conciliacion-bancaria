@@ -16,8 +16,8 @@ python seed.py
 ```
 
 Esto crea:
-- `admin@caneland.com` / `admin123` (rol **admin**)
-- `operador@caneland.com` / `operador123` (rol **operador**)
+- `admin@demo.com` / `admin123` (rol **admin**)
+- `operador@demo.com` / `operador123` (rol **operador**)
 
 ## 3. Levantar el server
 
@@ -34,7 +34,7 @@ Documentación Swagger: http://localhost:8000/docs
 ```bash
 curl -X POST http://localhost:8000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "admin@caneland.com", "password": "admin123"}'
+  -d '{"email": "admin@demo.com", "password": "admin123"}'
 ```
 
 Te devuelve un `access_token` para usar en las próximas requests:

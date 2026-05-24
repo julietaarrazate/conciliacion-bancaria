@@ -4,7 +4,7 @@ from datetime import datetime
 from app.database import Base
 
 
-# Estados base (Caneland)
+# Estados base
 # "pendiente", "ok", "no está", "duplicado", "faltan datos", "acreditado DD/MM"
 # Estados ricos (orgs con estados_habilitados extendidos)
 ESTADOS_RICOS = ["PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA", "VENCIDO", "EN_REVISION"]

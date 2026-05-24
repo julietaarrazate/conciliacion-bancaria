@@ -116,5 +116,5 @@ cd frontend && npm install && npm run dev
 ```
 
 Credenciales locales:
-- `admin@caneland.com` / `admin123`
-- `operador@caneland.com` / `operador123`
+- `admin@demo.com` / `admin123`
+- `operador@demo.com` / `operador123`

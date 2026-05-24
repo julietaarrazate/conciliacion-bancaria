@@ -5,10 +5,10 @@ Uso:
     python seed.py
 
 Crea:
-- Organización Caneland SA (id=1)
+- Organización Organización A (id=1)
 - julietaarrazate@gmail.com  (superadmin) — password desde env SUPERADMIN_PASSWORD
-- admin@caneland.com / admin123  (admin, demo Caneland)
-- operador@caneland.com / operador123  (operador, demo Caneland)
+- admin@demo.com / admin123  (admin, demo)
+- operador@demo.com / operador123  (operador, demo)
 
 Para definir la contraseña del superadmin:
     export SUPERADMIN_PASSWORD="tu_contraseña_segura"
@@ -33,11 +33,11 @@ def init_db():
 
 
 def seed_organizaciones():
-    print("[seed] Creando organización Caneland SA...")
+    print("[seed] Creando organización Organización A...")
     db = SessionLocal()
     try:
-        caneland = db.query(Organizacion).filter(Organizacion.id == 1).first()
-        if not caneland:
+        org_a = db.query(Organizacion).filter(Organizacion.id == 1).first()
+        if not org_a:
             config = {
                 "match_rules": ["monto_cuit"],
                 "tolerancia_monto": 0.01,
@@ -47,11 +47,11 @@ def seed_organizaciones():
                 "notificaciones_whatsapp": False,
                 "exportar_formato_contador": "excel_actual"
             }
-            db.add(Organizacion(id=1, nombre="Caneland SA", plan="pro", configuracion=config, activo=True))
+            db.add(Organizacion(id=1, nombre="Organización A", plan="pro", configuracion=config, activo=True))
             db.commit()
-            print("+  Caneland SA creada (id=1)")
+            print("+  Organización A creada (id=1)")
         else:
-            print("-  Caneland SA ya existe")
+            print("-  Organización A ya existe")
     finally:
         db.close()
 
@@ -82,10 +82,10 @@ def seed_users():
             ))
             print(f"+  creado superadmin: {julieta_email}")
 
-        # Usuarios demo Caneland
+        # Usuarios demo
         seeds_demo = [
-            ("admin@caneland.com", "admin123", "Administrador", RoleEnum.ADMIN),
-            ("operador@caneland.com", "operador123", "Operador Caneland", RoleEnum.OPERADOR),
+            ("admin@demo.com", "admin123", "Administrador", RoleEnum.ADMIN),
+            ("operador@demo.com", "operador123", "Operador Demo", RoleEnum.OPERADOR),
         ]
         for email, pwd, name, role in seeds_demo:
             if db.query(User).filter(User.email == email).first():

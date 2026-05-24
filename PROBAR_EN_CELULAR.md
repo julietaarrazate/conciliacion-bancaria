@@ -17,8 +17,8 @@ La primera vez te muestra tus IPs disponibles, anotá la del WiFi (ej: `192.168.
 Abrir http://localhost:3000
 
 Login con:
-- **Admin**: `admin@caneland.com` / `admin123`
-- **Operador**: `operador@caneland.com` / `operador123`
+- **Admin**: `admin@demo.com` / `admin123`
+- **Operador**: `operador@demo.com` / `operador123`
 
 ### Paso 3: Probar el flujo de conciliación con datos reales
 
@@ -79,7 +79,7 @@ La app se descarga y abre automáticamente.
 
 ### Paso 5: Probar la app
 
-Login con `admin@caneland.com` / `admin123`
+Login con `admin@demo.com` / `admin123`
 
 **Pestaña Conciliar**:
 - Tocá "Cargar extracto" → seleccioná un .xlsx desde el celular
