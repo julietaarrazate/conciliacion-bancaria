@@ -27,6 +27,7 @@ const Icon = {
   Flag:    () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5"/></svg>,
   Check:   () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>,
   Trash:   () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>,
+  Bell:    () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/></svg>,
 }
 
 const navItems = [
@@ -59,6 +60,7 @@ export const Layout: React.FC = () => {
   const { activeOrgId, activeOrgNombre, setActiveOrg, clearActiveOrg } = useOrgStore()
   const [orgs, setOrgs] = useState<{ id: number; nombre: string }[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [alertasCount, setAlertasCount] = useState(0)
   const drawerTouchStartX = React.useRef(0)
   const drawerTouchStartY = React.useRef(0)
   const edgeTouchStartX = React.useRef(0)
@@ -105,6 +107,16 @@ export const Layout: React.FC = () => {
         .catch(() => {})
     }
   }, [user?.is_superadmin])
+
+  useEffect(() => {
+    if (!user) return
+    const fetch = () => {
+      apiClient.getAlertas().then(d => setAlertasCount(d.total)).catch(() => {})
+    }
+    fetch()
+    const id = setInterval(fetch, 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [user])
 
   const handleLogout = () => {
     if (!confirm('¿Querés cerrar sesión?')) return
@@ -226,12 +238,25 @@ export const Layout: React.FC = () => {
           Conciliación
         </span>
 
-        <button
-          onClick={toggle}
-          className="p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover transition-colors"
-        >
-          {theme === 'light' ? <Icon.Moon /> : <Icon.Sun />}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => navigate('/resumen')}
+            className="relative p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover transition-colors"
+          >
+            <Icon.Bell />
+            {alertasCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-0.5">
+                {alertasCount > 99 ? '99+' : alertasCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={toggle}
+            className="p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover transition-colors"
+          >
+            {theme === 'light' ? <Icon.Moon /> : <Icon.Sun />}
+          </button>
+        </div>
       </header>
 
       {/* ── Drawer mobile ──────────────────────────────── */}
@@ -267,12 +292,23 @@ export const Layout: React.FC = () => {
       <aside className="hidden md:flex w-56 bg-white dark:bg-ml-dark-surface border-r border-ml-gray dark:border-ml-dark-border flex-col shrink-0">
         {/* Logo */}
         <div className="h-14 flex items-center px-4 border-b border-ml-gray dark:border-ml-dark-border shrink-0 bg-ml-yellow dark:bg-ml-dark-card">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-ml-text dark:bg-ml-green flex items-center justify-center">
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-ml-text dark:bg-ml-green flex items-center justify-center shrink-0">
               <Icon.Bolt />
             </div>
             <span className="font-bold text-sm font-mono app-title tracking-wide">Conciliación</span>
           </div>
+          <button
+            onClick={() => navigate('/resumen')}
+            className="relative p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover transition-colors shrink-0"
+          >
+            <Icon.Bell />
+            {alertasCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-0.5">
+                {alertasCount > 99 ? '99+' : alertasCount}
+              </span>
+            )}
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto">
           <SidebarContent />

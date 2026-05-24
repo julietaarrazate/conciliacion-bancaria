@@ -422,6 +422,13 @@ class ApiClient {
     URL.revokeObjectURL(url)
   }
 
+  async getAlertas(orgId?: number): Promise<{ total: number; alertas: { tipo: string; cantidad: number; label: string; urgencia: string; link: string }[] }> {
+    const params: Record<string, number> = {}
+    if (orgId) params.org_id = orgId
+    const res = await this.client.get('/analisis/alertas', { params })
+    return res.data
+  }
+
   // Bulk reconciliar: multiples planillas de un mismo extracto
   async bulkConciliar(
     extractoId: number,

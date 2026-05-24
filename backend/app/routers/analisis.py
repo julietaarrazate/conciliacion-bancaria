@@ -307,6 +307,93 @@ def dashboard(
     }
 
 
+@router.get("/alertas")
+def alertas(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Alertas operativas del día: cheques urgentes/vencidos, filas atrasadas, movimientos sin asignar."""
+    organizacion_id = _resolver_org(current_user, org_id)
+    hoy = date.today()
+
+    cheques_urgentes = db.query(func.count(Cheque.id)).filter(
+        Cheque.organizacion_id == organizacion_id,
+        Cheque.estado == "pendiente",
+        Cheque.fecha_deposito.isnot(None),
+        Cheque.fecha_deposito >= hoy,
+        Cheque.fecha_deposito <= hoy + timedelta(days=7),
+    ).scalar() or 0
+
+    cheques_vencidos = db.query(func.count(Cheque.id)).filter(
+        Cheque.organizacion_id == organizacion_id,
+        Cheque.estado == "pendiente",
+        Cheque.fecha_deposito.isnot(None),
+        Cheque.fecha_deposito < hoy,
+    ).scalar() or 0
+
+    filas_atrasadas = (
+        db.query(func.count(PlanillaRow.id))
+        .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
+        .filter(
+            Planilla.organizacion_id == organizacion_id,
+            Planilla.deleted_at.is_(None),
+            PlanillaRow.status.in_(list(_STATUS_PENDIENTE)),
+            func.date(Planilla.fecha_carga) < hoy - timedelta(days=30),
+        )
+        .scalar() or 0
+    )
+
+    movimientos_sin_asignar = db.query(func.count(MovimientoBanco.id)).filter(
+        MovimientoBanco.organizacion_id == organizacion_id,
+        MovimientoBanco.fecha >= hoy - timedelta(days=60),
+        or_(
+            MovimientoBanco.cliente_acreditado.is_(None),
+            MovimientoBanco.cliente_acreditado == "",
+        ),
+    ).scalar() or 0
+
+    alertas_lista = []
+    if cheques_urgentes:
+        alertas_lista.append({
+            "tipo": "cheques_urgentes",
+            "cantidad": cheques_urgentes,
+            "label": "Cheques vencen en 7 días",
+            "urgencia": "alta",
+            "link": "/cheques",
+        })
+    if cheques_vencidos:
+        alertas_lista.append({
+            "tipo": "cheques_vencidos",
+            "cantidad": cheques_vencidos,
+            "label": "Cheques vencidos",
+            "urgencia": "alta",
+            "link": "/cheques",
+        })
+    if filas_atrasadas:
+        alertas_lista.append({
+            "tipo": "filas_atrasadas",
+            "cantidad": filas_atrasadas,
+            "label": "Filas pendientes +30 días",
+            "urgencia": "media",
+            "link": "/historial",
+        })
+    if movimientos_sin_asignar:
+        alertas_lista.append({
+            "tipo": "movimientos_sin_asignar",
+            "cantidad": movimientos_sin_asignar,
+            "label": "Movimientos sin asignar",
+            "urgencia": "baja",
+            "link": "/movimientos",
+        })
+
+    return {
+        "organizacion_id": organizacion_id,
+        "total": sum(a["cantidad"] for a in alertas_lista),
+        "alertas": alertas_lista,
+    }
+
+
 def _calcular_aging_cliente(planilla_carga_date: date, hoy: date) -> str:
     """Asigna bucket de antiguedad a una fila pendiente."""
     dias = (hoy - planilla_carga_date).days
