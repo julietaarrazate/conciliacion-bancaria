@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import desc, func
 from typing import Optional
 from datetime import datetime, timedelta
@@ -48,7 +48,8 @@ def list_auditoria(
     total = q.count()
 
     rows = (
-        q.order_by(desc(AuditoriaLog.timestamp))
+        q.options(joinedload(AuditoriaLog.usuario))
+        .order_by(desc(AuditoriaLog.timestamp))
         .offset(skip)
         .limit(limit)
         .all()
@@ -120,10 +121,15 @@ def get_insights(
     oid = org_id if current_user.is_superadmin and org_id else (current_user.organizacion_id or 1)
 
     # ── 1. Stats de conciliacion desde planilla_rows ──────────────────────
-    planillas_org = db.query(Planilla).filter(
-        Planilla.organizacion_id == oid,
-        Planilla.fecha_carga >= desde
-    ).all()
+    planillas_org = (
+        db.query(Planilla)
+        .options(joinedload(Planilla.cliente), selectinload(Planilla.rows))
+        .filter(
+            Planilla.organizacion_id == oid,
+            Planilla.fecha_carga >= desde,
+        )
+        .all()
+    )
 
     total_filas = 0
     auto_ok = 0

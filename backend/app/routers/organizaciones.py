@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import List
 from datetime import datetime
 import io
@@ -107,17 +107,26 @@ def backup_organizacion(
     if not org:
         raise HTTPException(status_code=404, detail="Organización no encontrada")
 
-    # Planillas
-    planillas_db = db.query(Planilla).filter(Planilla.organizacion_id == org_id).all()
+    # Planillas (eager: cliente, usuario y rows en pocas queries)
+    planillas_db = (
+        db.query(Planilla)
+        .options(
+            joinedload(Planilla.cliente),
+            joinedload(Planilla.usuario),
+            selectinload(Planilla.rows),
+        )
+        .filter(Planilla.organizacion_id == org_id)
+        .all()
+    )
     planillas = []
     for p in planillas_db:
         statuses = [r.status for r in p.rows]
         planillas.append({
             "id": p.id,
-            "cliente_nombre": p.cliente.nombre,
+            "cliente_nombre": p.cliente.nombre if p.cliente else None,
             "nombre_archivo": p.nombre_archivo,
             "fecha_carga": p.fecha_carga,
-            "usuario_nombre": p.usuario.full_name,
+            "usuario_nombre": p.usuario.full_name if p.usuario else None,
             "total_filas": len(statuses),
             "acreditadas": sum(1 for s in statuses if s == "ok"),
             "no_encontradas": sum(1 for s in statuses if s == "no está"),
@@ -125,8 +134,13 @@ def backup_organizacion(
             "sin_datos": sum(1 for s in statuses if s == "faltan datos"),
         })
 
-    # Extractos
-    extractos_db = db.query(ExtractoBancario).filter(ExtractoBancario.organizacion_id == org_id).all()
+    # Extractos (eager: movimientos para el count)
+    extractos_db = (
+        db.query(ExtractoBancario)
+        .options(selectinload(ExtractoBancario.movimientos))
+        .filter(ExtractoBancario.organizacion_id == org_id)
+        .all()
+    )
     extractos = [{"id": e.id, "nombre_archivo": e.nombre_archivo,
                   "fecha_creacion": e.fecha_creacion, "total_movimientos": len(e.movimientos)} for e in extractos_db]
 
@@ -208,11 +222,16 @@ def panel_actividad(
 
     resultado = []
     for org in orgs:
-        # Planillas del mes
-        planillas_mes = db.query(Planilla).filter(
-            Planilla.organizacion_id == org.id,
-            Planilla.fecha_carga >= inicio_mes
-        ).all()
+        # Planillas del mes (eager: rows para los counts, evita N+1)
+        planillas_mes = (
+            db.query(Planilla)
+            .options(selectinload(Planilla.rows))
+            .filter(
+                Planilla.organizacion_id == org.id,
+                Planilla.fecha_carga >= inicio_mes,
+            )
+            .all()
+        )
 
         # Stats de filas del mes
         filas_mes = []
