@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { apiClient } from '@/services/api'
+import { Skeleton } from '@/components/Skeleton'
 
 interface Archivo {
   id: number
@@ -297,7 +298,20 @@ export const Clientes: React.FC = () => {
       )}
 
       {loading ? (
-        <div className="card p-8 text-center text-gray-400">Cargando...</div>
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="card flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
+                <div className="flex-1 space-y-1.5 min-w-0">
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-3 w-1/4" />
+                </div>
+              </div>
+              <Skeleton className="h-6 w-16 shrink-0 rounded-full" />
+            </div>
+          ))}
+        </div>
       ) : orgs.length === 0 ? (
         <div className="card p-8 text-center text-gray-400">Sin organizaciones</div>
       ) : (

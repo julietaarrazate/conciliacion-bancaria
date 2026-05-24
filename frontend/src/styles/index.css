@@ -202,6 +202,24 @@ input, textarea, [contenteditable="true"],
   animation: page-fade-up 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ─── Skeleton shimmer ───────────────────────────────── */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+.skeleton {
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+/* ─── Toast entrance ─────────────────────────────────── */
+@keyframes toast-slide-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast-enter {
+  animation: toast-slide-in 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* ─── Bottom nav safe area (iOS home bar) ────────────── */
 .bottom-nav-bar {
   padding-bottom: env(safe-area-inset-bottom);

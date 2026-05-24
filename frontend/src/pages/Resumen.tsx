@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
+import { Skeleton, SkeletonKpi } from '@/components/Skeleton'
 
 type Periodo = 'hoy' | 'semana' | 'mes'
 
@@ -85,7 +86,30 @@ export const Resumen: React.FC = () => {
   const labelComparativa = periodo === 'hoy' ? 'vs ayer' : periodo === 'semana' ? 'vs semana pasada' : 'vs mes pasado'
 
   if (loading && !data) {
-    return <div className="p-6 text-ml-text-soft dark:text-zinc-500">Cargando dashboard…</div>
+    return (
+      <div className="p-4 sm:p-6 space-y-6 max-w-7xl">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-56" />
+          <Skeleton className="h-3 w-72" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => <SkeletonKpi key={i} />)}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => <SkeletonKpi key={i} />)}
+        </div>
+        <div className="card space-y-3">
+          <Skeleton className="h-4 w-40" />
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 py-1">
+              <Skeleton className="h-3 w-1/3" />
+              <Skeleton className="h-2 flex-1 max-w-[40%]" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   if (error) {

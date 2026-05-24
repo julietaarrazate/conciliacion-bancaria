@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { User, UserRole } from '@/types'
+import { toast } from '@/store/toast'
 
 export const Usuarios: React.FC = () => {
   const [users, setUsers] = useState<User[]>([])
@@ -81,7 +82,7 @@ export const Usuarios: React.FC = () => {
       await apiClient.deleteUser(user.id)
       setUsers(prev => prev.filter(u => u.id !== user.id))
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Error al eliminar')
+      toast.error(err.response?.data?.detail || 'Error al eliminar')
     } finally { setDeletingId(null) }
   }
 

@@ -6,6 +6,7 @@ import { useOrgStore } from '@/store/org'
 import { apiClient } from '@/services/api'
 import { ThemeToggle } from './ThemeToggle'
 import { CuadraLogo } from './CuadraLogo'
+import { Toaster } from './Toaster'
 
 // ── SVG Icons (Heroicons outline style) ──────────────────────
 const Icon = {
@@ -233,6 +234,7 @@ export const Layout: React.FC = () => {
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-ml-gray-bg dark:bg-ml-dark-bg overflow-hidden">
+      <Toaster />
 
       {/* ── Header mobile ──────────────────────────────── */}
       <header className="md:hidden shrink-0 bg-ml-yellow dark:bg-ml-dark-surface border-b border-ml-yellow-dark dark:border-ml-dark-border flex items-center justify-between px-4 h-12 z-30 relative">
