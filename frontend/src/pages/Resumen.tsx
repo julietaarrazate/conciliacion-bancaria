@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 
+type Periodo = 'hoy' | 'semana' | 'mes'
+
 type Cantidad = { total: number; cantidad: number }
-type KpisMes = {
-  anio: number
-  mes: number
+type KpisPeriodo = {
   rango: { desde: string; hasta: string }
   conciliado: Cantidad
   pendiente: Cantidad
@@ -18,8 +18,10 @@ type KpisMes = {
 }
 type Dashboard = {
   organizacion_id: number
-  periodo_actual: KpisMes
-  periodo_anterior: KpisMes
+  periodo: Periodo
+  periodo_label: string
+  periodo_actual: KpisPeriodo
+  periodo_anterior: KpisPeriodo
   variaciones: Record<string, number | null>
   top_clientes: { cliente_id: number; nombre: string; total: number; cantidad: number }[]
   cheques: {
@@ -50,6 +52,8 @@ const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', '
 
 export const Resumen: React.FC = () => {
   const hoy = useMemo(() => new Date(), [])
+  // Default "hoy" porque para financiera la visibilidad diaria es lo critico
+  const [periodo, setPeriodo] = useState<Periodo>('hoy')
   const [anio, setAnio] = useState(hoy.getFullYear())
   const [mes, setMes] = useState(hoy.getMonth() + 1)
   const [data, setData] = useState<Dashboard | null>(null)
@@ -60,12 +64,14 @@ export const Resumen: React.FC = () => {
     let activo = true
     setLoading(true)
     setError('')
-    apiClient.getDashboard({ anio, mes })
+    const params: any = { periodo }
+    if (periodo === 'mes') { params.anio = anio; params.mes = mes }
+    apiClient.getDashboard(params)
       .then((d) => { if (activo) setData(d) })
       .catch((e) => { if (activo) setError(e.response?.data?.detail || 'Error cargando dashboard') })
       .finally(() => { if (activo) setLoading(false) })
     return () => { activo = false }
-  }, [anio, mes])
+  }, [periodo, anio, mes])
 
   const navegarMes = (delta: number) => {
     let m = mes + delta
@@ -75,6 +81,8 @@ export const Resumen: React.FC = () => {
     setMes(m)
     setAnio(a)
   }
+
+  const labelComparativa = periodo === 'hoy' ? 'vs ayer' : periodo === 'semana' ? 'vs semana pasada' : 'vs mes pasado'
 
   if (loading && !data) {
     return <div className="p-6 text-ml-text-soft dark:text-zinc-500">Cargando dashboard…</div>
@@ -91,33 +99,58 @@ export const Resumen: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-7xl">
-      {/* Header con navegacion */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-ml-text dark:text-white tracking-tight">Resumen ejecutivo</h1>
-          <p className="text-xs text-ml-text-soft dark:text-zinc-500 mt-1">
-            KPIs operativos y financieros del periodo
-          </p>
+      {/* Header */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-ml-text dark:text-white tracking-tight">Resumen ejecutivo</h1>
+            <p className="text-xs text-ml-text-soft dark:text-zinc-500 mt-1">
+              {periodo === 'hoy' && `Hoy · ${k.rango.desde}`}
+              {periodo === 'semana' && `Últimos 7 días · ${k.rango.desde} → ${k.rango.hasta}`}
+              {periodo === 'mes' && `${MESES[mes - 1]} ${anio} · ${k.rango.desde} → ${k.rango.hasta}`}
+            </p>
+          </div>
+
+          {/* Selector de periodo (segment control) */}
+          <div className="flex items-center gap-1 bg-white dark:bg-ml-dark-surface rounded-lg border border-gray-200 dark:border-ml-dark-border p-1">
+            {(['hoy', 'semana', 'mes'] as Periodo[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriodo(p)}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors capitalize ${
+                  periodo === p
+                    ? 'bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg'
+                    : 'text-ml-text-soft dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-2 bg-white dark:bg-ml-dark-surface rounded-lg border border-gray-200 dark:border-ml-dark-border p-1">
-          <button
-            onClick={() => navegarMes(-1)}
-            className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded transition-colors text-ml-text dark:text-zinc-300"
-            aria-label="Mes anterior"
-          >
-            ←
-          </button>
-          <span className="px-3 py-1.5 text-sm font-medium text-ml-text dark:text-white whitespace-nowrap">
-            {MESES[mes - 1]} {anio}
-          </span>
-          <button
-            onClick={() => navegarMes(1)}
-            className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded transition-colors text-ml-text dark:text-zinc-300"
-            aria-label="Mes siguiente"
-          >
-            →
-          </button>
-        </div>
+
+        {/* Navegacion de mes (solo cuando periodo=mes) */}
+        {periodo === 'mes' && (
+          <div className="flex items-center gap-2 bg-white dark:bg-ml-dark-surface rounded-lg border border-gray-200 dark:border-ml-dark-border p-1 w-fit">
+            <button
+              onClick={() => navegarMes(-1)}
+              className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded transition-colors text-ml-text dark:text-zinc-300"
+              aria-label="Mes anterior"
+            >
+              ←
+            </button>
+            <span className="px-3 py-1.5 text-sm font-medium text-ml-text dark:text-white whitespace-nowrap">
+              {MESES[mes - 1]} {anio}
+            </span>
+            <button
+              onClick={() => navegarMes(1)}
+              className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded transition-colors text-ml-text dark:text-zinc-300"
+              aria-label="Mes siguiente"
+            >
+              →
+            </button>
+          </div>
+        )}
       </div>
 
       {/* KPIs principales (4 cards grandes) */}
@@ -260,7 +293,9 @@ export const Resumen: React.FC = () => {
 
       {/* Footer info */}
       <p className="text-xs text-ml-text-soft dark:text-zinc-600 text-center">
-        Periodo: {k.rango.desde} → {k.rango.hasta} · Comparativa vs {MESES[data.periodo_anterior.mes - 1]} {data.periodo_anterior.anio}
+        Comparativa: {data.periodo_anterior.rango.desde}
+        {data.periodo_anterior.rango.desde !== data.periodo_anterior.rango.hasta && ` → ${data.periodo_anterior.rango.hasta}`}
+        {' '}({labelComparativa})
       </p>
     </div>
   )

@@ -84,10 +84,8 @@ def _suma_planilla_rows(
     return {"total": float(row.total or 0), "cantidad": int(row.cantidad or 0)}
 
 
-def _kpis_mes(db: Session, org_id: int, anio: int, mes: int) -> dict:
-    """KPIs base de un mes determinado. Se reutiliza para mes actual y anterior."""
-    desde, hasta = _rango_mes(anio, mes)
-
+def _kpis_periodo(db: Session, org_id: int, desde: date, hasta: date) -> dict:
+    """KPIs base de un periodo arbitrario. Se reutiliza para periodo actual y anterior."""
     conciliado = _suma_planilla_rows(db, org_id, desde, hasta, _STATUS_OK)
     pendiente = _suma_planilla_rows(db, org_id, desde, hasta, _STATUS_PENDIENTE)
     todo = _suma_planilla_rows(db, org_id, desde, hasta, None)
@@ -127,8 +125,6 @@ def _kpis_mes(db: Session, org_id: int, anio: int, mes: int) -> dict:
     tasa_conciliacion = (conciliado["total"] / total_reportado * 100) if total_reportado > 0 else 0.0
 
     return {
-        "anio": anio,
-        "mes": mes,
         "rango": {"desde": desde.isoformat(), "hasta": hasta.isoformat()},
         "conciliado": conciliado,
         "pendiente": pendiente,
@@ -230,33 +226,60 @@ def _cheques_proximos_vencimiento(db: Session, org_id: int, dias: int = 30) -> l
     ]
 
 
+def _calcular_rango(periodo: str, anio: Optional[int], mes: Optional[int]) -> tuple[date, date, date, date, str]:
+    """Devuelve (desde, hasta, prev_desde, prev_hasta, label_periodo).
+
+    Modos soportados:
+    - "hoy": hoy vs ayer
+    - "semana": ultimos 7 dias vs 7 dias previos
+    - "mes" (default): mes seleccionado (o actual) vs mes anterior
+    """
+    hoy = date.today()
+    if periodo == "hoy":
+        return hoy, hoy, hoy - timedelta(days=1), hoy - timedelta(days=1), "Hoy"
+    if periodo == "semana":
+        desde = hoy - timedelta(days=6)
+        prev_hasta = desde - timedelta(days=1)
+        prev_desde = prev_hasta - timedelta(days=6)
+        return desde, hoy, prev_desde, prev_hasta, "Últimos 7 días"
+    # default: mes
+    a = anio or hoy.year
+    m = mes or hoy.month
+    desde, hasta = _rango_mes(a, m)
+    if m == 1:
+        prev_desde, prev_hasta = _rango_mes(a - 1, 12)
+    else:
+        prev_desde, prev_hasta = _rango_mes(a, m - 1)
+    return desde, hasta, prev_desde, prev_hasta, f"{m:02d}/{a}"
+
+
 @router.get("/dashboard")
 def dashboard(
-    anio: Optional[int] = Query(None, description="Anio del periodo (default: actual)"),
-    mes: Optional[int] = Query(None, ge=1, le=12, description="Mes del periodo (1-12, default: actual)"),
+    periodo: str = Query("mes", description="hoy | semana | mes (default: mes)"),
+    anio: Optional[int] = Query(None, description="Solo cuando periodo=mes: anio (default: actual)"),
+    mes: Optional[int] = Query(None, ge=1, le=12, description="Solo cuando periodo=mes: mes 1-12 (default: actual)"),
     org_id: Optional[int] = Query(None, description="Solo superadmin: filtrar otra org"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Dashboard ejecutivo: KPIs del mes con comparativa al mes anterior.
+    """Dashboard ejecutivo: KPIs del periodo elegido con comparativa al anterior.
+
+    `periodo` controla el rango:
+    - hoy     -> hoy vs ayer
+    - semana  -> ultimos 7 dias vs 7 dias previos
+    - mes     -> mes elegido (o actual) vs mes anterior
 
     Incluye top clientes, cheques en cartera, cheques proximos a vencer.
     """
     organizacion_id = _resolver_org(current_user, org_id)
-    hoy = date.today()
-    a = anio or hoy.year
-    m = mes or hoy.month
+    if periodo not in ("hoy", "semana", "mes"):
+        periodo = "mes"
 
-    # Mes anterior (manejar enero -> diciembre del anio previo)
-    if m == 1:
-        a_prev, m_prev = a - 1, 12
-    else:
-        a_prev, m_prev = a, m - 1
+    desde, hasta, prev_desde, prev_hasta, label = _calcular_rango(periodo, anio, mes)
 
-    kpis_actual = _kpis_mes(db, organizacion_id, a, m)
-    kpis_prev = _kpis_mes(db, organizacion_id, a_prev, m_prev)
+    kpis_actual = _kpis_periodo(db, organizacion_id, desde, hasta)
+    kpis_prev = _kpis_periodo(db, organizacion_id, prev_desde, prev_hasta)
 
-    # Variaciones vs mes anterior
     variaciones = {
         "conciliado_pct": _variacion_pct(kpis_actual["conciliado"]["total"], kpis_prev["conciliado"]["total"]),
         "pendiente_pct": _variacion_pct(kpis_actual["pendiente"]["total"], kpis_prev["pendiente"]["total"]),
@@ -265,13 +288,14 @@ def dashboard(
         "gastos_pct": _variacion_pct(kpis_actual["gastos"]["total"], kpis_prev["gastos"]["total"]),
     }
 
-    desde, hasta = _rango_mes(a, m)
     top = _top_clientes_mes(db, organizacion_id, desde, hasta, limit=5)
     cheques_resumen = _cheques_estado(db, organizacion_id)
     cheques_vencen = _cheques_proximos_vencimiento(db, organizacion_id, dias=30)
 
     return {
         "organizacion_id": organizacion_id,
+        "periodo": periodo,
+        "periodo_label": label,
         "periodo_actual": kpis_actual,
         "periodo_anterior": kpis_prev,
         "variaciones": variaciones,

@@ -129,7 +129,7 @@ class ApiClient {
   }
 
   // Analisis / reportes
-  async getDashboard(params?: { anio?: number; mes?: number; org_id?: number }): Promise<any> {
+  async getDashboard(params?: { periodo?: 'hoy' | 'semana' | 'mes'; anio?: number; mes?: number; org_id?: number }): Promise<any> {
     const res = await this.client.get('/analisis/dashboard', { params })
     return res.data
   }
