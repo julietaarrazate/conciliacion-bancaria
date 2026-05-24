@@ -19,6 +19,7 @@ from app.routers import caja
 from app.routers import contabilidad
 from app.routers import cheques
 from app.routers import pagos_gastos
+from app.routers import papelera
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog
 from app.models.organizacion import Organizacion
 
@@ -497,6 +498,7 @@ app.include_router(caja.router)
 app.include_router(contabilidad.router)
 app.include_router(cheques.router)
 app.include_router(pagos_gastos.router)
+app.include_router(papelera.router)
 
 
 @app.get("/")

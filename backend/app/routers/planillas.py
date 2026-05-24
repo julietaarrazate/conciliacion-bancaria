@@ -546,29 +546,27 @@ def delete_planilla(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Elimina una planilla y sus filas. Libera los movimientos bancarios que había acreditado."""
-    planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
+    """Soft delete: marca la planilla como eliminada (deleted_at = now()).
+    Las filas y acreditaciones se conservan, así si se restaura vuelve completa."""
+    from datetime import datetime as _dt
+    planilla = db.query(Planilla).filter(
+        Planilla.id == planilla_id,
+        Planilla.deleted_at.is_(None),
+    ).first()
     if not planilla:
         raise HTTPException(status_code=404, detail="Planilla no encontrada")
 
-    from app.models.extracto import MovimientoBanco
-    for row in planilla.rows:
-        if row.orden_movimiento_acreditado:
-            mov = db.query(MovimientoBanco).filter(
-                MovimientoBanco.id == row.orden_movimiento_acreditado
-            ).first()
-            if mov and mov.cliente_acreditado == planilla.cliente.nombre:
-                mov.cliente_acreditado = None
-                mov.fecha_acred = None
-
-    cliente = planilla.cliente.nombre
-    nombre_archivo = planilla.nombre_archivo
-    db.delete(planilla)
+    planilla.deleted_at = _dt.utcnow()
     db.commit()
 
-    registrar_log(db, current_user.id, "planillas", planilla_id, "DELETE",
-                  {"cliente": cliente, "archivo": nombre_archivo})
-    return {"ok": True, "mensaje": f"Planilla #{planilla_id} eliminada y movimientos liberados"}
+    registrar_log(db, current_user.id, "planillas", planilla_id, "SOFT_DELETE",
+                  {"cliente": planilla.cliente.nombre if planilla.cliente else None,
+                   "archivo": planilla.nombre_archivo})
+    return {
+        "ok": True,
+        "mensaje": f"Planilla #{planilla_id} enviada a papelera. Restaurable desde /admin/papelera.",
+        "soft_deleted": True,
+    }
 
 
 @router.get("/{planilla_id}/detalle", response_model=PlanillaDetalleResponse)

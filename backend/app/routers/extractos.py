@@ -46,7 +46,7 @@ def list_extractos(skip: int = 0, limit: int = 50,
                    org_id: Optional[int] = Query(None),
                    db: Session = Depends(get_db),
                    current_user: User = Depends(get_current_user)):
-    q = db.query(ExtractoBancario)
+    q = db.query(ExtractoBancario).filter(ExtractoBancario.deleted_at.is_(None))
     # Superadmin puede filtrar por org; usuarios normales ven solo su org
     if current_user.is_superadmin and org_id:
         q = q.filter(ExtractoBancario.organizacion_id == org_id)
@@ -157,47 +157,29 @@ async def upload_extracto(file: UploadFile = File(...),
 @router.delete("/{extracto_id}")
 def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
                     current_user: User = Depends(get_current_user)):
-    """Elimina el extracto y sus movimientos. Las planillas conciliadas se conservan como historial."""
-    from app.models.planilla import PlanillaRow
-
-    extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
+    """Soft delete: marca el extracto como eliminado (deleted_at = now()).
+    Los movimientos y la relación con planillas se conservan, así si se restaura
+    el extracto vuelve completo. Para borrar definitivo: usar /admin/papelera/purgar."""
+    extracto = db.query(ExtractoBancario).filter(
+        ExtractoBancario.id == extracto_id,
+        ExtractoBancario.deleted_at.is_(None),
+    ).first()
     if not extracto:
         raise HTTPException(404, "Extracto no encontrado")
 
-    nombre   = extracto.nombre_archivo
-    n_movs   = len(extracto.movimientos)
-    ids_movs = [m.id for m in extracto.movimientos]
-
     try:
-        # 1. Nullificar FK en planilla_rows (conservar planillas, solo desligar el movimiento)
-        if ids_movs:
-            db.query(PlanillaRow)\
-              .filter(PlanillaRow.orden_movimiento_acreditado.in_(ids_movs))\
-              .update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
-            db.flush()
-
-        # 2. Desligar planillas del extracto (conservarlas como historial)
-        from app.models.planilla import Planilla
-        db.query(Planilla).filter(Planilla.extracto_id == extracto_id)\
-          .update({"extracto_id": None}, synchronize_session="fetch")
-        db.flush()
-
-        # 3. Borrar movimientos en bulk (una sola query)
-        db.query(MovimientoBanco).filter(
-            MovimientoBanco.extracto_id == extracto_id
-        ).delete(synchronize_session=False)
-        db.flush()
-
-        # 4. Borrar extracto
-        db.delete(extracto)
+        extracto.deleted_at = datetime.now(_ARG).replace(tzinfo=None)
         db.commit()
-
-        registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "DELETE",
-                      {"nombre": nombre, "movimientos": n_movs})
-        return {"ok": True, "mensaje": f"Extracto #{extracto_id} eliminado. Planillas conservadas."}
+        registrar_log(db, current_user.id, "extractos_bancarios", extracto_id,
+                      "SOFT_DELETE", {"nombre": extracto.nombre_archivo})
+        return {
+            "ok": True,
+            "mensaje": f"Extracto #{extracto_id} enviado a papelera. Restaurable desde /admin/papelera.",
+            "soft_deleted": True,
+        }
     except Exception as e:
         db.rollback()
-        logger.error("delete extracto: %s", e)
+        logger.error("soft delete extracto: %s", e)
         raise HTTPException(500, "Error al eliminar el extracto. Intentá de nuevo.")
 
 

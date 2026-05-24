@@ -35,7 +35,11 @@ def list_planillas(
     current_user: User = Depends(get_current_user)
 ):
     """Lista planillas reconciliadas con sus stats. Filtros por cliente y fechas."""
-    q = db.query(Planilla).join(Cliente, Planilla.cliente_id == Cliente.id)
+    q = (
+        db.query(Planilla)
+        .join(Cliente, Planilla.cliente_id == Cliente.id)
+        .filter(Planilla.deleted_at.is_(None))
+    )
 
     # Aislamiento por org
     if current_user.is_superadmin and org_id:
@@ -91,7 +95,11 @@ def export_historial_xlsx(
     _: User = Depends(get_current_user)
 ):
     """Descarga xlsx con el historial de planillas reconciliadas"""
-    q = db.query(Planilla).join(Cliente, Planilla.cliente_id == Cliente.id)
+    q = (
+        db.query(Planilla)
+        .join(Cliente, Planilla.cliente_id == Cliente.id)
+        .filter(Planilla.deleted_at.is_(None))
+    )
 
     if cliente:
         q = q.filter(Cliente.nombre.ilike(f"%{cliente}%"))
