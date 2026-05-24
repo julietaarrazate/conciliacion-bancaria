@@ -1,13 +1,13 @@
 {
-  "name": "Conciliación Bancaria — Julieta Arrazate",
-  "short_name": "Conciliación",
-  "description": "Sistema de conciliación bancaria con IA y multi-cliente",
+  "name": "Cuadra — Conciliación bancaria",
+  "short_name": "Cuadra",
+  "description": "Cuadra: conciliación bancaria con IA, motor de matching y multi-cliente",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#FFE600",
-  "theme_color": "#FFE600",
+  "background_color": "#0B0B0F",
+  "theme_color": "#0B0B0F",
   "categories": ["finance", "business", "productivity"],
   "lang": "es-AR",
   "share_target": {

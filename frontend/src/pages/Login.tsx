@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
+import { CuadraLogo } from '@/components/CuadraLogo'
 
 export const Login: React.FC = () => {
   const navigate = useNavigate()
@@ -66,15 +67,14 @@ export const Login: React.FC = () => {
 
         {/* Logo / título */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-ml-yellow dark:bg-ml-dark-surface dark:border dark:border-ml-green/40 mb-4 dark:shadow-green-glow">
-            <span className="text-2xl dark:hidden">💰</span>
-            <span className="text-2xl hidden dark:inline font-mono text-ml-green">$_</span>
+          <div className="inline-flex items-center justify-center mb-5 dark:drop-shadow-[0_0_20px_rgba(34,197,94,0.25)]">
+            <CuadraLogo size={88} />
           </div>
-          <h1 className="text-2xl font-bold text-ml-text dark:text-white tracking-tight">
-            Conciliación Bancaria
+          <h1 className="text-3xl font-bold text-ml-text dark:text-white tracking-tight font-mono">
+            Cuadra
           </h1>
-          <p className="text-xs text-ml-text-soft dark:text-zinc-500 mt-1 font-mono dark:tracking-widest uppercase">
-            <span className="dark:text-ml-green/70">▸</span> Julieta Arrazate
+          <p className="text-[11px] text-ml-text-soft dark:text-zinc-500 mt-2 font-mono tracking-[0.2em] uppercase">
+            Conciliación bancaria
           </p>
         </div>
 

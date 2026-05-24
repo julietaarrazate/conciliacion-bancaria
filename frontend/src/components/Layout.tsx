@@ -5,6 +5,7 @@ import { useThemeStore } from '@/store/theme'
 import { useOrgStore } from '@/store/org'
 import { apiClient } from '@/services/api'
 import { ThemeToggle } from './ThemeToggle'
+import { CuadraLogo } from './CuadraLogo'
 
 // ── SVG Icons (Heroicons outline style) ──────────────────────
 const Icon = {
@@ -234,8 +235,8 @@ export const Layout: React.FC = () => {
           <Icon.Menu />
         </button>
 
-        <span className="font-bold text-sm font-mono app-title absolute left-1/2 -translate-x-1/2">
-          Conciliación
+        <span className="font-bold text-sm font-mono app-title absolute left-1/2 -translate-x-1/2 tracking-wide">
+          Cuadra
         </span>
 
         <div className="flex items-center gap-1">
@@ -273,7 +274,7 @@ export const Layout: React.FC = () => {
           >
             {/* Header del drawer */}
             <div className="flex items-center justify-between px-4 h-12 bg-ml-yellow dark:bg-ml-dark-card border-b border-ml-yellow-dark dark:border-ml-dark-border shrink-0">
-              <span className="font-bold text-sm font-mono app-title">Conciliación</span>
+              <span className="font-bold text-sm font-mono app-title tracking-wide">Cuadra</span>
               <button
                 onClick={() => setDrawerOpen(false)}
                 className="p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover"
@@ -293,10 +294,8 @@ export const Layout: React.FC = () => {
         {/* Logo */}
         <div className="h-14 flex items-center px-4 border-b border-ml-gray dark:border-ml-dark-border shrink-0 bg-ml-yellow dark:bg-ml-dark-card">
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-ml-text dark:bg-ml-green flex items-center justify-center shrink-0">
-              <Icon.Bolt />
-            </div>
-            <span className="font-bold text-sm font-mono app-title tracking-wide">Conciliación</span>
+            <CuadraLogo size={28} />
+            <span className="font-bold text-base font-mono app-title tracking-wide">Cuadra</span>
           </div>
           <button
             onClick={() => navigate('/resumen')}
