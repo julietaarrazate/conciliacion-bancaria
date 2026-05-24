@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
 import { useThemeStore } from '@/store/theme'
 import { useOrgStore } from '@/store/org'
@@ -54,6 +54,13 @@ const navItems = [
   { to: '/perfil',         label: 'Mi perfil',     Icon: Icon.User },
 ]
 
+const bottomNavItems = [
+  { to: '/resumen',   label: 'Resumen',   Icon: Icon.Chart },
+  { to: '/dashboard', label: 'Conciliar', Icon: Icon.Bolt },
+  { to: '/clientes',  label: 'Clientes',  Icon: Icon.Folder },
+  { to: '/historial', label: 'Historial', Icon: Icon.List },
+]
+
 export const Layout: React.FC = () => {
   const navigate = useNavigate()
   const { user, logout, hasPermission } = useAuthStore()
@@ -62,6 +69,7 @@ export const Layout: React.FC = () => {
   const [orgs, setOrgs] = useState<{ id: number; nombre: string }[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [alertasCount, setAlertasCount] = useState(0)
+  const location = useLocation()
   const drawerTouchStartX = React.useRef(0)
   const drawerTouchStartY = React.useRef(0)
   const edgeTouchStartX = React.useRef(0)
@@ -227,13 +235,10 @@ export const Layout: React.FC = () => {
     <div className="flex flex-col md:flex-row h-screen bg-ml-gray-bg dark:bg-ml-dark-bg overflow-hidden">
 
       {/* ── Header mobile ──────────────────────────────── */}
-      <header className="md:hidden shrink-0 bg-ml-yellow dark:bg-ml-dark-surface border-b border-ml-yellow-dark dark:border-ml-dark-border flex items-center justify-between px-4 h-12 z-30">
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover transition-colors"
-        >
-          <Icon.Menu />
-        </button>
+      <header className="md:hidden shrink-0 bg-ml-yellow dark:bg-ml-dark-surface border-b border-ml-yellow-dark dark:border-ml-dark-border flex items-center justify-between px-4 h-12 z-30 relative">
+        <div className="w-8 flex items-center">
+          <CuadraLogo size={24} animate={false} />
+        </div>
 
         <span className="font-bold text-sm font-mono app-title absolute left-1/2 -translate-x-1/2 tracking-wide">
           Cuadra
@@ -241,7 +246,7 @@ export const Layout: React.FC = () => {
 
         <div className="flex items-center gap-1">
           <button
-            onClick={() => navigate('/resumen')}
+            onClick={() => { setAlertasCount(0); navigate('/resumen') }}
             className="relative p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover transition-colors"
           >
             <Icon.Bell />
@@ -298,7 +303,7 @@ export const Layout: React.FC = () => {
             <span className="font-bold text-base font-mono app-title tracking-wide">Cuadra</span>
           </div>
           <button
-            onClick={() => navigate('/resumen')}
+            onClick={() => { setAlertasCount(0); navigate('/resumen') }}
             className="relative p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover transition-colors shrink-0"
           >
             <Icon.Bell />
@@ -315,9 +320,44 @@ export const Layout: React.FC = () => {
       </aside>
 
       {/* ── Contenido ──────────────────────────────────── */}
-      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden text-ml-text dark:text-gray-200">
-        <Outlet />
+      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden text-ml-text dark:text-gray-200 pb-safe-nav md:pb-0">
+        <div key={location.pathname} className="page-enter">
+          <Outlet />
+        </div>
       </main>
+
+      {/* ── Bottom navigation mobile ────────────────────── */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white dark:bg-ml-dark-surface border-t border-gray-100 dark:border-ml-dark-border bottom-nav-bar flex items-stretch h-14">
+        {bottomNavItems.map(item => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              `flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-medium transition-colors ${
+                isActive
+                  ? 'text-ml-blue dark:text-ml-green'
+                  : 'text-gray-400 dark:text-zinc-600'
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <span className={`[&>svg]:w-5 [&>svg]:h-5 transition-transform ${isActive ? 'scale-110' : ''}`}>
+                  <item.Icon />
+                </span>
+                <span>{item.label}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-medium text-gray-400 dark:text-zinc-600 transition-colors active:text-ml-blue dark:active:text-ml-green"
+        >
+          <span className="[&>svg]:w-5 [&>svg]:h-5"><Icon.Menu /></span>
+          <span>Más</span>
+        </button>
+      </nav>
     </div>
   )
 }
