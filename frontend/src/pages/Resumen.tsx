@@ -60,6 +60,7 @@ export const Resumen: React.FC = () => {
   const [data, setData] = useState<Dashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   useEffect(() => {
     let activo = true
@@ -153,25 +154,40 @@ export const Resumen: React.FC = () => {
           </div>
         </div>
 
-        {/* Navegacion de mes (solo cuando periodo=mes) */}
+        {/* Navegacion de mes (solo cuando periodo=mes) + boton PDF */}
         {periodo === 'mes' && (
-          <div className="flex items-center gap-2 bg-white dark:bg-ml-dark-surface rounded-lg border border-gray-200 dark:border-ml-dark-border p-1 w-fit">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 bg-white dark:bg-ml-dark-surface rounded-lg border border-gray-200 dark:border-ml-dark-border p-1 w-fit">
+              <button
+                onClick={() => navegarMes(-1)}
+                className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded transition-colors text-ml-text dark:text-zinc-300"
+                aria-label="Mes anterior"
+              >
+                ←
+              </button>
+              <span className="px-3 py-1.5 text-sm font-medium text-ml-text dark:text-white whitespace-nowrap">
+                {MESES[mes - 1]} {anio}
+              </span>
+              <button
+                onClick={() => navegarMes(1)}
+                className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded transition-colors text-ml-text dark:text-zinc-300"
+                aria-label="Mes siguiente"
+              >
+                →
+              </button>
+            </div>
             <button
-              onClick={() => navegarMes(-1)}
-              className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded transition-colors text-ml-text dark:text-zinc-300"
-              aria-label="Mes anterior"
+              onClick={async () => {
+                setDownloadingPdf(true)
+                try { await apiClient.downloadCierreMensualPdf(anio, mes) }
+                catch { /* error silent */ }
+                finally { setDownloadingPdf(false) }
+              }}
+              disabled={downloadingPdf || !data}
+              className="px-3 py-1.5 text-sm rounded-lg bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              title="Descargar cierre mensual en PDF"
             >
-              ←
-            </button>
-            <span className="px-3 py-1.5 text-sm font-medium text-ml-text dark:text-white whitespace-nowrap">
-              {MESES[mes - 1]} {anio}
-            </span>
-            <button
-              onClick={() => navegarMes(1)}
-              className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded transition-colors text-ml-text dark:text-zinc-300"
-              aria-label="Mes siguiente"
-            >
-              →
+              {downloadingPdf ? 'Generando…' : '📄 PDF cierre'}
             </button>
           </div>
         )}

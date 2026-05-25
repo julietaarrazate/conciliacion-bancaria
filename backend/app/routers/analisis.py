@@ -682,3 +682,67 @@ def estado_cuenta_cliente(
         "cheques": cheques_data,
         "pagos": pagos_data,
     }
+
+
+# ---------------------------------------------------------------------------
+# Exports PDF
+# ---------------------------------------------------------------------------
+from fastapi.responses import Response  # noqa: E402
+from app.services.pdf_export import estado_cuenta_pdf, cierre_mensual_pdf  # noqa: E402
+from app.models.organizacion import Organizacion  # noqa: E402
+
+
+def _slugify_filename(s: str) -> str:
+    import re
+    base = re.sub(r"[^a-zA-Z0-9_-]+", "_", (s or "reporte")).strip("_")
+    return base[:60] or "reporte"
+
+
+@router.get("/cliente/{cliente_id}/estado-cuenta.pdf")
+def estado_cuenta_cliente_pdf(
+    cliente_id: int,
+    desde: Optional[date] = Query(None),
+    hasta: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Devuelve el estado de cuenta del cliente en PDF."""
+    data = estado_cuenta_cliente(cliente_id, desde, hasta, db, current_user)
+    pdf_bytes = estado_cuenta_pdf(data, generado_por=current_user.full_name or current_user.email)
+    nombre = _slugify_filename(data["cliente"]["nombre"])
+    desde_iso = data["periodo"]["desde"]
+    hasta_iso = data["periodo"]["hasta"]
+    filename = f"estado_cuenta_{nombre}_{desde_iso}_{hasta_iso}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/cierre/{anio}/{mes}.pdf")
+def cierre_mensual_pdf_endpoint(
+    anio: int,
+    mes: int,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Devuelve el cierre mensual en PDF (mismos KPIs que /analisis/dashboard?periodo=mes)."""
+    if not (1 <= mes <= 12):
+        raise HTTPException(status_code=400, detail="mes debe estar entre 1 y 12")
+    data = dashboard(periodo="mes", anio=anio, mes=mes, org_id=org_id, db=db, current_user=current_user)
+    organizacion_id = _resolver_org(current_user, org_id)
+    org = db.query(Organizacion).filter(Organizacion.id == organizacion_id).first()
+    org_nombre = org.nombre if org else None
+    pdf_bytes = cierre_mensual_pdf(
+        data, anio, mes, org_nombre=org_nombre,
+        generado_por=current_user.full_name or current_user.email,
+    )
+    org_slug = _slugify_filename(org_nombre or "org")
+    filename = f"cierre_{anio}_{mes:02d}_{org_slug}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

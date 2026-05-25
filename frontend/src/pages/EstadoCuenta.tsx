@@ -82,6 +82,7 @@ export const EstadoCuenta: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<'planillas' | 'cheques' | 'pagos'>('planillas')
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   const desde = useMemo(() => fechaHaceNDias(periodoDias), [periodoDias])
   const hasta = useMemo(() => new Date().toISOString().slice(0, 10), [])
@@ -133,20 +134,35 @@ export const EstadoCuenta: React.FC = () => {
               Estado de cuenta {data.cliente.cuit ? `· CUIT ${data.cliente.cuit}` : ''}
             </p>
           </div>
-          <div className="flex items-center gap-1 bg-white dark:bg-ml-dark-surface rounded-lg border border-gray-200 dark:border-ml-dark-border p-1">
-            {PERIODOS.map((p) => (
-              <button
-                key={p.dias}
-                onClick={() => setPeriodoDias(p.dias)}
-                className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                  periodoDias === p.dias
-                    ? 'bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg font-semibold'
-                    : 'text-ml-text-soft dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-white dark:bg-ml-dark-surface rounded-lg border border-gray-200 dark:border-ml-dark-border p-1">
+              {PERIODOS.map((p) => (
+                <button
+                  key={p.dias}
+                  onClick={() => setPeriodoDias(p.dias)}
+                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                    periodoDias === p.dias
+                      ? 'bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg font-semibold'
+                      : 'text-ml-text-soft dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={async () => {
+                setDownloadingPdf(true)
+                try { await apiClient.downloadEstadoCuentaPdf(clienteId, desde, hasta) }
+                catch { /* el toast/error global puede manejarlo si se agrega */ }
+                finally { setDownloadingPdf(false) }
+              }}
+              disabled={downloadingPdf || !data}
+              className="px-3 py-1.5 text-xs rounded-lg bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              title="Descargar estado de cuenta en PDF"
+            >
+              {downloadingPdf ? 'Generando…' : '📄 PDF'}
+            </button>
           </div>
         </div>
         <p className="text-[11px] text-ml-text-soft dark:text-zinc-600 mt-2">

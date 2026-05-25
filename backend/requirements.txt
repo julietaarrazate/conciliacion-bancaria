@@ -34,3 +34,6 @@ alembic==1.13.3
 
 # Scheduler para backup automatico diario
 apscheduler==3.10.4
+
+# PDF reports (estado de cuenta + cierre mensual)
+reportlab==4.2.5

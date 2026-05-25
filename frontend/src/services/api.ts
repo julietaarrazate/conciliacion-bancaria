@@ -146,6 +146,36 @@ class ApiClient {
     return res.data
   }
 
+  async downloadEstadoCuentaPdf(clienteId: number, desde?: string, hasta?: string): Promise<void> {
+    const res = await this.client.get(`/analisis/cliente/${clienteId}/estado-cuenta.pdf`, {
+      params: { desde, hasta }, responseType: 'blob',
+    })
+    const disp: string = res.headers['content-disposition'] || ''
+    const m = /filename="?([^"]+)"?/.exec(disp)
+    const filename = m?.[1] || `estado_cuenta_${clienteId}.pdf`
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async downloadCierreMensualPdf(anio: number, mes: number, orgId?: number): Promise<void> {
+    const res = await this.client.get(`/analisis/cierre/${anio}/${mes}.pdf`, {
+      params: { org_id: orgId }, responseType: 'blob',
+    })
+    const disp: string = res.headers['content-disposition'] || ''
+    const m = /filename="?([^"]+)"?/.exec(disp)
+    const filename = m?.[1] || `cierre_${anio}_${mes}.pdf`
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // Extractos endpoints
   async uploadExtraco(file: File, banco: string = 'Banco Macro'): Promise<ExtractoBancario> {
     const formData = new FormData()
