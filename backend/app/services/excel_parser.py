@@ -163,14 +163,19 @@ KEYWORDS_FECHA_ACRED   = ["fecha acred", "fecha de acred"]
 # pero seguir permitiendolos como columnas propias de cliente_acred/fecha_acred.
 BLOCKLIST = {"acred", "acreditad", "cliente"}
 
+def _normalizar(s: str) -> str:
+    """Quita acentos y diacríticos para que 'Débitos' matchee 'debito'."""
+    import unicodedata
+    return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+
 def _match_kw(header, keywords):
-    h = header.lower().strip()
+    h = _normalizar(header.lower().strip())
     if any(b in h for b in BLOCKLIST):
         return False
     return any(k in h for k in keywords)
 
 def _match_kw_raw(header, keywords):
-    h = header.lower().strip()
+    h = _normalizar(header.lower().strip())
     return any(k in h for k in keywords)
 
 def detectar_columnas(ws):
