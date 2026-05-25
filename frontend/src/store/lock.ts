@@ -122,7 +122,7 @@ export const useLockStore = create<LockState>()(
           const assertion = await navigator.credentials.get({
             publicKey: {
               challenge,
-              allowCredentials: [{ id: rawId, type: 'public-key' }],
+              allowCredentials: [{ id: rawId.buffer as ArrayBuffer, type: 'public-key' }],
               userVerification: 'required',
               timeout: 60000,
             },

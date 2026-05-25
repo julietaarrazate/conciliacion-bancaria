@@ -37,6 +37,7 @@ const Icon = {
 
 const navItems = [
   { to: '/resumen',        label: 'Resumen',       Icon: Icon.Chart },
+  { to: '/flujo-de-caja',  label: 'Flujo de Caja', Icon: Icon.Activity },
   { to: '/dashboard',      label: 'Conciliar',     Icon: Icon.Bolt },
   { to: '/clientes',       label: 'Clientes',      Icon: Icon.Folder },
   { to: '/extractos-archivo', label: 'Extractos',  Icon: Icon.Folder },
