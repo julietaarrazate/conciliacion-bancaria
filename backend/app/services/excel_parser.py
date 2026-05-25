@@ -148,7 +148,9 @@ def _parse_monto(v):
             return None
     return None
 
-KEYWORDS_MONTO   = ["importe","monto","haber","debe","amount"]
+KEYWORDS_MONTO   = ["importe","monto","amount"]
+KEYWORDS_CREDITO = ["credito","haber","credit"]
+KEYWORDS_DEBITO  = ["debito","debe","debit","cargo"]
 KEYWORDS_FECHA   = ["fecha","date","vencimiento"]
 KEYWORDS_TITULAR = ["titular","concepto","descripcion","glosa","detalle","nombre","beneficiario","ordenante"]
 KEYWORDS_ORDEN   = ["orden","nro. de referencia","nro","numero","secuencia","referencia"]
@@ -161,19 +163,25 @@ KEYWORDS_FECHA_ACRED   = ["fecha acred", "fecha de acred"]
 # pero seguir permitiendolos como columnas propias de cliente_acred/fecha_acred.
 BLOCKLIST = {"acred", "acreditad", "cliente"}
 
+def _normalizar(s: str) -> str:
+    """Quita acentos y diacríticos para que 'Débitos' matchee 'debito'."""
+    import unicodedata
+    return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+
 def _match_kw(header, keywords):
-    h = header.lower().strip()
+    h = _normalizar(header.lower().strip())
     if any(b in h for b in BLOCKLIST):
         return False
     return any(k in h for k in keywords)
 
 def _match_kw_raw(header, keywords):
-    h = header.lower().strip()
+    h = _normalizar(header.lower().strip())
     return any(k in h for k in keywords)
 
 def detectar_columnas(ws):
-    cols = {"hdr_row":1,"monto":None,"fecha":None,"titular":None,"orden":None,
-            "saldo":None,"mes":None,"cliente_acred":None,"fecha_acred":None}
+    cols = {"hdr_row":1,"monto":None,"credito":None,"debito":None,"fecha":None,
+            "titular":None,"orden":None,"saldo":None,"mes":None,
+            "cliente_acred":None,"fecha_acred":None}
     for r in range(1, min(13, ws.max_row + 1)):
         encontrados = {}
         for c in range(1, ws.max_column + 1):
@@ -189,6 +197,10 @@ def detectar_columnas(ws):
                 continue
             if _match_kw(h, KEYWORDS_MONTO):
                 encontrados.setdefault("monto", c)
+            elif _match_kw(h, KEYWORDS_CREDITO):
+                encontrados.setdefault("credito", c)
+            elif _match_kw(h, KEYWORDS_DEBITO):
+                encontrados.setdefault("debito", c)
             elif _match_kw(h, KEYWORDS_FECHA):
                 encontrados.setdefault("fecha", c)
             elif _match_kw(h, KEYWORDS_TITULAR):
@@ -199,7 +211,8 @@ def detectar_columnas(ws):
                 encontrados.setdefault("saldo", c)
             elif _match_kw(h, KEYWORDS_MES):
                 encontrados.setdefault("mes", c)
-        if "monto" in encontrados:
+        # Fila de headers válida si tiene monto unitario O par crédito/débito
+        if "monto" in encontrados or "credito" in encontrados or "debito" in encontrados:
             cols["hdr_row"] = r
             cols.update(encontrados)
             return cols
@@ -217,7 +230,24 @@ def parsear_generico(ws, cols):
     movimientos = []
     hdr = cols["hdr_row"]
     for row in range(hdr + 1, ws.max_row + 1):
-        monto = _parse_monto(ws.cell(row, cols["monto"]).value) if cols["monto"] else None
+        if cols["monto"]:
+            # Columna única de monto (Banco Macro y formato genérico)
+            monto = _parse_monto(ws.cell(row, cols["monto"]).value)
+        else:
+            # Columnas separadas crédito/débito (BBVA, Santander, Galicia)
+            credito = _parse_monto(ws.cell(row, cols["credito"]).value) if cols.get("credito") else None
+            debito  = _parse_monto(ws.cell(row, cols["debito"]).value)  if cols.get("debito")  else None
+            credito = abs(credito) if credito is not None else 0.0
+            debito  = abs(debito)  if debito  is not None else 0.0
+            if credito == 0.0 and debito == 0.0:
+                monto = None
+            elif credito > 0.0 and debito == 0.0:
+                monto = credito
+            elif debito > 0.0 and credito == 0.0:
+                monto = -debito
+            else:
+                # Ambas columnas con valor: neto (poco común, pero posible)
+                monto = round(credito - debito, 2)
         if monto is None or abs(monto) < 0.01:
             continue
         fecha   = _parse_fecha(ws.cell(row, cols["fecha"]).value)   if cols["fecha"]   else None

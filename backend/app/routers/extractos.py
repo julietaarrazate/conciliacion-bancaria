@@ -28,6 +28,31 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/extractos", tags=["extractos"])
 
+# Mapeo de clave interna del parser → nombre de banco legible
+_BANCO_NOMBRE = {
+    "macro":     "Banco Macro",
+    "bbva":      "BBVA",
+    "santander": "Santander",
+    "galicia":   "Galicia",
+    "icbc":      "ICBC",
+    "nacion":    "Banco Nación",
+    "provincia": "Bapro",
+    "ciudad":    "Banco Ciudad",
+    "hsbc":      "HSBC",
+}
+
+def _resolver_banco(banco_param: str, banco_detectado: str) -> str:
+    """
+    Usa el banco detectado por el parser cuando es más específico que el default.
+    Si el usuario pasó un banco explícito distinto del default, se respeta siempre.
+    """
+    if banco_detectado != "generico":
+        nombre_detectado = _BANCO_NOMBRE.get(banco_detectado, banco_detectado.capitalize())
+        # Usar detectado si el parámetro es el default ("Banco Macro") o coincide
+        if banco_param == "Banco Macro" or banco_param == nombre_detectado:
+            return nombre_detectado
+    return banco_param
+
 
 def _fingerprint(movimientos: list) -> str:
     """Huella digital del extracto: hash de total+ordenes+suma_montos"""
@@ -79,6 +104,8 @@ async def upload_extracto(file: UploadFile = File(...),
 
         parsed = parsear_extracto_bancario(tmp_path)
         movs = parsed["movimientos"]
+        banco_detectado = parsed.get("banco_detectado", "generico")
+        banco_final = _resolver_banco(banco, banco_detectado)
         fp = _fingerprint(movs)
 
         # Si ya existe un extracto identico (fingerprint match) → upsert de acreditados:
@@ -106,15 +133,16 @@ async def upload_extracto(file: UploadFile = File(...),
                     actualizados += 1
                 if fecha_nueva and not m.fecha_acred:
                     m.fecha_acred = fecha_nueva
-            if banco and banco != "Banco Macro" and not existente.banco:
-                existente.banco = banco
+            # Actualizar banco si el detectado es más específico que el guardado
+            if banco_final and banco_final != "Banco Macro" and not existente.banco:
+                existente.banco = banco_final
             db.commit()
             db.refresh(existente)
             registrar_log(db, current_user.id, "extractos_bancarios", existente.id, "UPSERT_ACRED",
                           {"archivo": file.filename, "actualizados": actualizados})
             return existente
 
-        extracto = ExtractoBancario(nombre_archivo=file.filename, creado_por=current_user.id, fingerprint=fp, banco=banco)
+        extracto = ExtractoBancario(nombre_archivo=file.filename, creado_por=current_user.id, fingerprint=fp, banco=banco_final)
         db.add(extracto)
         db.flush()
         for m in movs:
