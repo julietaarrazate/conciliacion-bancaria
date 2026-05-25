@@ -362,8 +362,18 @@ class ApiClient {
     Object.entries(filters).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') params[k] = v
     })
-    const res = await this.client.get(`/extractos/${extractoId}/movimientos`, { params })
-    return res.data
+    const key = this._cacheKey(`/extractos/${extractoId}/movimientos`, params)
+    return this._cached(key, 30_000, async () => {
+      const res = await this.client.get(`/extractos/${extractoId}/movimientos`, { params })
+      return res.data
+    })
+  }
+
+  async getClientesArchivos(): Promise<any> {
+    return this._cached('/clientes/archivos', 60_000, async () => {
+      const res = await this.client.get('/clientes/archivos')
+      return res.data
+    })
   }
 
   async updateMovimiento(extractoId: number, movId: number, payload: Record<string, unknown>): Promise<void> {
