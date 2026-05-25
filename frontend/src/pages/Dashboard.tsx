@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FileUpload } from '@/components/FileUpload'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
@@ -52,6 +52,8 @@ export const Dashboard: React.FC = () => {
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([])
   const [bulkRunning, setBulkRunning] = useState(false)
   const [bulkFecha, setBulkFecha] = useState(new Date().toISOString().split('T')[0])
+  const [autoRun, setAutoRun] = useState(true)
+  const justAddedRef = useRef(false)
 
   const handleBulkFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -61,8 +63,28 @@ export const Dashboard: React.FC = () => {
       clienteNombre: f.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').trim(),
       status: 'pending' as const
     }))])
+    justAddedRef.current = true
     e.target.value = ''
   }
+
+  const handleBulkFilesArray = (files: File[]) => {
+    setBulkItems(prev => [...prev, ...files.map(f => ({
+      id: `${f.name}-${Date.now()}-${Math.random()}`,
+      file: f,
+      clienteNombre: f.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').trim(),
+      status: 'pending' as const
+    }))])
+    justAddedRef.current = true
+  }
+
+  // Auto-conciliar: cuando se agregan planillas y autoRun está activo
+  useEffect(() => {
+    if (justAddedRef.current && autoRun && extractoId && !bulkRunning) {
+      justAddedRef.current = false
+      handleBulkRun()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkItems])
   const updateBulkItem = (id: string, patch: Partial<BulkItem>) =>
     setBulkItems(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it))
   const handleBulkRun = async () => {
@@ -676,12 +698,22 @@ export const Dashboard: React.FC = () => {
               </div>
               <p className="text-xs text-gray-400 dark:text-zinc-600 pb-2">Todas las planillas se acreditarán con esta fecha</p>
             </div>
-            <label className="block border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg p-6 text-center cursor-pointer hover:border-ml-blue dark:hover:border-ml-blue transition-colors">
-              <span className="text-3xl block mb-2">📂</span>
-              <span className="text-sm font-medium text-ml-text dark:text-white">Clic o arrastrá las planillas aquí</span>
-              <span className="text-xs text-ml-text-soft dark:text-gray-400 block mt-1">Podés seleccionar múltiples archivos a la vez</span>
-              <input type="file" accept="*/*" multiple hidden onChange={handleBulkFiles} />
-            </label>
+            <div className="flex flex-col gap-2">
+              <FileUpload
+                multiple
+                onFilesSelected={handleBulkFilesArray}
+                label="Seleccionar planillas (múltiples)"
+              />
+              <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={autoRun}
+                  onChange={e => setAutoRun(e.target.checked)}
+                  className="w-3 h-3 accent-violet-500"
+                />
+                Auto-conciliar al cargar
+              </label>
+            </div>
           </div>
 
           {/* Lista de planillas */}
