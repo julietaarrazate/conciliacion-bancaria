@@ -149,14 +149,14 @@ export const Clientes: React.FC = () => {
 
   const cargar = () => {
     setLoading(true)
-    apiClient.client.get('/clientes/archivos')
-      .then(r => {
+    apiClient.getClientesArchivos()
+      .then((r: any) => {
         // Soporta dos formatos:
         // 1) Nuevo: { organizaciones: [{id, nombre, clientes: [...]}] }
         // 2) Viejo (fallback por SW cacheado): { clientes: [{nombre, meses: [...]}] }
-        let data: OrgData[] = r.data.organizaciones || []
-        if (data.length === 0 && Array.isArray(r.data.clientes)) {
-          const clientesViejos = r.data.clientes.map((c: any, idx: number) => ({
+        let data: OrgData[] = r.organizaciones || []
+        if (data.length === 0 && Array.isArray(r.clientes)) {
+          const clientesViejos = r.clientes.map((c: any, idx: number) => ({
             id: idx + 1,
             nombre: c.nombre,
             cuit: null,
@@ -234,6 +234,7 @@ export const Clientes: React.FC = () => {
       await apiClient.client.delete(`/clientes/${clienteId}`, {
         params: tieneArchivos ? { force: true } : {}
       })
+      apiClient.invalidateCache('/clientes/archivos')
       setMsg(`✓ Cliente "${clienteNombre}" borrado`)
       cargar()
     } catch (e: any) {
@@ -253,6 +254,7 @@ export const Clientes: React.FC = () => {
       })
       setMsg(`✓ Cliente "${nuevoNombre.trim()}" creado`)
       setNuevoNombre(''); setNuevoCuit(''); setCreando(null)
+      apiClient.invalidateCache('/clientes/archivos')
       cargar()
     } catch (e: any) {
       setMsg(`✗ ${e.response?.data?.detail || 'Error al crear'}`)

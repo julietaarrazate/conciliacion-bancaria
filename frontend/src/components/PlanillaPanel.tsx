@@ -70,6 +70,8 @@ interface Props {
   onDelete?: (id: number) => void
 }
 
+const PAGE_SIZE = 100
+
 const ESTADOS_DISPONIBLES = [
   'ok', 'no está', 'duplicado', 'faltan datos', 'pendiente',
   'PAGO_PARCIAL', 'CONCILIADO_CON_DIFERENCIA', 'VENCIDO', 'EN_REVISION'
@@ -87,6 +89,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
   const [savingRow, setSavingRow] = useState(false)
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
   const [bulkStatus, setBulkStatus] = useState('')
+  const [page, setPage] = useState(0)
 
   useEffect(() => {
     if (!planillaId) { setDetalle(null); setFetchError(''); setFilters(EMPTY_FILTERS); setSelectedRows(new Set()); return }
@@ -117,11 +120,16 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     })
   }, [detalle, filters])
 
-  const hasFilters = Object.values(filters).some(v => v !== '')
-  const clearFilters = () => setFilters(EMPTY_FILTERS)
+  const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE)
+  const pageRows = filteredRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
-  const setFilter = (k: keyof Filters, v: string) =>
+  const hasFilters = Object.values(filters).some(v => v !== '')
+  const clearFilters = () => { setFilters(EMPTY_FILTERS); setPage(0) }
+
+  const setFilter = (k: keyof Filters, v: string) => {
     setFilters(prev => ({ ...prev, [k]: v }))
+    setPage(0)
+  }
 
   const uniqueStatuses = useMemo(() => {
     if (!detalle) return []
@@ -284,7 +292,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
           <div className="px-4 py-1.5 text-xs text-ml-text-soft dark:text-gray-400 flex flex-wrap items-center gap-2 border-b dark:border-slate-700 bg-ml-gray-bg dark:bg-slate-900 shrink-0">
             <span>{fmtDate(detalle.fecha_carga)}</span>
             <span>{detalle.usuario_nombre}</span>
-            <span>{filteredRows.length}/{detalle.total} filas{hasFilters ? ' (filtrado)' : ''}</span>
+            <span>{filteredRows.length}/{detalle.total} filas{hasFilters ? ' (filtrado)' : ''}{totalPages > 1 ? ` · p.${page + 1}/${totalPages}` : ''}</span>
 
             {selectedRows.size > 0 && (
               <div className="flex items-center gap-1 ml-auto">
@@ -373,7 +381,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                     </td>
                   </tr>
                 ) : (
-                  filteredRows.map((row, i) => (
+                  pageRows.map((row, i) => (
                     <tr key={row.id} className="hover:bg-ml-gray-bg dark:hover:bg-slate-700/50 divide-x divide-gray-100 dark:divide-slate-700">
                       <td className="px-1 py-px text-center">
                         <input
@@ -383,7 +391,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                           className="w-3 h-3"
                         />
                       </td>
-                      <td className="px-2 py-px text-gray-400 dark:text-gray-500">{i + 1}</td>
+                      <td className="px-2 py-px text-gray-400 dark:text-gray-500">{page * PAGE_SIZE + i + 1}</td>
                       <td className="px-2 py-px text-right font-mono font-semibold dark:text-white whitespace-nowrap">{fmtARS(row.monto)}</td>
                       <td className="px-2 py-px text-gray-500 dark:text-gray-400 font-mono text-[10px]">{row.cuit || '—'}</td>
                       <td className="px-2 py-px dark:text-gray-300 max-w-[130px] truncate" title={row.titular || ''}>{row.titular || '—'}</td>
@@ -444,6 +452,22 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                 )}
               </tbody>
             </table>
+
+            {totalPages > 1 && (
+              <div className="sticky bottom-0 flex items-center justify-between gap-2 px-4 py-2 bg-white dark:bg-ml-dark-surface border-t border-gray-100 dark:border-slate-700 text-xs text-ml-text-soft dark:text-gray-400">
+                <button
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="px-2.5 py-1 rounded border border-gray-200 dark:border-slate-600 disabled:opacity-40 hover:bg-ml-gray-bg dark:hover:bg-slate-700"
+                >← Anterior</button>
+                <span>Página {page + 1} / {totalPages} · {filteredRows.length} filas</span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                  disabled={page === totalPages - 1}
+                  className="px-2.5 py-1 rounded border border-gray-200 dark:border-slate-600 disabled:opacity-40 hover:bg-ml-gray-bg dark:hover:bg-slate-700"
+                >Siguiente →</button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -300,14 +300,12 @@ export const Dashboard: React.FC = () => {
       {tab === 'individual' && (<>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Paso 1: Extracto */}
-        <div className="card">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <span className="badge badge-info">PASO 1</span>
-              <h3 className="text-base font-semibold text-ml-text mt-2">
-                Extracto bancario
-              </h3>
-            </div>
+        <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/15 text-violet-500 dark:text-violet-400 text-xs font-bold shrink-0">1</span>
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-white tracking-tight">
+              Extracto bancario
+            </h3>
           </div>
 
           {extractos.length > 0 && (
@@ -470,10 +468,10 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Paso 2: Cliente + Planilla */}
-        <div className="card">
-          <div className="mb-3">
-            <span className="badge badge-info">PASO 2</span>
-            <h3 className="text-base font-semibold text-ml-text mt-2">
+        <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/15 text-violet-500 dark:text-violet-400 text-xs font-bold shrink-0">2</span>
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-white tracking-tight">
               Cliente y planilla
             </h3>
           </div>
@@ -531,10 +529,10 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Paso 3: Resultado */}
-        <div className="card">
-          <div className="mb-3">
-            <span className="badge badge-info">PASO 3</span>
-            <h3 className="text-base font-semibold text-ml-text mt-2">
+        <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/15 text-violet-500 dark:text-violet-400 text-xs font-bold shrink-0">3</span>
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-white tracking-tight">
               Resultado
             </h3>
           </div>
