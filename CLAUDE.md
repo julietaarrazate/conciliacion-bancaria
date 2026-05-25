@@ -223,6 +223,103 @@ botón "+ Nuevo cliente" de cada organización)
 
 ---
 
+## Versión v3.1 — 2026-05-25 (PDF reports, performance, ConfirmDialog, charts SVG, bell fix)
+
+Sin tag git. Iteracion sobre v3.0 con mejoras de productividad, performance
+y UX. Todo en main, deployado a Render+Vercel.
+
+### Reportes PDF (commit 0c4bcdf)
+- `backend/app/services/pdf_export.py`: dos generadores con reportlab
+  (estado_cuenta_pdf, cierre_mensual_pdf). A4, paleta UI, tablas con
+  zebra+bordes, footer timestamp+autor.
+- Endpoints reusan los JSON existentes (no duplican logica):
+  - GET /analisis/cliente/{id}/estado-cuenta.pdf?desde&hasta
+  - GET /analisis/cierre/{anio}/{mes}.pdf?org_id
+- Frontend: botones "📄 PDF" en EstadoCuenta (al lado del selector
+  30/90/180/365 dias) y "📄 PDF cierre" en Resumen (solo cuando
+  periodo='mes', al lado del navegador de mes).
+- requirements.txt: reportlab==4.2.5
+
+### Performance (commits f086b41, 345609b)
+- Backend GZipMiddleware: comprime respuestas >500 bytes, reduce
+  60-80% bytes en listados largos (movimientos, planillas, asientos,
+  backups). Sin cambios de API (axios decompresa automatico).
+- Frontend lazy routes: React.lazy() en todas las paginas excepto
+  Login/RecuperarPassword/RestablecerPassword. Bundle inicial mucho
+  mas chico, primer paint mas rapido. Despues del primer load cada
+  chunk queda cacheado en browser. Suspense fallback con "cargando..."
+  minimalista.
+
+### ConfirmDialog global (commit c83b0bf)
+- store/confirm.ts: zustand store + funcion `confirmDialog(opts)` que
+  devuelve Promise<boolean>.
+- components/ConfirmModal.tsx: modal visual (z-150, backdrop blur).
+- components/ConfirmDialog.tsx: wrapper montado UNA VEZ en Layout
+  que lee del store.
+- Reemplaza 16 confirm() nativos en: Dashboard (extracto + UM), Historial,
+  Cheques, PagosGastos (pago+gasto), Clientes (doble confirmacion),
+  Usuarios, Liquidaciones (aprobar+pagada), Movimientos, Papelera,
+  PlanillaPanel (fila+bulk), Layout (logout).
+- LockScreen sigue con confirm() nativo (z-200 > 150 del dialog).
+
+### Charts SVG (commit 81223d6)
+- `components/charts/LineChart.tsx`: serie temporal con area sombreada
+  y tooltips hover (rect overlay invisible para detectar).
+- `components/charts/DonutChart.tsx`: dona con centro configurable y
+  leyenda lateral (showLegend opcional).
+- `components/charts/BarChart.tsx`: barras agrupadas con leyenda
+  automatica si multiples series, formato compacto (es-AR).
+- Sin dependencias externas (NO recharts, NO chartjs). Cero peso extra.
+- Aun no se usan en ninguna pagina — FlujoCaja sera el primer consumidor.
+
+### Bell badge fix (commit 48f72cd)
+- Antes: el badge mostraba siempre 99+ porque sumaba la CANTIDAD bruta
+  de items de cada tipo de alerta (movimientos sin asignar de 60 dias
+  podian ser cientos).
+- Ahora: `total` en /analisis/alertas cuenta TIPOS de alerta urgencia
+  alta/media (max 3). Si no hay nada urgente, badge desaparece.
+- `total_items` queda como campo separado para mostrar cantidad bruta
+  en el dropdown si se quiere.
+- Movimientos sin asignar lookback baja de 60 → 30 dias.
+
+### Pendientes inmediatos (para arrancar en chat nuevo)
+1. **FlujoCaja page + endpoints** (mas costoso, ~300 lineas)
+   - Backend: `/analisis/evolucion?meses=N` (array {label, conciliado,
+     pendiente, anio, mes}) y `/analisis/flujo-caja?meses=N` (array
+     {label, ingresos, egresos, neto, anio, mes}).
+   - Frontend api.ts: `getEvolucion`, `getFlujoCaja` methods.
+   - Frontend page `FlujoCaja.tsx` ruta `/flujo-de-caja`: selector
+     3/6/12 meses, 3 KPI cards (Ingresos/Egresos/Neto), LineChart del
+     neto, BarChart de ingresos+egresos, tabla mensual al final.
+   - Layout.tsx: agregar item de menu "Flujo de Caja".
+   - App.tsx: registrar ruta `/flujo-de-caja` con lazy import.
+   - Tambien agregar charts a Resumen (LineChart de evolucion, opcional).
+
+2. **PRE-EXISTING TS errors** (no introducidos en esta sesion, viejos):
+   - src/pages/Movimientos.tsx (3 errors): `MovimientoFiltrado` espera
+     `fecha?: string` pero backend devuelve null. Fix: cambiar tipo
+     a `string | null` en `types/index.ts` campos fecha,
+     cliente_acreditado, fecha_acred.
+   - src/services/api.ts(28): `import.meta.env` sin tipo. Fix: crear
+     `src/vite-env.d.ts` con `/// <reference types="vite/client" />`.
+   - src/store/lock.ts(125): WebAuthn ArrayBuffer cast. Fix:
+     `id: fromBase64url(credentialId).buffer as ArrayBuffer`.
+
+3. **Cleanup git**: existe rama remota `claude/awesome-sagan-v57M3`
+   huerfana en GitHub (commits viejos, no se deploya, ya migrados los
+   cambios buenos a main). El usuario puede borrarla desde GitHub web
+   (Branches → 🗑). El harness MCP no tiene tool de delete branch.
+
+### Convenciones criticas (mantener en proximas sesiones)
+- Rama de trabajo: directo en `main` ahora (despues de migrar todo en
+  esta sesion). Si el harness pide otra rama, crear nueva desde main.
+- TODOS los commits con `--author="Julieta Arrazate <julietaarrazate@gmail.com>"`
+  o Vercel seatBlock COMMIT_AUTHOR_REQUIRED falla el build.
+- Caneland (org_id=1) NUNCA se modifica — cambios aditivos solamente.
+- Repo es PRIVADO pero igual no exponer keys en CLAUDE.md.
+
+---
+
 ## Versión v2.9 — 2026-05-24 (Resumen ejecutivo + estado de cuenta por cliente)
 
 Sin tag git. Agrega dos pantallas de analisis de alto valor para perfilar
