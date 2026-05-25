@@ -70,20 +70,26 @@ def send_test_push(
 
 @router.post("/setup")
 def setup_vapid(current_user: User = Depends(get_current_user)):
-    """Genera un par de claves VAPID. Copiá el resultado a VAPID_PRIVATE_KEY y VAPID_PUBLIC_KEY en Render."""
+    """Genera un par de claves VAPID en formato base64url, listas para pegar como env vars."""
     if not current_user.is_superadmin:
         raise HTTPException(403, "Solo superadmin")
     try:
+        import base64
         from py_vapid import Vapid
         v = Vapid()
         v.generate_keys()
+        # Private key: 32 bytes raw → base64url sin padding
+        priv_bytes = v.private_key.private_numbers().private_value.to_bytes(32, "big")
+        priv_b64 = base64.urlsafe_b64encode(priv_bytes).rstrip(b"=").decode("ascii")
+        # Public key: punto sin comprimir (0x04 || X || Y) = 65 bytes → base64url sin padding
+        nums = v.public_key.public_numbers()
+        pub_bytes = b"\x04" + nums.x.to_bytes(32, "big") + nums.y.to_bytes(32, "big")
+        pub_b64 = base64.urlsafe_b64encode(pub_bytes).rstrip(b"=").decode("ascii")
         return {
-            "vapid_public_key": v.public_key,
-            "vapid_private_key": v.private_key,
-            "instrucciones": "Copiá estos valores como env vars VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY en Render, luego redeploy.",
+            "vapid_public_key": pub_b64,
+            "vapid_private_key": priv_b64,
+            "instrucciones": "Pegá ambos valores como env vars VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY en Render, luego redeploy.",
         }
     except Exception as e:
-        return {
-            "error": str(e),
-            "message": "Instalá pywebpush>=1.14 en requirements.txt",
-        }
+        logger.exception("VAPID setup error")
+        raise HTTPException(500, f"Error generando VAPID keys: {e}")
