@@ -1,7 +1,9 @@
 import React, { useRef } from 'react'
 
 interface FileUploadProps {
-  onFileSelected: (file: File) => void
+  onFileSelected?: (file: File) => void
+  onFilesSelected?: (files: File[]) => void
+  multiple?: boolean
   accept?: string
   label?: string
   error?: string
@@ -9,6 +11,8 @@ interface FileUploadProps {
 
 export const FileUpload: React.FC<FileUploadProps> = ({
   onFileSelected,
+  onFilesSelected,
+  multiple = false,
   accept = '*/*',
   label = 'Seleccionar archivo',
   error
@@ -26,12 +30,24 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     e.preventDefault()
     e.stopPropagation()
     setIsDragActive(false)
-    const files = e.dataTransfer.files
-    if (files && files.length > 0) onFileSelected(files[0])
+    const files = Array.from(e.dataTransfer.files || [])
+    if (files.length === 0) return
+    if (multiple && onFilesSelected) {
+      onFilesSelected(files)
+    } else if (onFileSelected) {
+      onFileSelected(files[0])
+    }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) onFileSelected(e.target.files[0])
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    if (multiple && onFilesSelected) {
+      onFilesSelected(files)
+      e.target.value = ''
+    } else if (onFileSelected && files.length > 0) {
+      onFileSelected(files[0])
+    }
   }
 
   return (
@@ -61,7 +77,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         <span className="truncate">{isDragActive ? 'Soltá para subir' : label}</span>
       </button>
       {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
-      <input ref={inputRef} type="file" hidden accept={accept} onChange={handleChange} />
+      <input ref={inputRef} type="file" hidden accept={accept} multiple={multiple} onChange={handleChange} />
     </div>
   )
 }

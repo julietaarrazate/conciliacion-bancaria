@@ -210,6 +210,28 @@ class ApiClient {
     URL.revokeObjectURL(url)
   }
 
+  async generarShareLink(clienteId: number): Promise<{ token: string; url: string; expires_at: string; cliente_nombre: string }> {
+    const res = await this.client.post(`/clientes/${clienteId}/share-link`)
+    return res.data
+  }
+
+  async downloadCierreMensualXlsx(anio: number, mes: number, orgId?: number): Promise<void> {
+    const params: any = {}
+    if (orgId) params.org_id = orgId
+    const res = await this.client.get(`/analisis/cierre/${anio}/${mes}/export-xlsx`, {
+      params,
+      responseType: 'blob',
+    })
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    const cd = res.headers['content-disposition'] || ''
+    const match = cd.match(/filename="?([^"]+)"?/)
+    a.download = match?.[1] || `cierre_${anio}_${String(mes).padStart(2, '0')}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async downloadCierreMensualPdf(anio: number, mes: number, orgId?: number): Promise<void> {
     const res = await this.client.get(`/analisis/cierre/${anio}/${mes}.pdf`, {
       params: { org_id: orgId }, responseType: 'blob',
@@ -549,6 +571,23 @@ class ApiClient {
       resultados.push(r)
     }
     return resultados
+  }
+
+  // ─── Web Push ─────────────────────────────────────────────────
+  async getPushPublicKey(): Promise<string | null> {
+    const res = await this.client.get('/push/public-key')
+    return res.data.vapid_public_key || null
+  }
+
+  async subscribePush(subscription: PushSubscriptionJSON): Promise<void> {
+    await this.client.post('/push/subscribe', {
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+    })
+  }
+
+  async unsubscribePush(endpoint: string): Promise<void> {
+    await this.client.delete('/push/subscribe', { data: { endpoint, keys: {} } })
   }
 }
 

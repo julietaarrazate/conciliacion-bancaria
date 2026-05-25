@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
 import { useThemeStore } from '@/store/theme'
@@ -10,6 +10,7 @@ import { Toaster } from './Toaster'
 import { AppLockGuard } from './AppLockGuard'
 import { ConfirmDialog } from './ConfirmDialog'
 import { confirmDialog } from '@/store/confirm'
+import { SearchModal } from './SearchModal'
 
 // ── SVG Icons (Heroicons outline style) ──────────────────────
 const Icon = {
@@ -74,6 +75,7 @@ export const Layout: React.FC = () => {
   const [orgs, setOrgs] = useState<{ id: number; nombre: string }[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [alertasCount, setAlertasCount] = useState(0)
+  const [searchOpen, setSearchOpen] = useState(false)
   const location = useLocation()
   const drawerTouchStartX = React.useRef(0)
   const drawerTouchStartY = React.useRef(0)
@@ -121,6 +123,18 @@ export const Layout: React.FC = () => {
         .catch(() => {})
     }
   }, [user?.is_superadmin])
+
+  // Cmd+K / Ctrl+K global shortcut para búsqueda
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(s => !s)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   useEffect(() => {
     if (!user) return
@@ -260,6 +274,13 @@ export const Layout: React.FC = () => {
 
         <div className="flex items-center gap-1">
           <button
+            onClick={() => setSearchOpen(true)}
+            className="p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover transition-colors"
+            title="Buscar (⌘K)"
+          >
+            <Icon.Search />
+          </button>
+          <button
             onClick={() => { setAlertasCount(0); navigate('/resumen') }}
             className="relative p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover transition-colors"
           >
@@ -317,6 +338,13 @@ export const Layout: React.FC = () => {
             <span className="font-bold text-base font-mono app-title tracking-wide">Cuadra</span>
           </div>
           <button
+            onClick={() => setSearchOpen(true)}
+            className="p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover transition-colors shrink-0"
+            title="Buscar (⌘K)"
+          >
+            <Icon.Search />
+          </button>
+          <button
             onClick={() => { setAlertasCount(0); navigate('/resumen') }}
             className="relative p-1.5 rounded-lg text-ml-text dark:text-gray-400 hover:bg-black/8 dark:hover:bg-ml-dark-hover transition-colors shrink-0"
           >
@@ -372,6 +400,8 @@ export const Layout: React.FC = () => {
           <span>Más</span>
         </button>
       </nav>
+
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   )
 }
