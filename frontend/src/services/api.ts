@@ -210,6 +210,11 @@ class ApiClient {
     URL.revokeObjectURL(url)
   }
 
+  async generarShareLink(clienteId: number): Promise<{ token: string; url: string; expires_at: string; cliente_nombre: string }> {
+    const res = await this.client.post(`/clientes/${clienteId}/share-link`)
+    return res.data
+  }
+
   async downloadCierreMensualXlsx(anio: number, mes: number, orgId?: number): Promise<void> {
     const params: any = {}
     if (orgId) params.org_id = orgId

@@ -37,6 +37,7 @@ const PagosGastos       = lazyPage(() => import('@/pages/PagosGastos'),       'P
 const Papelera          = lazyPage(() => import('@/pages/Papelera'),          'Papelera')
 const Compartir         = lazyPage(() => import('@/pages/Compartir'),         'Compartir')
 const FlujoCaja         = lazyPage(() => import('@/pages/FlujoCaja'),         'FlujoCaja')
+const PaginaPublica     = lazyPage(() => import('@/pages/PaginaPublica'),     'PaginaPublica')
 
 const PageFallback: React.FC = () => (
   <div className="flex items-center justify-center min-h-[200px] p-8">
@@ -104,6 +105,7 @@ export function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/recuperar-password" element={<RecuperarPassword />} />
           <Route path="/restablecer-password" element={<RestablecerPassword />} />
+          <Route path="/p/:token" element={<PaginaPublica />} />
 
           <Route
             element={

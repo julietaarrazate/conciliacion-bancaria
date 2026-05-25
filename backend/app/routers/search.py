@@ -65,7 +65,7 @@ def search_global(
         db.query(Cheque)
         .filter(
             Cheque.organizacion_id == org,
-            func.lower(Cheque.emisor).like(term),
+            func.lower(Cheque.titular).like(term),
         )
         .order_by(Cheque.fecha_emision.desc())
         .limit(4).all()
@@ -96,7 +96,7 @@ def search_global(
             {
                 "id": c.id,
                 "numero": c.numero,
-                "emisor": c.emisor,
+                "emisor": c.titular,
                 "monto": float(c.monto or 0),
             }
             for c in cheques

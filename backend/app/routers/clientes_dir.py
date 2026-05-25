@@ -569,6 +569,41 @@ def borrar_cliente(cliente_id: int,
         raise HTTPException(500, "Error al borrar el cliente. Intentá de nuevo.")
 
 
+@router.post("/{cliente_id}/share-link")
+def generar_share_link(
+    cliente_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Genera un link público de solo lectura para el estado de cuenta del cliente (expira en 7 días)."""
+    from datetime import timedelta
+    from jose import jwt as jose_jwt
+    from app.config import get_settings
+    from app.models.cliente import Cliente
+
+    settings = get_settings()
+    org_id = current_user.organizacion_id or 1
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id, Cliente.organizacion_id == org_id).first()
+    if not cliente:
+        raise HTTPException(404, "Cliente no encontrado")
+
+    exp = datetime.utcnow() + timedelta(days=7)
+    payload = {
+        "type": "share_cliente",
+        "client_id": cliente_id,
+        "org_id": org_id,
+        "exp": exp,
+    }
+    token = jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+    url = f"{settings.frontend_url}/p/{token}"
+    return {
+        "token": token,
+        "url": url,
+        "expires_at": exp.isoformat(),
+        "cliente_nombre": cliente.nombre,
+    }
+
+
 @router.post("")
 def crear_cliente(payload: dict,
                   db: Session = Depends(get_db),

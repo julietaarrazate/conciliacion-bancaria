@@ -83,6 +83,19 @@ export const EstadoCuenta: React.FC = () => {
   const [error, setError] = useState('')
   const [tab, setTab] = useState<'planillas' | 'cheques' | 'pagos'>('planillas')
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [sharingLink, setSharingLink] = useState(false)
+  const [linkCopiado, setLinkCopiado] = useState(false)
+
+  const handleShare = async () => {
+    setSharingLink(true)
+    try {
+      const { url } = await apiClient.generarShareLink(clienteId)
+      await navigator.clipboard.writeText(url)
+      setLinkCopiado(true)
+      setTimeout(() => setLinkCopiado(false), 3000)
+    } catch { /* ignore */ }
+    finally { setSharingLink(false) }
+  }
 
   const desde = useMemo(() => fechaHaceNDias(periodoDias), [periodoDias])
   const hasta = useMemo(() => new Date().toISOString().slice(0, 10), [])
@@ -162,6 +175,13 @@ export const EstadoCuenta: React.FC = () => {
               title="Descargar estado de cuenta en PDF"
             >
               {downloadingPdf ? 'Generando…' : '📄 PDF'}
+            </button>
+            <button
+              onClick={handleShare}
+              disabled={sharingLink}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors disabled:opacity-50"
+            >
+              {linkCopiado ? '✓ Link copiado' : '🔗 Compartir'}
             </button>
           </div>
         </div>
