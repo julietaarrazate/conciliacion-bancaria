@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
 import { useOrgStore } from '@/store/org'
+import { confirmDialog } from '@/store/confirm'
 
 interface Detalle {
   id: number
@@ -92,7 +93,7 @@ export const Liquidaciones: React.FC = () => {
   }
 
   const handleAprobar = async (id: number) => {
-    if (!confirm('¿Aprobar esta liquidación?')) return
+    if (!await confirmDialog({ title: 'Aprobar liquidación', message: '¿Aprobar esta liquidación?', confirmLabel: 'Aprobar' })) return
     try {
       await apiClient.client.post(`/liquidaciones/${id}/aprobar`)
       setMsg('✓ Liquidación aprobada')
@@ -104,7 +105,7 @@ export const Liquidaciones: React.FC = () => {
   }
 
   const handlePagada = async (id: number) => {
-    if (!confirm('¿Marcar como pagada?')) return
+    if (!await confirmDialog({ title: 'Marcar como pagada', message: '¿Marcar esta liquidación como pagada?', confirmLabel: 'Marcar pagada' })) return
     try {
       await apiClient.client.post(`/liquidaciones/${id}/marcar-pagada`)
       setMsg('✓ Marcada como pagada')

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { apiClient } from '@/services/api'
 import { Skeleton } from '@/components/Skeleton'
+import { confirmDialog } from '@/store/confirm'
 
 interface Archivo {
   id: number
@@ -223,10 +224,10 @@ export const Clientes: React.FC = () => {
   const handleBorrarCliente = async (clienteId: number, clienteNombre: string, totalArchivos: number) => {
     const tieneArchivos = totalArchivos > 0
     const mensaje = tieneArchivos
-      ? `¿Borrar "${clienteNombre}"?\n\nTiene ${totalArchivos} archivo(s) guardados.\nSe van a borrar TODOS los archivos y las acreditaciones quedarán sin cliente asignado.`
-      : `¿Borrar "${clienteNombre}"?\n\n(Sin archivos guardados)`
-    if (!confirm(mensaje)) return
-    if (tieneArchivos && !confirm(`Última confirmación: ¿borrar "${clienteNombre}" y sus ${totalArchivos} archivo(s)?`)) return
+      ? `Tiene ${totalArchivos} archivo(s) guardados. Se van a borrar TODOS los archivos y las acreditaciones quedarán sin cliente asignado.`
+      : 'Sin archivos guardados.'
+    if (!await confirmDialog({ title: `Borrar "${clienteNombre}"`, message: mensaje, confirmLabel: 'Borrar', danger: true })) return
+    if (tieneArchivos && !await confirmDialog({ title: 'Última confirmación', message: `¿Borrar "${clienteNombre}" y sus ${totalArchivos} archivo(s)?`, confirmLabel: 'Sí, borrar todo', danger: true })) return
 
     setMsg('')
     try {

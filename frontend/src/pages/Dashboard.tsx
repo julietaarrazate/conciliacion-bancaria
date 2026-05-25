@@ -4,6 +4,7 @@ import { FileUpload } from '@/components/FileUpload'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
+import { confirmDialog } from '@/store/confirm'
 import {
   ConciliacionResultado,
   ExtractoListItem,
@@ -105,7 +106,12 @@ export const Dashboard: React.FC = () => {
   }
 
   const handleDeleteExtracto = async (id: number) => {
-    if (!confirm('¿Borrar este extracto?\n\nLos movimientos se eliminan, pero las planillas conciliadas quedan conservadas como historial (no se borran).')) return
+    if (!await confirmDialog({
+      title: 'Borrar extracto',
+      message: 'Los movimientos se eliminan, pero las planillas conciliadas quedan conservadas como historial.',
+      confirmLabel: 'Borrar',
+      danger: true,
+    })) return
     try {
       await apiClient.deleteExtracto(id)
       const data = await apiClient.listExtractos()
@@ -413,7 +419,7 @@ export const Dashboard: React.FC = () => {
                           const det = err.response.data?.detail
                           const msg = typeof det === 'object' ? det.mensaje : det
                           const total = typeof det === 'object' ? det.total : 0
-                          if (confirm(`${msg}\n\n¿Borrar los ${total} movimientos UM?`)) {
+                          if (await confirmDialog({ title: 'UM ya existe', message: `${msg}\n\n¿Borrar los ${total} movimientos UM?`, confirmLabel: 'Borrar UM', danger: true })) {
                             try {
                               const r = await apiClient.deleteUM(extractoId, true)
                               setUmCorteDetectado(null)

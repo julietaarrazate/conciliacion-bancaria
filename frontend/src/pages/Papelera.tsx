@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
+import { confirmDialog } from '@/store/confirm'
 
 interface ItemPapelera {
   id: number
@@ -66,7 +67,7 @@ export const Papelera: React.FC = () => {
   }
 
   const dispararBackup = async () => {
-    if (!window.confirm('¿Disparar un backup manual ahora? Va a llegar por email en unos segundos.')) return
+    if (!await confirmDialog({ title: 'Backup manual', message: '¿Disparar un backup manual ahora? Va a llegar por email en unos segundos.', confirmLabel: 'Disparar' })) return
     setBackupBusy(true); setMensaje(null); setError(null)
     try {
       const res = await apiClient.client.post('/admin/backup/run-now')

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { User, UserRole } from '@/types'
 import { toast } from '@/store/toast'
+import { confirmDialog } from '@/store/confirm'
 
 export const Usuarios: React.FC = () => {
   const [users, setUsers] = useState<User[]>([])
@@ -76,7 +77,7 @@ export const Usuarios: React.FC = () => {
   }
 
   const handleDelete = async (user: User) => {
-    if (!confirm(`¿Eliminar permanentemente a ${user.full_name} (${user.email})?`)) return
+    if (!await confirmDialog({ title: 'Eliminar usuario', message: `¿Eliminar permanentemente a ${user.full_name} (${user.email})?`, confirmLabel: 'Eliminar', danger: true })) return
     setDeletingId(user.id)
     try {
       await apiClient.deleteUser(user.id)

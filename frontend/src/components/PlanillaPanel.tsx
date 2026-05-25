@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { apiClient } from '@/services/api'
+import { confirmDialog } from '@/store/confirm'
 
 interface Row {
   id: number
@@ -148,7 +149,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
   }
 
   const deleteRow = useCallback(async (rowId: number) => {
-    if (!confirm('Eliminar esta fila?')) return
+    if (!await confirmDialog({ title: 'Eliminar fila', message: '¿Eliminar esta fila?', confirmLabel: 'Eliminar', danger: true })) return
     try {
       await apiClient.deleteRow(rowId)
       setDetalle(prev => prev ? {
@@ -195,7 +196,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
 
   const bulkDelete = async () => {
     if (selectedRows.size === 0) return
-    if (!confirm(`Eliminar ${selectedRows.size} filas?`)) return
+    if (!await confirmDialog({ title: 'Eliminar filas', message: `¿Eliminar ${selectedRows.size} filas?`, confirmLabel: 'Eliminar', danger: true })) return
     setSavingRow(true)
     try {
       await Promise.all(Array.from(selectedRows).map(id => apiClient.deleteRow(id)))

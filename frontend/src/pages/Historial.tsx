@@ -3,6 +3,7 @@ import { apiClient } from '@/services/api'
 import { PlanillaHistorialItem } from '@/types'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { useOrgStore } from '@/store/org'
+import { confirmDialog } from '@/store/confirm'
 import { Skeleton } from '@/components/Skeleton'
 import { toast } from '@/store/toast'
 
@@ -33,7 +34,7 @@ export const Historial: React.FC = () => {
   useEffect(() => { load() }, [])
 
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Borrar esta planilla?')) return
+    if (!await confirmDialog({ title: 'Borrar planilla', message: '¿Borrar esta planilla?', confirmLabel: 'Borrar', danger: true })) return
     setDeletingId(id)
     try {
       await apiClient.deletePlanilla(id)

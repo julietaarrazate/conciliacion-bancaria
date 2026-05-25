@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
+import { confirmDialog } from '@/store/confirm'
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n)
@@ -193,7 +194,7 @@ export const Cheques: React.FC = () => {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar este cheque?')) return
+    if (!await confirmDialog({ title: 'Eliminar cheque', message: '¿Eliminar este cheque?', confirmLabel: 'Eliminar', danger: true })) return
     try { await apiClient.client.delete(`/cheques/${id}`); load() }
     catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al eliminar') }
   }

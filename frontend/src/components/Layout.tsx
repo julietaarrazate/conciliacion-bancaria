@@ -8,6 +8,8 @@ import { ThemeToggle } from './ThemeToggle'
 import { CuadraLogo } from './CuadraLogo'
 import { Toaster } from './Toaster'
 import { AppLockGuard } from './AppLockGuard'
+import { ConfirmDialog } from './ConfirmDialog'
+import { confirmDialog } from '@/store/confirm'
 
 // ── SVG Icons (Heroicons outline style) ──────────────────────
 const Icon = {
@@ -129,8 +131,14 @@ export const Layout: React.FC = () => {
     return () => clearInterval(id)
   }, [user])
 
-  const handleLogout = () => {
-    if (!confirm('¿Querés cerrar sesión?')) return
+  const handleLogout = async () => {
+    const ok = await confirmDialog({
+      title: 'Cerrar sesión',
+      message: '¿Querés cerrar sesión?',
+      confirmLabel: 'Cerrar sesión',
+      danger: true,
+    })
+    if (!ok) return
     logout()
     navigate('/login')
   }
@@ -236,6 +244,7 @@ export const Layout: React.FC = () => {
   return (
     <div className="flex flex-col md:flex-row h-screen bg-ml-gray-bg dark:bg-ml-dark-bg overflow-hidden">
       <Toaster />
+      <ConfirmDialog />
       <AppLockGuard />
 
       {/* ── Header mobile ──────────────────────────────── */}

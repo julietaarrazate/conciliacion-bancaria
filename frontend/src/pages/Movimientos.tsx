@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { ExtractoListItem, MovimientoFiltrado, MovimientosFiltros } from '@/types'
+import { confirmDialog } from '@/store/confirm'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -235,7 +236,7 @@ export const Movimientos: React.FC = () => {
 
   const handleDeleteMovimiento = async (m: MovimientoFiltrado) => {
     if (!extractoId) return
-    if (!confirm(`¿Borrar movimiento "${m.titular || m.orden}"? Esta acción no se puede deshacer.`)) return
+    if (!await confirmDialog({ title: 'Borrar movimiento', message: `¿Borrar "${m.titular || m.orden}"? Esta acción no se puede deshacer.`, confirmLabel: 'Borrar', danger: true })) return
     try {
       await apiClient.deleteMovimiento(extractoId, m.id)
       setMovimientos(prev => prev.filter(x => x.id !== m.id))

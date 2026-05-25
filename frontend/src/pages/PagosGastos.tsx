@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
+import { confirmDialog } from '@/store/confirm'
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n)
@@ -138,7 +139,7 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[]; canEdit: boolean }> = ({ clie
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar este pago?')) return
+    if (!await confirmDialog({ title: 'Eliminar pago', message: '¿Eliminar este pago?', confirmLabel: 'Eliminar', danger: true })) return
     try { await apiClient.client.delete(`/pagos/${id}`); load() }
     catch (e: any) { setMsg(e?.response?.data?.detail || 'Error') }
   }
@@ -395,7 +396,7 @@ const GastosTab: React.FC<{ canEdit: boolean }> = ({ canEdit }) => {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar este gasto?')) return
+    if (!await confirmDialog({ title: 'Eliminar gasto', message: '¿Eliminar este gasto?', confirmLabel: 'Eliminar', danger: true })) return
     try { await apiClient.client.delete(`/gastos/${id}`); load() }
     catch (e: any) { setMsg(e?.response?.data?.detail || 'Error') }
   }
