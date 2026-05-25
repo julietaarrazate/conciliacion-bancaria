@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { Skeleton, SkeletonKpi } from '@/components/Skeleton'
+import { LineChart } from '@/components/charts/LineChart'
 
 type Periodo = 'hoy' | 'semana' | 'mes'
 
@@ -61,6 +62,7 @@ export const Resumen: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [evolucion, setEvolucion] = useState<{ label: string; conciliado: number; pendiente: number }[]>([])
 
   useEffect(() => {
     let activo = true
@@ -68,12 +70,24 @@ export const Resumen: React.FC = () => {
     setError('')
     const params: any = { periodo }
     if (periodo === 'mes') { params.anio = anio; params.mes = mes }
-    apiClient.getDashboard(params)
-      .then((d) => { if (activo) setData(d) })
+    Promise.all([
+      apiClient.getDashboard(params),
+      apiClient.getEvolucion(6),
+    ])
+      .then(([d, ev]) => {
+        if (!activo) return
+        setData(d)
+        setEvolucion(ev.meses || [])
+      })
       .catch((e) => { if (activo) setError(e.response?.data?.detail || 'Error cargando dashboard') })
       .finally(() => { if (activo) setLoading(false) })
     return () => { activo = false }
   }, [periodo, anio, mes])
+
+  const evolucionLine = useMemo(
+    () => evolucion.map(m => ({ label: m.label, value: m.conciliado })),
+    [evolucion]
+  )
 
   const navegarMes = (delta: number) => {
     let m = mes + delta
@@ -329,6 +343,28 @@ export const Resumen: React.FC = () => {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Evolución 6 meses */}
+      <div className="bg-white dark:bg-ml-dark-surface rounded-xl border border-gray-100 dark:border-ml-dark-border p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-ml-text dark:text-white uppercase tracking-wide">
+            Evolución conciliado · 6 meses
+          </h2>
+          <Link to="/flujo-de-caja" className="text-xs text-ml-text-soft hover:text-ml-text dark:text-zinc-500 dark:hover:text-ml-green">
+            Ver flujo de caja →
+          </Link>
+        </div>
+        {loading ? (
+          <div className="h-[160px] animate-pulse bg-gray-100 dark:bg-white/5 rounded" />
+        ) : (
+          <LineChart
+            data={evolucionLine}
+            height={160}
+            color="#10b981"
+            formatValue={(n) => new Intl.NumberFormat('es-AR', { notation: 'compact', maximumFractionDigits: 1 }).format(n)}
+          />
+        )}
       </div>
 
       {/* Footer info */}
