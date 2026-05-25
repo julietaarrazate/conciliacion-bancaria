@@ -23,6 +23,7 @@ from app.routers import pagos_gastos
 from app.routers import papelera
 from app.routers import backup_admin
 from app.routers import analisis
+from app.routers import search as search_router
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.organizacion import Organizacion
 
@@ -510,6 +511,7 @@ app.include_router(pagos_gastos.router)
 app.include_router(papelera.router)
 app.include_router(backup_admin.router)
 app.include_router(analisis.router)
+app.include_router(search_router.router)
 
 
 @app.get("/")
