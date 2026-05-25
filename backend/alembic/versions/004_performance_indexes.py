@@ -13,31 +13,31 @@ depends_on = None
 
 def upgrade() -> None:
     # movimientos_banco — la tabla más consultada en analytics
-    op.create_index("idx_movbanco_org_fecha",    "movimientos_banco", ["organizacion_id", "fecha"])
-    op.create_index("idx_movbanco_org",           "movimientos_banco", ["organizacion_id"])
-    op.create_index("idx_movbanco_extracto",      "movimientos_banco", ["extracto_id"])
+    op.create_index("idx_movbanco_org_fecha",     "movimientos_banco", ["organizacion_id", "fecha"],  if_not_exists=True)
+    op.create_index("idx_movbanco_org",           "movimientos_banco", ["organizacion_id"],            if_not_exists=True)
+    op.create_index("idx_movbanco_extracto",      "movimientos_banco", ["extracto_id"],               if_not_exists=True)
 
     # planillas — filtrada por org + deleted_at en casi todas las queries
-    op.create_index("idx_planillas_org_deleted",  "planillas", ["organizacion_id", "deleted_at"])
-    op.create_index("idx_planillas_org_cliente",  "planillas", ["organizacion_id", "cliente_id"])
-    op.create_index("idx_planillas_cliente",      "planillas", ["cliente_id"])
+    op.create_index("idx_planillas_org_deleted",  "planillas", ["organizacion_id", "deleted_at"],     if_not_exists=True)
+    op.create_index("idx_planillas_org_cliente",  "planillas", ["organizacion_id", "cliente_id"],     if_not_exists=True)
+    op.create_index("idx_planillas_cliente",      "planillas", ["cliente_id"],                        if_not_exists=True)
 
     # planilla_rows — join + filter por status es la query más frecuente del motor
-    op.create_index("idx_planrows_planilla",      "planilla_rows", ["planilla_id"])
-    op.create_index("idx_planrows_status",        "planilla_rows", ["status"])
-    op.create_index("idx_planrows_planilla_status","planilla_rows", ["planilla_id", "status"])
+    op.create_index("idx_planrows_planilla",      "planilla_rows", ["planilla_id"],                   if_not_exists=True)
+    op.create_index("idx_planrows_status",        "planilla_rows", ["status"],                        if_not_exists=True)
+    op.create_index("idx_planrows_planilla_status","planilla_rows", ["planilla_id", "status"],         if_not_exists=True)
 
     # cheques — alertas, aging, proximos a vencer
-    op.create_index("idx_cheques_org_estado",     "cheques", ["organizacion_id", "estado"])
-    op.create_index("idx_cheques_org_deposito",   "cheques", ["organizacion_id", "fecha_deposito"])
+    op.create_index("idx_cheques_org_estado",     "cheques", ["organizacion_id", "estado"],           if_not_exists=True)
+    op.create_index("idx_cheques_org_deposito",   "cheques", ["organizacion_id", "fecha_deposito"],   if_not_exists=True)
 
     # pagos y gastos — flujo de caja mensual
-    op.create_index("idx_pagos_org_fecha",        "pagos",   ["organizacion_id", "fecha"])
-    op.create_index("idx_gastos_org_fecha",       "gastos",  ["organizacion_id", "fecha"])
+    op.create_index("idx_pagos_org_fecha",        "pagos",   ["organizacion_id", "fecha"],            if_not_exists=True)
+    op.create_index("idx_gastos_org_fecha",       "gastos",  ["organizacion_id", "fecha"],            if_not_exists=True)
 
     # auditoria — listados por org
-    op.create_index("idx_auditoria_org",          "auditoria", ["organizacion_id"])
-    op.create_index("idx_auditoria_org_fecha",    "auditoria", ["organizacion_id", "fecha"])
+    op.create_index("idx_auditoria_org",          "auditoria", ["organizacion_id"],                   if_not_exists=True)
+    op.create_index("idx_auditoria_org_fecha",    "auditoria", ["organizacion_id", "fecha"],          if_not_exists=True)
 
 
 def downgrade() -> None:
