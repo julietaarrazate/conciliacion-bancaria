@@ -42,9 +42,49 @@ function detectApiUrl(): string {
 
 const API_BASE_URL = detectApiUrl()
 
+// Cache entry shape
+interface CacheEntry { data: any; at: number }
+
 class ApiClient {
   client: AxiosInstance   // público para endpoints puntuales
   private token: string | null = null
+  private _cache = new Map<string, CacheEntry>()
+
+  private _cacheKey(url: string, params?: any): string {
+    return params ? `${url}?${JSON.stringify(params)}` : url
+  }
+
+  private _getCached(key: string, ttlMs: number): any | null {
+    const e = this._cache.get(key)
+    if (!e) return null
+    if (Date.now() - e.at > ttlMs) { this._cache.delete(key); return null }
+    return e.data
+  }
+
+  private _setCached(key: string, data: any): void {
+    if (this._cache.size >= 60) {
+      // evict oldest
+      let oldestKey = ''
+      let oldestAt = Infinity
+      for (const [k, v] of this._cache) if (v.at < oldestAt) { oldestAt = v.at; oldestKey = k }
+      if (oldestKey) this._cache.delete(oldestKey)
+    }
+    this._cache.set(key, { data, at: Date.now() })
+  }
+
+  // Invalida entradas cuya clave empieza con prefix. Sin prefix, limpia todo.
+  invalidateCache(prefix?: string): void {
+    if (!prefix) { this._cache.clear(); return }
+    for (const k of this._cache.keys()) if (k.startsWith(prefix)) this._cache.delete(k)
+  }
+
+  private async _cached<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
+    const hit = this._getCached(key, ttlMs)
+    if (hit !== null) return hit as T
+    const data = await fetcher()
+    this._setCached(key, data)
+    return data
+  }
 
   constructor() {
     this.client = axios.create({
@@ -128,22 +168,31 @@ class ApiClient {
     return res.data
   }
 
-  // Analisis / reportes
+  // Analisis / reportes — cacheados 60s para navegación fluida
   async getDashboard(params?: { periodo?: 'hoy' | 'semana' | 'mes'; anio?: number; mes?: number; org_id?: number }): Promise<any> {
-    const res = await this.client.get('/analisis/dashboard', { params })
-    return res.data
+    const key = this._cacheKey('/analisis/dashboard', params)
+    return this._cached(key, 60_000, async () => {
+      const res = await this.client.get('/analisis/dashboard', { params })
+      return res.data
+    })
   }
 
   async getClientesAging(orgId?: number): Promise<any> {
-    const res = await this.client.get('/analisis/clientes-aging', { params: { org_id: orgId } })
-    return res.data
+    const key = this._cacheKey('/analisis/clientes-aging', { org_id: orgId })
+    return this._cached(key, 60_000, async () => {
+      const res = await this.client.get('/analisis/clientes-aging', { params: { org_id: orgId } })
+      return res.data
+    })
   }
 
   async getEstadoCuentaCliente(clienteId: number, desde?: string, hasta?: string): Promise<any> {
-    const res = await this.client.get(`/analisis/cliente/${clienteId}/estado-cuenta`, {
-      params: { desde, hasta },
+    const key = this._cacheKey(`/analisis/cliente/${clienteId}/estado-cuenta`, { desde, hasta })
+    return this._cached(key, 60_000, async () => {
+      const res = await this.client.get(`/analisis/cliente/${clienteId}/estado-cuenta`, {
+        params: { desde, hasta },
+      })
+      return res.data
     })
-    return res.data
   }
 
   async downloadEstadoCuentaPdf(clienteId: number, desde?: string, hasta?: string): Promise<void> {
@@ -177,13 +226,19 @@ class ApiClient {
   }
 
   async getEvolucion(meses: number = 6, orgId?: number): Promise<any> {
-    const res = await this.client.get('/analisis/evolucion', { params: { meses, org_id: orgId } })
-    return res.data
+    const key = this._cacheKey('/analisis/evolucion', { meses, org_id: orgId })
+    return this._cached(key, 60_000, async () => {
+      const res = await this.client.get('/analisis/evolucion', { params: { meses, org_id: orgId } })
+      return res.data
+    })
   }
 
   async getFlujoCaja(meses: number = 6, orgId?: number): Promise<any> {
-    const res = await this.client.get('/analisis/flujo-caja', { params: { meses, org_id: orgId } })
-    return res.data
+    const key = this._cacheKey('/analisis/flujo-caja', { meses, org_id: orgId })
+    return this._cached(key, 60_000, async () => {
+      const res = await this.client.get('/analisis/flujo-caja', { params: { meses, org_id: orgId } })
+      return res.data
+    })
   }
 
   // Extractos endpoints
@@ -465,8 +520,11 @@ class ApiClient {
   async getAlertas(orgId?: number): Promise<{ total: number; alertas: { tipo: string; cantidad: number; label: string; urgencia: string; link: string }[] }> {
     const params: Record<string, number> = {}
     if (orgId) params.org_id = orgId
-    const res = await this.client.get('/analisis/alertas', { params })
-    return res.data
+    const key = this._cacheKey('/analisis/alertas', params)
+    return this._cached(key, 30_000, async () => {
+      const res = await this.client.get('/analisis/alertas', { params })
+      return res.data
+    })
   }
 
   // Bulk reconciliar: multiples planillas de un mismo extracto
