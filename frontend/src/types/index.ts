@@ -121,13 +121,13 @@ export interface MovimientoFiltrado {
   id: number
   extracto_id: number
   orden?: number
-  fecha?: string
+  fecha?: string | null
   mes?: string
   titular?: string
   monto: number
   saldo?: number
-  cliente_acreditado?: string
-  fecha_acred?: string
+  cliente_acreditado?: string | null
+  fecha_acred?: string | null
   source?: string  // 'extracto' | 'um'
 }
 

@@ -694,6 +694,108 @@ def estado_cuenta_cliente(
 
 
 # ---------------------------------------------------------------------------
+# Evolucion y Flujo de Caja
+# ---------------------------------------------------------------------------
+
+def _meses_atras(n: int) -> list[tuple[int, int]]:
+    """Retorna lista de (anio, mes) para los ultimos N meses, de mas viejo a mas nuevo."""
+    hoy = date.today()
+    result = []
+    a, m = hoy.year, hoy.month
+    for _ in range(n):
+        result.append((a, m))
+        m -= 1
+        if m == 0:
+            m = 12
+            a -= 1
+    return list(reversed(result))
+
+
+@router.get("/evolucion")
+def evolucion(
+    meses: int = Query(6, ge=1, le=24, description="Cantidad de meses hacia atras"),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Evolucion mensual de conciliado vs pendiente para los ultimos N meses.
+
+    Util para el LineChart de tendencia en la pantalla de Flujo de Caja.
+    Cada entrada: {label, anio, mes, conciliado, pendiente, tasa_pct}
+    """
+    organizacion_id = _resolver_org(current_user, org_id)
+    periodos = _meses_atras(meses)
+    resultado = []
+    for a, m in periodos:
+        desde, hasta = _rango_mes(a, m)
+        conc = _suma_planilla_rows(db, organizacion_id, desde, hasta, _STATUS_OK)
+        pend = _suma_planilla_rows(db, organizacion_id, desde, hasta, _STATUS_PENDIENTE)
+        todo = _suma_planilla_rows(db, organizacion_id, desde, hasta, None)
+        tasa = round(conc["total"] / todo["total"] * 100, 1) if todo["total"] > 0 else 0.0
+        resultado.append({
+            "label": f"{m:02d}/{str(a)[-2:]}",
+            "anio": a,
+            "mes": m,
+            "conciliado": round(conc["total"], 2),
+            "pendiente": round(pend["total"], 2),
+            "tasa_pct": tasa,
+        })
+    return {"organizacion_id": organizacion_id, "meses": resultado}
+
+
+@router.get("/flujo-caja")
+def flujo_caja(
+    meses: int = Query(6, ge=1, le=24, description="Cantidad de meses hacia atras"),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Flujo de caja mensual: ingresos (banco), egresos (gastos + pagos) y neto.
+
+    Ingresos  = suma de MovimientoBanco del mes (dinero que entro al banco).
+    Egresos   = suma de Gasto + suma de Pago del mes (salidas operativas).
+    Neto      = ingresos - egresos.
+    """
+    organizacion_id = _resolver_org(current_user, org_id)
+    periodos = _meses_atras(meses)
+    resultado = []
+    for a, m in periodos:
+        desde, hasta = _rango_mes(a, m)
+        ingresos_q = db.query(
+            func.coalesce(func.sum(MovimientoBanco.monto), 0.0)
+        ).filter(
+            MovimientoBanco.organizacion_id == organizacion_id,
+            MovimientoBanco.fecha >= desde,
+            MovimientoBanco.fecha <= hasta,
+        ).scalar() or 0.0
+        gastos_q = db.query(
+            func.coalesce(func.sum(Gasto.monto), 0.0)
+        ).filter(
+            Gasto.organizacion_id == organizacion_id,
+            Gasto.fecha >= desde,
+            Gasto.fecha <= hasta,
+        ).scalar() or 0.0
+        pagos_q = db.query(
+            func.coalesce(func.sum(Pago.monto), 0.0)
+        ).filter(
+            Pago.organizacion_id == organizacion_id,
+            Pago.fecha >= desde,
+            Pago.fecha <= hasta,
+        ).scalar() or 0.0
+        ingresos = float(ingresos_q)
+        egresos = float(gastos_q) + float(pagos_q)
+        resultado.append({
+            "label": f"{m:02d}/{str(a)[-2:]}",
+            "anio": a,
+            "mes": m,
+            "ingresos": round(ingresos, 2),
+            "egresos": round(egresos, 2),
+            "neto": round(ingresos - egresos, 2),
+        })
+    return {"organizacion_id": organizacion_id, "meses": resultado}
+
+
+# ---------------------------------------------------------------------------
 # Exports PDF
 # ---------------------------------------------------------------------------
 from fastapi.responses import Response  # noqa: E402

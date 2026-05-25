@@ -176,6 +176,16 @@ class ApiClient {
     URL.revokeObjectURL(url)
   }
 
+  async getEvolucion(meses: number = 6, orgId?: number): Promise<any> {
+    const res = await this.client.get('/analisis/evolucion', { params: { meses, org_id: orgId } })
+    return res.data
+  }
+
+  async getFlujoCaja(meses: number = 6, orgId?: number): Promise<any> {
+    const res = await this.client.get('/analisis/flujo-caja', { params: { meses, org_id: orgId } })
+    return res.data
+  }
+
   // Extractos endpoints
   async uploadExtraco(file: File, banco: string = 'Banco Macro'): Promise<ExtractoBancario> {
     const formData = new FormData()
