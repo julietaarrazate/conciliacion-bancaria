@@ -655,3 +655,73 @@ def export_eft_historial(ops: list, periodo: str = "") -> bytes:
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
+
+
+def export_cierre_mensual_xlsx(planillas: list, anio: int, mes: int) -> bytes:
+    """Excel de cierre mensual: hoja Resumen + una hoja por cliente."""
+    MESES_NOMBRES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+    wb = openpyxl.Workbook()
+
+    # Hoja resumen
+    ws = wb.active
+    ws.title = "Resumen"
+    ws.cell(1, 1, f"Cierre mensual — {MESES_NOMBRES[mes]} {anio}").font = TITLE_FONT
+    ws.cell(2, 1, f"Generado: {_now().strftime('%d/%m/%Y %H:%M')}").font = Font(italic=True, color="666666")
+    _hdr(ws, 4, ["Cliente", "Planilla", "Total filas", "Acreditadas", "Pendientes", "Monto OK", "Monto Pendiente"])
+    row = 5
+    for p in planillas:
+        rows = p.rows if hasattr(p, 'rows') else []
+        ok = [r for r in rows if r.status in ('ok', 'OK', 'PAGO_PARCIAL', 'CONCILIADO_CON_DIFERENCIA')]
+        pendiente = [r for r in rows if r.status not in ('ok', 'OK', 'PAGO_PARCIAL', 'CONCILIADO_CON_DIFERENCIA', 'duplicado')]
+        cliente_nombre = p.cliente.nombre if p.cliente else '—'
+        ws.cell(row, 1, cliente_nombre).border = BORDER
+        ws.cell(row, 2, p.nombre_archivo).border = BORDER
+        ws.cell(row, 3, len(rows)).border = BORDER
+        ws.cell(row, 4, len(ok)).border = BORDER
+        ws.cell(row, 5, len(pendiente)).border = BORDER
+        c6 = ws.cell(row, 6, sum(r.monto for r in ok))
+        c6.number_format = '"$"#,##0.00'
+        c6.border = BORDER
+        c7 = ws.cell(row, 7, sum(r.monto for r in pendiente))
+        c7.number_format = '"$"#,##0.00'
+        c7.border = BORDER
+        ws.row_dimensions[row].height = 15
+        row += 1
+    _autosize(ws, 7)
+    ws.freeze_panes = "A5"
+
+    # Una hoja por cliente
+    for p in planillas:
+        rows = p.rows if hasattr(p, 'rows') else []
+        cliente_nombre = (p.cliente.nombre if p.cliente else 'Cliente')[:31]
+        sheet_name = cliente_nombre[:28] + (f"_{p.id}" if len(cliente_nombre) >= 28 else "")
+        # ensure unique sheet names
+        existing = [s.title for s in wb.worksheets]
+        if sheet_name in existing:
+            sheet_name = sheet_name[:25] + f"_{p.id}"
+        ws2 = wb.create_sheet(title=sheet_name)
+        ws2.cell(1, 1, f"{cliente_nombre} — {p.nombre_archivo}").font = TITLE_FONT
+        _hdr(ws2, 3, ["#", "CUIT", "Titular", "Monto", "Estado", "Titular extracto", "Fecha acred."])
+        for i, r in enumerate(rows, start=4):
+            ws2.cell(i, 1, i - 3).border = BORDER
+            ws2.row_dimensions[i].height = 15
+            ws2.cell(i, 2, r.cuit or '—').border = BORDER
+            ws2.cell(i, 3, r.titular or '—').border = BORDER
+            c = ws2.cell(i, 4, r.monto)
+            c.number_format = '"$"#,##0.00'
+            c.border = BORDER
+            ws2.cell(i, 5, r.status).border = BORDER
+            ws2.cell(i, 6, r.mov_titular or '—').border = BORDER
+            fa = r.mov_fecha_acred
+            cfa = ws2.cell(i, 7, fa)
+            if fa:
+                cfa.number_format = "DD/MM/YYYY"
+            cfa.border = BORDER
+        _autosize(ws2, 7)
+        ws2.freeze_panes = "A4"
+
+    buf2 = io.BytesIO()
+    wb.save(buf2)
+    buf2.seek(0)
+    return buf2.getvalue()

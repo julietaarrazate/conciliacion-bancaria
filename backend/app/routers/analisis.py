@@ -857,3 +857,45 @@ def cierre_mensual_pdf_endpoint(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/cierre/{anio}/{mes}/export-xlsx")
+def export_cierre_mensual_xlsx_endpoint(
+    anio: int,
+    mes: int,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Excel de cierre mensual: todas las planillas del mes, hoja resumen + una por cliente."""
+    from sqlalchemy.orm import selectinload, joinedload as _joinedload
+    from app.services.excel_export import export_cierre_mensual_xlsx
+    from app.models.cliente import Cliente as ClienteModel  # noqa
+
+    if not (1 <= mes <= 12):
+        raise HTTPException(status_code=400, detail="mes debe estar entre 1 y 12")
+    desde, hasta = _rango_mes(anio, mes)
+    organizacion_id = _resolver_org(current_user, org_id)
+
+    planillas = (
+        db.query(Planilla)
+        .options(selectinload(Planilla.rows), _joinedload(Planilla.cliente))
+        .filter(
+            Planilla.organizacion_id == organizacion_id,
+            Planilla.deleted_at.is_(None),
+            func.date(Planilla.fecha_carga) >= desde,
+            func.date(Planilla.fecha_carga) <= hasta,
+        )
+        .order_by(Planilla.cliente_id, Planilla.fecha_carga)
+        .all()
+    )
+
+    xlsx = export_cierre_mensual_xlsx(planillas, anio, mes)
+    MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+    filename = f"cierre_{anio}_{mes:02d}_{MESES[mes].lower()}.xlsx"
+    return Response(
+        content=xlsx,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

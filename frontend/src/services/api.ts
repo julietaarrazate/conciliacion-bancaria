@@ -210,6 +210,23 @@ class ApiClient {
     URL.revokeObjectURL(url)
   }
 
+  async downloadCierreMensualXlsx(anio: number, mes: number, orgId?: number): Promise<void> {
+    const params: any = {}
+    if (orgId) params.org_id = orgId
+    const res = await this.client.get(`/analisis/cierre/${anio}/${mes}/export-xlsx`, {
+      params,
+      responseType: 'blob',
+    })
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    const cd = res.headers['content-disposition'] || ''
+    const match = cd.match(/filename="?([^"]+)"?/)
+    a.download = match?.[1] || `cierre_${anio}_${String(mes).padStart(2, '0')}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async downloadCierreMensualPdf(anio: number, mes: number, orgId?: number): Promise<void> {
     const res = await this.client.get(`/analisis/cierre/${anio}/${mes}.pdf`, {
       params: { org_id: orgId }, responseType: 'blob',
