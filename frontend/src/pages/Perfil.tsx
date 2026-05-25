@@ -39,6 +39,10 @@ export const Perfil: React.FC = () => {
   const [pushEnabled, setPushEnabled] = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
 
+  // VAPID setup (sólo superadmin)
+  const [vapidLoading, setVapidLoading] = useState(false)
+  const [vapidKeys, setVapidKeys] = useState<{ vapid_public_key: string; vapid_private_key: string } | null>(null)
+
   useEffect(() => {
     isBiometricAvailable().then(setBioAvailable)
   }, [])
@@ -68,9 +72,15 @@ export const Perfil: React.FC = () => {
         if (permission !== 'granted') return
         const vapidKey = await apiClient.getPushPublicKey()
         if (!vapidKey) { toast.info('Notificaciones no configuradas aún. Contactá al admin.'); return }
+        // Conversión base64url → Uint8Array (Safari no acepta string raw)
+        const pad = '='.repeat((4 - (vapidKey.length % 4)) % 4)
+        const b64 = (vapidKey + pad).replace(/-/g, '+').replace(/_/g, '/')
+        const raw = atob(b64)
+        const appKey = new Uint8Array(raw.length)
+        for (let i = 0; i < raw.length; i++) appKey[i] = raw.charCodeAt(i)
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: vapidKey,
+          applicationServerKey: appKey,
         })
         await apiClient.subscribePush(sub.toJSON() as PushSubscriptionJSON)
         setPushEnabled(true)
@@ -304,6 +314,60 @@ export const Perfil: React.FC = () => {
           </p>
         )}
       </div>
+
+      {/* Setup VAPID — sólo superadmin */}
+      {user?.is_superadmin && (
+        <div className="card mt-4 border-violet-200 dark:border-violet-900/40">
+          <h2 className="text-base font-semibold dark:text-white mb-1">⚙️ Setup notificaciones push (admin)</h2>
+          <p className="text-xs text-ml-text-soft dark:text-zinc-500 mb-3">
+            Generá las VAPID keys una sola vez. Después copiálas como env vars <code className="font-mono text-[10px] bg-gray-100 dark:bg-white/10 px-1 rounded">VAPID_PUBLIC_KEY</code> y <code className="font-mono text-[10px] bg-gray-100 dark:bg-white/10 px-1 rounded">VAPID_PRIVATE_KEY</code> en Render y redeployá.
+          </p>
+          {!vapidKeys ? (
+            <button
+              disabled={vapidLoading}
+              onClick={async () => {
+                setVapidLoading(true)
+                try {
+                  const r = await apiClient.setupVapid()
+                  setVapidKeys(r)
+                } catch (e: any) {
+                  toast.error(e.response?.data?.detail || 'Error generando keys')
+                } finally { setVapidLoading(false) }
+              }}
+              className="btn-yellow"
+            >
+              {vapidLoading ? 'Generando...' : 'Generar VAPID keys'}
+            </button>
+          ) : (
+            <div className="space-y-3">
+              {(['vapid_public_key', 'vapid_private_key'] as const).map(k => (
+                <div key={k}>
+                  <label className="label text-xs">{k === 'vapid_public_key' ? 'VAPID_PUBLIC_KEY' : 'VAPID_PRIVATE_KEY'}</label>
+                  <div className="flex gap-2">
+                    <input
+                      readOnly
+                      value={vapidKeys[k]}
+                      onClick={e => (e.target as HTMLInputElement).select()}
+                      className="input-field font-mono text-[11px] selectable"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(vapidKeys[k]); toast.success('Copiado') }}
+                      className="btn-secondary shrink-0"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <p className="text-[11px] text-ml-text-soft dark:text-zinc-500 italic pt-1">
+                Render Dashboard → conciliacion-api → Environment → Add Environment Variable. Save deploya solo.
+              </p>
+              <button onClick={() => setVapidKeys(null)} className="btn-ghost text-xs">Ocultar</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Modal PIN */}
       {pinModal && (

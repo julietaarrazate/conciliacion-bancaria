@@ -589,6 +589,11 @@ class ApiClient {
   async unsubscribePush(endpoint: string): Promise<void> {
     await this.client.delete('/push/subscribe', { data: { endpoint, keys: {} } })
   }
+
+  async setupVapid(): Promise<{ vapid_public_key: string; vapid_private_key: string; instrucciones: string }> {
+    const res = await this.client.post('/push/setup')
+    return res.data
+  }
 }
 
 export const apiClient = new ApiClient()
