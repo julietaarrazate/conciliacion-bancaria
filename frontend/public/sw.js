@@ -114,3 +114,34 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(event.request).then((r) => r || new Response('', { status: 503 })))
   );
 });
+
+// Web Push — mostrar notificación nativa
+self.addEventListener('push', (event) => {
+  const data = event.data?.json?.() ?? {};
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Cuadra', {
+      body: data.body || '',
+      icon: '/icon-192.svg',
+      badge: '/icon-192.svg',
+      data: { url: data.url || '/' },
+      tag: 'cuadra-alert',
+      renotify: true,
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then((cs) => {
+      const targetUrl = event.notification.data?.url || '/';
+      for (const c of cs) {
+        if (c.url.includes(self.location.origin) && 'focus' in c) {
+          c.navigate(targetUrl);
+          return c.focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(targetUrl);
+    })
+  );
+});

@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     # (recuperacion de contraseña, etc). Se puede sobreescribir con FRONTEND_URL.
     frontend_url: str = "https://conciliacion-bancaria-ten.vercel.app"
 
+    # Web Push (VAPID) — generados via POST /push/setup
+    # Si están vacíos, el push queda deshabilitado (opt-in).
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+    push_enabled: bool = True
+    admin_email: str = "julietaarrazate@gmail.com"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

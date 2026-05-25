@@ -37,3 +37,6 @@ apscheduler==3.10.4
 
 # PDF reports (estado de cuenta + cierre mensual)
 reportlab==4.2.5
+
+# Web Push notifications (VAPID)
+pywebpush>=1.14.0

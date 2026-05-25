@@ -25,7 +25,9 @@ from app.routers import backup_admin
 from app.routers import analisis
 from app.routers import search as search_router
 from app.routers import public_router
+from app.routers import push_router
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
+from app.models.push_subscription import PushSubscription  # noqa: F401
 from app.models.organizacion import Organizacion
 
 settings = get_settings()
@@ -514,6 +516,7 @@ app.include_router(backup_admin.router)
 app.include_router(analisis.router)
 app.include_router(search_router.router)
 app.include_router(public_router.router)
+app.include_router(push_router.router)
 
 
 @app.get("/")

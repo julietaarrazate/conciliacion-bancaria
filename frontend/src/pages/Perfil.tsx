@@ -34,9 +34,55 @@ export const Perfil: React.FC = () => {
   const [bioAvailable, setBioAvailable] = useState(false)
   const [bioBusy, setBioBusy] = useState(false)
 
+  // Push notifications
+  const [pushSupported] = useState('serviceWorker' in navigator && 'PushManager' in window)
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
+
   useEffect(() => {
     isBiometricAvailable().then(setBioAvailable)
   }, [])
+
+  useEffect(() => {
+    if (!pushSupported) return
+    navigator.serviceWorker.ready.then(async reg => {
+      const sub = await reg.pushManager.getSubscription()
+      setPushEnabled(!!sub)
+    }).catch(() => {})
+  }, [pushSupported])
+
+  const togglePush = async () => {
+    if (!pushSupported) return
+    setPushLoading(true)
+    try {
+      const reg = await navigator.serviceWorker.ready
+      if (pushEnabled) {
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) {
+          await apiClient.unsubscribePush(sub.endpoint)
+          await sub.unsubscribe()
+          setPushEnabled(false)
+        }
+      } else {
+        const permission = await Notification.requestPermission()
+        if (permission !== 'granted') return
+        const vapidKey = await apiClient.getPushPublicKey()
+        if (!vapidKey) { toast.info('Notificaciones no configuradas aún. Contactá al admin.'); return }
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: vapidKey,
+        })
+        await apiClient.subscribePush(sub.toJSON() as PushSubscriptionJSON)
+        setPushEnabled(true)
+        toast.success('Notificaciones activadas')
+      }
+    } catch (e) {
+      console.error('Push error:', e)
+      toast.error('No se pudo configurar las notificaciones')
+    } finally {
+      setPushLoading(false)
+    }
+  }
 
   const handleActivarBio = async () => {
     setBioBusy(true)
@@ -227,6 +273,34 @@ export const Perfil: React.FC = () => {
         {pinEnabled && !bioAvailable && (
           <p className="mt-3 text-xs text-ml-text-soft dark:text-zinc-600 italic">
             Tu dispositivo o navegador no soporta biometría (huella/Face ID).
+          </p>
+        )}
+      </div>
+
+      {/* Notificaciones Push */}
+      <div className="card mt-4">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-base font-semibold dark:text-white">Notificaciones push</h2>
+            <p className="text-xs text-ml-text-soft dark:text-zinc-500 mt-1">
+              Recibí alertas en tu dispositivo aunque la app esté cerrada. Requiere instalar la PWA.
+            </p>
+          </div>
+          <span className={`badge ${pushEnabled ? 'badge-ok' : 'badge-neutral'} shrink-0`}>
+            {pushEnabled ? 'Activadas' : 'Desactivadas'}
+          </span>
+        </div>
+        {pushSupported ? (
+          <button
+            onClick={togglePush}
+            disabled={pushLoading}
+            className={pushEnabled ? 'btn-secondary' : 'btn-yellow'}
+          >
+            {pushLoading ? 'Configurando...' : pushEnabled ? 'Desactivar notificaciones' : 'Activar notificaciones'}
+          </button>
+        ) : (
+          <p className="text-xs text-ml-text-soft dark:text-zinc-600 italic">
+            Tu navegador no soporta notificaciones push. Instalá la PWA desde Chrome/Edge.
           </p>
         )}
       </div>

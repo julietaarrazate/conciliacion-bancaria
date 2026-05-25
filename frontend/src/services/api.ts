@@ -572,6 +572,23 @@ class ApiClient {
     }
     return resultados
   }
+
+  // ─── Web Push ─────────────────────────────────────────────────
+  async getPushPublicKey(): Promise<string | null> {
+    const res = await this.client.get('/push/public-key')
+    return res.data.vapid_public_key || null
+  }
+
+  async subscribePush(subscription: PushSubscriptionJSON): Promise<void> {
+    await this.client.post('/push/subscribe', {
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+    })
+  }
+
+  async unsubscribePush(endpoint: string): Promise<void> {
+    await this.client.delete('/push/subscribe', { data: { endpoint, keys: {} } })
+  }
 }
 
 export const apiClient = new ApiClient()
