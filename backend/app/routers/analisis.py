@@ -344,9 +344,11 @@ def alertas(
         .scalar() or 0
     )
 
+    # Solo cuento movimientos sin asignar de los ultimos 30 dias para no
+    # arrastrar historico antiguo que infla el badge artificialmente.
     movimientos_sin_asignar = db.query(func.count(MovimientoBanco.id)).filter(
         MovimientoBanco.organizacion_id == organizacion_id,
-        MovimientoBanco.fecha >= hoy - timedelta(days=60),
+        MovimientoBanco.fecha >= hoy - timedelta(days=30),
         or_(
             MovimientoBanco.cliente_acreditado.is_(None),
             MovimientoBanco.cliente_acreditado == "",
@@ -387,9 +389,16 @@ def alertas(
             "link": "/movimientos",
         })
 
+    # `total` para el badge de la campana: solo cuenta TIPOS de alerta
+    # accionables (urgencia alta o media). De esta forma el numero del badge
+    # refleja "cuantas cosas requieren atencion" y no se infla con cientos
+    # de movimientos pendientes informativos.
+    total_badge = sum(1 for a in alertas_lista if a["urgencia"] in ("alta", "media"))
+
     return {
         "organizacion_id": organizacion_id,
-        "total": sum(a["cantidad"] for a in alertas_lista),
+        "total": total_badge,
+        "total_items": sum(a["cantidad"] for a in alertas_lista),
         "alertas": alertas_lista,
     }
 
