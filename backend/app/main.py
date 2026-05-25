@@ -3,6 +3,7 @@ import threading
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -456,6 +457,10 @@ app = FastAPI(
 # Rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# GZip: comprime respuestas >500 bytes. Reduce 60-80% los bytes en endpoints
+# largos (movimientos, planillas, backups, asientos contables, dashboard).
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # CORS: cerrado al dominio de produccion + previews de Vercel + dev local.
 # Cualquier otro origen es rechazado.
