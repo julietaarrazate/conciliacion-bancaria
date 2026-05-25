@@ -180,6 +180,7 @@ export const Dashboard: React.FC = () => {
       const r = await apiClient.appendUM(extractoId, file, corteSaldoOverride)
       setUmCorteDetectado(r.corte_saldo_detectado ?? null)
       setUmFile(file)
+      apiClient.invalidateCache('/movimientos')
       const metodo = r.corte_metodo === 'manual' ? ' (corte manual)' : r.corte_metodo === 'fallback' ? ' ⚠️ corte por fallback — verificar' : ''
       setSuccess(
         r.agregados > 0
