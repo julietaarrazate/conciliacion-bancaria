@@ -42,10 +42,16 @@ export const Perfil: React.FC = () => {
   // VAPID setup (sólo superadmin)
   const [vapidLoading, setVapidLoading] = useState(false)
   const [vapidKeys, setVapidKeys] = useState<{ vapid_public_key: string; vapid_private_key: string } | null>(null)
+  const [vapidConfigured, setVapidConfigured] = useState<boolean | null>(null) // null = cargando
 
   useEffect(() => {
     isBiometricAvailable().then(setBioAvailable)
   }, [])
+
+  useEffect(() => {
+    if (!user?.is_superadmin) return
+    apiClient.getPushPublicKey().then(k => setVapidConfigured(!!k)).catch(() => setVapidConfigured(false))
+  }, [user?.is_superadmin])
 
   useEffect(() => {
     if (!pushSupported) return
@@ -318,27 +324,57 @@ export const Perfil: React.FC = () => {
       {/* Setup VAPID — sólo superadmin */}
       {user?.is_superadmin && (
         <div className="card mt-4 border-violet-200 dark:border-violet-900/40">
-          <h2 className="text-base font-semibold dark:text-white mb-1">⚙️ Setup notificaciones push (admin)</h2>
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <h2 className="text-base font-semibold dark:text-white">⚙️ Setup notificaciones push (admin)</h2>
+            {vapidConfigured === true && !vapidKeys && (
+              <span className="badge badge-ok shrink-0">Configuradas</span>
+            )}
+            {vapidConfigured === false && (
+              <span className="badge badge-neutral shrink-0">Sin configurar</span>
+            )}
+          </div>
           <p className="text-xs text-ml-text-soft dark:text-zinc-500 mb-3">
-            Generá las VAPID keys una sola vez. Después copiálas como env vars <code className="font-mono text-[10px] bg-gray-100 dark:bg-white/10 px-1 rounded">VAPID_PUBLIC_KEY</code> y <code className="font-mono text-[10px] bg-gray-100 dark:bg-white/10 px-1 rounded">VAPID_PRIVATE_KEY</code> en Render y redeployá.
+            Generá las VAPID keys <strong>una sola vez</strong> y pegálas en Render como env vars <code className="font-mono text-[10px] bg-gray-100 dark:bg-white/10 px-1 rounded">VAPID_PUBLIC_KEY</code> y <code className="font-mono text-[10px] bg-gray-100 dark:bg-white/10 px-1 rounded">VAPID_PRIVATE_KEY</code>. Si ya lo hiciste y el badge dice "Configuradas", no regeneres.
           </p>
-          {!vapidKeys ? (
+
+          {/* Ya configuradas y no se está mostrando un set nuevo */}
+          {vapidConfigured === true && !vapidKeys && (
+            <div className="flex gap-2 flex-wrap">
+              <p className="text-xs text-green-600 dark:text-green-400 flex-1">Las keys están activas en el servidor. No es necesario regenerar.</p>
+              <button
+                onClick={async () => {
+                  if (!confirm('¿Seguro? Generar keys nuevas invalida las anteriores y tenés que volver a pegarlas en Render.')) return
+                  setVapidLoading(true)
+                  try { const r = await apiClient.setupVapid(); setVapidKeys(r); setVapidConfigured(false) }
+                  catch (e: any) { toast.error(e.response?.data?.detail || 'Error') }
+                  finally { setVapidLoading(false) }
+                }}
+                className="btn-ghost text-xs"
+                disabled={vapidLoading}
+              >
+                Regenerar
+              </button>
+            </div>
+          )}
+
+          {/* No configuradas aún — mostrar botón Generar */}
+          {(vapidConfigured === false || vapidConfigured === null) && !vapidKeys && (
             <button
-              disabled={vapidLoading}
+              disabled={vapidLoading || vapidConfigured === null}
               onClick={async () => {
                 setVapidLoading(true)
-                try {
-                  const r = await apiClient.setupVapid()
-                  setVapidKeys(r)
-                } catch (e: any) {
-                  toast.error(e.response?.data?.detail || 'Error generando keys')
-                } finally { setVapidLoading(false) }
+                try { const r = await apiClient.setupVapid(); setVapidKeys(r) }
+                catch (e: any) { toast.error(e.response?.data?.detail || 'Error generando keys') }
+                finally { setVapidLoading(false) }
               }}
               className="btn-yellow"
             >
-              {vapidLoading ? 'Generando...' : 'Generar VAPID keys'}
+              {vapidLoading ? 'Generando...' : vapidConfigured === null ? 'Verificando...' : 'Generar VAPID keys'}
             </button>
-          ) : (
+          )}
+
+          {/* Keys recién generadas — mostrar para copiar */}
+          {vapidKeys && (
             <div className="space-y-3">
               {(['vapid_public_key', 'vapid_private_key'] as const).map(k => (
                 <div key={k}>
@@ -360,8 +396,11 @@ export const Perfil: React.FC = () => {
                   </div>
                 </div>
               ))}
-              <p className="text-[11px] text-ml-text-soft dark:text-zinc-500 italic pt-1">
-                Render Dashboard → conciliacion-api → Environment → Add Environment Variable. Save deploya solo.
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium pt-1">
+                Copiá ambas a Render → Environment antes de cerrar esta pantalla. No se vuelven a mostrar.
+              </p>
+              <p className="text-[11px] text-ml-text-soft dark:text-zinc-500 italic">
+                Render Dashboard → conciliacion-api → Environment → Add Variable → Save and Deploy.
               </p>
               <button onClick={() => setVapidKeys(null)} className="btn-ghost text-xs">Ocultar</button>
             </div>
