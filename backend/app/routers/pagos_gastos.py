@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.pago import Pago, Gasto
 from app.models.cliente import Cliente
 from app.services.motor_contable import registrar_pago, registrar_gasto
+from app.services.auditoria import registrar_log
 
 router = APIRouter(tags=["pagos_gastos"])
 
@@ -122,6 +123,9 @@ def crear_pago(
         medio=p.medio,
         fecha=p.fecha,
     )
+    registrar_log(db, current_user.id, "pagos", p.id, "INSERT",
+                  {"monto": p.monto, "cliente_id": p.cliente_id, "medio": p.medio,
+                   "concepto": p.concepto, "fecha": str(p.fecha)})
     db.commit()
     db.refresh(p)
     return _pago_dict(p)
@@ -153,6 +157,8 @@ def actualizar_pago(
     p.fecha      = body.fecha
     p.referencia = body.referencia
     p.notas      = body.notas
+    registrar_log(db, current_user.id, "pagos", p.id, "UPDATE",
+                  {"monto": p.monto, "cliente_id": p.cliente_id, "medio": p.medio})
     db.commit()
     db.refresh(p)
     return _pago_dict(p)
@@ -179,6 +185,8 @@ def eliminar_pago(
                       org_id=p.organizacion_id, usuario_id=current_user.id,
                       motivo=f"Pago #{pago_id} eliminado por {current_user.email}")
 
+    registrar_log(db, current_user.id, "pagos", pago_id, "DELETE",
+                  {"monto": p.monto, "cliente_id": p.cliente_id, "concepto": p.concepto})
     db.delete(p)
     db.commit()
     return {"ok": True}
@@ -275,6 +283,9 @@ def crear_gasto(
         medio=g.medio,
         fecha=g.fecha,
     )
+    registrar_log(db, current_user.id, "gastos", g.id, "INSERT",
+                  {"monto": g.monto, "concepto": g.concepto, "medio": g.medio,
+                   "fecha": str(g.fecha)})
     db.commit()
     db.refresh(g)
     return _gasto_dict(g)
@@ -306,6 +317,8 @@ def actualizar_gasto(
     g.fecha      = body.fecha
     g.referencia = body.referencia
     g.notas      = body.notas
+    registrar_log(db, current_user.id, "gastos", g.id, "UPDATE",
+                  {"monto": g.monto, "concepto": g.concepto, "medio": g.medio})
     db.commit()
     db.refresh(g)
     return _gasto_dict(g)
@@ -332,6 +345,8 @@ def eliminar_gasto(
                       org_id=g.organizacion_id, usuario_id=current_user.id,
                       motivo=f"Gasto #{gasto_id} eliminado por {current_user.email}")
 
+    registrar_log(db, current_user.id, "gastos", gasto_id, "DELETE",
+                  {"monto": g.monto, "concepto": g.concepto})
     db.delete(g)
     db.commit()
     return {"ok": True}

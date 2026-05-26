@@ -380,7 +380,13 @@ def patch_row_status(
     if not row:
         raise HTTPException(status_code=404, detail="Fila no encontrada")
     # Validacion multi-tenant: la planilla padre debe ser de la org del usuario
-    _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
+    planilla = _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
+
+    # Inmutabilidad: no permitir cambios en filas de periodos cerrados
+    from app.services.cierre_periodo import periodo_esta_cerrado
+    fecha_check = row.fecha_acred or (planilla.fecha_carga.date() if planilla.fecha_carga else None)
+    if periodo_esta_cerrado(db, planilla.organizacion_id or 1, fecha_check):
+        raise HTTPException(409, "El periodo ya está cerrado — esta fila no se puede modificar")
 
     status_anterior = row.status
     nuevo_status = payload.get("status", "").strip()
@@ -470,7 +476,12 @@ def delete_row(
     if not row:
         raise HTTPException(status_code=404, detail="Fila no encontrada")
     # Validacion multi-tenant
-    _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
+    planilla = _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
+    # Inmutabilidad de periodo cerrado
+    from app.services.cierre_periodo import periodo_esta_cerrado
+    fecha_check = row.fecha_acred or (planilla.fecha_carga.date() if planilla.fecha_carga else None)
+    if periodo_esta_cerrado(db, planilla.organizacion_id or 1, fecha_check):
+        raise HTTPException(409, "El periodo ya está cerrado — esta fila no se puede borrar")
 
     registrar_log(
         db=db,
