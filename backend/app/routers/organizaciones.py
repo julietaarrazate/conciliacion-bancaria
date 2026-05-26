@@ -116,7 +116,7 @@ def backup_organizacion(
             joinedload(Planilla.usuario),
             selectinload(Planilla.rows),
         )
-        .filter(Planilla.organizacion_id == org_id)
+        .filter(Planilla.organizacion_id == org_id, Planilla.deleted_at.is_(None))
         .all()
     )
     planillas = []
@@ -139,7 +139,7 @@ def backup_organizacion(
     extractos_db = (
         db.query(ExtractoBancario)
         .options(selectinload(ExtractoBancario.movimientos))
-        .filter(ExtractoBancario.organizacion_id == org_id)
+        .filter(ExtractoBancario.organizacion_id == org_id, ExtractoBancario.deleted_at.is_(None))
         .all()
     )
     extractos = [{"id": e.id, "nombre_archivo": e.nombre_archivo,
@@ -286,6 +286,7 @@ def panel_actividad(
             .options(selectinload(Planilla.rows))
             .filter(
                 Planilla.organizacion_id == org.id,
+                Planilla.deleted_at.is_(None),
                 Planilla.fecha_carga >= inicio_mes,
             )
             .all()
@@ -303,7 +304,8 @@ def panel_actividad(
 
         # Ultima conciliacion
         ultima_planilla = db.query(Planilla).filter(
-            Planilla.organizacion_id == org.id
+            Planilla.organizacion_id == org.id,
+            Planilla.deleted_at.is_(None),
         ).order_by(Planilla.fecha_carga.desc()).first()
 
         # Usuarios de la org

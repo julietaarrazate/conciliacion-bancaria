@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Optional, List
 import base64, io
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import openpyxl
 
@@ -22,8 +22,8 @@ class ChequeIn(BaseModel):
     numero:         Optional[str] = None
     banco_origen:   Optional[str] = None
     titular:        Optional[str] = None
-    monto:          float
-    comision:       float = 0.0
+    monto:          float = Field(..., gt=0)
+    comision:       float = Field(0.0, ge=0)
     fecha_emision:  Optional[date] = None
     fecha_deposito: Optional[date] = None
     notas:          Optional[str] = None

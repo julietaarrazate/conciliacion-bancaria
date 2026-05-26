@@ -133,6 +133,7 @@ def get_insights(
         .options(joinedload(Planilla.cliente), selectinload(Planilla.rows))
         .filter(
             Planilla.organizacion_id == oid,
+            Planilla.deleted_at.is_(None),
             Planilla.fecha_carga >= desde,
         )
         .all()

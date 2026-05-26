@@ -56,6 +56,7 @@ def _calcular_monto_conciliado(db: Session, org_id: int, cliente_id: int,
     planillas = db.query(Planilla).filter(
         Planilla.organizacion_id == org_id,
         Planilla.cliente_id == cliente_id,
+        Planilla.deleted_at.is_(None),
         Planilla.fecha_carga >= datetime.combine(desde, datetime.min.time()),
         Planilla.fecha_carga <= datetime.combine(hasta, datetime.max.time())
     ).all()

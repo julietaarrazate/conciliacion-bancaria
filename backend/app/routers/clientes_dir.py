@@ -624,11 +624,18 @@ def crear_cliente(payload: dict,
     from app.services.auditoria import registrar_log
 
     nombre = (payload.get("nombre") or "").strip()
-    cuit = (payload.get("cuit") or "").strip() or None
+    cuit_raw = (payload.get("cuit") or "").strip()
+    cuit = cuit_raw or None
     org_id = payload.get("organizacion_id") or current_user.organizacion_id or 1
 
     if not nombre:
         raise HTTPException(400, "El nombre es obligatorio")
+
+    if cuit:
+        cuit_digits = cuit.replace("-", "").replace(" ", "")
+        if not cuit_digits.isdigit() or len(cuit_digits) not in (10, 11):
+            raise HTTPException(400, "CUIT inválido: debe tener 10 u 11 dígitos numéricos")
+        cuit = cuit_digits
 
     # Scope: usuarios no superadmin solo pueden crear en su org
     if not current_user.is_superadmin and org_id != (current_user.organizacion_id or 1):

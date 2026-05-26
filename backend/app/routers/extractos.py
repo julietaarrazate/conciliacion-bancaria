@@ -523,7 +523,8 @@ def update_movimiento(
             if cliente:
                 planillas = db.query(Planilla).filter(
                     Planilla.cliente_id == cliente.id,
-                    Planilla.extracto_id == mov.extracto_id
+                    Planilla.extracto_id == mov.extracto_id,
+                    Planilla.deleted_at.is_(None),
                 ).all()
                 mov_monto = abs(float(mov.monto))
                 for planilla in planillas:

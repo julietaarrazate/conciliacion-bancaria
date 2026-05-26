@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -28,7 +28,7 @@ def _org_id(current_user: User, org_id: Optional[int]) -> int:
 class PagoIn(BaseModel):
     cliente_id: Optional[int] = None
     concepto:   Optional[str] = None
-    monto:      float
+    monto:      float = Field(..., gt=0)
     medio:      str = "banco"   # banco | efectivo
     fecha:      Optional[date] = None
     referencia: Optional[str] = None
@@ -197,7 +197,7 @@ def eliminar_pago(
 class GastoIn(BaseModel):
     concepto:   str
     categoria:  Optional[str] = None   # impuestos | bancarios | otros
-    monto:      float
+    monto:      float = Field(..., gt=0)
     medio:      str = "banco"
     fecha:      Optional[date] = None
     referencia: Optional[str] = None
