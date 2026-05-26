@@ -91,8 +91,9 @@ def export_historial_xlsx(
     cliente: Optional[str] = Query(None),
     desde: Optional[datetime] = Query(None),
     hasta: Optional[datetime] = Query(None),
+    org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Descarga xlsx con el historial de planillas reconciliadas"""
     q = (
@@ -100,6 +101,12 @@ def export_historial_xlsx(
         .join(Cliente, Planilla.cliente_id == Cliente.id)
         .filter(Planilla.deleted_at.is_(None))
     )
+
+    # Aislamiento multi-tenant
+    if current_user.is_superadmin and org_id:
+        q = q.filter(Planilla.organizacion_id == org_id)
+    elif not current_user.is_superadmin:
+        q = q.filter(Planilla.organizacion_id == (current_user.organizacion_id or 1))
 
     if cliente:
         q = q.filter(Cliente.nombre.ilike(f"%{cliente}%"))
@@ -143,11 +150,18 @@ def list_extractos(
     limit: int = 50,
     desde: Optional[datetime] = Query(None),
     hasta: Optional[datetime] = Query(None),
+    org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Lista extractos bancarios cargados"""
-    q = db.query(ExtractoBancario)
+    q = db.query(ExtractoBancario).filter(ExtractoBancario.deleted_at.is_(None))
+
+    # Aislamiento multi-tenant
+    if current_user.is_superadmin and org_id:
+        q = q.filter(ExtractoBancario.organizacion_id == org_id)
+    elif not current_user.is_superadmin:
+        q = q.filter(ExtractoBancario.organizacion_id == (current_user.organizacion_id or 1))
 
     if desde:
         q = q.filter(ExtractoBancario.fecha_creacion >= desde)

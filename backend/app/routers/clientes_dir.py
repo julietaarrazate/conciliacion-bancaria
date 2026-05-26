@@ -255,7 +255,10 @@ def buscar_movimiento_para_acreditar(
     from datetime import timedelta
     from app.models.cliente import Cliente
 
-    cli = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    q = db.query(Cliente).filter(Cliente.id == cliente_id)
+    if not current_user.is_superadmin:
+        q = q.filter(Cliente.organizacion_id == current_user.organizacion_id)
+    cli = q.first()
     if not cli:
         raise HTTPException(404, "Cliente no encontrado")
 
@@ -393,7 +396,10 @@ def acreditar_movimiento_a_cliente(
         raise HTTPException(404, "Movimiento no encontrado")
 
     cliente_id = payload.get("cliente_id")
-    cli = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    q = db.query(Cliente).filter(Cliente.id == cliente_id)
+    if not current_user.is_superadmin:
+        q = q.filter(Cliente.organizacion_id == current_user.organizacion_id)
+    cli = q.first()
     if not cli:
         raise HTTPException(404, "Cliente no encontrado")
 
@@ -515,7 +521,10 @@ def borrar_cliente(cliente_id: int,
     from app.models.planilla import Planilla, PlanillaRow
     from app.services.auditoria import registrar_log
 
-    cli = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    q = db.query(Cliente).filter(Cliente.id == cliente_id)
+    if not current_user.is_superadmin:
+        q = q.filter(Cliente.organizacion_id == current_user.organizacion_id)
+    cli = q.first()
     if not cli:
         raise HTTPException(404, "Cliente no encontrado")
 
@@ -537,8 +546,10 @@ def borrar_cliente(cliente_id: int,
     nombre = cli.nombre
     try:
         # 1. Limpiar cliente_acreditado en movimientos que tenian este cliente
+        # Filtramos por org para no afectar movs de otras orgs con mismo nombre
         movs_acreditados = db.query(MovimientoBanco).filter(
-            MovimientoBanco.cliente_acreditado.ilike(nombre)
+            MovimientoBanco.cliente_acreditado.ilike(nombre),
+            MovimientoBanco.organizacion_id == cli.organizacion_id,
         ).all()
         for m in movs_acreditados:
             m.cliente_acreditado = None

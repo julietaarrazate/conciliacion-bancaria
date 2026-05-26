@@ -24,6 +24,21 @@ import logging
 from app.middleware.auth import get_current_user
 from app.config import get_settings
 
+
+def _extracto_for_user(db: Session, extracto_id: int, current_user: User,
+                       include_deleted: bool = False) -> ExtractoBancario:
+    """Resuelve un extracto con aislamiento multi-tenant.
+    Superadmin ve cualquier org; el resto solo la propia. 404 si no existe o es de otra org."""
+    q = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id)
+    if not include_deleted:
+        q = q.filter(ExtractoBancario.deleted_at.is_(None))
+    if not current_user.is_superadmin:
+        q = q.filter(ExtractoBancario.organizacion_id == current_user.organizacion_id)
+    extracto = q.first()
+    if not extracto:
+        raise HTTPException(404, "Extracto no encontrado")
+    return extracto
+
 settings = get_settings()
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/extractos", tags=["extractos"])
@@ -112,7 +127,10 @@ async def upload_extracto(file: UploadFile = File(...),
         # actualizar cliente_acreditado y fecha_acred en movs existentes cuando el archivo
         # nuevo trae info que el guardado no tiene. NO tirar 409: el usuario espera que
         # subir el extracto "actualice" lo que ya esta.
-        existente = db.query(ExtractoBancario).filter(ExtractoBancario.fingerprint == fp).first()
+        existente = db.query(ExtractoBancario).filter(
+            ExtractoBancario.fingerprint == fp,
+            ExtractoBancario.organizacion_id == current_user.organizacion_id,
+        ).first()
         if existente:
             actualizados = 0
             for m in existente.movimientos:
@@ -188,12 +206,7 @@ def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
     """Soft delete: marca el extracto como eliminado (deleted_at = now()).
     Los movimientos y la relación con planillas se conservan, así si se restaura
     el extracto vuelve completo. Para borrar definitivo: usar /admin/papelera/purgar."""
-    extracto = db.query(ExtractoBancario).filter(
-        ExtractoBancario.id == extracto_id,
-        ExtractoBancario.deleted_at.is_(None),
-    ).first()
-    if not extracto:
-        raise HTTPException(404, "Extracto no encontrado")
+    extracto = _extracto_for_user(db, extracto_id, current_user)
 
     try:
         extracto.deleted_at = datetime.now(_ARG).replace(tzinfo=None)
@@ -214,23 +227,36 @@ def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
 @router.delete("")
 def delete_todos_extractos(db: Session = Depends(get_db),
                            current_user: User = Depends(get_current_user)):
-    """Elimina TODOS los extractos, planillas y movimientos. Limpia la BD para empezar de cero."""
+    """Elimina TODOS los extractos, planillas y movimientos DE LA ORG ACTUAL.
+    Solo superadmin. Aislado por organizacion_id — no toca otras orgs."""
+    if not current_user.is_superadmin:
+        raise HTTPException(403, "Solo superadmin puede ejecutar limpieza masiva")
+
     from app.models.planilla import PlanillaRow, Planilla
+    oid = current_user.organizacion_id
 
     try:
-        # Borrar en orden correcto para respetar FKs
-        db.query(PlanillaRow).update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
+        # FKs: PlanillaRow → Planilla → ExtractoBancario / MovimientoBanco → ExtractoBancario
+        planilla_ids = [p.id for p in db.query(Planilla.id).filter(Planilla.organizacion_id == oid).all()]
+        extracto_ids = [e.id for e in db.query(ExtractoBancario.id).filter(ExtractoBancario.organizacion_id == oid).all()]
+
+        if planilla_ids:
+            db.query(PlanillaRow).filter(PlanillaRow.planilla_id.in_(planilla_ids)).update(
+                {"orden_movimiento_acreditado": None}, synchronize_session=False
+            )
         db.flush()
-        n_planillas = db.query(Planilla).delete(synchronize_session="fetch")
+        n_planillas = db.query(Planilla).filter(Planilla.organizacion_id == oid).delete(synchronize_session=False)
         db.flush()
-        n_movs = db.query(MovimientoBanco).delete(synchronize_session="fetch")
+        n_movs = 0
+        if extracto_ids:
+            n_movs = db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id.in_(extracto_ids)).delete(synchronize_session=False)
         db.flush()
-        n_extractos = db.query(ExtractoBancario).delete(synchronize_session="fetch")
+        n_extractos = db.query(ExtractoBancario).filter(ExtractoBancario.organizacion_id == oid).delete(synchronize_session=False)
         db.commit()
 
         registrar_log(db, current_user.id, "extractos_bancarios", 0, "DELETE_ALL",
-                      {"extractos": n_extractos, "movimientos": n_movs, "planillas": n_planillas})
-        return {"ok": True, "mensaje": f"Limpieza completa: {n_extractos} extractos, {n_planillas} planillas, {n_movs} movimientos eliminados"}
+                      {"extractos": n_extractos, "movimientos": n_movs, "planillas": n_planillas, "org_id": oid})
+        return {"ok": True, "mensaje": f"Limpieza completa de la org: {n_extractos} extractos, {n_planillas} planillas, {n_movs} movimientos"}
     except Exception as e:
         db.rollback()
         logger.error("limpiar extractos: %s", e)
@@ -243,9 +269,7 @@ def eliminar_movimientos_um(extracto_id: int,
                             db: Session = Depends(get_db),
                             current_user: User = Depends(get_current_user)):
     """Elimina solo el ultimo lote de UM. Si no hay lotes asignados requiere forzar_todo=true."""
-    extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
-    if not extracto:
-        raise HTTPException(404, "Extracto no encontrado")
+    extracto = _extracto_for_user(db, extracto_id, current_user)
     try:
         from sqlalchemy import func
         from app.models.planilla import PlanillaRow
@@ -303,9 +327,7 @@ async def agregar_ultimos_movimientos(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
-    if not extracto:
-        raise HTTPException(404, "Extracto no encontrado")
+    extracto = _extracto_for_user(db, extracto_id, current_user)
     ext = os.path.splitext(file.filename or '')[1].lower()
     if ext not in ('.xlsx', '.xls', '.csv'):
         raise HTTPException(400, "Formatos aceptados: .xlsx, .xls, .csv")
@@ -360,9 +382,8 @@ def listar_movimientos(extracto_id: int,
                        hasta: Optional[date] = Query(None), fecha_desde: Optional[date] = Query(None),
                        fecha_hasta: Optional[date] = Query(None), sin_acreditar: Optional[bool] = Query(None),
                        skip: int = 0, limit: int = 0,
-                       db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    if not db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first():
-        raise HTTPException(404, "Extracto no encontrado")
+                       db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
     q = _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fecha_desde, fecha_hasta, sin_acreditar)
     total = q.count()
     q = q.order_by(MovimientoBanco.orden.desc().nulls_last(), MovimientoBanco.id.desc()).offset(skip)
@@ -378,10 +399,8 @@ def export_movimientos_xlsx(extracto_id: int,
                             titular: Optional[str] = Query(None), desde: Optional[date] = Query(None),
                             hasta: Optional[date] = Query(None), fecha_desde: Optional[date] = Query(None),
                             fecha_hasta: Optional[date] = Query(None), sin_acreditar: Optional[bool] = Query(None),
-                            db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
-    if not extracto:
-        raise HTTPException(404, "Extracto no encontrado")
+                            db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    extracto = _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
     q = _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fecha_desde, fecha_hasta, sin_acreditar)
     rows = q.order_by(MovimientoBanco.orden.desc().nulls_last(), MovimientoBanco.id.desc()).all()
     movs = [{"orden": m.orden, "fecha": m.fecha, "mes": m.mes, "titular": m.titular,
@@ -398,16 +417,14 @@ def export_movimientos_xlsx(extracto_id: int,
 def export_para_contador(
     extracto_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Descarga el extracto completo conciliado en Excel profesional para el contador.
     Hoja 1: todos los movimientos con acreditaciones coloreadas en verde.
     Hoja 2: resumen estadístico y detalle por cliente.
     """
-    extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
-    if not extracto:
-        raise HTTPException(404, "Extracto no encontrado")
+    extracto = _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
 
     movs = sorted(extracto.movimientos, key=lambda m: (m.fecha.isoformat() if m.fecha else "", m.orden or 0))
     data = [
@@ -445,6 +462,7 @@ def update_movimiento(
     current_user: User = Depends(get_current_user)
 ):
     """Edita un movimiento bancario (titular, monto, fecha, etc.) — para correcciones manuales."""
+    _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
     mov = db.query(MovimientoBanco).filter(
         MovimientoBanco.id == mov_id,
         MovimientoBanco.extracto_id == extracto_id
@@ -534,6 +552,7 @@ def delete_movimiento(
     current_user: User = Depends(get_current_user)
 ):
     from app.models.planilla import PlanillaRow
+    _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
     mov = db.query(MovimientoBanco).filter(
         MovimientoBanco.id == mov_id,
         MovimientoBanco.extracto_id == extracto_id
@@ -556,11 +575,9 @@ def delete_movimiento(
 
 
 @router.get("/{extracto_id}", response_model=ExtractoBancarioResponse)
-def get_extracto(extracto_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
-    if not extracto:
-        raise HTTPException(404, "Extracto no encontrado")
-    return extracto
+def get_extracto(extracto_id: int, db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
+    return _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
 
 
 # ─── Conciliaciones globales (cross-extracto) ───────────────────────────

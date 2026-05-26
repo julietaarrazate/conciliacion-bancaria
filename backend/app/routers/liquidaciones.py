@@ -23,6 +23,17 @@ def _get_org_config(db: Session, org_id: int) -> dict:
     return org.configuracion if org and org.configuracion else {}
 
 
+def _liquidacion_for_user(db: Session, liq_id: int, current_user: User) -> Liquidacion:
+    """Resuelve una liquidacion con aislamiento multi-tenant."""
+    q = db.query(Liquidacion).filter(Liquidacion.id == liq_id)
+    if not current_user.is_superadmin:
+        q = q.filter(Liquidacion.organizacion_id == current_user.organizacion_id)
+    liq = q.first()
+    if not liq:
+        raise HTTPException(404, "Liquidación no encontrada")
+    return liq
+
+
 def _comision_cliente(config: dict, cliente_nombre: str) -> float:
     """Obtiene el % de comision para un cliente segun la config de la org."""
     comisiones = config.get("comisiones", {})
@@ -173,9 +184,7 @@ def get_liquidacion(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    liq = db.query(Liquidacion).filter(Liquidacion.id == liq_id).first()
-    if not liq:
-        raise HTTPException(404, "Liquidación no encontrada")
+    liq = _liquidacion_for_user(db, liq_id, current_user)
     return _liq_detalle_response(liq)
 
 
@@ -188,9 +197,7 @@ def aprobar_liquidacion(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("manage_users"))
 ):
-    liq = db.query(Liquidacion).filter(Liquidacion.id == liq_id).first()
-    if not liq:
-        raise HTTPException(404, "Liquidación no encontrada")
+    liq = _liquidacion_for_user(db, liq_id, current_user)
     if liq.estado != "borrador":
         raise HTTPException(400, f"Solo se puede aprobar en estado borrador (actual: {liq.estado})")
 
@@ -215,9 +222,7 @@ def marcar_pagada(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("manage_users"))
 ):
-    liq = db.query(Liquidacion).filter(Liquidacion.id == liq_id).first()
-    if not liq:
-        raise HTTPException(404, "Liquidación no encontrada")
+    liq = _liquidacion_for_user(db, liq_id, current_user)
     if liq.estado != "aprobada":
         raise HTTPException(400, "Solo se puede marcar como pagada una liquidación aprobada")
     liq.estado = "pagada"
@@ -234,9 +239,7 @@ def exportar_liquidacion(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    liq = db.query(Liquidacion).filter(Liquidacion.id == liq_id).first()
-    if not liq:
-        raise HTTPException(404, "Liquidación no encontrada")
+    liq = _liquidacion_for_user(db, liq_id, current_user)
 
     # Revisiones manuales del periodo
     revisiones = db.query(
