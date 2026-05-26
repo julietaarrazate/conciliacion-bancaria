@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.models.user import User, RoleEnum
+from app.models.revoked_token import RevokedToken
 from app.database import get_db
 from app.services.auth import verify_token
 
@@ -25,6 +26,15 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido"
+        )
+
+    # Revocacion: si el token tiene jti y esta en la lista, rechazar
+    # Tokens viejos sin jti pasan derecho (backward compat con sesiones activas)
+    jti = payload.get("jti")
+    if jti and db.query(RevokedToken).filter(RevokedToken.jti == jti).first():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sesión cerrada"
         )
 
     user = db.query(User).filter(User.email == email).first()

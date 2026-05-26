@@ -1,12 +1,15 @@
 import logging
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
-from datetime import timedelta
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from jose import jwt as jose_jwt, JWTError
 
 from app.database import get_db
+from app.models.revoked_token import RevokedToken
 from app.schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse
 from app.services.auth import register_user, authenticate_user, create_access_token
 from app.services.password_reset import (
@@ -20,6 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
 limiter = Limiter(key_func=get_remote_address)
+_bearer = HTTPBearer(auto_error=False)
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -124,3 +128,38 @@ def reset_password(
         pass
 
     return {"ok": True, "mensaje": "Contraseña actualizada. Ya podes iniciar sesión."}
+
+
+@router.post("/logout")
+def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    db: Session = Depends(get_db),
+):
+    """Revoca el token actual. La sesión deja de funcionar inmediatamente.
+
+    No usa get_current_user — tokens ya inválidos también pueden cerrar sesión.
+    """
+    if not credentials:
+        return {"ok": True}
+    try:
+        payload = jose_jwt.decode(
+            credentials.credentials, settings.secret_key,
+            algorithms=[settings.algorithm],
+            options={"verify_exp": False},
+        )
+    except JWTError:
+        return {"ok": True}
+
+    jti = payload.get("jti")
+    exp = payload.get("exp")
+    if not jti or not exp:
+        return {"ok": True}  # token viejo sin jti
+
+    if not db.query(RevokedToken).filter(RevokedToken.jti == jti).first():
+        db.add(RevokedToken(
+            jti=jti,
+            user_id=payload.get("user_id"),
+            expires_at=datetime.utcfromtimestamp(exp),
+        ))
+        db.commit()
+    return {"ok": True}
