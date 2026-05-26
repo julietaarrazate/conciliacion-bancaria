@@ -394,6 +394,7 @@ def registrar_planilla(
     """Asiento al conciliar una planilla: Pasivo Corriente (D) / Cliente (H).
     Si comision_pct > 0 genera un segundo asiento de comisión.
     En re-conciliación (solo_pendientes), actualiza el monto si ya existe."""
+    comision_pct = Decimal(str(comision_pct))
     try:
         regla = _get_regla(db, "carga_planilla", org_id)
         if not regla:

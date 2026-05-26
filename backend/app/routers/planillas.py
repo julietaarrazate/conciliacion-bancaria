@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
 import tempfile
@@ -235,7 +236,7 @@ def conciliar(
                 rows=planilla.rows,
                 fecha_acred=_fecha,
                 solo_pendientes=solo_pendientes,
-                comision_pct=comision_pct,
+                comision_pct=Decimal(str(comision_pct)),
             )
         except Exception as _mc_ex:
             logger.warning("motor_contable planilla: %s", _mc_ex)
