@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Boolean, Numeric
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -32,8 +32,8 @@ class MovimientoBanco(Base):
     fecha = Column(Date, nullable=True)
     mes = Column(String, nullable=True)
     titular = Column(String, nullable=True)
-    monto = Column(Float, nullable=False)
-    saldo = Column(Float, nullable=True)
+    monto = Column(Numeric(12, 2), nullable=False)
+    saldo = Column(Numeric(12, 2), nullable=True)
 
     cliente_acreditado = Column(String, nullable=True)
     fecha_acred = Column(Date, nullable=True)

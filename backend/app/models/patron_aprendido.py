@@ -6,7 +6,7 @@ se extrae el patron que lo identifico y se guarda aqui.
 Con suficientes patrones, el motor de match los usa como referencia adicional
 antes de declarar que no hay suficientes datos.
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Numeric
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -24,7 +24,7 @@ class PatronAprendido(Base):
     numeros_clave = Column(String, nullable=True)       # CUIT/CBU/nros separados por coma
 
     # Monto tipico (ayuda a priorizar patrones con ese monto)
-    monto_tipico = Column(Float, nullable=True)
+    monto_tipico = Column(Numeric(12, 2), nullable=True)
 
     # Patron encontrado en el extracto
     titular_extracto_fragmento = Column(String, nullable=True)  # palabras del titular del banco

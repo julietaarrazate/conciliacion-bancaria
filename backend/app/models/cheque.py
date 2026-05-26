@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Text, Numeric
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -13,8 +13,8 @@ class Cheque(Base):
     numero          = Column(String, nullable=True)
     banco_origen    = Column(String, nullable=True)
     titular         = Column(String, nullable=True)
-    monto           = Column(Float, nullable=False)
-    comision        = Column(Float, nullable=False, default=0.0)
+    monto           = Column(Numeric(12, 2), nullable=False)
+    comision        = Column(Numeric(12, 2), nullable=False, default=0.0)
     fecha_emision   = Column(Date, nullable=True)
     fecha_deposito  = Column(Date, nullable=True)
     fecha_acred     = Column(Date, nullable=True)

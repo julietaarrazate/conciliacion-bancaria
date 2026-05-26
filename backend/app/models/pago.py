@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Numeric
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -11,7 +11,7 @@ class Pago(Base):
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=False, default=1, index=True)
     cliente_id      = Column(Integer, ForeignKey("clientes.id"), nullable=True, index=True)
     concepto        = Column(String, nullable=True)
-    monto           = Column(Float, nullable=False)
+    monto           = Column(Numeric(12, 2), nullable=False)
     medio           = Column(String, nullable=False, default="banco")  # banco | efectivo
     fecha           = Column(Date, nullable=True)
     referencia      = Column(String, nullable=True)
@@ -31,7 +31,7 @@ class Gasto(Base):
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=False, default=1, index=True)
     concepto        = Column(String, nullable=False)
     categoria       = Column(String, nullable=True)   # impuestos | bancarios | otros
-    monto           = Column(Float, nullable=False)
+    monto           = Column(Numeric(12, 2), nullable=False)
     medio           = Column(String, nullable=False, default="banco")  # banco | efectivo
     fecha           = Column(Date, nullable=True)
     referencia      = Column(String, nullable=True)
