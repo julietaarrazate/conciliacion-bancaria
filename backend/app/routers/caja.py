@@ -306,6 +306,8 @@ def marcar_compartido(
     op = db.query(OrdenDePago).filter(OrdenDePago.id == op_id).first()
     if not op:
         raise HTTPException(404, "OP no encontrada")
+    if not current_user.is_superadmin and op.organizacion_id != (current_user.organizacion_id or 1):
+        raise HTTPException(403, "No autorizado")
     op.compartido_whatsapp = True
     db.commit()
     return {"ok": True, "op_id": op_id, "compartido": True}

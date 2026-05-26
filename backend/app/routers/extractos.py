@@ -599,14 +599,16 @@ from fastapi import APIRouter as _AR
 conciliaciones_router = _AR(prefix="/conciliaciones", tags=["conciliaciones"])
 
 
-def _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, titular):
+def _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, titular, org_id=None):
     q = db.query(MovimientoBanco).filter(
         MovimientoBanco.cliente_acreditado.isnot(None),
         MovimientoBanco.cliente_acreditado != "",
         ~MovimientoBanco.cliente_acreditado.ilike("no identificado"),
     )
     # Scope por organizacion
-    if not current_user.is_superadmin:
+    if current_user.is_superadmin and org_id:
+        q = q.filter(MovimientoBanco.organizacion_id == org_id)
+    elif not current_user.is_superadmin:
         q = q.filter(MovimientoBanco.organizacion_id == (current_user.organizacion_id or 1))
     if cliente:
         q = q.filter(MovimientoBanco.cliente_acreditado.ilike(f"%{cliente}%"))
@@ -631,6 +633,7 @@ def listar_conciliaciones(
     hasta: Optional[date] = Query(None),
     monto_min: Optional[float] = Query(None),
     monto_max: Optional[float] = Query(None),
+    org_id: Optional[int] = Query(None),
     skip: int = 0, limit: int = 500,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -640,7 +643,7 @@ def listar_conciliaciones(
     TODOS los extractos del usuario. Permite filtrar por cliente, titular, rango
     de fecha de acreditacion y rango de monto.
     """
-    q = _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, titular)
+    q = _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, titular, org_id)
     total = q.count()
     rows = (
         q.order_by(MovimientoBanco.fecha_acred.desc().nulls_last(),
@@ -671,13 +674,14 @@ def export_conciliaciones(
     hasta: Optional[date] = Query(None),
     monto_min: Optional[float] = Query(None),
     monto_max: Optional[float] = Query(None),
+    org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment
 
-    q = _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, titular)
+    q = _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, titular, org_id)
     rows = q.order_by(MovimientoBanco.fecha_acred.desc().nulls_last(),
                       MovimientoBanco.id.desc()).all()
 

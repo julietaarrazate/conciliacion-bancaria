@@ -160,6 +160,21 @@ export const Login: React.FC = () => {
         <p className="text-center text-xs text-gray-400 dark:text-zinc-700 mt-6 font-mono">
           © 2026 Julieta Arrazate
         </p>
+        <div className="flex justify-center gap-4 mt-2">
+          <Link
+            to="/privacidad"
+            className="text-xs text-gray-400 dark:text-zinc-600 hover:text-gray-600 dark:hover:text-zinc-400 transition-colors"
+          >
+            Privacidad
+          </Link>
+          <span className="text-gray-300 dark:text-zinc-700">·</span>
+          <Link
+            to="/terminos"
+            className="text-xs text-gray-400 dark:text-zinc-600 hover:text-gray-600 dark:hover:text-zinc-400 transition-colors"
+          >
+            Términos
+          </Link>
+        </div>
       </div>
     </div>
   )

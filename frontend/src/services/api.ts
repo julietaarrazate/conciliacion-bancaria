@@ -521,6 +521,7 @@ class ApiClient {
     desde?: string; hasta?: string;
     monto_min?: number; monto_max?: number;
     limit?: number; skip?: number;
+    org_id?: number | null;
   } = {}): Promise<{ total: number; items: any[]; suma: number }> {
     const params: Record<string, string | number> = {}
     Object.entries(filters).forEach(([k, v]) => {
@@ -534,6 +535,7 @@ class ApiClient {
     cliente?: string; titular?: string;
     desde?: string; hasta?: string;
     monto_min?: number; monto_max?: number;
+    org_id?: number | null;
   } = {}): Promise<void> {
     const params: Record<string, string | number> = {}
     Object.entries(filters).forEach(([k, v]) => {

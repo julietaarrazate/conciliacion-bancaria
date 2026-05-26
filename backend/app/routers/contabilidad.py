@@ -12,13 +12,18 @@ router = APIRouter(prefix="/contabilidad", tags=["contabilidad"])
 
 
 @router.get("/stats")
-def get_stats(db: Session = Depends(get_db)):
-    """Conteos del módulo contable — público, solo enteros, sin datos sensibles."""
+def get_stats(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Conteos del módulo contable."""
+    oid = _org_id(current_user, org_id)
     return {
-        "plan_cuentas":    db.query(PlanCuenta).filter(PlanCuenta.organizacion_id == 1).count(),
-        "reglas":          db.query(ReglaContable).filter(ReglaContable.organizacion_id == 1).count(),
-        "asientos":        db.query(Asiento).filter(Asiento.organizacion_id == 1).count(),
-        "asiento_detalle": db.query(AsientoDetalle).count(),
+        "plan_cuentas":    db.query(PlanCuenta).filter(PlanCuenta.organizacion_id == oid).count(),
+        "reglas":          db.query(ReglaContable).filter(ReglaContable.organizacion_id == oid).count(),
+        "asientos":        db.query(Asiento).filter(Asiento.organizacion_id == oid).count(),
+        "asiento_detalle": db.query(AsientoDetalle).join(Asiento).filter(Asiento.organizacion_id == oid).count(),
     }
 
 
@@ -176,6 +181,8 @@ def get_libro_mayor(
     cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == cuenta_id).first()
     if not cuenta:
         raise HTTPException(404, "Cuenta no encontrada")
+    if cuenta.organizacion_id != oid:
+        raise HTTPException(403, "Cuenta no pertenece a la organización")
 
     q = (
         db.query(AsientoDetalle, Asiento)
