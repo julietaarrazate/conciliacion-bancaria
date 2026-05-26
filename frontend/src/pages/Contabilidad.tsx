@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
+import { useOrgStore } from '@/store/org'
 
 interface CuentaItem {
   id: number
@@ -90,6 +91,7 @@ const MODULO_LABEL: Record<string, string> = {
 type Tab = 'plan' | 'reglas' | 'diario' | 'sumas' | 'balance' | 'mayor'
 
 export const Contabilidad: React.FC = () => {
+  const { activeOrgId } = useOrgStore()
   const [cuentas, setCuentas]         = useState<CuentaItem[]>([])
   const [reglas, setReglas]           = useState<ReglaItem[]>([])
   const [asientos, setAsientos]       = useState<AsientoItem[]>([])
@@ -106,19 +108,20 @@ export const Contabilidad: React.FC = () => {
   const [tab, setTab]                 = useState<Tab>('plan')
 
   useEffect(() => {
+    const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
     Promise.all([
-      apiClient.client.get('/contabilidad/plan-cuentas').then(r => r.data),
-      apiClient.client.get('/contabilidad/reglas').then(r => r.data),
-      apiClient.client.get('/contabilidad/asientos?limit=100').then(r => r.data),
-      apiClient.client.get('/contabilidad/sumas-saldo').then(r => r.data),
-      apiClient.client.get('/contabilidad/balance').then(r => r.data),
+      apiClient.client.get(`/contabilidad/plan-cuentas${q}`).then(r => r.data),
+      apiClient.client.get(`/contabilidad/reglas${q}`).then(r => r.data),
+      apiClient.client.get(`/contabilidad/asientos?limit=100${activeOrgId ? `&org_id=${activeOrgId}` : ''}`).then(r => r.data),
+      apiClient.client.get(`/contabilidad/sumas-saldo${q}`).then(r => r.data),
+      apiClient.client.get(`/contabilidad/balance${q}`).then(r => r.data),
     ]).then(([c, r, a, ss, b]) => {
       setCuentas(c); setReglas(r)
       setAsientos(a.items); setTotalAsientos(a.total)
       setSumasSaldo(ss); setBalance(b)
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [])
+  }, [activeOrgId])
 
   const cargarLibroMayor = (id: number) => {
     setLoadingMayor(true)

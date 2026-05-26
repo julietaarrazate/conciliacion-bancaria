@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
+import { useOrgStore } from '@/store/org'
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n)
@@ -52,6 +53,7 @@ const toBase64 = (file: File): Promise<string> =>
   })
 
 export const Cheques: React.FC = () => {
+  const { activeOrgId } = useOrgStore()
   const [cheques, setCheques]     = useState<Cheque[]>([])
   const [total, setTotal]         = useState(0)
   const [clientes, setClientes]   = useState<ClienteOpt[]>([])
@@ -90,17 +92,18 @@ export const Cheques: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params: Record<string, string> = { skip: String(skip), limit: String(LIMIT) }
+      const params: Record<string, string | number> = { skip: String(skip), limit: String(LIMIT) }
       if (filtroEstado)  params.estado     = filtroEstado
       if (filtroCliente) params.cliente_id = filtroCliente
       if (filtroDesde)   params.desde      = filtroDesde
       if (filtroHasta)   params.hasta      = filtroHasta
+      if (activeOrgId)   params.org_id     = activeOrgId
       const res = await apiClient.client.get('/cheques', { params })
       setCheques(res.data.items)
       setTotal(res.data.total)
     } catch { setMsg('Error al cargar cheques') }
     finally { setLoading(false) }
-  }, [filtroEstado, filtroCliente, filtroDesde, filtroHasta, skip])
+  }, [filtroEstado, filtroCliente, filtroDesde, filtroHasta, skip, activeOrgId])
 
   useEffect(() => { load() }, [load])
 

@@ -3,6 +3,7 @@ import { apiClient } from '@/services/api'
 import { LineChart } from '@/components/charts/LineChart'
 import { BarChart } from '@/components/charts/BarChart'
 import { SkeletonKpi } from '@/components/Skeleton'
+import { useOrgStore } from '@/store/org'
 
 type MesFlujo = {
   label: string
@@ -43,6 +44,7 @@ function KpiCard({ label, value, sub, positive }: { label: string; value: string
 }
 
 export const FlujoCaja: React.FC = () => {
+  const { activeOrgId } = useOrgStore()
   const [meses, setMeses] = useState(6)
   const [flujo, setFlujo] = useState<MesFlujo[]>([])
   const [evolucion, setEvolucion] = useState<MesEvolucion[]>([])
@@ -54,8 +56,8 @@ export const FlujoCaja: React.FC = () => {
     setLoading(true)
     setError('')
     Promise.all([
-      apiClient.getFlujoCaja(meses),
-      apiClient.getEvolucion(meses),
+      apiClient.getFlujoCaja(meses, activeOrgId ?? undefined),
+      apiClient.getEvolucion(meses, activeOrgId ?? undefined),
     ])
       .then(([f, e]) => {
         if (!activo) return
@@ -67,7 +69,7 @@ export const FlujoCaja: React.FC = () => {
       })
       .finally(() => { if (activo) setLoading(false) })
     return () => { activo = false }
-  }, [meses])
+  }, [meses, activeOrgId])
 
   const totales = useMemo(() => {
     const ingresos = flujo.reduce((s, m) => s + m.ingresos, 0)
