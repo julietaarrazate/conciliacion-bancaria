@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { AuditoriaLog } from '@/types'
+import { useOrgStore } from '@/store/org'
 
 interface Insights {
   periodo_dias: number
@@ -24,6 +25,7 @@ interface Insights {
 }
 
 export const Auditoria: React.FC = () => {
+  const { activeOrgId } = useOrgStore()
   const [items, setItems] = useState<AuditoriaLog[]>([])
   const [insights, setInsights] = useState<Insights | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,7 +38,7 @@ export const Auditoria: React.FC = () => {
   const loadLog = async () => {
     setLoading(true)
     try {
-      const res = await apiClient.getAuditoria({ tabla: tabla || undefined, accion: accion || undefined, limit: 200 })
+      const res = await apiClient.getAuditoria({ tabla: tabla || undefined, accion: accion || undefined, limit: 200, org_id: activeOrgId })
       setItems(res.items)
     } catch { setItems([]) }
     finally { setLoading(false) }
@@ -45,14 +47,16 @@ export const Auditoria: React.FC = () => {
   const loadInsights = async () => {
     setLoadingInsights(true)
     try {
-      const res = await apiClient.client.get(`/auditoria/insights?dias=${dias}`)
+      const params: Record<string, string | number> = { dias }
+      if (activeOrgId) params.org_id = activeOrgId
+      const res = await apiClient.client.get('/auditoria/insights', { params })
       setInsights(res.data)
     } catch { setInsights(null) }
     finally { setLoadingInsights(false) }
   }
 
-  useEffect(() => { loadInsights() }, [dias])
-  useEffect(() => { if (tab === 'log') loadLog() }, [tab])
+  useEffect(() => { loadInsights() }, [dias, activeOrgId])
+  useEffect(() => { if (tab === 'log') loadLog() }, [tab, activeOrgId])
 
   const accionColor = (a: string) => {
     if (a === 'INSERT') return 'badge-ok'

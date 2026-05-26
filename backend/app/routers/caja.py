@@ -17,7 +17,9 @@ from app.services.auditoria import registrar_log
 router = APIRouter(prefix="/caja", tags=["caja"])
 
 
-def _org_id(user: User) -> int:
+def _org_id(user: User, org_id_param: Optional[int] = None) -> int:
+    if user.is_superadmin and org_id_param:
+        return org_id_param
     return user.organizacion_id or 1
 
 
@@ -26,11 +28,12 @@ def _org_id(user: User) -> int:
 @router.get("/arqueo/hoy")
 def get_arqueo_hoy(
     fecha_str: Optional[str] = Query(None, description="YYYY-MM-DD, default hoy"),
+    org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Obtiene o crea el arqueo del día. Si es nuevo, arrastra el saldo del día anterior."""
-    org_id = _org_id(current_user)
+    org_id = _org_id(current_user, org_id)
     fecha = date.fromisoformat(fecha_str) if fecha_str else date.today()
 
     arqueo = db.query(ArqueoDiario).filter(
@@ -129,10 +132,11 @@ def update_arqueo(
 def historial_arqueos(
     skip: int = 0,
     limit: int = 30,
+    org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    org_id = _org_id(current_user)
+    org_id = _org_id(current_user, org_id)
     items = db.query(ArqueoDiario).filter(
         ArqueoDiario.organizacion_id == org_id
     ).order_by(ArqueoDiario.fecha.desc()).offset(skip).limit(limit).all()
@@ -266,10 +270,11 @@ def historial_ops(
     hasta: Optional[date] = Query(None),
     skip: int = 0,
     limit: int = 100,
+    org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    org_id = _org_id(current_user)
+    org_id = _org_id(current_user, org_id)
     q = db.query(OrdenDePago).filter(OrdenDePago.organizacion_id == org_id)
     if cliente_id:
         q = q.filter(OrdenDePago.cliente_id == cliente_id)

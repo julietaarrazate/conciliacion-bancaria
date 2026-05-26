@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { ExtractoHistorialItem } from '@/types'
+import { useOrgStore } from '@/store/org'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -43,6 +44,7 @@ function agrupar(items: ExtractoHistorialItem[]): GroupBanco[] {
 
 export const ExtractosArchivo: React.FC = () => {
   const navigate = useNavigate()
+  const { activeOrgId } = useOrgStore()
   const [items, setItems]         = useState<ExtractoHistorialItem[]>([])
   const [loading, setLoading]     = useState(true)
   const [openBancos, setOpenBancos] = useState<Set<string>>(new Set())
@@ -52,7 +54,7 @@ export const ExtractosArchivo: React.FC = () => {
   const [dlLoading, setDlLoading] = useState<number | null>(null)
 
   useEffect(() => {
-    apiClient.getHistorialExtractos({ limit: 200 }).then(d => {
+    apiClient.getHistorialExtractos({ limit: 200, org_id: activeOrgId }).then(d => {
       setItems(d.items)
       const grupos = agrupar(d.items)
       if (grupos.length > 0) {
@@ -68,7 +70,7 @@ export const ExtractosArchivo: React.FC = () => {
       }
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [])
+  }, [activeOrgId])
 
   const toggle = <T extends string | number>(set: Set<T>, val: T): Set<T> => {
     const n = new Set(set); n.has(val) ? n.delete(val) : n.add(val); return n

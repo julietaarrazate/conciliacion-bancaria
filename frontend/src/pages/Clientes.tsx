@@ -4,6 +4,7 @@ import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { apiClient } from '@/services/api'
 import { Skeleton } from '@/components/Skeleton'
 import { confirmDialog } from '@/store/confirm'
+import { useOrgStore } from '@/store/org'
 
 interface Archivo {
   id: number
@@ -70,6 +71,7 @@ const fmtFecha = (s: string) => {
 
 export const Clientes: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { activeOrgId } = useOrgStore()
   const [orgs, setOrgs] = useState<OrgData[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -149,7 +151,7 @@ export const Clientes: React.FC = () => {
 
   const cargar = () => {
     setLoading(true)
-    apiClient.getClientesArchivos()
+    apiClient.getClientesArchivos(activeOrgId)
       .then((r: any) => {
         // Soporta dos formatos:
         // 1) Nuevo: { organizaciones: [{id, nombre, clientes: [...]}] }
@@ -177,7 +179,7 @@ export const Clientes: React.FC = () => {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar() }, [activeOrgId])
 
   // Detectar comprobante compartido desde /compartir
   useEffect(() => {
@@ -234,7 +236,7 @@ export const Clientes: React.FC = () => {
       await apiClient.client.delete(`/clientes/${clienteId}`, {
         params: tieneArchivos ? { force: true } : {}
       })
-      apiClient.invalidateCache('/clientes/archivos')
+      apiClient.invalidateCache(activeOrgId ? `/clientes/archivos?org_id=${activeOrgId}` : '/clientes/archivos')
       setMsg(`✓ Cliente "${clienteNombre}" borrado`)
       cargar()
     } catch (e: any) {
@@ -254,7 +256,7 @@ export const Clientes: React.FC = () => {
       })
       setMsg(`✓ Cliente "${nuevoNombre.trim()}" creado`)
       setNuevoNombre(''); setNuevoCuit(''); setCreando(null)
-      apiClient.invalidateCache('/clientes/archivos')
+      apiClient.invalidateCache(activeOrgId ? `/clientes/archivos?org_id=${activeOrgId}` : '/clientes/archivos')
       cargar()
     } catch (e: any) {
       setMsg(`✗ ${e.response?.data?.detail || 'Error al crear'}`)

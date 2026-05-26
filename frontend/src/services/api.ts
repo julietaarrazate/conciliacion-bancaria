@@ -332,6 +332,7 @@ class ApiClient {
   async getHistorialExtractos(params?: {
     skip?: number
     limit?: number
+    org_id?: number | null
   }): Promise<PaginatedResponse<ExtractoHistorialItem>> {
     const res = await this.client.get('/historial/extractos', { params })
     return res.data
@@ -343,6 +344,7 @@ class ApiClient {
     limit?: number
     tabla?: string
     accion?: string
+    org_id?: number | null
   }): Promise<PaginatedResponse<AuditoriaLog>> {
     const res = await this.client.get('/auditoria', { params })
     return res.data
@@ -391,9 +393,10 @@ class ApiClient {
     })
   }
 
-  async getClientesArchivos(): Promise<any> {
-    return this._cached('/clientes/archivos', 60_000, async () => {
-      const res = await this.client.get('/clientes/archivos')
+  async getClientesArchivos(orgId?: number | null): Promise<any> {
+    const cacheKey = orgId ? `/clientes/archivos?org_id=${orgId}` : '/clientes/archivos'
+    return this._cached(cacheKey, 60_000, async () => {
+      const res = await this.client.get('/clientes/archivos', { params: orgId ? { org_id: orgId } : {} })
       return res.data
     })
   }
