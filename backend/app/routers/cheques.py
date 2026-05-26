@@ -12,6 +12,7 @@ from app.models.user import User
 from app.models.cheque import Cheque
 from app.models.cliente import Cliente
 from app.services.motor_contable import registrar_cheque, acreditar_cheque, rechazar_cheque
+from app.services.auditoria import registrar_log
 
 router = APIRouter(prefix="/cheques", tags=["cheques"])
 
@@ -126,6 +127,9 @@ def crear_cheque(
         comision=c.comision,
         fecha=c.fecha_deposito or date.today(),
     )
+    registrar_log(db, current_user.id, "cheques", c.id, "INSERT",
+                  {"monto": c.monto, "titular": c.titular, "cliente_id": c.cliente_id,
+                   "fecha_deposito": str(c.fecha_deposito) if c.fecha_deposito else None})
     db.commit()
     db.refresh(c)
     return _cheque_dict(c)
@@ -161,11 +165,15 @@ def editar_cheque(
         raise HTTPException(403, "Sin acceso")
     if c.estado != "pendiente":
         raise HTTPException(400, "Solo se pueden editar cheques pendientes")
+    cambios = {}
     for field in ("cliente_id", "numero", "banco_origen", "titular", "monto",
                   "comision", "fecha_emision", "fecha_deposito", "notas"):
         val = getattr(body, field, None)
         if val is not None:
+            cambios[field] = {"de": str(getattr(c, field)), "a": str(val)}
             setattr(c, field, val)
+    if cambios:
+        registrar_log(db, current_user.id, "cheques", c.id, "UPDATE", cambios)
     db.commit()
     db.refresh(c)
     return _cheque_dict(c)
@@ -200,6 +208,8 @@ def acreditar(
         monto=c.monto,
         fecha=c.fecha_acred,
     )
+    registrar_log(db, current_user.id, "cheques", c.id, "ACREDITAR",
+                  {"monto": c.monto, "fecha_acred": str(c.fecha_acred)})
     db.commit()
     db.refresh(c)
     return _cheque_dict(c)
@@ -234,6 +244,8 @@ def rechazar(
         monto=c.monto,
         fecha=c.fecha_acred,
     )
+    registrar_log(db, current_user.id, "cheques", c.id, "RECHAZAR",
+                  {"monto": c.monto, "fecha_acred": str(c.fecha_acred)})
     db.commit()
     db.refresh(c)
     return _cheque_dict(c)
@@ -263,6 +275,8 @@ def eliminar_cheque(
                       org_id=c.organizacion_id, usuario_id=current_user.id,
                       motivo=f"Cheque #{cheque_id} eliminado por {current_user.email}")
 
+    registrar_log(db, current_user.id, "cheques", cheque_id, "DELETE",
+                  {"monto": c.monto, "titular": c.titular, "estado": c.estado})
     db.delete(c)
     db.commit()
     return {"ok": True}

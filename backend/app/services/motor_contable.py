@@ -9,6 +9,7 @@ import logging
 from datetime import date
 from typing import Optional
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
 
@@ -66,7 +67,13 @@ def _crear_asiento(
         usuario_id=usuario_id,
     )
     db.add(a)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # Otro request creó el asiento en paralelo (race con unique constraint).
+        # Salir limpio: el asiento ya existe gracias al otro request.
+        db.rollback()
+        return
     db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=regla.cuenta_debe_id,  debe=monto, haber=0.0))
     db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=regla.cuenta_haber_id, debe=0.0,  haber=monto))
 

@@ -462,13 +462,18 @@ def update_movimiento(
     current_user: User = Depends(get_current_user)
 ):
     """Edita un movimiento bancario (titular, monto, fecha, etc.) — para correcciones manuales."""
-    _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
+    extracto = _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
     mov = db.query(MovimientoBanco).filter(
         MovimientoBanco.id == mov_id,
         MovimientoBanco.extracto_id == extracto_id
     ).first()
     if not mov:
         raise HTTPException(404, "Movimiento no encontrado")
+    # Inmutabilidad de periodo cerrado
+    from app.services.cierre_periodo import periodo_esta_cerrado
+    fecha_check = mov.fecha_acred or mov.fecha
+    if periodo_esta_cerrado(db, extracto.organizacion_id or 1, fecha_check):
+        raise HTTPException(409, "El periodo ya está cerrado — este movimiento no se puede modificar")
 
     campos_editables = {"titular", "monto", "fecha", "mes", "saldo", "orden",
                         "cliente_acreditado", "fecha_acred"}
@@ -552,13 +557,18 @@ def delete_movimiento(
     current_user: User = Depends(get_current_user)
 ):
     from app.models.planilla import PlanillaRow
-    _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
+    extracto = _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
     mov = db.query(MovimientoBanco).filter(
         MovimientoBanco.id == mov_id,
         MovimientoBanco.extracto_id == extracto_id
     ).first()
     if not mov:
         raise HTTPException(404, "Movimiento no encontrado")
+    # Inmutabilidad de periodo cerrado
+    from app.services.cierre_periodo import periodo_esta_cerrado
+    fecha_check = mov.fecha_acred or mov.fecha
+    if periodo_esta_cerrado(db, extracto.organizacion_id or 1, fecha_check):
+        raise HTTPException(409, "El periodo ya está cerrado — este movimiento no se puede borrar")
     try:
         db.query(PlanillaRow).filter(
             PlanillaRow.orden_movimiento_acreditado == mov_id

@@ -377,6 +377,8 @@ def conciliar_planilla(
     solo_pendientes: bool = False,
 ) -> dict:
     from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    _ARG = ZoneInfo("America/Argentina/Buenos_Aires")
 
     config = org_config or CONFIG_DEFAULT_ORG
     estados_habilitados = config.get("estados_habilitados", [])
@@ -462,14 +464,14 @@ def conciliar_planilla(
         if mov:
             mov.cliente_acreditado = cliente_nombre
             if fecha_acred_str.lower() == 'hoy':
-                mov.fecha_acred = datetime.now().date()
+                mov.fecha_acred = datetime.now(_ARG).date()
             elif fecha_acred_str.lower() == 'ayer':
-                mov.fecha_acred = (datetime.now() - timedelta(days=1)).date()
+                mov.fecha_acred = (datetime.now(_ARG) - timedelta(days=1)).date()
             else:
                 try:
                     mov.fecha_acred = datetime.fromisoformat(fecha_acred_str).date()
                 except Exception:
-                    mov.fecha_acred = datetime.now().date()
+                    mov.fecha_acred = datetime.now(_ARG).date()
 
             row.fecha_acred = mov.fecha_acred
             row.orden_movimiento_acreditado = mov.id
