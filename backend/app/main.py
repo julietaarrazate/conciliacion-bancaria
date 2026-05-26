@@ -440,10 +440,13 @@ async def lifespan(app: FastAPI):
     t.start()
     # Scheduler de backup diario por email (no-op si RESEND_API_KEY no esta)
     try:
-        from app.services.backup_scheduler import start_backup_scheduler, stop_backup_scheduler
+        from app.services.backup_scheduler import (
+            start_backup_scheduler, stop_backup_scheduler, start_alertas_push_job
+        )
         start_backup_scheduler()
+        start_alertas_push_job()  # 10:00 ART — push si hay cheques/movs urgentes
     except Exception as ex:
-        logger.warning("No se pudo iniciar el backup scheduler: %s", ex)
+        logger.warning("No se pudo iniciar schedulers: %s", ex)
     yield
     try:
         stop_backup_scheduler()

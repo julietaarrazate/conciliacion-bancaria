@@ -96,6 +96,94 @@ def start_backup_scheduler() -> None:
     )
 
 
+def start_alertas_push_job() -> None:
+    """Agrega el job de push notifications de alertas al scheduler (8:00 ART).
+    Arranca el scheduler si todavia no estaba corriendo.
+    No hace nada si VAPID no esta configurado.
+    """
+    global _scheduler
+    if not settings.vapid_private_key or not settings.vapid_public_key:
+        logger.info("Push alertas no configurado: faltan VAPID_PRIVATE_KEY / VAPID_PUBLIC_KEY")
+        return
+
+    # Reusar el scheduler existente o crear uno nuevo
+    if _scheduler is None:
+        sched = BackgroundScheduler(timezone=_ART)
+        sched.start()
+        _scheduler = sched
+
+    if _scheduler.get_job("push_alertas_diario"):
+        return  # ya registrado
+
+    _scheduler.add_job(
+        _run_alertas_push,
+        CronTrigger(hour=10, minute=0, timezone=_ART),
+        id="push_alertas_diario",
+        name="Push alertas diarias (cheques + movimientos)",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("Push alertas diarias programadas para 10:00 ART")
+
+
+def _run_alertas_push() -> None:
+    """Revisa cheques por vencer y movimientos sin asignar. Manda push si hay urgentes."""
+    from datetime import date
+    from app.models.cheque import Cheque
+    from app.models.extracto import MovimientoBanco
+
+    db = SessionLocal()
+    try:
+        hoy = date.today()
+        en_3_dias = hoy + timedelta(days=3)
+        hace_7_dias = hoy - timedelta(days=7)
+
+        cheques_urgentes = (
+            db.query(Cheque)
+            .filter(
+                Cheque.estado == "pendiente",
+                Cheque.fecha_deposito != None,
+                Cheque.fecha_deposito >= hoy,
+                Cheque.fecha_deposito <= en_3_dias,
+            )
+            .count()
+        )
+
+        movs_sin_asignar = (
+            db.query(MovimientoBanco)
+            .filter(
+                MovimientoBanco.cliente_acreditado == None,
+                MovimientoBanco.monto > 0,
+                MovimientoBanco.fecha != None,
+                MovimientoBanco.fecha <= hace_7_dias,
+            )
+            .count()
+        )
+
+        partes = []
+        if cheques_urgentes:
+            n = cheques_urgentes
+            partes.append(f"{n} cheque{'s' if n > 1 else ''} vence{'n' if n > 1 else ''} en 3 días")
+        if movs_sin_asignar:
+            n = movs_sin_asignar
+            partes.append(f"{n} movimiento{'s' if n > 1 else ''} sin conciliar (+7 días)")
+
+        if not partes:
+            logger.info("Push alertas: sin novedades urgentes hoy")
+            return
+
+        from app.services.push_service import send_push_to_all
+        body = " · ".join(partes)
+        sent = send_push_to_all(db, "Cuadra — Alerta", body, "/resumen")
+        logger.info("Push alertas enviadas a %d suscriptores: %s", sent, body)
+    except Exception as ex:
+        logger.error("Push alertas job FALLO: %s", ex, exc_info=True)
+    finally:
+        db.close()
+
+
 def stop_backup_scheduler() -> None:
     global _scheduler
     if _scheduler is not None:
