@@ -69,7 +69,8 @@ Diseño: Linear-inspired · Inter font · dark mode (#0B0B0F)
                    extracto_merger.py, excel_parser.py, motor_contable.py,
                    backup_service.py, backup_scheduler.py, push_service.py,
                    email_sender.py, password_reset.py
-  /alembic/versions — 001_baseline, 002_soft_delete, 003_password_reset, 004_performance_indexes
+  /alembic/versions — 001_baseline, 002_soft_delete, 003_password_reset, 004_performance_indexes,
+                      006_unique_constraints, 007_float_to_numeric
 
 /frontend/src
   /pages   — Dashboard (Individual + Carga masiva auto-conciliar), Clientes,
@@ -77,7 +78,8 @@ Diseño: Linear-inspired · Inter font · dark mode (#0B0B0F)
              Usuarios, Perfil, Login, Organizaciones, Liquidaciones, Caja,
              OrdenDePago, Cheques, PagosGastos, Contabilidad, Resumen,
              EstadoCuenta, FlujoCaja, Revision, Actividad,
-             PaginaPublica (/p/:token — sin auth), RecuperarPassword, RestablecerPassword
+             PaginaPublica (/p/:token — sin auth), RecuperarPassword, RestablecerPassword,
+             Privacidad (/privacidad — sin auth), Terminos (/terminos — sin auth)
   /components — Layout (drawer mobile + ⌘K search), PlanillaPanel (paginado 100 filas,
                 bulk edit), FileUpload (compacto, multi-archivo), SearchModal,
                 ConfirmModal, charts/LineChart, BarChart, DonutChart
@@ -130,7 +132,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ---
 
-## Features implementadas (estado actual)
+## Features implementadas (estado actual — v3.2)
 
 - Conciliación bancaria multi-extracto con motor de scoring
 - Carga masiva con auto-conciliar al subir planillas
@@ -145,16 +147,26 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - Recuperación de contraseña por email
 - Bloqueo PIN + biometría (WebAuthn) + ConfirmDialog global
 - Share target: recibir archivos desde WhatsApp/Galería
+- **Aislamiento multi-org completo**: todos los reportes y módulos respetan org seleccionada
+- **Aritmética exacta**: columnas financieras en `Numeric(12,2)` (migración 007); JSON encoder Decimal transparente
+- **Validaciones Pydantic**: `monto > 0` en cheques y pagos/gastos; CUIT validado al crear cliente
+- **Soft-delete hermético**: planillas eliminadas excluidas de stats, insights, liquidaciones y conciliaciones
+- **Seguridad hardening**: `/auth/register` requiere superadmin; CORS con métodos/headers explícitos;
+  `/contabilidad/stats` autenticado; libro mayor valida org; OP compartir valida org
+- **Páginas legales**: `/privacidad` y `/terminos` públicas (Ley 25.326 Argentina)
+- **Suite de tests**: 124 tests (29 nuevos en `test_audit_fixes.py`)
 
 ---
 
 ## Roadmap (por valor / esfuerzo)
 
 1. **2FA para superadmin** — código por email al login (medio esfuerzo, alta seguridad)
-2. **JWT revocados** — invalidar tokens comprometidos antes de las 8hs (bajo esfuerzo)
-3. **Google OAuth** — login con Google (medio esfuerzo, mejor UX)
-4. **IA Nivel 3** — predicción automática (requiere 3-6 meses de datos reales)
-5. **App móvil nativa** React Native (alto esfuerzo, cuando la PWA se quede corta)
+2. **Google OAuth** — login con Google (medio esfuerzo, mejor UX)
+3. **Caja/OrdenDePago org switching** — el superadmin no puede cambiar de org en esos módulos (backend `_org_id` sin parámetro)
+4. **Rate limiting global** — slowapi en todos los endpoints, no solo auth
+5. **Storage externo (R2/S3)** — `foto_comprobante` actualmente en base64 en DB
+6. **IA Nivel 3** — predicción automática (requiere 3-6 meses de datos reales)
+7. **App móvil nativa** React Native (alto esfuerzo, cuando la PWA se quede corta)
 
 ---
 
@@ -174,8 +186,10 @@ git commit --allow-empty --author="Julieta Arrazate <julietaarrazate@gmail.com>"
 **Keys/tokens:** NUNCA en este archivo. Están en Render, Vercel y GitHub de Julieta.
 **Org A:** NUNCA modificar datos existentes — solo cambios aditivos.
 
-Checkpoint disponible: rama `v3.1-stable-checkpoint` en GitHub (antes de las 5 features de mayo 2026).
+Checkpoints disponibles:
+- `v3.1-stable-checkpoint` — antes de las 5 features de mayo 2026
+- `v3.2-stable-checkpoint` — después de seguridad hardening + Numeric migration + legal pages (mayo 2026)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.2
