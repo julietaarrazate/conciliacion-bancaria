@@ -1,10 +1,12 @@
+import json
 import logging
 import threading
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse as _BaseJSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -30,6 +32,24 @@ from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planill
 from app.models.push_subscription import PushSubscription  # noqa: F401
 from app.models.revoked_token import RevokedToken  # noqa: F401
 from app.models.organizacion import Organizacion
+
+# ── Decimal → float encoder para SQLAlchemy Numeric columns ──────────────────
+class _DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
+
+
+class JSONResponse(_BaseJSONResponse):
+    """JSONResponse que serializa decimal.Decimal como float."""
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            cls=_DecimalEncoder,
+            ensure_ascii=False,
+        ).encode("utf-8")
+
 
 settings = get_settings()
 setup_logging(debug=settings.debug)
@@ -461,7 +481,8 @@ app = FastAPI(
     title=settings.app_name,
     version="2.0.0",
     debug=settings.debug,
-    lifespan=lifespan
+    lifespan=lifespan,
+    default_response_class=JSONResponse,
 )
 
 # Rate limiting

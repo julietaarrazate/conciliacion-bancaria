@@ -1,3 +1,4 @@
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -34,40 +35,41 @@ def _liquidacion_for_user(db: Session, liq_id: int, current_user: User) -> Liqui
     return liq
 
 
-def _comision_cliente(config: dict, cliente_nombre: str) -> float:
+def _comision_cliente(config: dict, cliente_nombre: str) -> Decimal:
     """Obtiene el % de comision para un cliente segun la config de la org."""
     comisiones = config.get("comisiones", {})
     por_cliente = comisiones.get("por_cliente", {})
     if cliente_nombre in por_cliente:
-        return float(por_cliente[cliente_nombre])
-    return float(comisiones.get("porcentaje_default", 1.5))
+        return Decimal(str(por_cliente[cliente_nombre]))
+    return Decimal(str(comisiones.get("porcentaje_default", 1.5)))
 
 
 def _calcular_monto_conciliado(db: Session, org_id: int, cliente_id: int,
-                                desde: date, hasta: date) -> float:
+                                desde: date, hasta: date) -> Decimal:
     """Suma montos de movimientos acreditados a este cliente en el periodo."""
     from app.models.extracto import MovimientoBanco
     from app.models.extracto import ExtractoBancario
 
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
-        return 0.0
+        return Decimal("0")
 
     planillas = db.query(Planilla).filter(
         Planilla.organizacion_id == org_id,
         Planilla.cliente_id == cliente_id,
+        Planilla.deleted_at.is_(None),
         Planilla.fecha_carga >= datetime.combine(desde, datetime.min.time()),
         Planilla.fecha_carga <= datetime.combine(hasta, datetime.max.time())
     ).all()
 
-    total = 0.0
+    total = Decimal("0")
     for p in planillas:
         for row in p.rows:
             if row.status == "ok" and row.orden_movimiento_acreditado:
                 from app.models.extracto import MovimientoBanco as MB
                 mov = db.query(MB).filter(MB.id == row.orden_movimiento_acreditado).first()
                 if mov:
-                    total += mov.monto or 0
+                    total += mov.monto or Decimal("0")
     return round(total, 2)
 
 
@@ -105,8 +107,8 @@ def generar_liquidacion(
     clientes = db.query(Cliente).filter(Cliente.organizacion_id == org_id).all()
 
     detalles = []
-    total_conciliado = 0.0
-    total_comision   = 0.0
+    total_conciliado = Decimal("0")
+    total_comision   = Decimal("0")
 
     for cliente in clientes:
         monto = _calcular_monto_conciliado(db, org_id, cliente.id, periodo_inicio, periodo_fin)

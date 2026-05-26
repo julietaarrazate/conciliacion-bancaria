@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -89,11 +90,11 @@ def update_arqueo(
         raise HTTPException(404, "Arqueo no encontrado. Llamar GET /caja/arqueo/hoy primero.")
 
     if "saldo_inicial" in payload:
-        arqueo.saldo_inicial = float(payload["saldo_inicial"])
+        arqueo.saldo_inicial = Decimal(str(payload["saldo_inicial"]))
     if "pesos_agregados" in payload:
-        arqueo.pesos_agregados = float(payload["pesos_agregados"])
+        arqueo.pesos_agregados = Decimal(str(payload["pesos_agregados"]))
     if "ingresos" in payload:
-        arqueo.ingresos = float(payload["ingresos"])
+        arqueo.ingresos = Decimal(str(payload["ingresos"]))
     if "denominaciones" in payload:
         # Validar que solo tenga denominaciones conocidas
         dens = {str(d): int(payload["denominaciones"].get(str(d), 0)) for d in DENOMINACIONES}
@@ -101,7 +102,7 @@ def update_arqueo(
     if "notas" in payload:
         arqueo.notas = payload["notas"]
 
-    pesos_nuevos = float(payload.get("pesos_agregados", arqueo.pesos_agregados or 0))
+    pesos_nuevos = Decimal(str(payload.get("pesos_agregados", arqueo.pesos_agregados or 0)))
     db.commit()
     db.refresh(arqueo)
 
@@ -157,7 +158,7 @@ def registrar_op(
 
     cliente_id = payload.get("cliente_id")
     beneficiario = payload.get("beneficiario", "").strip()
-    importe = float(payload.get("importe", 0))
+    importe = Decimal(str(payload.get("importe", 0)))
     foto = payload.get("foto_base64")  # base64 de la foto del comprobante
     dens_usadas = payload.get("denominaciones", {})  # {"20000": 2, "10000": 1}
     notas = payload.get("notas")

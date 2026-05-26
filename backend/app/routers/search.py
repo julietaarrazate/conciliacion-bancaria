@@ -86,7 +86,7 @@ def search_global(
             {
                 "id": m.id,
                 "titular": m.titular,
-                "monto": float(m.monto or 0),
+                "monto": m.monto or 0,
                 "fecha": str(m.fecha) if m.fecha else None,
                 "extracto_id": m.extracto_id,
             }
@@ -97,7 +97,7 @@ def search_global(
                 "id": c.id,
                 "numero": c.numero,
                 "emisor": c.titular,
-                "monto": float(c.monto or 0),
+                "monto": c.monto or 0,
             }
             for c in cheques
         ],

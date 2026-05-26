@@ -12,6 +12,7 @@ import os
 logger = logging.getLogger(__name__)
 import platform
 from datetime import datetime
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 import io
@@ -267,7 +268,7 @@ def buscar_movimiento_para_acreditar(
     try:
         m_raw = payload.get("monto")
         if m_raw is not None and str(m_raw).strip() != "":
-            monto = float(m_raw)
+            monto = Decimal(str(m_raw))
             if monto <= 0:
                 monto = None
     except (TypeError, ValueError):
@@ -624,11 +625,18 @@ def crear_cliente(payload: dict,
     from app.services.auditoria import registrar_log
 
     nombre = (payload.get("nombre") or "").strip()
-    cuit = (payload.get("cuit") or "").strip() or None
+    cuit_raw = (payload.get("cuit") or "").strip()
+    cuit = cuit_raw or None
     org_id = payload.get("organizacion_id") or current_user.organizacion_id or 1
 
     if not nombre:
         raise HTTPException(400, "El nombre es obligatorio")
+
+    if cuit:
+        cuit_digits = cuit.replace("-", "").replace(" ", "")
+        if not cuit_digits.isdigit() or len(cuit_digits) not in (10, 11):
+            raise HTTPException(400, "CUIT inválido: debe tener 10 u 11 dígitos numéricos")
+        cuit = cuit_digits
 
     # Scope: usuarios no superadmin solo pueden crear en su org
     if not current_user.is_superadmin and org_id != (current_user.organizacion_id or 1):

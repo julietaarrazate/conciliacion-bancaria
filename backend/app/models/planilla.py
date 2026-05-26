@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Text, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Text, Boolean, Numeric
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -39,7 +39,7 @@ class PlanillaRow(Base):
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
 
     # Datos de la planilla
-    monto = Column(Float, nullable=False)
+    monto = Column(Numeric(12, 2), nullable=False)
     cuit = Column(String, nullable=True)
     titular = Column(String, nullable=True)
     referencia = Column(String, nullable=True)  # para match_rule "referencia"
@@ -49,7 +49,7 @@ class PlanillaRow(Base):
     # Estados ricos: "PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA", "VENCIDO", "EN_REVISION"
     status = Column(String, nullable=False)
     fecha_acred = Column(Date, nullable=True)
-    monto_acreditado = Column(Float, nullable=True)
+    monto_acreditado = Column(Numeric(12, 2), nullable=True)
     comentario_revision = Column(Text, nullable=True)
     orden_movimiento_acreditado = Column(Integer, ForeignKey("movimientos_banco.id"), nullable=True)
 

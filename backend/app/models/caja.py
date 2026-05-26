@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Boolean, Text, JSON
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Boolean, Text, JSON, Numeric
 from sqlalchemy.orm import relationship
 from datetime import datetime, date
 from app.database import Base
@@ -18,9 +18,9 @@ class ArqueoDiario(Base):
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=False, index=True)
     fecha           = Column(Date, nullable=False, index=True)
 
-    saldo_inicial   = Column(Float, default=0)   # arrastrado del dia anterior
-    pesos_agregados = Column(Float, default=0)   # efectivo que le dan para pagar mas OPs
-    ingresos        = Column(Float, default=0)   # clientes que traen plata
+    saldo_inicial   = Column(Numeric(12, 2), default=0)   # arrastrado del dia anterior
+    pesos_agregados = Column(Numeric(12, 2), default=0)   # efectivo que le dan para pagar mas OPs
+    ingresos        = Column(Numeric(12, 2), default=0)   # clientes que traen plata
 
     # Billetes fisicos: {"20000": 1500, "10000": 1419, "2000": 408, ...}
     denominaciones  = Column(JSON, default=denominaciones_vacias)
@@ -67,7 +67,7 @@ class OrdenDePago(Base):
 
     fecha           = Column(Date, nullable=False, default=date.today)
     beneficiario    = Column(String, nullable=False)   # nombre del proveedor
-    importe         = Column(Float, nullable=False)
+    importe         = Column(Numeric(12, 2), nullable=False)
 
     # Foto de la OP firmada (base64 comprimida)
     foto_comprobante = Column(Text, nullable=True)

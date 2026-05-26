@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Date
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Date, Numeric
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -60,8 +60,8 @@ class AsientoDetalle(Base):
     id         = Column(Integer, primary_key=True, index=True)
     asiento_id = Column(Integer, ForeignKey("asientos.id"), nullable=False)
     cuenta_id  = Column(Integer, ForeignKey("plan_cuentas.id"), nullable=False)
-    debe       = Column(Float, default=0.0)
-    haber      = Column(Float, default=0.0)
+    debe       = Column(Numeric(12, 2), default=0.0)
+    haber      = Column(Numeric(12, 2), default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     asiento = relationship("Asiento", back_populates="lineas")

@@ -249,8 +249,8 @@ def get_sumas_saldo(
 
     rows = []
     for r in q.all():
-        debe  = round(float(r.total_debe),  2)
-        haber = round(float(r.total_haber), 2)
+        debe  = round(r.total_debe or 0,  2)
+        haber = round(r.total_haber or 0, 2)
         saldo = round(debe - haber, 2)
         rows.append({
             "id":     r.id,
@@ -295,8 +295,8 @@ def get_balance(
 
     totales: dict = {}
     for r in q.all():
-        debe  = round(float(r.total_debe),  2)
-        haber = round(float(r.total_haber), 2)
+        debe  = round(r.total_debe or 0,  2)
+        haber = round(r.total_haber or 0, 2)
         totales[r.tipo] = {
             "total_debe":  debe,
             "total_haber": haber,

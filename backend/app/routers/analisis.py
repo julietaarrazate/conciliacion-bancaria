@@ -81,7 +81,7 @@ def _suma_planilla_rows(
     if solo_status:
         q = q.filter(PlanillaRow.status.in_(list(solo_status)))
     row = q.one()
-    return {"total": float(row.total or 0), "cantidad": int(row.cantidad or 0)}
+    return {"total": row.total or 0, "cantidad": int(row.cantidad or 0)}
 
 
 def _kpis_periodo(db: Session, org_id: int, desde: date, hasta: date) -> dict:
@@ -99,7 +99,7 @@ def _kpis_periodo(db: Session, org_id: int, desde: date, hasta: date) -> dict:
         MovimientoBanco.fecha >= desde,
         MovimientoBanco.fecha <= hasta,
     ).one()
-    movimientos_banco = {"total": float(mov_q[0] or 0), "cantidad": int(mov_q[1] or 0)}
+    movimientos_banco = {"total": mov_q[0] or 0, "cantidad": int(mov_q[1] or 0)}
 
     # Cheques cargados en el mes (por fecha_emision)
     cheq_q = db.query(
@@ -110,7 +110,7 @@ def _kpis_periodo(db: Session, org_id: int, desde: date, hasta: date) -> dict:
         Cheque.fecha_emision >= desde,
         Cheque.fecha_emision <= hasta,
     ).one()
-    cheques_mes = {"total": float(cheq_q[0] or 0), "cantidad": int(cheq_q[1] or 0)}
+    cheques_mes = {"total": cheq_q[0] or 0, "cantidad": int(cheq_q[1] or 0)}
 
     # Pagos y gastos del mes
     pag_q = db.query(func.coalesce(func.sum(Pago.monto), 0.0), func.count(Pago.id)).filter(
@@ -132,8 +132,8 @@ def _kpis_periodo(db: Session, org_id: int, desde: date, hasta: date) -> dict:
         "tasa_conciliacion_pct": round(tasa_conciliacion, 1),
         "movimientos_banco": movimientos_banco,
         "cheques_cargados": cheques_mes,
-        "pagos": {"total": float(pag_q[0] or 0), "cantidad": int(pag_q[1] or 0)},
-        "gastos": {"total": float(gas_q[0] or 0), "cantidad": int(gas_q[1] or 0)},
+        "pagos": {"total": pag_q[0] or 0, "cantidad": int(pag_q[1] or 0)},
+        "gastos": {"total": gas_q[0] or 0, "cantidad": int(gas_q[1] or 0)},
     }
 
 
@@ -168,7 +168,7 @@ def _top_clientes_mes(db: Session, org_id: int, desde: date, hasta: date, limit:
         .all()
     )
     return [
-        {"cliente_id": r.id, "nombre": r.nombre, "total": float(r.total or 0), "cantidad": int(r.cantidad or 0)}
+        {"cliente_id": r.id, "nombre": r.nombre, "total": r.total or 0, "cantidad": int(r.cantidad or 0)}
         for r in rows
     ]
 
@@ -188,7 +188,7 @@ def _cheques_estado(db: Session, org_id: int) -> dict:
     salida: dict = {}
     for r in rows:
         salida[(r.estado or "pendiente").lower()] = {
-            "total": float(r.total or 0),
+            "total": r.total or 0,
             "cantidad": int(r.cantidad or 0),
         }
     return salida
@@ -215,7 +215,7 @@ def _cheques_proximos_vencimiento(db: Session, org_id: int, dias: int = 30) -> l
         {
             "id": c.id,
             "numero": c.numero,
-            "monto": float(c.monto or 0),
+            "monto": c.monto or 0,
             "fecha_deposito": c.fecha_deposito.isoformat() if c.fecha_deposito else None,
             "dias_para_vencer": (c.fecha_deposito - hoy).days if c.fecha_deposito else None,
             "cliente_nombre": c.cliente.nombre if c.cliente else None,
@@ -462,15 +462,15 @@ def clientes_aging(
         entry = agregados.setdefault(r.cliente_id, {
             "cliente_id": r.cliente_id,
             "nombre": r.cliente_nombre,
-            "total_pendiente": 0.0,
+            "total_pendiente": 0,
             "cantidad": 0,
             "dias_max": 0,
-            "buckets": {"0-30": 0.0, "31-60": 0.0, "61-90": 0.0, "+90": 0.0},
+            "buckets": {"0-30": 0, "31-60": 0, "61-90": 0, "+90": 0},
         })
-        entry["total_pendiente"] += float(r.monto or 0)
+        entry["total_pendiente"] += r.monto or 0
         entry["cantidad"] += 1
         entry["dias_max"] = max(entry["dias_max"], dias)
-        entry["buckets"][bucket] += float(r.monto or 0)
+        entry["buckets"][bucket] += r.monto or 0
 
     # Cheques pendientes por cliente (suman al "pendiente operativo")
     cheques_pendientes = (
@@ -489,7 +489,7 @@ def clientes_aging(
         .all()
     )
     cheques_por_cliente = {
-        c.cliente_id: {"total": float(c.total or 0), "cantidad": int(c.cantidad or 0)}
+        c.cliente_id: {"total": c.total or 0, "cantidad": int(c.cantidad or 0)}
         for c in cheques_pendientes
     }
 
@@ -501,16 +501,16 @@ def clientes_aging(
                 agregados[cid] = {
                     "cliente_id": cid,
                     "nombre": cliente.nombre,
-                    "total_pendiente": 0.0,
+                    "total_pendiente": 0,
                     "cantidad": 0,
                     "dias_max": 0,
-                    "buckets": {"0-30": 0.0, "31-60": 0.0, "61-90": 0.0, "+90": 0.0},
+                    "buckets": {"0-30": 0, "31-60": 0, "61-90": 0, "+90": 0},
                 }
 
     # Mergear cheques al total operativo
     salida = []
     for cid, data in agregados.items():
-        cheques_info = cheques_por_cliente.get(cid, {"total": 0.0, "cantidad": 0})
+        cheques_info = cheques_por_cliente.get(cid, {"total": 0, "cantidad": 0})
         data["cheques_pendientes"] = cheques_info
         data["total_operativo"] = data["total_pendiente"] + cheques_info["total"]
         salida.append(data)
@@ -579,27 +579,27 @@ def estado_cuenta_cliente(
     )
 
     planillas_data = []
-    total_conciliado = 0.0
-    total_pendiente = 0.0
+    total_conciliado = 0
+    total_pendiente = 0
     cantidad_filas = 0
     for p in planillas:
         filas_data = []
-        sub_ok = 0.0
-        sub_pendiente = 0.0
+        sub_ok = 0
+        sub_pendiente = 0
         for row in p.rows:
             estado_norm = "ok" if row.status in _STATUS_OK else (
                 "pendiente" if row.status in _STATUS_PENDIENTE else (row.status or "otro")
             )
             if estado_norm == "ok":
-                sub_ok += float(row.monto or 0)
-                total_conciliado += float(row.monto or 0)
+                sub_ok += row.monto or 0
+                total_conciliado += row.monto or 0
             elif estado_norm == "pendiente":
-                sub_pendiente += float(row.monto or 0)
-                total_pendiente += float(row.monto or 0)
+                sub_pendiente += row.monto or 0
+                total_pendiente += row.monto or 0
             cantidad_filas += 1
             filas_data.append({
                 "id": row.id,
-                "monto": float(row.monto or 0),
+                "monto": row.monto or 0,
                 "status": row.status,
                 "status_norm": estado_norm,
                 "titular": row.titular,
@@ -633,7 +633,7 @@ def estado_cuenta_cliente(
             "numero": c.numero,
             "banco_origen": c.banco_origen,
             "titular": c.titular,
-            "monto": float(c.monto or 0),
+            "monto": c.monto or 0,
             "fecha_emision": c.fecha_emision.isoformat() if c.fecha_emision else None,
             "fecha_deposito": c.fecha_deposito.isoformat() if c.fecha_deposito else None,
             "fecha_acred": c.fecha_acred.isoformat() if c.fecha_acred else None,
@@ -661,7 +661,7 @@ def estado_cuenta_cliente(
         {
             "id": p.id,
             "concepto": p.concepto,
-            "monto": float(p.monto or 0),
+            "monto": p.monto or 0,
             "medio": p.medio,
             "fecha": p.fecha.isoformat() if p.fecha else None,
         }
@@ -782,8 +782,8 @@ def flujo_caja(
             Pago.fecha >= desde,
             Pago.fecha <= hasta,
         ).scalar() or 0.0
-        ingresos = float(ingresos_q)
-        egresos = float(gastos_q) + float(pagos_q)
+        ingresos = ingresos_q or 0
+        egresos = (gastos_q or 0) + (pagos_q or 0)
         resultado.append({
             "label": f"{m:02d}/{str(a)[-2:]}",
             "anio": a,

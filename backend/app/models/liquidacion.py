@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Text, Numeric
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -16,9 +16,9 @@ class Liquidacion(Base):
     # borrador → aprobada → pagada
     estado = Column(String, default="borrador", nullable=False)
 
-    total_conciliado = Column(Float, default=0)
-    total_comision   = Column(Float, default=0)
-    total_neto       = Column(Float, default=0)
+    total_conciliado = Column(Numeric(12, 2), default=0)
+    total_comision   = Column(Numeric(12, 2), default=0)
+    total_neto       = Column(Numeric(12, 2), default=0)
     notas            = Column(Text, nullable=True)
 
     created_by  = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -41,10 +41,10 @@ class LiquidacionDetalle(Base):
     cliente_id     = Column(Integer, ForeignKey("clientes.id"), nullable=False)
     cliente_nombre = Column(String, nullable=False)
 
-    monto_conciliado    = Column(Float, default=0)
-    porcentaje_comision = Column(Float, default=0)
-    monto_comision      = Column(Float, default=0)
-    monto_neto          = Column(Float, default=0)
+    monto_conciliado    = Column(Numeric(12, 2), default=0)
+    porcentaje_comision = Column(Numeric(5, 4), default=0)
+    monto_comision      = Column(Numeric(12, 2), default=0)
+    monto_neto          = Column(Numeric(12, 2), default=0)
     observaciones       = Column(Text, nullable=True)
 
     liquidacion = relationship("Liquidacion", back_populates="detalles")

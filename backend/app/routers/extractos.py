@@ -140,8 +140,8 @@ async def upload_extracto(file: UploadFile = File(...),
                 for n in movs:
                     if (m.orden is not None and n.get("orden") == m.orden) or (
                         m.saldo is not None and n.get("saldo") is not None
-                        and abs(float(m.saldo) - float(n["saldo"])) < 0.01
-                        and abs(float(m.monto) - float(n.get("monto") or 0)) < 0.01
+                        and abs((m.saldo or 0) - float(n["saldo"])) < 0.01
+                        and abs((m.monto or 0) - float(n.get("monto") or 0)) < 0.01
                     ):
                         cliente_nuevo = n.get("cliente_acreditado")
                         fecha_nueva = n.get("fecha_acred")
@@ -523,15 +523,16 @@ def update_movimiento(
             if cliente:
                 planillas = db.query(Planilla).filter(
                     Planilla.cliente_id == cliente.id,
-                    Planilla.extracto_id == mov.extracto_id
+                    Planilla.extracto_id == mov.extracto_id,
+                    Planilla.deleted_at.is_(None),
                 ).all()
-                mov_monto = abs(float(mov.monto))
+                mov_monto = abs(mov.monto or 0)
                 for planilla in planillas:
                     for row in planilla.rows:
                         if row.status == "ok" or row.orden_movimiento_acreditado is not None:
                             continue
                         try:
-                            row_monto = abs(float(row.monto or 0))
+                            row_monto = abs(row.monto or 0)
                         except (ValueError, TypeError):
                             continue
                         if abs(row_monto - mov_monto) < 0.01:
@@ -700,7 +701,7 @@ def export_conciliaciones(
         c.fill = PatternFill("solid", fgColor="1F4E78")
         c.alignment = Alignment(horizontal="center")
 
-    total_monto = 0.0
+    total_monto = 0
     for i, m in enumerate(rows, start=4):
         ws.cell(row=i, column=1, value=m.fecha).number_format = "DD/MM/YYYY"
         ws.cell(row=i, column=2, value=m.orden)
@@ -716,7 +717,7 @@ def export_conciliaciones(
             c.alignment = Alignment(horizontal=c.alignment.horizontal or "general",
                                     vertical="center", wrap_text=False)
         ws.row_dimensions[i].height = 15
-        total_monto += float(m.monto or 0)
+        total_monto += m.monto or 0
 
     n = len(rows)
     foot = 4 + n
