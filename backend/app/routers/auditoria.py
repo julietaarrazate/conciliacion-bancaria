@@ -1,3 +1,4 @@
+from decimal import Decimal
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import desc, func
@@ -267,7 +268,7 @@ def importar_patrones_historicos(
         cliente = str(p.get("cliente","")).strip()
         titular = str(p.get("titular","")).strip()
         cuit    = re.sub(r'\D','', str(p.get("cuit","") or ""))  # solo digitos
-        monto   = float(p.get("monto",0) or 0)
+        monto   = Decimal(str(p.get("monto", 0) or 0))
 
         if not cliente or (not titular and not cuit):
             continue

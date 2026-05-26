@@ -12,6 +12,7 @@ import os
 logger = logging.getLogger(__name__)
 import platform
 from datetime import datetime
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 import io
@@ -267,7 +268,7 @@ def buscar_movimiento_para_acreditar(
     try:
         m_raw = payload.get("monto")
         if m_raw is not None and str(m_raw).strip() != "":
-            monto = float(m_raw)
+            monto = Decimal(str(m_raw))
             if monto <= 0:
                 monto = None
     except (TypeError, ValueError):

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional, List
 import base64, io
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
@@ -409,7 +410,7 @@ async def importar_excel(
             monto_raw = row[COL['monto']] if COL['monto'] is not None else None
             if not monto_raw:
                 continue
-            monto = float(str(monto_raw).replace(',', '.').replace('$', '').strip())
+            monto = Decimal(str(monto_raw).replace(',', '.').replace('$', '').strip())
             if monto <= 0:
                 continue
 
@@ -421,10 +422,10 @@ async def importar_excel(
                 else:
                     cliente_id = clientes_cache.get(cv.lower())
 
-            comision = 0.0
+            comision = Decimal("0")
             if COL['comision'] is not None and row[COL['comision']]:
                 try:
-                    comision = float(str(row[COL['comision']]).replace(',', '.').replace('$', '').strip())
+                    comision = Decimal(str(row[COL['comision']]).replace(',', '.').replace('$', '').strip())
                 except Exception:
                     pass
 

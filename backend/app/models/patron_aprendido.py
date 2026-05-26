@@ -6,7 +6,7 @@ se extrae el patron que lo identifico y se guarda aqui.
 Con suficientes patrones, el motor de match los usa como referencia adicional
 antes de declarar que no hay suficientes datos.
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Numeric
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Numeric
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base

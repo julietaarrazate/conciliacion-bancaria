@@ -489,7 +489,7 @@ def delete_row(
         tabla="planilla_rows",
         registro_id=row.id,
         accion="DELETE_ROW",
-        cambios={"monto": float(row.monto or 0), "status": row.status, "titular": row.titular}
+        cambios={"monto": str(row.monto or 0), "status": row.status, "titular": row.titular}
     )
 
     db.delete(row)

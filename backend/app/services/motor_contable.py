@@ -7,6 +7,7 @@ Idempotente: nunca crea dos asientos para el mismo (modulo, referencia_id, org_i
 
 import logging
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -40,11 +41,11 @@ def _ya_existe(db: Session, modulo: str, referencia_id: int, org_id: int) -> boo
     ) is not None
 
 
-def _monto(v) -> float:
+def _monto(v) -> Decimal:
     try:
-        return round(float(str(v).replace(",", ".").replace("$", "").strip()), 2)
+        return round(Decimal(str(v).replace(",", ".").replace("$", "").strip()), 2)
     except Exception:
-        return 0.0
+        return Decimal("0")
 
 
 def _crear_asiento(
@@ -56,7 +57,7 @@ def _crear_asiento(
     referencia_id: int,
     org_id: int,
     usuario_id: Optional[int],
-    monto: float,
+    monto: Decimal,
 ) -> None:
     a = Asiento(
         fecha=fecha,
@@ -74,8 +75,8 @@ def _crear_asiento(
         # Salir limpio: el asiento ya existe gracias al otro request.
         db.rollback()
         return
-    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=regla.cuenta_debe_id,  debe=monto, haber=0.0))
-    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=regla.cuenta_haber_id, debe=0.0,  haber=monto))
+    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=regla.cuenta_debe_id,  debe=monto, haber=Decimal("0")))
+    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=regla.cuenta_haber_id, debe=Decimal("0"),  haber=monto))
 
 
 def registrar_extracto(
@@ -120,8 +121,8 @@ def registrar_cheque(
     org_id: int,
     usuario_id: Optional[int],
     titular: str,
-    monto: float,
-    comision: float,
+    monto: Decimal,
+    comision: Decimal,
     fecha: date,
 ) -> None:
     """Carga cheque: Créditos (D) / Pasivo cliente (H). Comisión opcional."""
@@ -166,7 +167,7 @@ def acreditar_cheque(
     org_id: int,
     usuario_id: Optional[int],
     titular: str,
-    monto: float,
+    monto: Decimal,
     fecha: date,
 ) -> None:
     """Acreditación cheque: Banco (D) / Créditos (H)."""
@@ -198,7 +199,7 @@ def rechazar_cheque(
     org_id: int,
     usuario_id: Optional[int],
     titular: str,
-    monto: float,
+    monto: Decimal,
     fecha: date,
 ) -> None:
     """Rechazo cheque: Pasivo cliente (D) / Créditos (H)."""
@@ -231,7 +232,7 @@ def registrar_op_pago(
     usuario_id: Optional[int],
     beneficiario: str,
     cliente_nombre: str,
-    monto: float,
+    monto: Decimal,
     fecha: date,
 ) -> None:
     """OP de caja: Gastos (D) / Efectivo (H)."""
@@ -262,7 +263,7 @@ def registrar_ingreso_efectivo(
     arqueo_id: int,
     org_id: int,
     usuario_id: Optional[int],
-    monto: float,
+    monto: Decimal,
     fecha: date,
 ) -> None:
     """Reposición de efectivo (banco → caja): Efectivo (D) / Banco (H).
@@ -286,10 +287,10 @@ def registrar_ingreso_efectivo(
             for linea in existente.lineas:
                 if linea.cuenta_id == regla.cuenta_debe_id:
                     linea.debe  = monto
-                    linea.haber = 0.0
+                    linea.haber = Decimal("0")
                 else:
                     linea.haber = monto
-                    linea.debe  = 0.0
+                    linea.debe  = Decimal("0")
             existente.fecha = fecha
             db.commit()
         else:
@@ -316,7 +317,7 @@ def registrar_pago(
     usuario_id: Optional[int],
     concepto: str,
     cliente_nombre: str,
-    monto: float,
+    monto: Decimal,
     medio: str,
     fecha: date,
 ) -> None:
@@ -350,7 +351,7 @@ def registrar_gasto(
     org_id: int,
     usuario_id: Optional[int],
     concepto: str,
-    monto: float,
+    monto: Decimal,
     medio: str,
     fecha: date,
 ) -> None:
@@ -388,7 +389,7 @@ def registrar_planilla(
     rows,
     fecha_acred: date,
     solo_pendientes: bool = False,
-    comision_pct: float = 0.0,
+    comision_pct: Decimal = Decimal("0"),
 ) -> None:
     """Asiento al conciliar una planilla: Pasivo Corriente (D) / Cliente (H).
     Si comision_pct > 0 genera un segundo asiento de comisión.
@@ -414,9 +415,9 @@ def registrar_planilla(
         if existente and solo_pendientes:
             for linea in existente.lineas:
                 if linea.cuenta_id == regla.cuenta_debe_id:
-                    linea.debe = total; linea.haber = 0.0
+                    linea.debe = total; linea.haber = Decimal("0")
                 else:
-                    linea.haber = total; linea.debe = 0.0
+                    linea.haber = total; linea.debe = Decimal("0")
             existente.fecha = fecha_acred
         elif not existente:
             _crear_asiento(
@@ -448,9 +449,9 @@ def registrar_planilla(
                     if existente_com and solo_pendientes:
                         for linea in existente_com.lineas:
                             if linea.cuenta_id == regla_com.cuenta_debe_id:
-                                linea.debe = comision_monto; linea.haber = 0.0
+                                linea.debe = comision_monto; linea.haber = Decimal("0")
                             else:
-                                linea.haber = comision_monto; linea.debe = 0.0
+                                linea.haber = comision_monto; linea.debe = Decimal("0")
                         existente_com.fecha = fecha_acred
                     elif not existente_com:
                         _crear_asiento(

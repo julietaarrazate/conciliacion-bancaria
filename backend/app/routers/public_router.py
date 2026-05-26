@@ -66,7 +66,7 @@ def estado_cuenta_publico(token: str, db: Session = Depends(get_db)):
                 "total": len(p.rows),
                 "acreditadas": sum(1 for r in p.rows if r.status in ('ok', 'OK', 'PAGO_PARCIAL')),
                 "rows": [
-                    {"monto": float(r.monto or 0), "titular": r.titular, "status": r.status}
+                    {"monto": r.monto or 0, "titular": r.titular, "status": r.status}
                     for r in p.rows
                 ],
             }
@@ -75,7 +75,7 @@ def estado_cuenta_publico(token: str, db: Session = Depends(get_db)):
         "cheques": [
             {
                 "numero": c.numero,
-                "monto": float(c.monto or 0),
+                "monto": c.monto or 0,
                 "estado": c.estado,
                 "fecha_deposito": str(c.fecha_deposito) if c.fecha_deposito else None,
             }
@@ -83,7 +83,7 @@ def estado_cuenta_publico(token: str, db: Session = Depends(get_db)):
         ],
         "pagos": [
             {
-                "monto": float(p.monto or 0),
+                "monto": p.monto or 0,
                 "fecha": str(p.fecha) if p.fecha else None,
                 "descripcion": p.concepto,
             }
