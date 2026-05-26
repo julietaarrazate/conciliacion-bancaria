@@ -63,9 +63,50 @@ def send_test_push(
 ):
     if not current_user.is_superadmin:
         raise HTTPException(403, "Solo superadmin")
-    from app.services.push_service import send_push_to_all
-    count = send_push_to_all(db, "Cuadra", "Notificaciones activas ✓", "/resumen")
-    return {"enviadas": count}
+
+    settings = get_settings()
+    subs = db.query(PushSubscription).all()
+    diag = {
+        "vapid_configurado": bool(settings.vapid_private_key and settings.vapid_public_key),
+        "suscripciones_en_db": len(subs),
+        "enviadas": 0,
+        "errores": [],
+    }
+
+    if not diag["vapid_configurado"]:
+        diag["errores"].append("Faltan VAPID_PRIVATE_KEY o VAPID_PUBLIC_KEY en Render")
+        return diag
+
+    if not subs:
+        diag["errores"].append("No hay suscripciones guardadas — activá notificaciones en /perfil primero")
+        return diag
+
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        diag["errores"].append("pywebpush no está instalado en el servidor — verificá requirements.txt")
+        return diag
+
+    for s in subs:
+        try:
+            import json
+            webpush(
+                subscription_info={"endpoint": s.endpoint, "keys": {"p256dh": s.p256dh, "auth": s.auth}},
+                data=json.dumps({"title": "Cuadra", "body": "Notificaciones activas ✓", "url": "/resumen"}),
+                vapid_private_key=settings.vapid_private_key,
+                vapid_claims={"sub": f"mailto:{settings.admin_email}"},
+            )
+            diag["enviadas"] += 1
+        except WebPushException as e:
+            msg = f"WebPushException sub={s.id}: {e} | response={getattr(e, 'response', None)}"
+            logger.error(msg)
+            diag["errores"].append(msg)
+        except Exception as e:
+            msg = f"Error sub={s.id}: {type(e).__name__}: {e}"
+            logger.error(msg)
+            diag["errores"].append(msg)
+
+    return diag
 
 
 @router.post("/setup")
