@@ -32,6 +32,21 @@ def _get_org_config(db: Session, organizacion_id: int) -> dict:
     return CONFIG_DEFAULT_ORG
 
 
+def _planilla_for_user(db: Session, planilla_id: int, current_user: User,
+                       include_deleted: bool = False) -> Planilla:
+    """Resuelve una planilla con aislamiento multi-tenant.
+    Superadmin ve cualquier org; el resto solo la propia. 404 si no existe o es de otra org."""
+    q = db.query(Planilla).filter(Planilla.id == planilla_id)
+    if not include_deleted:
+        q = q.filter(Planilla.deleted_at.is_(None))
+    if not current_user.is_superadmin:
+        q = q.filter(Planilla.organizacion_id == current_user.organizacion_id)
+    p = q.first()
+    if not p:
+        raise HTTPException(404, "Planilla no encontrada")
+    return p
+
+
 @router.post("/upload", response_model=PlanillaResponse)
 async def upload_planilla(
     cliente_nombre: str = Query(..., description="Nombre del cliente"),
@@ -139,9 +154,7 @@ def conciliar(
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permission("reconcile"))
 ):
-    planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
-    if not planilla:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planilla no encontrada")
+    planilla = _planilla_for_user(db, planilla_id, current_user)
 
     # Si la planilla no tiene extracto (fue borrado), usar el más reciente de la org
     if not planilla.extracto_id:
@@ -253,10 +266,7 @@ def get_revision(
     Lista filas EN_REVISION de la planilla.
     Solo disponible para orgs con requiere_cierre_periodo: true.
     """
-    planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
-    if not planilla:
-        raise HTTPException(status_code=404, detail="Planilla no encontrada")
-
+    planilla = _planilla_for_user(db, planilla_id, current_user)
     org_id = planilla.organizacion_id or 1
     org_config = _get_org_config(db, org_id)
 
@@ -296,10 +306,7 @@ def resolver_revision(
     Resuelve una fila EN_REVISION.
     Body: {"accion": "aprobar|rechazar|pago_parcial", "comentario": "..."}
     """
-    planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
-    if not planilla:
-        raise HTTPException(status_code=404, detail="Planilla no encontrada")
-
+    planilla = _planilla_for_user(db, planilla_id, current_user)
     org_id = planilla.organizacion_id or 1
     org_config = _get_org_config(db, org_id)
 
@@ -372,6 +379,8 @@ def patch_row_status(
     row = db.query(PlanillaRow).filter(PlanillaRow.id == row_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Fila no encontrada")
+    # Validacion multi-tenant: la planilla padre debe ser de la org del usuario
+    _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
 
     status_anterior = row.status
     nuevo_status = payload.get("status", "").strip()
@@ -460,6 +469,8 @@ def delete_row(
     row = db.query(PlanillaRow).filter(PlanillaRow.id == row_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Fila no encontrada")
+    # Validacion multi-tenant
+    _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
 
     registrar_log(
         db=db,
@@ -488,9 +499,7 @@ def download_planilla_conciliada(
     from datetime import datetime
     from app.models.extracto import MovimientoBanco
 
-    p = db.query(Planilla).filter(Planilla.id == planilla_id).first()
-    if not p:
-        raise HTTPException(404, "Planilla no encontrada")
+    p = _planilla_for_user(db, planilla_id, current_user, include_deleted=True)
 
     mov_ids = [r.orden_movimiento_acreditado for r in p.rows if r.orden_movimiento_acreditado]
     movs_map = {}
@@ -549,12 +558,7 @@ def delete_planilla(
     """Soft delete: marca la planilla como eliminada (deleted_at = now()).
     Las filas y acreditaciones se conservan, así si se restaura vuelve completa."""
     from datetime import datetime as _dt
-    planilla = db.query(Planilla).filter(
-        Planilla.id == planilla_id,
-        Planilla.deleted_at.is_(None),
-    ).first()
-    if not planilla:
-        raise HTTPException(status_code=404, detail="Planilla no encontrada")
+    planilla = _planilla_for_user(db, planilla_id, current_user)
 
     planilla.deleted_at = _dt.utcnow()
     db.commit()
@@ -573,13 +577,11 @@ def delete_planilla(
 def get_planilla_detalle(
     planilla_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     from app.models.extracto import MovimientoBanco
 
-    p = db.query(Planilla).filter(Planilla.id == planilla_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Planilla no encontrada")
+    p = _planilla_for_user(db, planilla_id, current_user, include_deleted=True)
 
     mov_ids = [r.orden_movimiento_acreditado for r in p.rows if r.orden_movimiento_acreditado]
     movs_map = {}
@@ -625,7 +627,4 @@ def get_planilla(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
-    if not planilla:
-        raise HTTPException(status_code=404, detail="Planilla no encontrada")
-    return planilla
+    return _planilla_for_user(db, planilla_id, current_user, include_deleted=True)

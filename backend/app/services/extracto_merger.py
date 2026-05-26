@@ -61,6 +61,11 @@ def mergear_movimientos(
     movimientos_nuevos: List[dict],
     corte_saldo: Optional[float] = None,
 ) -> dict:
+    from app.models.extracto import ExtractoBancario
+    extracto_org = db.query(ExtractoBancario.organizacion_id).filter(
+        ExtractoBancario.id == extracto_id
+    ).scalar() or 1
+
     existentes = (
         db.query(MovimientoBanco)
         .filter(MovimientoBanco.extracto_id == extracto_id)
@@ -170,6 +175,7 @@ def mergear_movimientos(
             mes = str(fecha.month)
         db.add(MovimientoBanco(
             extracto_id=extracto_id,
+            organizacion_id=extracto_org,
             orden=orden_nuevo,
             fecha=fecha,
             mes=mes,

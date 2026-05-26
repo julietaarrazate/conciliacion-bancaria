@@ -287,7 +287,10 @@ def get_comprobante(
     current_user: User = Depends(get_current_user)
 ):
     """Retorna la foto del comprobante firmado en base64."""
-    op = db.query(OrdenDePago).filter(OrdenDePago.id == op_id).first()
+    q = db.query(OrdenDePago).filter(OrdenDePago.id == op_id)
+    if not current_user.is_superadmin:
+        q = q.filter(OrdenDePago.organizacion_id == current_user.organizacion_id)
+    op = q.first()
     if not op:
         raise HTTPException(404, "OP no encontrada")
     return {"op_id": op_id, "foto_base64": op.foto_comprobante}

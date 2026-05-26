@@ -26,13 +26,20 @@ def list_auditoria(
     desde: Optional[datetime] = Query(None),
     hasta: Optional[datetime] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("view_audit"))
+    current_user: User = Depends(require_permission("view_audit"))
 ):
     """
     Lista logs de auditoría con filtros opcionales.
     Requiere permiso 'view_audit' (admin o auditor).
+    Aislamiento multi-tenant: admin solo ve logs de usuarios de su org.
     """
     q = db.query(AuditoriaLog)
+
+    # Multi-tenant: filtrar por organizacion del actor (excepto superadmin)
+    if not current_user.is_superadmin:
+        q = q.join(User, User.id == AuditoriaLog.usuario_id).filter(
+            User.organizacion_id == current_user.organizacion_id
+        )
 
     if tabla:
         q = q.filter(AuditoriaLog.tabla == tabla)
@@ -158,10 +165,16 @@ def get_insights(
                 duplicadas += 1
 
     # ── 2. Correcciones manuales (UPDATE_STATUS en audit log) ─────────────
-    correcciones = db.query(AuditoriaLog).filter(
+    # Filtramos por usuarios de la org (multi-tenant aislamiento)
+    correcciones_q = db.query(AuditoriaLog).filter(
         AuditoriaLog.accion == "UPDATE_STATUS",
         AuditoriaLog.timestamp >= desde
-    ).all()
+    )
+    if not current_user.is_superadmin:
+        correcciones_q = correcciones_q.join(User, User.id == AuditoriaLog.usuario_id).filter(
+            User.organizacion_id == oid
+        )
+    correcciones = correcciones_q.all()
     correcciones_manuales = len(correcciones)
 
     # Patrones de correcciones: que se cambio y desde que estado
@@ -190,12 +203,17 @@ def get_insights(
     )[:10]
 
     # ── 4. Actividad reciente (logs ultimos N dias) ───────────────────────
-    actividad = db.query(
+    actividad_q = db.query(
         AuditoriaLog.accion,
         func.count(AuditoriaLog.id).label("cantidad")
     ).filter(
         AuditoriaLog.timestamp >= desde
-    ).group_by(AuditoriaLog.accion).all()
+    )
+    if not current_user.is_superadmin:
+        actividad_q = actividad_q.join(User, User.id == AuditoriaLog.usuario_id).filter(
+            User.organizacion_id == oid
+        )
+    actividad = actividad_q.group_by(AuditoriaLog.accion).all()
 
     actividad_dict = {a.accion: a.cantidad for a in actividad}
 
