@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
+import { useOrgStore } from '@/store/org'
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
@@ -10,6 +11,7 @@ interface Cliente { id: number; nombre: string }
 type Step = 'foto' | 'datos' | 'exito'
 
 export const OrdenDePago: React.FC = () => {
+  const { activeOrgId } = useOrgStore()
   const [step, setStep] = useState<Step>('foto')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [foto, setFoto] = useState<string | null>(null)  // base64
@@ -51,16 +53,19 @@ export const OrdenDePago: React.FC = () => {
   }, [searchParams, setSearchParams])
 
   useEffect(() => {
-    apiClient.client.get('/clientes/archivos').then(r => {
+    const params = activeOrgId ? { org_id: activeOrgId } : {}
+    apiClient.client.get('/clientes/archivos', { params }).then(r => {
       setClientes(r.data.clientes?.map((c: any) => ({ id: c.id || 0, nombre: c.nombre })) || [])
     }).catch(() => {
       // fallback: traer del historial
-      apiClient.client.get('/historial/planillas?limit=200').then(r => {
+      const p: Record<string, string | number> = { limit: 200 }
+      if (activeOrgId) p.org_id = activeOrgId
+      apiClient.client.get('/historial/planillas', { params: p }).then(r => {
         const nombres = [...new Set(r.data.items?.map((p: any) => p.cliente_nombre) || [])]
         setClientes(nombres.map((n: any, i: number) => ({ id: i + 1, nombre: n })))
       }).catch(() => {})
     })
-  }, [])
+  }, [activeOrgId])
 
   const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

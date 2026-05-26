@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { ExtractoListItem, MovimientoFiltrado, MovimientosFiltros } from '@/types'
 import { confirmDialog } from '@/store/confirm'
+import { useOrgStore } from '@/store/org'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -74,6 +75,7 @@ const EMPTY: ColFilter = { cliente:'', cuit:'', titular:'', desde:'', hasta:'', 
 
 export const Movimientos: React.FC = () => {
   const [searchParams] = useSearchParams()
+  const { activeOrgId } = useOrgStore()
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [movimientos, setMovimientos] = useState<MovimientoFiltrado[]>([])
@@ -98,12 +100,12 @@ export const Movimientos: React.FC = () => {
   const umRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    apiClient.listExtractos().then(data => {
+    apiClient.listExtractos(activeOrgId).then(data => {
       setExtractos(data.items)
       const p = searchParams.get('extracto')
       setExtractoId(p ? Number(p) : data.items[0]?.id ?? null)
     })
-  }, [])
+  }, [activeOrgId])
 
   const debouncedFilters = useDebounce(filters, 800)
 

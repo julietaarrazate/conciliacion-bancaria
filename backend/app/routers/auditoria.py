@@ -26,6 +26,7 @@ def list_auditoria(
     usuario_id: Optional[int] = Query(None),
     desde: Optional[datetime] = Query(None),
     hasta: Optional[datetime] = Query(None),
+    org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("view_audit"))
 ):
@@ -36,8 +37,12 @@ def list_auditoria(
     """
     q = db.query(AuditoriaLog)
 
-    # Multi-tenant: filtrar por organizacion del actor (excepto superadmin)
-    if not current_user.is_superadmin:
+    # Multi-tenant: filtrar por organizacion del actor
+    if current_user.is_superadmin and org_id:
+        q = q.join(User, User.id == AuditoriaLog.usuario_id).filter(
+            User.organizacion_id == org_id
+        )
+    elif not current_user.is_superadmin:
         q = q.join(User, User.id == AuditoriaLog.usuario_id).filter(
             User.organizacion_id == current_user.organizacion_id
         )

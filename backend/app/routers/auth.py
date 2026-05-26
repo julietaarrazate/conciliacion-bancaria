@@ -10,6 +10,7 @@ from jose import jwt as jose_jwt, JWTError
 
 from app.database import get_db
 from app.models.revoked_token import RevokedToken
+from app.models.user import User
 from app.schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse
 from app.services.auth import register_user, authenticate_user, create_access_token
 from app.services.password_reset import (
@@ -17,6 +18,7 @@ from app.services.password_reset import (
     validar_y_cambiar_password,
 )
 from app.services.auditoria import registrar_log
+from app.middleware.auth import require_superadmin
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -37,8 +39,13 @@ class ResetPasswordRequest(BaseModel):
 
 @router.post("/register", response_model=UserResponse)
 @limiter.limit("5/minute")
-def register(request: Request, user_data: UserRegister, db: Session = Depends(get_db)):
-    """Registra un nuevo usuario. Limitado a 5 intentos por minuto por IP."""
+def register(
+    request: Request,
+    user_data: UserRegister,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """Crea un nuevo usuario. Solo el superadmin puede registrar usuarios."""
     user = register_user(db, user_data)
     if not user:
         raise HTTPException(

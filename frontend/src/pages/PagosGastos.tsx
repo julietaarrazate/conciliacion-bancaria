@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
+import { useOrgStore } from '@/store/org'
 import { confirmDialog } from '@/store/confirm'
 
 const fmt = (n: number) =>
@@ -47,7 +48,7 @@ const filterClass = "bg-white dark:bg-white/5 border border-gray-200 dark:border
 
 // ── Pagos tab ────────────────────────────────────────────────────
 
-const PagosTab: React.FC<{ clientes: ClienteOpt[]; canEdit: boolean }> = ({ clientes, canEdit }) => {
+const PagosTab: React.FC<{ clientes: ClienteOpt[]; canEdit: boolean; activeOrgId?: number | null }> = ({ clientes, canEdit, activeOrgId }) => {
   const [pagos, setPagos]         = useState<Pago[]>([])
   const [total, setTotal]         = useState(0)
   const [loading, setLoading]     = useState(true)
@@ -69,17 +70,18 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[]; canEdit: boolean }> = ({ clie
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params: Record<string, string> = { skip: String(skip), limit: String(LIMIT) }
+      const params: Record<string, string | number> = { skip: String(skip), limit: String(LIMIT) }
       if (filtroCliente) params.cliente_id = filtroCliente
       if (filtroMedio)   params.medio      = filtroMedio
       if (filtroDesde)   params.desde      = filtroDesde
       if (filtroHasta)   params.hasta      = filtroHasta
+      if (activeOrgId)   params.org_id     = activeOrgId
       const res = await apiClient.client.get('/pagos', { params })
       setPagos(res.data.items)
       setTotal(res.data.total)
     } catch { setMsg('Error al cargar pagos') }
     finally { setLoading(false) }
-  }, [filtroCliente, filtroMedio, filtroDesde, filtroHasta, skip])
+  }, [filtroCliente, filtroMedio, filtroDesde, filtroHasta, skip, activeOrgId])
 
   useEffect(() => { load() }, [load])
 
@@ -302,7 +304,7 @@ const PagosTab: React.FC<{ clientes: ClienteOpt[]; canEdit: boolean }> = ({ clie
 
 // ── Gastos tab ───────────────────────────────────────────────────
 
-const GastosTab: React.FC<{ canEdit: boolean }> = ({ canEdit }) => {
+const GastosTab: React.FC<{ canEdit: boolean; activeOrgId?: number | null }> = ({ canEdit, activeOrgId }) => {
   const [gastos, setGastos]       = useState<Gasto[]>([])
   const [total, setTotal]         = useState(0)
   const [loading, setLoading]     = useState(true)
@@ -324,17 +326,18 @@ const GastosTab: React.FC<{ canEdit: boolean }> = ({ canEdit }) => {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params: Record<string, string> = { skip: String(skip), limit: String(LIMIT) }
+      const params: Record<string, string | number> = { skip: String(skip), limit: String(LIMIT) }
       if (filtroCategoria) params.categoria = filtroCategoria
       if (filtroMedio)     params.medio     = filtroMedio
       if (filtroDesde)     params.desde     = filtroDesde
       if (filtroHasta)     params.hasta     = filtroHasta
+      if (activeOrgId)     params.org_id    = activeOrgId
       const res = await apiClient.client.get('/gastos', { params })
       setGastos(res.data.items)
       setTotal(res.data.total)
     } catch { setMsg('Error al cargar gastos') }
     finally { setLoading(false) }
-  }, [filtroCategoria, filtroMedio, filtroDesde, filtroHasta, skip])
+  }, [filtroCategoria, filtroMedio, filtroDesde, filtroHasta, skip, activeOrgId])
 
   useEffect(() => { load() }, [load])
 
@@ -571,6 +574,7 @@ export const PagosGastos: React.FC = () => {
   )
   const [clientes, setClientes] = useState<ClienteOpt[]>([])
   const { hasPermission }       = useAuthStore()
+  const { activeOrgId }         = useOrgStore()
   const canEdit                 = hasPermission('manage_users')
 
   useEffect(() => {
@@ -611,8 +615,8 @@ export const PagosGastos: React.FC = () => {
       </div>
 
       {tab === 'pagos'
-        ? <PagosTab clientes={clientes} canEdit={canEdit} />
-        : <GastosTab canEdit={canEdit} />}
+        ? <PagosTab clientes={clientes} canEdit={canEdit} activeOrgId={activeOrgId} />
+        : <GastosTab canEdit={canEdit} activeOrgId={activeOrgId} />}
     </div>
   )
 }

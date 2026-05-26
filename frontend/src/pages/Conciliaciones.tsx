@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { apiClient } from '@/services/api'
+import { useOrgStore } from '@/store/org'
 
 interface ConciliacionItem {
   id: number
@@ -33,6 +34,7 @@ function fmtDate(d?: string | null) {
 }
 
 export const Conciliaciones: React.FC = () => {
+  const { activeOrgId } = useOrgStore()
   const [items, setItems] = useState<ConciliacionItem[]>([])
   const [total, setTotal] = useState(0)
   const [suma, setSuma] = useState(0)
@@ -60,8 +62,9 @@ export const Conciliaciones: React.FC = () => {
     const mx = parseFloat(dMontoMax.replace(/\./g, '').replace(',', '.'))
     if (!isNaN(mn)) f.monto_min = mn
     if (!isNaN(mx)) f.monto_max = mx
+    if (activeOrgId) f.org_id = activeOrgId
     return f
-  }, [dCliente, dTitular, desde, hasta, dMontoMin, dMontoMax])
+  }, [dCliente, dTitular, desde, hasta, dMontoMin, dMontoMax, activeOrgId])
 
   const load = useCallback(async () => {
     setLoading(true)

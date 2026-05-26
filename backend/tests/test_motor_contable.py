@@ -7,6 +7,7 @@ y comportamiento de upsert (re-conciliación, reposición efectivo).
 
 import pytest
 from datetime import date
+from decimal import Decimal
 from types import SimpleNamespace
 
 from sqlalchemy import create_engine
@@ -300,11 +301,11 @@ def test_original_mas_reverso_neto_es_cero(db):
     saldos_por_cuenta: dict = {}
     for a in db.query(Asiento).filter(Asiento.organizacion_id == ORG_ID).all():
         for l in a.lineas:
-            saldos_por_cuenta.setdefault(l.cuenta_id, 0.0)
+            saldos_por_cuenta.setdefault(l.cuenta_id, 0)
             saldos_por_cuenta[l.cuenta_id] += (l.debe - l.haber)
 
     for cuenta_id, saldo in saldos_por_cuenta.items():
-        assert abs(saldo) < 0.01, f"Cuenta {cuenta_id} quedó con saldo {saldo} (esperaba 0)"
+        assert abs(saldo) < Decimal("0.01"), f"Cuenta {cuenta_id} quedó con saldo {saldo} (esperaba 0)"
 
 
 def test_reverso_mantiene_invariante_partida_doble(db):

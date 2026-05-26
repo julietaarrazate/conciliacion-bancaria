@@ -143,8 +143,11 @@ def get_estructura(db: Session = Depends(get_db), _: User = Depends(get_current_
 
 
 @router.get("/archivos")
-def get_archivos_por_cliente(db: Session = Depends(get_db),
-                             current_user: User = Depends(get_current_user)):
+def get_archivos_por_cliente(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Devuelve archivos conciliados agrupados por:
       organizacion -> cliente -> año/mes -> [archivos]
@@ -162,13 +165,17 @@ def get_archivos_por_cliente(db: Session = Depends(get_db),
 
     # Scope por org segun rol
     orgs_q = db.query(Organizacion)
-    if not current_user.is_superadmin:
+    if current_user.is_superadmin and org_id:
+        orgs_q = orgs_q.filter(Organizacion.id == org_id)
+    elif not current_user.is_superadmin:
         orgs_q = orgs_q.filter(Organizacion.id == (current_user.organizacion_id or 1))
     orgs = orgs_q.order_by(Organizacion.id).all()
 
     # Indexar planillas por org_id -> cliente_id -> "anio/mes"
     pq = db.query(Planilla).join(Cliente)
-    if not current_user.is_superadmin:
+    if current_user.is_superadmin and org_id:
+        pq = pq.filter(Planilla.organizacion_id == org_id)
+    elif not current_user.is_superadmin:
         pq = pq.filter(Planilla.organizacion_id == (current_user.organizacion_id or 1))
     planillas = pq.order_by(Planilla.fecha_carga.desc()).all()
 

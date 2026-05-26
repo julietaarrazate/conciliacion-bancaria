@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { Skeleton, SkeletonKpi } from '@/components/Skeleton'
 import { LineChart } from '@/components/charts/LineChart'
+import { useOrgStore } from '@/store/org'
 
 type Periodo = 'hoy' | 'semana' | 'mes'
 
@@ -54,6 +55,7 @@ const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', '
 
 export const Resumen: React.FC = () => {
   const hoy = useMemo(() => new Date(), [])
+  const { activeOrgId } = useOrgStore()
   // Default "hoy" porque para financiera la visibilidad diaria es lo critico
   const [periodo, setPeriodo] = useState<Periodo>('hoy')
   const [anio, setAnio] = useState(hoy.getFullYear())
@@ -70,9 +72,10 @@ export const Resumen: React.FC = () => {
     setError('')
     const params: any = { periodo }
     if (periodo === 'mes') { params.anio = anio; params.mes = mes }
+    if (activeOrgId) params.org_id = activeOrgId
     Promise.all([
       apiClient.getDashboard(params),
-      apiClient.getEvolucion(6),
+      apiClient.getEvolucion(6, activeOrgId ?? undefined),
     ])
       .then(([d, ev]) => {
         if (!activo) return
@@ -82,7 +85,7 @@ export const Resumen: React.FC = () => {
       .catch((e) => { if (activo) setError(e.response?.data?.detail || 'Error cargando dashboard') })
       .finally(() => { if (activo) setLoading(false) })
     return () => { activo = false }
-  }, [periodo, anio, mes])
+  }, [periodo, anio, mes, activeOrgId])
 
   const evolucionLine = useMemo(
     () => evolucion.map(m => ({ label: m.label, value: m.conciliado })),

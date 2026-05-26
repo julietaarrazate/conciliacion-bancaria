@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { apiClient } from '@/services/api'
+import { useOrgStore } from '@/store/org'
 
 const DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 200, 100]
 
@@ -54,6 +55,7 @@ interface ArqueoResumen {
 }
 
 export const Caja: React.FC = () => {
+  const { activeOrgId } = useOrgStore()
   const [selectedDate, setSelectedDate] = useState(today())
   const [arqueo, setArqueo]             = useState<Arqueo | null>(null)
   const [loading, setLoading]           = useState(true)
@@ -77,21 +79,25 @@ export const Caja: React.FC = () => {
     setLoading(true)
     try {
       const f = fecha || selectedDate
-      const res = await apiClient.client.get('/caja/arqueo/hoy', { params: { fecha_str: f } })
+      const params: Record<string, string | number> = { fecha_str: f }
+      if (activeOrgId) params.org_id = activeOrgId
+      const res = await apiClient.client.get('/caja/arqueo/hoy', { params })
       setArqueo(res.data)
       setDens(Object.fromEntries(
         Object.entries(res.data.denominaciones).map(([k, v]) => [k, String(v)])
       ))
     } catch { setArqueo(null) }
     finally { setLoading(false) }
-  }, [selectedDate])
+  }, [selectedDate, activeOrgId])
 
   useEffect(() => { load() }, [load])
 
   const loadHistorial = async () => {
     setLoadingHist(true)
     try {
-      const res = await apiClient.client.get('/caja/arqueo/historial', { params: { limit: 60 } })
+      const params: Record<string, string | number> = { limit: 60 }
+      if (activeOrgId) params.org_id = activeOrgId
+      const res = await apiClient.client.get('/caja/arqueo/historial', { params })
       setHistorial(res.data.items || res.data)
     } catch { }
     finally { setLoadingHist(false) }
