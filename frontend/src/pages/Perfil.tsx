@@ -339,12 +339,24 @@ export const Perfil: React.FC = () => {
 
           {/* Ya configuradas y no se está mostrando un set nuevo */}
           {vapidConfigured === true && !vapidKeys && (
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
               <p className="text-xs text-green-600 dark:text-green-400 flex-1">Las keys están activas en el servidor. No es necesario regenerar.</p>
               <button
                 onClick={async () => {
-                  if (!confirm('¿Seguro? Generar keys nuevas invalida las anteriores y tenés que volver a pegarlas en Render.')) return
-                  setVapidLoading(true)
+                  try {
+                    await apiClient.client.post('/push/test')
+                    toast.success('Push de prueba enviado — debería llegarte en segundos')
+                  } catch (e: any) {
+                    toast.error(e.response?.data?.detail || 'Error enviando push')
+                  }
+                }}
+                className="btn-secondary text-xs shrink-0"
+              >
+                Enviar push de prueba
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm('¿Seguro? Generar keys nuevas invalida las anteriores y tenés que volver a pegarlas en Render.')) return                  setVapidLoading(true)
                   try { const r = await apiClient.setupVapid(); setVapidKeys(r); setVapidConfigured(false) }
                   catch (e: any) { toast.error(e.response?.data?.detail || 'Error') }
                   finally { setVapidLoading(false) }
