@@ -28,6 +28,7 @@ from app.routers import public_router
 from app.routers import push_router
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.push_subscription import PushSubscription  # noqa: F401
+from app.models.revoked_token import RevokedToken  # noqa: F401
 from app.models.organizacion import Organizacion
 
 settings = get_settings()
@@ -441,10 +442,12 @@ async def lifespan(app: FastAPI):
     # Scheduler de backup diario por email (no-op si RESEND_API_KEY no esta)
     try:
         from app.services.backup_scheduler import (
-            start_backup_scheduler, stop_backup_scheduler, start_alertas_push_job
+            start_backup_scheduler, stop_backup_scheduler,
+            start_alertas_push_job, start_token_cleanup_job,
         )
         start_backup_scheduler()
-        start_alertas_push_job()  # 10:00 ART — push si hay cheques/movs urgentes
+        start_alertas_push_job()       # 10:00 ART — push cheques/movs urgentes
+        start_token_cleanup_job()      # 03:30 ART — purga tokens revocados
     except Exception as ex:
         logger.warning("No se pudo iniciar schedulers: %s", ex)
     yield

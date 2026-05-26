@@ -184,6 +184,43 @@ def _run_alertas_push() -> None:
         db.close()
 
 
+def start_token_cleanup_job() -> None:
+    """Cron diario 03:30 ART — purga tokens revocados que ya estan vencidos."""
+    global _scheduler
+    if _scheduler is None:
+        sched = BackgroundScheduler(timezone=_ART)
+        sched.start()
+        _scheduler = sched
+    if _scheduler.get_job("token_cleanup"):
+        return
+    _scheduler.add_job(
+        _run_token_cleanup,
+        CronTrigger(hour=3, minute=30, timezone=_ART),
+        id="token_cleanup",
+        name="Purga de tokens revocados vencidos",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("Limpieza de tokens revocados programada para 03:30 ART")
+
+
+def _run_token_cleanup() -> None:
+    from datetime import datetime
+    from app.models.revoked_token import RevokedToken
+    db = SessionLocal()
+    try:
+        ahora = datetime.utcnow()
+        deleted = db.query(RevokedToken).filter(RevokedToken.expires_at < ahora).delete(synchronize_session=False)
+        db.commit()
+        logger.info("Tokens revocados purgados: %d", deleted)
+    except Exception as ex:
+        logger.error("Token cleanup FALLO: %s", ex, exc_info=True)
+    finally:
+        db.close()
+
+
 def stop_backup_scheduler() -> None:
     global _scheduler
     if _scheduler is not None:

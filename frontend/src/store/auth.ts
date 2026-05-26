@@ -36,6 +36,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
+    // Revoca el token en el backend antes de limpiar el storage (best-effort).
+    // No bloquea — si el servidor está caído, el logout local igual procede.
+    const token = get().token || localStorage.getItem('token')
+    if (token) {
+      import('@/services/api').then(({ apiClient }) => {
+        apiClient.client.post('/auth/logout').catch(() => {})
+      })
+    }
     set({ user: null, token: null, isAuthenticated: false })
     localStorage.removeItem('token')
   },

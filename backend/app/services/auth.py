@@ -3,6 +3,7 @@ from typing import Optional
 import hashlib
 import os
 import hmac
+import uuid
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from app.models.user import User
@@ -57,7 +58,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
-    to_encode.update({"exp": expire})
+    # jti unico por token — permite revocar individualmente
+    to_encode.update({"exp": expire, "jti": uuid.uuid4().hex})
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 
