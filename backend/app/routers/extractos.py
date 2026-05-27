@@ -647,6 +647,28 @@ async def recuperar_orden(
         if int(m["orden"]) > max_excel_orden:
             max_excel_orden = int(m["orden"])
 
+    # Limpiar filas-resumen del banco que se hayan colado antes del filtro
+    # del parser (TOTAL ACREDITADO, SALDO FINAL, etc.).
+    from app.models.planilla import PlanillaRow as _PR
+    db_movs_all = (
+        db.query(MovimientoBanco)
+        .filter(MovimientoBanco.extracto_id == extracto.id)
+        .all()
+    )
+    eliminados_resumen = 0
+    for m in list(db_movs_all):
+        t_up = (m.titular or "").strip().upper()
+        if t_up.startswith(("TOTAL ", "SALDO ", "SUBTOTAL")) or t_up in (
+            "TOTAL", "SUBTOTAL", "SALDO", "TOTALES"
+        ):
+            db.query(_PR).filter(
+                _PR.orden_movimiento_acreditado == m.id
+            ).update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
+            db.delete(m)
+            eliminados_resumen += 1
+    if eliminados_resumen:
+        db.flush()
+
     db_movs = (
         db.query(MovimientoBanco)
         .filter(MovimientoBanco.extracto_id == extracto.id)
@@ -682,6 +704,7 @@ async def recuperar_orden(
         "excel_movs": len(movs_excel),
         "matched": matched,
         "unmatched": len(unmatched_movs),
+        "eliminados_resumen": eliminados_resumen,
         "max_excel_orden": max_excel_orden,
         "ultimo_orden": max_excel_orden + len(unmatched_movs),
     }
