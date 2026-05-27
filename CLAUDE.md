@@ -132,7 +132,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ---
 
-## Features implementadas (estado actual — v3.2)
+## Features implementadas (estado actual — v3.3)
 
 - Conciliación bancaria multi-extracto con motor de scoring
 - Carga masiva con auto-conciliar al subir planillas
@@ -159,6 +159,14 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   `S3_ENDPOINT/S3_BUCKET/S3_ACCESS_KEY/S3_SECRET_KEY/S3_PUBLIC_URL` están seteadas; si no, mantiene base64 en DB
 - **Org isolation completa**: POST `/caja/op/registrar`, PUT `/caja/arqueo/hoy` y GET `/caja/op/exportar-eft`
   ahora aceptan `org_id` para que superadmin escriba/lea en la org seleccionada
+- **Landing page pública** (`/`): hero, features, seguridad, FAQ, comparativa, pricing, contacto WhatsApp;
+  Fraunces italic en títulos, menú hamburguesa mobile, secciones siempre visibles en mobile
+- **Fix conciliación Decimal**: `parse_importe` y `montos_iguales` ahora soportan `Decimal` (SQLAlchemy
+  Numeric); antes todas las filas salían "faltan datos" tras la migración 007
+- **Plan de cuentas**: sub-cuenta `1-1-1-3-1 Banco Macro` bajo `1-1-1-3 Banco`; PLAN_PATCH idempotente
+  agrega cuentas nuevas en cada deploy sin romper instalaciones existentes
+- **Renumeración de movimientos**: al borrar un movimiento duplicado, el `orden` de los siguientes se
+  decrementa automáticamente; startup detecta y corrige huecos existentes
 
 ---
 
@@ -218,4 +226,4 @@ Checkpoints disponibles:
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.2
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.3
