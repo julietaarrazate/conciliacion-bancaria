@@ -602,7 +602,7 @@ def renumerar_orden(
     current_user: User = Depends(get_current_user),
 ):
     """Renumera los movimientos del extracto de 1..N cerrando cualquier hueco."""
-    if not current_user.superadmin:
+    if not current_user.is_superadmin:
         raise HTTPException(403, "Solo superadmin")
     extracto = _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
     movs = (
