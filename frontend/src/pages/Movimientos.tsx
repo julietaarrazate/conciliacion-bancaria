@@ -335,17 +335,27 @@ export const Movimientos: React.FC = () => {
           {extractoId && user?.is_superadmin && (
             <button
               onClick={async () => {
+                const input = window.prompt(
+                  'Ingresá el último orden válido ANTES del UM nuevo (los movimientos con orden mayor se renumerarán consecutivamente desde ese valor + 1).\n\nEjemplo: si antes del UM el último orden era 17240, ingresá 17240.',
+                  ''
+                )
+                if (input === null) return
+                const desde = parseInt(input.trim(), 10)
+                if (!Number.isFinite(desde) || desde < 0) {
+                  setUmMsg('✗ Renumerar: ingresá un número válido')
+                  return
+                }
                 const confirmed = await confirmDialog({
-                  title: 'Renumerar orden de movimientos',
-                  message: `¿Renumerar todos los movimientos del extracto #${extractoId}? Esto corrige gaps en el orden (ej: tras borrar un duplicado).`,
+                  title: 'Renumerar orden',
+                  message: `¿Renumerar los movimientos con orden > ${desde} del extracto #${extractoId}? Los movimientos con orden ≤ ${desde} no se tocan.`,
                   confirmLabel: 'Renumerar',
                   danger: false,
                 })
                 if (!confirmed) return
                 setRenumerando(true)
                 try {
-                  const r = await apiClient.renumerarOrden(extractoId!)
-                  setUmMsg(`✓ Orden corregido: ${r.total} movimientos, último orden: ${r.ultimo_orden}`)
+                  const r = await apiClient.renumerarOrden(extractoId!, desde)
+                  setUmMsg(`✓ Renumerados ${r.renumerados} movimientos. Último orden: ${r.ultimo_orden}`)
                   load()
                 } catch (err: any) {
                   setUmMsg(`✗ Renumerar: ${err.response?.data?.detail || err.message}`)
@@ -355,7 +365,7 @@ export const Movimientos: React.FC = () => {
               }}
               disabled={renumerando}
               className="flex items-center gap-1 px-3 py-1.5 text-xs bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50 font-medium"
-              title="Superadmin: renumerar orden de movimientos (corrige gaps tras borrar duplicados)"
+              title="Superadmin: renumerar orden de los movimientos del UM (cierra gaps tras borrar duplicados)"
             >
               {renumerando ? '⏳' : '🔢'} Renumerar
             </button>

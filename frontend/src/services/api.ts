@@ -409,8 +409,10 @@ class ApiClient {
     await this.client.delete(`/extractos/${extractoId}/movimientos/${movId}`)
   }
 
-  async renumerarOrden(extractoId: number): Promise<{ ok: boolean; total: number; ultimo_orden: number }> {
-    const res = await this.client.post(`/extractos/${extractoId}/renumerar-orden`)
+  async renumerarOrden(extractoId: number, desdeOrden: number): Promise<{ ok: boolean; renumerados: number; desde_orden: number; ultimo_orden: number }> {
+    const res = await this.client.post(`/extractos/${extractoId}/renumerar-orden`, null, {
+      params: { desde_orden: desdeOrden }
+    })
     return res.data
   }
 

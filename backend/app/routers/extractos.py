@@ -575,17 +575,21 @@ def delete_movimiento(
             PlanillaRow.orden_movimiento_acreditado == mov_id
         ).update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
         db.flush()
+        # Cerrar el gap: shift -1 a los movimientos con orden mayor al borrado.
+        # No renumerar 1..N: el campo orden es la numeracion real del banco
+        # (sparse, con gaps reales entre meses) — solo cerramos el hueco que
+        # genera este borrado.
+        orden_borrado = mov.orden
         db.delete(mov)
         db.flush()
-        # Renumerar todo el extracto 1..N para cerrar el hueco
-        movs = (
-            db.query(MovimientoBanco)
-            .filter(MovimientoBanco.extracto_id == extracto_id)
-            .order_by(MovimientoBanco.orden.nullslast(), MovimientoBanco.id)
-            .all()
-        )
-        for i, m in enumerate(movs):
-            m.orden = i + 1
+        if orden_borrado is not None:
+            db.query(MovimientoBanco).filter(
+                MovimientoBanco.extracto_id == extracto_id,
+                MovimientoBanco.orden > orden_borrado,
+            ).update(
+                {MovimientoBanco.orden: MovimientoBanco.orden - 1},
+                synchronize_session=False,
+            )
         db.commit()
         registrar_log(db, current_user.id, "movimientos_banco", mov_id, "DELETE", {})
         return {"ok": True}
@@ -598,23 +602,39 @@ def delete_movimiento(
 @router.post("/{extracto_id}/renumerar-orden")
 def renumerar_orden(
     extracto_id: int,
+    desde_orden: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Renumera los movimientos del extracto de 1..N cerrando cualquier hueco."""
+    """Renumera SOLO los movimientos con orden > desde_orden, asignando valores
+    consecutivos desde desde_orden+1. No toca los movimientos con orden <=
+    desde_orden (la numeracion del banco, sparse, se preserva).
+
+    Caso de uso: tras agregar UM y borrar un duplicado en el medio, queda un
+    hueco — pasar desde_orden = ultimo orden valido pre-UM y se cierra.
+    """
     if not current_user.is_superadmin:
         raise HTTPException(403, "Solo superadmin")
     extracto = _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
     movs = (
         db.query(MovimientoBanco)
-        .filter(MovimientoBanco.extracto_id == extracto.id)
-        .order_by(MovimientoBanco.orden.nullslast(), MovimientoBanco.id)
+        .filter(
+            MovimientoBanco.extracto_id == extracto.id,
+            MovimientoBanco.orden > desde_orden,
+        )
+        .order_by(MovimientoBanco.orden.asc(), MovimientoBanco.id.asc())
         .all()
     )
     for i, m in enumerate(movs):
-        m.orden = i + 1
+        m.orden = desde_orden + 1 + i
     db.commit()
-    return {"ok": True, "total": len(movs), "ultimo_orden": len(movs)}
+    ultimo = desde_orden + len(movs) if movs else desde_orden
+    return {
+        "ok": True,
+        "renumerados": len(movs),
+        "desde_orden": desde_orden,
+        "ultimo_orden": ultimo,
+    }
 
 
 @router.get("/{extracto_id}", response_model=ExtractoBancarioResponse)
