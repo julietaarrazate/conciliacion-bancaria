@@ -1,11 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useThemeStore } from '@/store/theme'
 
-// ── Constantes de marca ──────────────────────────────────────────────────────
 const WA_NUMBER = '543774504024'
 const WA_LINK   = `https://wa.me/${WA_NUMBER}?text=Hola%20Julieta%2C%20me%20interesa%20conocer%20m%C3%A1s%20sobre%20Cuadra`
 
-// ── Scroll reveal hook ───────────────────────────────────────────────────────
 function useReveal(threshold = 0.1) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -32,7 +31,6 @@ const R: React.FC<{ children: React.ReactNode; delay?: number; className?: strin
   )
 }
 
-// ── Datos ────────────────────────────────────────────────────────────────────
 const FEATURES = [
   { icon: '⚡', title: 'Conciliación automática', desc: 'Cruza extractos bancarios con planillas de clientes por CUIT, CBU y referencia. Lo que cuadra, cuadra solo — sin tocar nada.' },
   { icon: '📸', title: 'OPs desde el celular', desc: 'Registrá órdenes de pago firmadas con foto del comprobante. Tres pasos, desde el celular, en movimiento.' },
@@ -55,8 +53,17 @@ const STATS = [
   { value: '0', label: 'instalaciones necesarias' },
 ]
 
-// ── Componente principal ─────────────────────────────────────────────────────
+// Filas de ejemplo — nombres genéricos, no clientes reales
+const MOCKUP_ROWS = [
+  { cliente: 'Cliente Norte SRL',  importe: '$124.500', ok: true  },
+  { cliente: 'Constructora Sur',   importe: '$89.200',  ok: true  },
+  { cliente: 'Distribuidora Este', importe: '$212.000', ok: false },
+  { cliente: 'Servicios Centro',   importe: '$56.800',  ok: true  },
+  { cliente: 'Comercial Oeste',    importe: '$98.400',  ok: true  },
+]
+
 export const Landing: React.FC = () => {
+  const { theme, toggle } = useThemeStore()
   const [form, setForm] = useState({ nombre: '', email: '', mensaje: '' })
   const [formSent, setFormSent] = useState(false)
 
@@ -72,121 +79,176 @@ export const Landing: React.FC = () => {
   return (
     <div className="landing-root">
 
-      {/* ── Estilos ── */}
       <style>{`
+        /* ─── Variables claro/oscuro ───────────────────────────────────── */
+        .landing-root {
+          --bg:           #FAFAFA;
+          --bg-2:         #FFFFFF;
+          --bg-soft:      #F4F4F5;
+          --card:         #FFFFFF;
+          --card-2:       #FAFAFA;
+          --border:       #E4E4E7;
+          --border-soft:  #EEEEEF;
+          --text:         #18181B;
+          --text-2:       #3F3F46;
+          --muted:        #71717A;
+          --muted-2:      #A1A1AA;
+          --accent:       #16A34A;
+          --accent-2:     #15803D;
+          --accent-soft:  #16A34A14;
+          --accent-line:  #16A34A33;
+          --topbar-bg:    #F4F4F5;
+          --mock-shadow:  0 24px 60px rgba(0,0,0,.08), 0 0 0 1px #16A34A10;
+        }
+        .dark .landing-root {
+          --bg:           #09090D;
+          --bg-2:         #0D0D13;
+          --bg-soft:      #0F0F16;
+          --card:         #13131A;
+          --card-2:       #0F0F16;
+          --border:       #1E1E26;
+          --border-soft:  #1A1A24;
+          --text:         #E4E4E7;
+          --text-2:       #D4D4D8;
+          --muted:        #71717A;
+          --muted-2:      #52525B;
+          --accent:       #22C55E;
+          --accent-2:     #4ADE80;
+          --accent-soft:  #22C55E12;
+          --accent-line:  #22C55E30;
+          --topbar-bg:    #0F0F16;
+          --mock-shadow:  0 32px 80px rgba(0,0,0,.6), 0 0 0 1px #22C55E18;
+        }
+
         .landing-root {
           min-height: 100vh;
-          background: #09090D;
-          color: #E4E4E7;
+          background: var(--bg);
+          color: var(--text);
           font-family: 'Inter', -apple-system, sans-serif;
           -webkit-font-smoothing: antialiased;
           overflow-x: hidden;
+          transition: background 0.2s, color 0.2s;
         }
 
-        /* Scroll reveal */
         .land-reveal {
           opacity: 0;
           transform: translateY(20px);
           transition: opacity 0.65s ease calc(var(--d, 0ms)), transform 0.65s ease calc(var(--d, 0ms));
         }
-        .land-reveal[data-visible="true"] {
-          opacity: 1;
-          transform: none;
-        }
+        .land-reveal[data-visible="true"] { opacity: 1; transform: none; }
 
-        /* Gradient text */
         .grad-text {
-          background: linear-gradient(135deg, #4ADE80 0%, #22C55E 50%, #86EFAC 100%);
+          background: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 50%, var(--accent-2) 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           background-clip: text;
         }
 
-        /* Glow pulsante del hero */
         @keyframes glowPulse {
           0%, 100% { opacity: 0.3; transform: scale(1); }
           50%       { opacity: 0.6; transform: scale(1.05); }
         }
         .glow-orb { animation: glowPulse 5s ease-in-out infinite; }
 
-        /* Mockup flotante */
         @keyframes floatMock {
           0%   { transform: translateY(0) rotateX(2deg); }
           100% { transform: translateY(-10px) rotateX(0deg); }
         }
         .mock-float { animation: floatMock 3.5s ease-in-out infinite alternate; }
 
-        /* Borde gradiente en cards */
         .grad-border {
           position: relative;
-          background: #13131A;
+          background: var(--card);
           border-radius: 16px;
+          border: 1px solid var(--border);
+          transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
         }
-        .grad-border::before {
-          content: '';
-          position: absolute;
-          inset: -1px;
-          border-radius: 17px;
-          background: linear-gradient(135deg, #22C55E22, #1E1E2A, #22C55E11);
-          z-index: -1;
+        .grad-border:hover {
+          border-color: var(--accent-line);
+          transform: translateY(-3px);
+          box-shadow: 0 12px 32px rgba(0,0,0,.06);
         }
-        .grad-border:hover::before {
-          background: linear-gradient(135deg, #22C55E55, #1E1E2A, #22C55E33);
-          transition: background 0.3s ease;
+        .dark .grad-border:hover {
+          box-shadow: 0 12px 32px rgba(0,0,0,.4);
         }
 
-        /* Nav */
         .land-nav {
           position: fixed; top: 0; left: 0; right: 0; z-index: 50;
           display: flex; align-items: center; justify-content: space-between;
           padding: 16px 24px;
-          background: rgba(9,9,13,0.85);
+          background: rgba(250,250,250,0.85);
           backdrop-filter: blur(16px);
-          border-bottom: 1px solid #1E1E26;
+          border-bottom: 1px solid var(--border);
+          transition: background 0.2s;
         }
+        .dark .land-nav { background: rgba(9,9,13,0.85); }
 
-        /* Botones */
         .btn-green {
           display: inline-flex; align-items: center; gap: 8px;
           padding: 10px 22px; border-radius: 10px;
-          background: #22C55E; color: #000; font-weight: 600; font-size: 14px;
+          background: var(--accent); color: #fff; font-weight: 600; font-size: 14px;
           border: none; cursor: pointer;
           transition: background 0.15s, transform 0.1s;
           text-decoration: none;
         }
-        .btn-green:hover { background: #4ADE80; }
+        .dark .btn-green { color: #000; }
+        .btn-green:hover { background: var(--accent-2); }
         .btn-green:active { transform: scale(0.97); }
         .btn-green.large { padding: 14px 32px; font-size: 16px; border-radius: 12px; }
 
         .btn-ghost {
           display: inline-flex; align-items: center; gap: 8px;
           padding: 10px 22px; border-radius: 10px;
-          background: transparent; color: #A1A1AA; font-weight: 500; font-size: 14px;
-          border: 1px solid #2A2A35; cursor: pointer;
+          background: transparent; color: var(--muted); font-weight: 500; font-size: 14px;
+          border: 1px solid var(--border); cursor: pointer;
           transition: all 0.15s;
           text-decoration: none;
         }
-        .btn-ghost:hover { background: #16161C; color: #E4E4E7; border-color: #3A3A48; }
+        .btn-ghost:hover {
+          background: var(--card);
+          color: var(--text);
+        }
 
-        /* Input */
+        .theme-toggle {
+          width: 36px; height: 36px;
+          display: inline-flex; align-items: center; justify-content: center;
+          border-radius: 10px;
+          background: transparent;
+          border: 1px solid var(--border);
+          cursor: pointer;
+          font-size: 15px;
+          transition: background 0.15s, transform 0.1s;
+          color: var(--text);
+        }
+        .theme-toggle:hover { background: var(--card); }
+        .theme-toggle:active { transform: scale(0.92); }
+
         .land-input {
           width: 100%;
-          background: #111118; border: 1px solid #2A2A35; border-radius: 10px;
-          padding: 12px 16px; color: #E4E4E7; font-size: 14px;
+          background: var(--card-2); border: 1px solid var(--border); border-radius: 10px;
+          padding: 12px 16px; color: var(--text); font-size: 14px;
           outline: none; transition: border 0.15s;
           font-family: inherit;
         }
-        .land-input:focus { border-color: #22C55E66; box-shadow: 0 0 0 3px #22C55E11; }
-        .land-input::placeholder { color: #52525B; }
+        .land-input:focus {
+          border-color: var(--accent-line);
+          box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+        .land-input::placeholder { color: var(--muted-2); }
 
-        /* Badge */
         @keyframes badgeFade {
           0%, 100% { opacity: 1; }
           50%       { opacity: 0.6; }
         }
         .live-badge { animation: badgeFade 2.5s ease-in-out infinite; }
 
-        /* WA hover */
+        .pill {
+          display: inline-block; padding: 5px 14px; border-radius: 999px;
+          background: var(--accent-soft); border: 1px solid var(--accent-line);
+          color: var(--accent); font-size: 12px; font-weight: 600;
+          letter-spacing: 0.06em; text-transform: uppercase;
+        }
+
         .wa-btn {
           display: inline-flex; align-items: center; gap: 10px;
           padding: 14px 28px; border-radius: 12px;
@@ -197,20 +259,34 @@ export const Landing: React.FC = () => {
         }
         .wa-btn:hover { background: #20C25A; box-shadow: 0 6px 32px #25D36644; }
         .wa-btn:active { transform: scale(0.97); }
+
+        .footer-link {
+          font-size: 12px; color: var(--muted-2); text-decoration: none;
+          transition: color 0.15s;
+        }
+        .footer-link:hover { color: var(--text-2); }
       `}</style>
 
       {/* ── NAV ── */}
       <nav className="land-nav">
-        <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.5px', color: '#22C55E' }}>
+        <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.5px', color: 'var(--accent)' }}>
           Cuadra
         </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <a href="#features" className="btn-ghost" style={{ padding: '7px 14px', display: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <a href="#features" className="btn-ghost" style={{ padding: '7px 14px' }}>
             Features
           </a>
           <a href="#contacto" className="btn-ghost" style={{ padding: '7px 14px' }}>
             Contacto
           </a>
+          <button
+            onClick={toggle}
+            className="theme-toggle"
+            title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            aria-label="Cambiar tema"
+          >
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
           <Link to="/login" className="btn-green">
             Ingresar →
           </Link>
@@ -220,23 +296,19 @@ export const Landing: React.FC = () => {
       {/* ── HERO ── */}
       <section style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '96px 24px 64px', textAlign: 'center', overflow: 'hidden' }}>
 
-        {/* Orbes de fondo */}
-        <div className="glow-orb" style={{ position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)', width: 700, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, #22C55E18 0%, transparent 70%)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', top: '30%', left: '25%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, #5E6AD218 0%, transparent 70%)', pointerEvents: 'none', opacity: 0.5 }} />
+        <div className="glow-orb" style={{ position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)', width: 700, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, var(--accent-soft) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
-        {/* Badge live */}
-        <div className="live-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 999, background: '#22C55E12', border: '1px solid #22C55E30', color: '#22C55E', fontSize: 12, fontWeight: 600, marginBottom: 28 }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', display: 'inline-block' }} />
+        <div className="live-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 999, background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', color: 'var(--accent)', fontSize: 12, fontWeight: 600, marginBottom: 28 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
           Sistema de conciliación bancaria · en producción
         </div>
 
-        {/* Headline */}
         <h1 style={{ fontSize: 'clamp(40px, 7vw, 80px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-2px', maxWidth: 800, marginBottom: 24 }}>
           Los números<br />
           <span className="grad-text">cuadran solos.</span>
         </h1>
 
-        <p style={{ fontSize: 'clamp(16px, 2.5vw, 20px)', color: '#71717A', maxWidth: 520, lineHeight: 1.65, marginBottom: 40 }}>
+        <p style={{ fontSize: 'clamp(16px, 2.5vw, 20px)', color: 'var(--muted)', maxWidth: 520, lineHeight: 1.65, marginBottom: 40 }}>
           Conciliación bancaria automática, gestión de caja, cheques y órdenes de pago.
           Para vos y tu equipo, desde el celular o la web.
         </p>
@@ -252,55 +324,45 @@ export const Landing: React.FC = () => {
 
         {/* Mockup */}
         <div className="mock-float" style={{ width: '100%', maxWidth: 560, perspective: 1000 }}>
-          <div style={{ borderRadius: 20, border: '1px solid #1E1E26', background: '#13131A', boxShadow: '0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px #22C55E18', overflow: 'hidden' }}>
+          <div style={{ borderRadius: 20, border: '1px solid var(--border)', background: 'var(--card)', boxShadow: 'var(--mock-shadow)', overflow: 'hidden' }}>
 
-            {/* Topbar mockup */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #1E1E26', background: '#0F0F16' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--topbar-bg)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: '#22C55E18', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>⚡</div>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#22C55E' }}>Cuadra</span>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>⚡</div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>Cuadra</span>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 {['#FF5F57','#FFBD2E','#28C840'].map(c => <div key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />)}
               </div>
             </div>
 
-            {/* Contenido mockup */}
             <div style={{ padding: 16 }}>
-              {/* Stats row */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
                 {[
-                  { label: 'Conciliados', val: '47', color: '#22C55E' },
+                  { label: 'Conciliados', val: '47', color: 'var(--accent)' },
                   { label: 'Pendientes', val: '3', color: '#F59E0B' },
                   { label: 'Caja', val: '$482k', color: '#5E6AD2' },
                 ].map(s => (
-                  <div key={s.label} style={{ background: '#0F0F16', borderRadius: 10, padding: '10px 12px', border: '1px solid #1E1E26' }}>
+                  <div key={s.label} style={{ background: 'var(--card-2)', borderRadius: 10, padding: '10px 12px', border: '1px solid var(--border-soft)' }}>
                     <div style={{ fontSize: 18, fontWeight: 700, color: s.color, fontFamily: 'monospace' }}>{s.val}</div>
-                    <div style={{ fontSize: 10, color: '#52525B', marginTop: 2 }}>{s.label}</div>
+                    <div style={{ fontSize: 10, color: 'var(--muted-2)', marginTop: 2 }}>{s.label}</div>
                   </div>
                 ))}
               </div>
 
-              {/* Filas conciliación */}
-              <div style={{ fontSize: 11, color: '#52525B', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Planilla Mayo 2025
+              <div style={{ fontSize: 11, color: 'var(--muted-2)', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Planilla del mes
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {[
-                  { cliente: 'Green SRL', importe: '$124.500', ok: true },
-                  { cliente: 'Tucu Inversiones', importe: '$89.200', ok: true },
-                  { cliente: 'David Prop.', importe: '$212.000', ok: false },
-                  { cliente: 'Innova SA', importe: '$56.800', ok: true },
-                  { cliente: 'Gwinn Group', importe: '$98.400', ok: true },
-                ].map((r, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: '#0F0F16', border: '1px solid #1A1A24' }}>
+                {MOCKUP_ROWS.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'var(--card-2)', border: '1px solid var(--border-soft)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: r.ok ? '#22C55E' : '#F59E0B', boxShadow: r.ok ? '0 0 6px #22C55E66' : '0 0 6px #F59E0B66' }} />
-                      <span style={{ fontSize: 12, fontWeight: 500, color: '#D4D4D8' }}>{r.cliente}</span>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: r.ok ? 'var(--accent)' : '#F59E0B' }} />
+                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)' }}>{r.cliente}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#71717A' }}>{r.importe}</span>
-                      <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: r.ok ? '#22C55E18' : '#F59E0B18', color: r.ok ? '#22C55E' : '#F59E0B', fontWeight: 600 }}>
+                      <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--muted)' }}>{r.importe}</span>
+                      <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: r.ok ? 'var(--accent-soft)' : '#F59E0B18', color: r.ok ? 'var(--accent)' : '#F59E0B', fontWeight: 600 }}>
                         {r.ok ? 'OK' : 'REVISAR'}
                       </span>
                     </div>
@@ -308,10 +370,9 @@ export const Landing: React.FC = () => {
                 ))}
               </div>
 
-              {/* Footer mockup */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid #1E1E26' }}>
-                <span style={{ fontSize: 11, color: '#52525B' }}>4 conciliados · 1 para revisar</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#22C55E', fontWeight: 600, cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, color: 'var(--muted-2)' }}>4 conciliados · 1 para revisar</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--accent)', fontWeight: 600, cursor: 'pointer' }}>
                   ↓ Exportar Excel
                 </div>
               </div>
@@ -322,12 +383,12 @@ export const Landing: React.FC = () => {
 
       {/* ── STATS ── */}
       <section style={{ padding: '0 24px 80px' }}>
-        <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 1, background: '#1A1A24', borderRadius: 16, overflow: 'hidden', border: '1px solid #1E1E26' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 1, background: 'var(--border)', borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border)' }}>
           {STATS.map((s, i) => (
             <R key={s.label} delay={i * 60}>
-              <div style={{ padding: '28px 24px', background: '#09090D', textAlign: 'center' }}>
-                <div style={{ fontSize: 32, fontWeight: 800, color: '#22C55E', fontFamily: 'monospace', letterSpacing: '-1px' }}>{s.value}</div>
-                <div style={{ fontSize: 12, color: '#52525B', marginTop: 4 }}>{s.label}</div>
+              <div style={{ padding: '28px 24px', background: 'var(--bg)', textAlign: 'center' }}>
+                <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--accent)', fontFamily: 'monospace', letterSpacing: '-1px' }}>{s.value}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted-2)', marginTop: 4 }}>{s.label}</div>
               </div>
             </R>
           ))}
@@ -337,15 +398,13 @@ export const Landing: React.FC = () => {
       {/* ── FEATURES ── */}
       <section id="features" style={{ padding: '80px 24px' }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-          <R className="">
+          <R>
             <div style={{ textAlign: 'center', marginBottom: 56 }}>
-              <div style={{ display: 'inline-block', padding: '5px 14px', borderRadius: 999, background: '#22C55E12', border: '1px solid #22C55E25', color: '#22C55E', fontSize: 12, fontWeight: 600, marginBottom: 16, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Todo en un lugar
-              </div>
+              <div className="pill" style={{ marginBottom: 16 }}>Todo en un lugar</div>
               <h2 style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 800, letterSpacing: '-1px', marginBottom: 12 }}>
                 Diseñado para el trabajo diario
               </h2>
-              <p style={{ color: '#71717A', fontSize: 16, maxWidth: 460, margin: '0 auto' }}>
+              <p style={{ color: 'var(--muted)', fontSize: 16, maxWidth: 460, margin: '0 auto' }}>
                 Cada módulo construido para que sea rápido usarlo, no para que sea lindo explicarlo.
               </p>
             </div>
@@ -354,12 +413,10 @@ export const Landing: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
             {FEATURES.map((f, i) => (
               <R key={f.title} delay={i * 70}>
-                <div className="grad-border" style={{ padding: 24, height: '100%', cursor: 'default', transition: 'transform 0.2s' }}
-                     onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-3px)')}
-                     onMouseLeave={e => (e.currentTarget.style.transform = '')}>
+                <div className="grad-border" style={{ padding: 24, height: '100%' }}>
                   <div style={{ fontSize: 28, marginBottom: 14 }}>{f.icon}</div>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, color: '#E4E4E7' }}>{f.title}</div>
-                  <div style={{ fontSize: 13, color: '#71717A', lineHeight: 1.65 }}>{f.desc}</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, color: 'var(--text)' }}>{f.title}</div>
+                  <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.65 }}>{f.desc}</div>
                 </div>
               </R>
             ))}
@@ -368,13 +425,11 @@ export const Landing: React.FC = () => {
       </section>
 
       {/* ── CÓMO FUNCIONA ── */}
-      <section style={{ padding: '80px 24px', background: '#0D0D13', borderTop: '1px solid #1A1A24', borderBottom: '1px solid #1A1A24' }}>
+      <section style={{ padding: '80px 24px', background: 'var(--bg-2)', borderTop: '1px solid var(--border-soft)', borderBottom: '1px solid var(--border-soft)' }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <R>
             <div style={{ textAlign: 'center', marginBottom: 56 }}>
-              <div style={{ display: 'inline-block', padding: '5px 14px', borderRadius: 999, background: '#22C55E12', border: '1px solid #22C55E25', color: '#22C55E', fontSize: 12, fontWeight: 600, marginBottom: 16, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Simple por diseño
-              </div>
+              <div className="pill" style={{ marginBottom: 16 }}>Simple por diseño</div>
               <h2 style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 800, letterSpacing: '-1px' }}>
                 De la planilla al Excel del contador
               </h2>
@@ -384,13 +439,10 @@ export const Landing: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
             {STEPS.map((s, i) => (
               <R key={s.n} delay={i * 100}>
-                <div style={{ padding: '28px 24px', borderRadius: 16, background: '#13131A', border: '1px solid #1E1E26', position: 'relative', overflow: 'hidden' }}>
-                  <div style={{ fontSize: 56, fontWeight: 900, color: '#22C55E10', fontFamily: 'monospace', lineHeight: 1, marginBottom: 12, letterSpacing: '-2px' }}>{s.n}</div>
-                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: '#E4E4E7' }}>{s.title}</div>
-                  <div style={{ fontSize: 13, color: '#71717A', lineHeight: 1.65 }}>{s.desc}</div>
-                  {i < STEPS.length - 1 && (
-                    <div style={{ position: 'absolute', top: '50%', right: -16, width: 32, height: 1, background: 'linear-gradient(to right, #22C55E40, transparent)', display: 'none' }} />
-                  )}
+                <div style={{ padding: '28px 24px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 56, fontWeight: 900, color: 'var(--accent-soft)', fontFamily: 'monospace', lineHeight: 1, marginBottom: 12, letterSpacing: '-2px' }}>{s.n}</div>
+                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: 'var(--text)' }}>{s.title}</div>
+                  <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.65 }}>{s.desc}</div>
                 </div>
               </R>
             ))}
@@ -403,20 +455,18 @@ export const Landing: React.FC = () => {
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 48, alignItems: 'center' }}>
           <R>
             <div>
-              <div style={{ display: 'inline-block', padding: '5px 14px', borderRadius: 999, background: '#22C55E12', border: '1px solid #22C55E25', color: '#22C55E', fontSize: 12, fontWeight: 600, marginBottom: 20, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                PWA instalable
-              </div>
+              <div className="pill" style={{ marginBottom: 20 }}>PWA instalable</div>
               <h2 style={{ fontSize: 'clamp(26px, 3.5vw, 38px)', fontWeight: 800, letterSpacing: '-1px', marginBottom: 16, lineHeight: 1.2 }}>
                 Desde el celular<br />o la web
               </h2>
-              <p style={{ color: '#71717A', lineHeight: 1.7, marginBottom: 24, fontSize: 15 }}>
+              <p style={{ color: 'var(--muted)', lineHeight: 1.7, marginBottom: 24, fontSize: 15 }}>
                 Instalala como app sin pasar por el App Store ni el Play Store.
                 Actualizaciones automáticas — sin reinstalar nunca.
               </p>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {['Android e iPhone', 'Sin instalación desde tiendas', 'Actualizaciones silenciosas', 'Notificaciones push'].map(item => (
-                  <li key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: '#A1A1AA' }}>
-                    <span style={{ color: '#22C55E', fontWeight: 700, fontSize: 16 }}>✓</span>
+                  <li key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text-2)' }}>
+                    <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 16 }}>✓</span>
                     {item}
                   </li>
                 ))}
@@ -427,17 +477,17 @@ export const Landing: React.FC = () => {
           <R delay={150}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[
-                { icon: '📱', title: 'Campo / cobranza', sub: 'Celular · OPs, fotos, caja', color: '#22C55E' },
+                { icon: '📱', title: 'Campo / cobranza', sub: 'Celular · OPs, fotos, caja', color: 'var(--accent)' },
                 { icon: '💻', title: 'Contabilidad', sub: 'Web · extractos, conciliación, exports', color: '#5E6AD2' },
                 { icon: '👁', title: 'Supervisión', sub: 'Web o celular · solo lectura', color: '#F59E0B' },
               ].map(r => (
                 <div key={r.title} className="grad-border" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px' }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: `${r.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: `color-mix(in srgb, ${r.color} 12%, transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
                     {r.icon}
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: '#E4E4E7' }}>{r.title}</div>
-                    <div style={{ fontSize: 12, color: '#52525B', marginTop: 2 }}>{r.sub}</div>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{r.title}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted-2)', marginTop: 2 }}>{r.sub}</div>
                   </div>
                 </div>
               ))}
@@ -447,24 +497,21 @@ export const Landing: React.FC = () => {
       </section>
 
       {/* ── CONTACTO ── */}
-      <section id="contacto" style={{ padding: '80px 24px', background: '#0D0D13', borderTop: '1px solid #1A1A24' }}>
+      <section id="contacto" style={{ padding: '80px 24px', background: 'var(--bg-2)', borderTop: '1px solid var(--border-soft)' }}>
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           <R>
             <div style={{ textAlign: 'center', marginBottom: 40 }}>
-              <div style={{ display: 'inline-block', padding: '5px 14px', borderRadius: 999, background: '#22C55E12', border: '1px solid #22C55E25', color: '#22C55E', fontSize: 12, fontWeight: 600, marginBottom: 16, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Contacto
-              </div>
+              <div className="pill" style={{ marginBottom: 16 }}>Contacto</div>
               <h2 style={{ fontSize: 'clamp(26px, 3.5vw, 38px)', fontWeight: 800, letterSpacing: '-1px', marginBottom: 12 }}>
                 ¿Querés implementar Cuadra?
               </h2>
-              <p style={{ color: '#71717A', fontSize: 15, lineHeight: 1.65 }}>
+              <p style={{ color: 'var(--muted)', fontSize: 15, lineHeight: 1.65 }}>
                 Escribime directo por WhatsApp o completá el formulario y te contacto a la brevedad.
               </p>
             </div>
           </R>
 
           <R delay={100}>
-            {/* WhatsApp directo */}
             <div style={{ textAlign: 'center', marginBottom: 32 }}>
               <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="wa-btn">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -474,25 +521,23 @@ export const Landing: React.FC = () => {
               </a>
             </div>
 
-            {/* Separador */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
-              <div style={{ flex: 1, height: 1, background: '#1E1E26' }} />
-              <span style={{ fontSize: 12, color: '#52525B' }}>o completá el formulario</span>
-              <div style={{ flex: 1, height: 1, background: '#1E1E26' }} />
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              <span style={{ fontSize: 12, color: 'var(--muted-2)' }}>o completá el formulario</span>
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
             </div>
 
-            {/* Formulario */}
             {formSent ? (
-              <div style={{ textAlign: 'center', padding: '32px 24px', borderRadius: 16, background: '#22C55E10', border: '1px solid #22C55E30' }}>
+              <div style={{ textAlign: 'center', padding: '32px 24px', borderRadius: 16, background: 'var(--accent-soft)', border: '1px solid var(--accent-line)' }}>
                 <div style={{ fontSize: 32, marginBottom: 12 }}>✅</div>
-                <div style={{ fontWeight: 700, color: '#22C55E', marginBottom: 8 }}>¡Mensaje enviado!</div>
-                <div style={{ fontSize: 13, color: '#71717A' }}>Te abrió WhatsApp con tu mensaje. Respondemos a la brevedad.</div>
+                <div style={{ fontWeight: 700, color: 'var(--accent)', marginBottom: 8 }}>¡Mensaje enviado!</div>
+                <div style={{ fontSize: 13, color: 'var(--muted)' }}>Te abrió WhatsApp con tu mensaje. Respondemos a la brevedad.</div>
               </div>
             ) : (
               <form onSubmit={handleContact} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 500, color: '#A1A1AA', display: 'block', marginBottom: 6 }}>Nombre</label>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', display: 'block', marginBottom: 6 }}>Nombre</label>
                     <input
                       className="land-input"
                       placeholder="Tu nombre"
@@ -502,7 +547,7 @@ export const Landing: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 500, color: '#A1A1AA', display: 'block', marginBottom: 6 }}>Email (opcional)</label>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', display: 'block', marginBottom: 6 }}>Email (opcional)</label>
                     <input
                       className="land-input"
                       type="email"
@@ -513,7 +558,7 @@ export const Landing: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 500, color: '#A1A1AA', display: 'block', marginBottom: 6 }}>¿En qué puedo ayudarte?</label>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', display: 'block', marginBottom: 6 }}>¿En qué puedo ayudarte?</label>
                   <textarea
                     className="land-input"
                     placeholder="Contame sobre tu empresa y qué necesitás..."
@@ -527,7 +572,7 @@ export const Landing: React.FC = () => {
                 <button type="submit" className="btn-green" style={{ padding: '13px 24px', fontSize: 15, borderRadius: 12, justifyContent: 'center' }}>
                   Enviar por WhatsApp →
                 </button>
-                <p style={{ fontSize: 11, color: '#52525B', textAlign: 'center', marginTop: -4 }}>
+                <p style={{ fontSize: 11, color: 'var(--muted-2)', textAlign: 'center', marginTop: -4 }}>
                   Al enviar, se abre WhatsApp con tu mensaje listo para mandar.
                 </p>
               </form>
@@ -537,22 +582,14 @@ export const Landing: React.FC = () => {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer style={{ padding: '28px 24px', borderTop: '1px solid #1A1A24' }}>
+      <footer style={{ padding: '28px 24px', borderTop: '1px solid var(--border-soft)' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <span style={{ fontWeight: 700, color: '#22C55E', fontSize: 15 }}>Cuadra</span>
+          <span style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 15 }}>Cuadra</span>
           <div style={{ display: 'flex', gap: 20 }}>
-            <Link to="/privacidad" style={{ fontSize: 12, color: '#52525B', textDecoration: 'none' }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#A1A1AA')}
-              onMouseLeave={e => (e.currentTarget.style.color = '#52525B')}>
-              Política de privacidad
-            </Link>
-            <Link to="/terminos" style={{ fontSize: 12, color: '#52525B', textDecoration: 'none' }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#A1A1AA')}
-              onMouseLeave={e => (e.currentTarget.style.color = '#52525B')}>
-              Términos y condiciones
-            </Link>
+            <Link to="/privacidad" className="footer-link">Política de privacidad</Link>
+            <Link to="/terminos" className="footer-link">Términos y condiciones</Link>
           </div>
-          <span style={{ fontSize: 11, color: '#3A3A48' }}>© {new Date().getFullYear()} Julieta Arrazate</span>
+          <span style={{ fontSize: 11, color: 'var(--muted-2)' }}>© {new Date().getFullYear()} Julieta Arrazate</span>
         </div>
       </footer>
     </div>
