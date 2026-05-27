@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="g" cx="50%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#22C55E" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#09090D" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="text-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#86EFAC"/>
+      <stop offset="50%" stop-color="#22C55E"/>
+      <stop offset="100%" stop-color="#4ADE80"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#09090D"/>
+  <rect width="1200" height="630" fill="url(#g)"/>
+
+  <!-- Logo mark -->
+  <g transform="translate(540 165)">
+    <rect width="120" height="120" rx="26" fill="#22C55E"/>
+    <path d="M34 62L51 79L86 44" stroke="white" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+
+  <!-- Cuadra -->
+  <text x="600" y="380" text-anchor="middle" font-family="Inter, sans-serif" font-weight="800" font-size="92" fill="white" letter-spacing="-3">
+    Cuadra
+  </text>
+
+  <!-- Tagline -->
+  <text x="600" y="445" text-anchor="middle" font-family="Inter, sans-serif" font-weight="600" font-size="38" fill="url(#text-grad)" letter-spacing="-0.5">
+    Los números cuadran solos
+  </text>
+
+  <!-- Subtagline -->
+  <text x="600" y="500" text-anchor="middle" font-family="Inter, sans-serif" font-weight="400" font-size="22" fill="#A1A1AA">
+    Conciliación bancaria automática
+  </text>
+
+  <!-- Footer dot -->
+  <circle cx="585" cy="555" r="3" fill="#22C55E"/>
+  <text x="600" y="562" text-anchor="start" font-family="Inter, sans-serif" font-weight="500" font-size="18" fill="#71717A">
+    cuadra.app · sistema de gestión
+  </text>
+</svg>
