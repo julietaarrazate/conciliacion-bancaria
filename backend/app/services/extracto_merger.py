@@ -93,22 +93,29 @@ def mergear_movimientos(
         if m.um_lote and m.um_lote > max_lote:
             max_lote = m.um_lote
 
-    # Eliminar duplicados internos dentro del UM (mismo archivo con fila repetida).
-    # Solo usa saldo+monto: el saldo es acumulativo y nunca se repite en dos
-    # transacciones distintas, así que es el único criterio seguro para duplicados
-    # reales dentro del mismo archivo.
-    um_saldos_vistos: set = set()
+    # Detectar duplicados internos del UM usando la referencia del banco.
+    # Regla del contador: misma referencia + mismo importe = duplicado real.
+    # La referencia es el número que el parser lee como "orden" del UM (columna
+    # del banco, no el orden secuencial del sistema).
+    # Fallback: misma saldo+monto (saldo acumulativo, no se repite en filas distintas).
+    um_ref_vistos: set = set()
     um_deduped: list = []
     duplicados_internos: list = []
     for mov_data in movimientos_nuevos:
-        s = _to_float(mov_data.get("saldo"))
+        ref = mov_data.get("orden")   # referencia del banco (columna NRO/referencia)
         m = _to_float(mov_data.get("monto"))
-        key = (round(s, 2), round(m, 2)) if s is not None and m is not None else None
-        if key is not None and key in um_saldos_vistos:
+        s = _to_float(mov_data.get("saldo"))
+        if ref is not None and m is not None:
+            key = (ref, round(m, 2))
+        elif s is not None and m is not None:
+            key = (round(s, 2), round(m, 2))
+        else:
+            key = None
+        if key is not None and key in um_ref_vistos:
             duplicados_internos.append(mov_data)
         else:
             if key is not None:
-                um_saldos_vistos.add(key)
+                um_ref_vistos.add(key)
             um_deduped.append(mov_data)
     movimientos_nuevos = um_deduped
 
