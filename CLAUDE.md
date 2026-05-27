@@ -166,7 +166,8 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - **Plan de cuentas**: sub-cuenta `1-1-1-3-1 Banco Macro` bajo `1-1-1-3 Banco`; PLAN_PATCH idempotente
   agrega cuentas nuevas en cada deploy sin romper instalaciones existentes
 - **Renumeración de movimientos**: al borrar un movimiento duplicado, el `orden` de los siguientes se
-  decrementa automáticamente; startup detecta y corrige huecos existentes
+  decrementa automáticamente; startup detecta huecos y renumera siempre 1..N (último orden = total
+  de movimientos del extracto); idempotente en cada deploy
 
 ---
 
