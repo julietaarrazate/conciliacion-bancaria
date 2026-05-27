@@ -40,12 +40,18 @@ const FlujoCaja         = lazyPage(() => import('@/pages/FlujoCaja'),         'F
 const PaginaPublica     = lazyPage(() => import('@/pages/PaginaPublica'),     'PaginaPublica')
 const Privacidad        = lazyPage(() => import('@/pages/Privacidad'),        'Privacidad')
 const Terminos          = lazyPage(() => import('@/pages/Terminos'),          'Terminos')
+const Landing           = lazyPage(() => import('@/pages/Landing'),           'Landing')
 
 const PageFallback: React.FC = () => (
   <div className="flex items-center justify-center min-h-[200px] p-8">
     <div className="text-sm text-gray-400 dark:text-zinc-500 font-mono">cargando...</div>
   </div>
 )
+
+const RootRoute: React.FC = () => {
+  const { isAuthenticated } = useAuthStore()
+  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <Landing />
+}
 
 const ProtectedRoute: React.FC<{
   children: React.ReactNode
@@ -110,6 +116,7 @@ export function App() {
           <Route path="/p/:token" element={<PaginaPublica />} />
           <Route path="/privacidad" element={<Privacidad />} />
           <Route path="/terminos" element={<Terminos />} />
+          <Route path="/landing" element={<Landing />} />
 
           <Route
             element={
@@ -170,7 +177,7 @@ export function App() {
             />
           </Route>
 
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<RootRoute />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Suspense>
