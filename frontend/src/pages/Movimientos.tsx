@@ -269,7 +269,10 @@ export const Movimientos: React.FC = () => {
     setUmLoading(true); setUmMsg('')
     try {
       const r = await apiClient.appendUM(extractoId, file)
-      setUmMsg(`✓ ${r.agregados} nuevos desde el corte · ${r.duplicados} ya existían (ignorados)`)
+      let msg = `✓ ${r.agregados} nuevos agregados`
+      if (r.duplicados > 0) msg += ` · ${r.duplicados} ya existían (ignorados)`
+      if ((r as any).duplicados_internos > 0) msg += ` · ⚠️ ${(r as any).duplicados_internos} duplicado(s) en el archivo del banco eliminados automáticamente`
+      setUmMsg(msg)
       // Refrescar extracto y movimientos
       const data = await apiClient.listExtractos()
       setExtractos(data.items)
@@ -344,6 +347,37 @@ export const Movimientos: React.FC = () => {
         <label className={`flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium cursor-pointer transition-colors ${umLoading ? 'opacity-50' : 'bg-ml-blue text-white border-ml-blue hover:bg-ml-blue-dark'}`}>
           {umLoading ? '⏳' : '📎'} {umLoading ? 'Procesando...' : 'Agregar UM'}
           <input ref={umRef} type="file" accept="*/*" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
+        </label>
+        {extractoId && umCount > 0 && (
+          <button
+            onClick={async () => {
+              const confirmed = await confirmDialog({
+                title: 'Borrar UM del último lote',
+                message: '¿Borrar todos los movimientos del último lote de UM? Los movimientos del extracto original no se tocan.',
+                confirmLabel: 'Borrar UM',
+                danger: true,
+              })
+              if (!confirmed) return
+              try {
+                const r = await apiClient.deleteUM(extractoId!)
+                setUmMsg(`✓ ${r.eliminados} movimientos UM eliminados`)
+                load()
+              } catch (err: any) {
+                const detail = err.response?.data?.detail
+                if (detail?.code === 'sin_lotes') {
+                  const c2 = await confirmDialog({ title: 'UM sin lote', message: detail.mensaje, confirmLabel: 'Borrar todos', danger: true })
+                  if (!c2) return
+                  const r2 = await apiClient.deleteUM(extractoId!, true)
+                  setUmMsg(`✓ ${r2.eliminados} movimientos UM eliminados`)
+                  load()
+                } else {
+                  setUmMsg(`✗ ${detail || err.message}`)
+                }
+              }
+            }}
+            className="px-3 py-2 text-sm font-medium bg-red-600 text-white rounded-md hover:bg-red-700"
+          >
+            🗑️ Borrar UM
         </label>
       </div>
 
