@@ -170,7 +170,7 @@ export const Perfil: React.FC = () => {
     <div className="p-4 md:p-8 max-w-lg mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl md:text-2xl font-bold dark:text-white">Mi perfil</h1>
-        <span className="text-[10px] font-mono text-ml-text-soft dark:text-zinc-600">build v3.0</span>
+        <span className="text-[10px] font-mono text-ml-text-soft dark:text-zinc-600">build v3.2</span>
       </div>
 
       {/* Datos personales */}
