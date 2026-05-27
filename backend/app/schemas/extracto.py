@@ -55,6 +55,8 @@ class MergeUMResponse(BaseModel):
     extracto_id: int
     agregados: int
     duplicados: int
+    duplicados_internos: int = 0
+    duplicados_internos_detalle: list = []
     total_recibido: int
     corte_metodo: Optional[str] = None
     corte_saldo_detectado: Optional[float] = None

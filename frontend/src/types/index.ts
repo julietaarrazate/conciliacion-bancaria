@@ -135,6 +135,8 @@ export interface MergeUMResult {
   extracto_id: number
   agregados: number
   duplicados: number
+  duplicados_internos: number
+  duplicados_internos_detalle: { fecha: string; monto: number; titular: string }[]
   total_recibido: number
   corte_metodo?: string
   corte_saldo_detectado?: number

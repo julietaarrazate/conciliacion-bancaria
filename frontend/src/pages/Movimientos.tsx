@@ -274,7 +274,15 @@ export const Movimientos: React.FC = () => {
     setUmLoading(true); setUmMsg('')
     try {
       const r = await apiClient.appendUM(extractoId, file)
-      setUmMsg(`✓ ${r.agregados} nuevos desde el corte · ${r.duplicados} ya existían (ignorados)`)
+      let msg = `✓ ${r.agregados} nuevos agregados`
+      if (r.duplicados > 0) msg += ` · ${r.duplicados} ya existían (ignorados)`
+      if (r.duplicados_internos > 0) {
+        const detalle = r.duplicados_internos_detalle
+          .map(d => `${d.fecha} $${d.monto?.toLocaleString('es-AR')} ${d.titular || ''}`.trim())
+          .join(' | ')
+        msg += ` · ⚠️ ${r.duplicados_internos} duplicado${r.duplicados_internos > 1 ? 's' : ''} detectado${r.duplicados_internos > 1 ? 's' : ''} en el archivo del banco y eliminado${r.duplicados_internos > 1 ? 's' : ''}: ${detalle}`
+      }
+      setUmMsg(msg)
       // Refrescar extracto y movimientos
       const data = await apiClient.listExtractos()
       setExtractos(data.items)

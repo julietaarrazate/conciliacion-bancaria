@@ -93,6 +93,24 @@ def mergear_movimientos(
         if m.um_lote and m.um_lote > max_lote:
             max_lote = m.um_lote
 
+    # Detectar duplicados internos dentro del UM (el banco a veces repite filas).
+    # Usa la misma logica que _match_existente: (saldo+monto) o (fecha+monto+titular).
+    um_seen: list = []
+    um_deduped: list = []
+    duplicados_internos: list = []
+    for mov_data in movimientos_nuevos:
+        if _match_existente(mov_data, um_seen):
+            duplicados_internos.append(mov_data)
+        else:
+            monto_n = _to_float(mov_data.get("monto"))
+            saldo_n = _to_float(mov_data.get("saldo"))
+            fecha = mov_data.get("fecha")
+            fecha_iso = fecha.isoformat() if isinstance(fecha, date) else (str(fecha) if fecha else "")
+            titular_norm = _normalizar_titular(mov_data.get("titular"))
+            um_seen.append((monto_n, saldo_n, fecha_iso, titular_norm))
+            um_deduped.append(mov_data)
+    movimientos_nuevos = um_deduped
+
     corte_idx: Optional[int] = None
     corte_metodo = "ninguno"
 
@@ -195,11 +213,22 @@ def mergear_movimientos(
     if corte_idx is not None and corte_idx < len(movimientos_nuevos):
         corte_saldo_detectado = _to_float(movimientos_nuevos[corte_idx].get("saldo"))
 
+    dupes_info = []
+    for d in duplicados_internos:
+        fecha = d.get("fecha")
+        dupes_info.append({
+            "fecha": fecha.isoformat() if isinstance(fecha, date) else str(fecha or ""),
+            "monto": d.get("monto"),
+            "titular": d.get("titular"),
+        })
+
     return {
         "agregados": agregados,
         "duplicados": duplicados,
+        "duplicados_internos": len(duplicados_internos),
+        "duplicados_internos_detalle": dupes_info,
         "corte_en": corte_idx,
         "corte_metodo": corte_metodo,
         "corte_saldo_detectado": corte_saldo_detectado,
-        "total_recibido": len(movimientos_nuevos),
+        "total_recibido": len(movimientos_nuevos) + len(duplicados_internos),
     }
