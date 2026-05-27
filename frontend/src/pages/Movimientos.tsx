@@ -412,6 +412,48 @@ export const Movimientos: React.FC = () => {
               {renumerando ? '⏳' : '🔢'} Renumerar
             </button>
           )}
+          {extractoId && umCount > 0 && (
+            <button
+              onClick={async () => {
+                const confirmed = await confirmDialog({
+                  title: 'Borrar UM del último lote',
+                  message: `¿Borrar todos los movimientos del último lote de UM? Los movimientos del extracto original no se tocan.`,
+                  confirmLabel: 'Borrar UM',
+                  danger: true,
+                })
+                if (!confirmed) return
+                try {
+                  const r = await apiClient.deleteUM(extractoId!)
+                  setUmMsg(`✓ UM eliminados: ${r.eliminados} movimientos borrados`)
+                  load()
+                } catch (err: any) {
+                  const detail = err.response?.data?.detail
+                  if (detail?.code === 'sin_lotes') {
+                    const confirm2 = await confirmDialog({
+                      title: 'UM sin lote asignado',
+                      message: `${detail.mensaje}`,
+                      confirmLabel: 'Borrar todos',
+                      danger: true,
+                    })
+                    if (!confirm2) return
+                    try {
+                      const r2 = await apiClient.deleteUM(extractoId!, true)
+                      setUmMsg(`✓ UM eliminados: ${r2.eliminados} movimientos borrados`)
+                      load()
+                    } catch (err2: any) {
+                      setUmMsg(`✗ ${err2.response?.data?.detail || err2.message}`)
+                    }
+                  } else {
+                    setUmMsg(`✗ ${detail || err.message}`)
+                  }
+                }
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-600 text-white rounded-md hover:bg-red-700 font-medium"
+              title="Borrar el último lote de movimientos UM"
+            >
+              🗑️ Borrar UM
+            </button>
+          )}
         </div>
       </div>
 
