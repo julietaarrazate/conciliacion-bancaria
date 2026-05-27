@@ -409,32 +409,6 @@ class ApiClient {
     await this.client.delete(`/extractos/${extractoId}/movimientos/${movId}`)
   }
 
-  async corregirOrden(extractoId: number, offset: number): Promise<{ ok: boolean; orden_corregidos: number; eliminados_resumen: number }> {
-    const res = await this.client.post(`/extractos/${extractoId}/corregir-orden`, null, { params: { offset } })
-    return res.data
-  }
-
-  async renumerarOrden(extractoId: number, desdeOrden: number): Promise<{ ok: boolean; renumerados: number; desde_orden: number; ultimo_orden: number }> {
-    const res = await this.client.post(`/extractos/${extractoId}/renumerar-orden`, null, {
-      params: { desde_orden: desdeOrden }
-    })
-    return res.data
-  }
-
-  async recuperarOrden(extractoId: number, file: File): Promise<{
-    ok: boolean; total_db: number; excel_movs: number; matched: number;
-    unmatched: number; max_excel_orden: number; ultimo_orden: number;
-  }> {
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await this.client.post(
-      `/extractos/${extractoId}/recuperar-orden`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
-    )
-    return res.data
-  }
-
   async guardarEnCarpeta(planillaId: number): Promise<{ path?: string; blob: Blob }> {
     const res = await this.client.post(`/clientes/planillas/${planillaId}/guardar`, {}, { responseType: 'blob' })
     const savedPath = res.headers['x-saved-path'] as string | undefined

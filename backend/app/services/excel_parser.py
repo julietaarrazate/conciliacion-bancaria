@@ -252,13 +252,6 @@ def parsear_generico(ws, cols):
             continue
         fecha   = _parse_fecha(ws.cell(row, cols["fecha"]).value)   if cols["fecha"]   else None
         titular = str(ws.cell(row, cols["titular"]).value or "")     if cols["titular"] else ""
-        # Filtrar filas-resumen del banco (no son movimientos reales).
-        # Ej: "TOTAL ACREDITADO", "TOTAL DEBITADO", "SALDO INICIAL", "SALDO FINAL".
-        _t_up = titular.strip().upper()
-        if _t_up.startswith(("TOTAL ", "SALDO ", "SUBTOTAL")) or _t_up in (
-            "TOTAL", "SUBTOTAL", "SALDO", "TOTALES"
-        ):
-            continue
         orden   = ws.cell(row, cols["orden"]).value                  if cols["orden"]   else None
         saldo   = _parse_monto(ws.cell(row, cols["saldo"]).value)    if cols["saldo"]   else None
         mes_val = str(ws.cell(row, cols["mes"]).value or "")         if cols["mes"]     else None

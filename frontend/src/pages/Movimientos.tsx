@@ -4,7 +4,6 @@ import { apiClient } from '@/services/api'
 import { ExtractoListItem, MovimientoFiltrado, MovimientosFiltros } from '@/types'
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
-import { useAuthStore } from '@/store/auth'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -77,7 +76,6 @@ const EMPTY: ColFilter = { cliente:'', cuit:'', titular:'', desde:'', hasta:'', 
 export const Movimientos: React.FC = () => {
   const [searchParams] = useSearchParams()
   const { activeOrgId } = useOrgStore()
-  const user = useAuthStore(s => s.user)
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [movimientos, setMovimientos] = useState<MovimientoFiltrado[]>([])
@@ -99,9 +97,6 @@ export const Movimientos: React.FC = () => {
   const [acredModal, setAcredModal] = useState<{ mov: MovimientoFiltrado; cliente: string; fecha: string } | null>(null)
   const [acredSaving, setAcredSaving] = useState(false)
   const [acredError, setAcredError] = useState('')
-  const [renumerando, setRenumerando] = useState(false)
-  const [recuperando, setRecuperando] = useState(false)
-  const recuperarRef = useRef<HTMLInputElement>(null)
   const umRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -274,15 +269,7 @@ export const Movimientos: React.FC = () => {
     setUmLoading(true); setUmMsg('')
     try {
       const r = await apiClient.appendUM(extractoId, file)
-      let msg = `✓ ${r.agregados} nuevos agregados`
-      if (r.duplicados > 0) msg += ` · ${r.duplicados} ya existían (ignorados)`
-      if (r.duplicados_internos > 0) {
-        const detalle = r.duplicados_internos_detalle
-          .map(d => `${d.fecha} $${d.monto?.toLocaleString('es-AR')} ${d.titular || ''}`.trim())
-          .join(' | ')
-        msg += ` · ⚠️ ${r.duplicados_internos} duplicado${r.duplicados_internos > 1 ? 's' : ''} detectado${r.duplicados_internos > 1 ? 's' : ''} en el archivo del banco y eliminado${r.duplicados_internos > 1 ? 's' : ''}: ${detalle}`
-      }
-      setUmMsg(msg)
+      setUmMsg(`✓ ${r.agregados} nuevos desde el corte · ${r.duplicados} ya existían (ignorados)`)
       // Refrescar extracto y movimientos
       const data = await apiClient.listExtractos()
       setExtractos(data.items)
@@ -340,118 +327,6 @@ export const Movimientos: React.FC = () => {
               title="Exportar extracto completo conciliado para el contador"
             >
               📤 Para contador
-            </button>
-          )}
-          {extractoId && user?.is_superadmin && (
-            <label
-              className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md font-medium cursor-pointer ${recuperando ? 'opacity-50 bg-gray-400 text-white' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
-              title="Superadmin: restaurar los números de orden exactos del Excel del contador"
-            >
-              {recuperando ? '⏳' : '🔧'} Restaurar orden (Excel)
-              <input ref={recuperarRef} type="file" accept=".xlsx,.xls" hidden disabled={recuperando}
-                onChange={async (e) => {
-                  const f = e.target.files?.[0]
-                  if (!f || !extractoId) return
-                  const confirmed = await confirmDialog({
-                    title: 'Restaurar orden desde Excel del contador',
-                    message: `Voy a leer los números de orden del archivo "${f.name}" y restaurarlos en la DB, matcheando cada movimiento por fecha+monto+saldo.`,
-                    confirmLabel: 'Restaurar',
-                    danger: false,
-                  })
-                  if (!confirmed) { if (recuperarRef.current) recuperarRef.current.value = ''; return }
-                  setRecuperando(true)
-                  try {
-                    const r = await apiClient.recuperarOrden(extractoId!, f)
-                    setUmMsg(`✓ Orden restaurado — matcheados: ${r.matched}, sin match (UM): ${r.unmatched}, último orden: ${r.ultimo_orden}`)
-                    load()
-                  } catch (err: any) {
-                    setUmMsg(`✗ ${err.response?.data?.detail || err.message}`)
-                  } finally {
-                    setRecuperando(false)
-                    if (recuperarRef.current) recuperarRef.current.value = ''
-                  }
-                }}
-              />
-            </label>
-          )}
-          {extractoId && user?.is_superadmin && (
-            <button
-              onClick={async () => {
-                const input = window.prompt(
-                  'Ingresá el número a sumar a todos los valores de orden.\n\nEjemplo: si el orden actual máximo es 1682 y debería ser 17240, ingresá 15558 (= 17240 - 1682).',
-                  ''
-                )
-                if (input === null) return
-                const offset = parseInt(input.trim(), 10)
-                if (!Number.isFinite(offset)) {
-                  setUmMsg('✗ Ingresá un número válido')
-                  return
-                }
-                const confirmed = await confirmDialog({
-                  title: 'Corregir orden',
-                  message: `¿Sumar ${offset} al orden de todos los movimientos del extracto #${extractoId}? También se eliminan filas resumen (TOTAL ACREDITADO, etc.).`,
-                  confirmLabel: 'Corregir',
-                  danger: false,
-                })
-                if (!confirmed) return
-                setRenumerando(true)
-                try {
-                  const r = await apiClient.corregirOrden(extractoId!, offset)
-                  setUmMsg(`✓ Orden corregido: ${r.orden_corregidos} movimientos, ${r.eliminados_resumen} filas resumen eliminadas`)
-                  load()
-                } catch (err: any) {
-                  setUmMsg(`✗ ${err.response?.data?.detail || err.message}`)
-                } finally {
-                  setRenumerando(false)
-                }
-              }}
-              disabled={renumerando}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50 font-medium"
-              title="Superadmin: corregir orden sumando un offset a todos los movimientos"
-            >
-              {renumerando ? '⏳' : '🔢'} Corregir orden
-            </button>
-          )}
-          {extractoId && umCount > 0 && (
-            <button
-              onClick={async () => {
-                const confirmed = await confirmDialog({
-                  title: 'Borrar UM del último lote',
-                  message: `¿Borrar todos los movimientos del último lote de UM? Los movimientos del extracto original no se tocan.`,
-                  confirmLabel: 'Borrar UM',
-                  danger: true,
-                })
-                if (!confirmed) return
-                try {
-                  const r = await apiClient.deleteUM(extractoId!)
-                  setUmMsg(`✓ UM eliminados: ${r.eliminados} movimientos borrados`)
-                  load()
-                } catch (err: any) {
-                  const detail = err.response?.data?.detail
-                  if (detail?.code === 'sin_lotes') {
-                    const confirm2 = await confirmDialog({
-                      title: 'UM sin lote asignado',
-                      message: `${detail.mensaje}`,
-                      confirmLabel: 'Borrar todos',
-                      danger: true,
-                    })
-                    if (!confirm2) return
-                    try {
-                      const r2 = await apiClient.deleteUM(extractoId!, true)
-                      setUmMsg(`✓ UM eliminados: ${r2.eliminados} movimientos borrados`)
-                      load()
-                    } catch (err2: any) {
-                      setUmMsg(`✗ ${err2.response?.data?.detail || err2.message}`)
-                    }
-                  } else {
-                    setUmMsg(`✗ ${detail || err.message}`)
-                  }
-                }
-              }}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-600 text-white rounded-md hover:bg-red-700 font-medium"
-              title="Borrar el último lote de movimientos UM"
-            >
-              🗑️ Borrar UM
             </button>
           )}
         </div>
