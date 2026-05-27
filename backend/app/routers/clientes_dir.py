@@ -13,8 +13,9 @@ logger = logging.getLogger(__name__)
 import platform
 from datetime import datetime
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from typing import Optional
 import io
 
 from app.database import get_db
