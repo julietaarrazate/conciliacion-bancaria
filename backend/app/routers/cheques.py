@@ -14,6 +14,7 @@ from app.models.cheque import Cheque
 from app.models.cliente import Cliente
 from app.services.motor_contable import registrar_cheque, acreditar_cheque, rechazar_cheque
 from app.services.auditoria import registrar_log
+from app.services.storage import upload_comprobante
 
 router = APIRouter(prefix="/cheques", tags=["cheques"])
 
@@ -302,7 +303,7 @@ def subir_foto(
         raise HTTPException(404, "Cheque no encontrado")
     if not current_user.is_superadmin and c.organizacion_id != oid:
         raise HTTPException(403, "Sin acceso")
-    c.foto_comprobante = body.foto_base64
+    c.foto_comprobante = upload_comprobante(body.foto_base64, prefix=f"cheque/{c.organizacion_id}")
     db.commit()
     return {"ok": True, "tiene_foto": True}
 

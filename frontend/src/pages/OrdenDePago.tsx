@@ -106,6 +106,7 @@ export const OrdenDePago: React.FC = () => {
         beneficiario: form.beneficiario,
         importe: importeNum,
         foto_base64: foto,
+        ...(activeOrgId ? { org_id: activeOrgId } : {}),
       })
       setResultado(res.data)
       setStep('exito')

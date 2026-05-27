@@ -127,7 +127,9 @@ export const Caja: React.FC = () => {
       const parsed = Object.fromEntries(
         Object.entries(dens).map(([k, v]) => [k, parseInt(v) || 0])
       )
-      const res = await apiClient.client.put('/caja/arqueo/hoy', { denominaciones: parsed, fecha: selectedDate })
+      const body: Record<string, unknown> = { denominaciones: parsed, fecha: selectedDate }
+      if (activeOrgId) body.org_id = activeOrgId
+      const res = await apiClient.client.put('/caja/arqueo/hoy', body)
       setArqueo(res.data)
       setMsg('✓ Arqueo actualizado')
       setTimeout(() => setMsg(''), 3000)
@@ -137,7 +139,9 @@ export const Caja: React.FC = () => {
 
   const saveField = async (field: string, value: number) => {
     try {
-      const res = await apiClient.client.put('/caja/arqueo/hoy', { [field]: value, fecha: selectedDate })
+      const body: Record<string, unknown> = { [field]: value, fecha: selectedDate }
+      if (activeOrgId) body.org_id = activeOrgId
+      const res = await apiClient.client.put('/caja/arqueo/hoy', body)
       setArqueo(res.data)
     } catch { }
     setEditando(null)
@@ -149,6 +153,7 @@ export const Caja: React.FC = () => {
       const params = new URLSearchParams()
       if (filtroDesde) params.set('desde', filtroDesde)
       if (filtroHasta) params.set('hasta', filtroHasta)
+      if (activeOrgId) params.set('org_id', String(activeOrgId))
       const res = await apiClient.client.get(`/caja/op/exportar-eft?${params}`, { responseType: 'blob' })
       const url = URL.createObjectURL(res.data)
       const a = document.createElement('a')
