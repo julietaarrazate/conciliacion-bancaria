@@ -100,9 +100,7 @@ export const Movimientos: React.FC = () => {
   const [acredSaving, setAcredSaving] = useState(false)
   const [acredError, setAcredError] = useState('')
   const [renumerando, setRenumerando] = useState(false)
-  const [recuperando, setRecuperando] = useState(false)
   const umRef = useRef<HTMLInputElement>(null)
-  const recuperarRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     apiClient.listExtractos(activeOrgId).then(data => {
@@ -343,81 +341,41 @@ export const Movimientos: React.FC = () => {
             </button>
           )}
           {extractoId && user?.is_superadmin && (
-            <label
-              className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md font-medium cursor-pointer ${recuperando ? 'opacity-50 bg-gray-400 text-white' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
-              title="Superadmin: recuperar valores reales de orden subiendo el Excel original del extracto"
-            >
-              {recuperando ? '⏳' : '🔧'} Recuperar orden (Excel)
-              <input
-                ref={recuperarRef}
-                type="file"
-                accept=".xlsx,.xls"
-                hidden
-                disabled={recuperando}
-                onChange={async (e) => {
-                  const f = e.target.files?.[0]
-                  if (!f || !extractoId) return
-                  const confirmed = await confirmDialog({
-                    title: 'Recuperar orden desde Excel',
-                    message: `Voy a parsear "${f.name}" y restaurar los valores de orden originales del banco. Los movimientos que no estén en el Excel (UM agregados después) reciben orden consecutivo arrancando desde el último del Excel.`,
-                    confirmLabel: 'Recuperar',
-                    danger: false,
-                  })
-                  if (!confirmed) {
-                    if (recuperarRef.current) recuperarRef.current.value = ''
-                    return
-                  }
-                  setRecuperando(true)
-                  try {
-                    const r = await apiClient.recuperarOrden(extractoId, f)
-                    setUmMsg(`✓ Recuperación OK — Excel: ${r.excel_movs} movs, DB: ${r.total_db}, matcheados: ${r.matched}, sin match (UM): ${r.unmatched}, último orden: ${r.ultimo_orden}`)
-                    load()
-                  } catch (err: any) {
-                    setUmMsg(`✗ Recuperar: ${err.response?.data?.detail || err.message}`)
-                  } finally {
-                    setRecuperando(false)
-                    if (recuperarRef.current) recuperarRef.current.value = ''
-                  }
-                }}
-              />
-            </label>
-          )}
-          {extractoId && user?.is_superadmin && (
             <button
               onClick={async () => {
                 const input = window.prompt(
-                  'Ingresá el último orden válido ANTES del UM nuevo (los movimientos con orden mayor se renumerarán consecutivamente desde ese valor + 1).\n\nEjemplo: si antes del UM el último orden era 17240, ingresá 17240.',
+                  'Ingresá el número a sumar a todos los valores de orden.\n\nEjemplo: si el orden actual máximo es 1682 y debería ser 17240, ingresá 15558 (= 17240 - 1682).',
                   ''
                 )
                 if (input === null) return
-                const desde = parseInt(input.trim(), 10)
-                if (!Number.isFinite(desde) || desde < 0) {
-                  setUmMsg('✗ Renumerar: ingresá un número válido')
+                const offset = parseInt(input.trim(), 10)
+                if (!Number.isFinite(offset)) {
+                  setUmMsg('✗ Ingresá un número válido')
                   return
                 }
                 const confirmed = await confirmDialog({
-                  title: 'Renumerar orden',
-                  message: `¿Renumerar los movimientos con orden > ${desde} del extracto #${extractoId}? Los movimientos con orden ≤ ${desde} no se tocan.`,
-                  confirmLabel: 'Renumerar',
+                  title: 'Corregir orden',
+                  message: `¿Sumar ${offset} al orden de todos los movimientos del extracto #${extractoId}? También se eliminan filas resumen (TOTAL ACREDITADO, etc.).`,
+                  confirmLabel: 'Corregir',
                   danger: false,
                 })
                 if (!confirmed) return
                 setRenumerando(true)
                 try {
-                  const r = await apiClient.renumerarOrden(extractoId!, desde)
-                  setUmMsg(`✓ Renumerados ${r.renumerados} movimientos. Último orden: ${r.ultimo_orden}`)
+                  const r = await apiClient.corregirOrden(extractoId!, offset)
+                  setUmMsg(`✓ Orden corregido: ${r.orden_corregidos} movimientos, ${r.eliminados_resumen} filas resumen eliminadas`)
                   load()
                 } catch (err: any) {
-                  setUmMsg(`✗ Renumerar: ${err.response?.data?.detail || err.message}`)
+                  setUmMsg(`✗ ${err.response?.data?.detail || err.message}`)
                 } finally {
                   setRenumerando(false)
                 }
               }}
               disabled={renumerando}
               className="flex items-center gap-1 px-3 py-1.5 text-xs bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50 font-medium"
-              title="Superadmin: renumerar orden de los movimientos del UM (cierra gaps tras borrar duplicados)"
+              title="Superadmin: corregir orden sumando un offset a todos los movimientos"
             >
-              {renumerando ? '⏳' : '🔢'} Renumerar
+              {renumerando ? '⏳' : '🔢'} Corregir orden
             </button>
           )}
           {extractoId && umCount > 0 && (

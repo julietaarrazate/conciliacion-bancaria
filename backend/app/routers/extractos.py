@@ -599,6 +599,47 @@ def delete_movimiento(
         raise HTTPException(500, "Error al borrar el movimiento. Intentá de nuevo.")
 
 
+@router.post("/{extracto_id}/corregir-orden")
+def corregir_orden(
+    extracto_id: int,
+    offset: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Suma `offset` al campo orden de todos los movimientos del extracto
+    y elimina filas-resumen del banco (TOTAL ACREDITADO, etc.).
+    Uso: cuando el orden fue corrompido a 1..N, pasar offset = valor_real_maximo - N.
+    """
+    if not current_user.is_superadmin:
+        raise HTTPException(403, "Solo superadmin")
+    extracto = _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
+
+    from app.models.planilla import PlanillaRow as _PR2
+    eliminados = 0
+    for m in list(db.query(MovimientoBanco).filter(
+        MovimientoBanco.extracto_id == extracto.id
+    ).all()):
+        t_up = (m.titular or "").strip().upper()
+        if t_up.startswith(("TOTAL ", "SALDO ", "SUBTOTAL")) or t_up in ("TOTAL", "SUBTOTAL", "SALDO", "TOTALES"):
+            db.query(_PR2).filter(_PR2.orden_movimiento_acreditado == m.id).update(
+                {"orden_movimiento_acreditado": None}, synchronize_session="fetch"
+            )
+            db.delete(m)
+            eliminados += 1
+
+    db.flush()
+
+    updated = db.query(MovimientoBanco).filter(
+        MovimientoBanco.extracto_id == extracto.id,
+        MovimientoBanco.orden.isnot(None),
+    ).update(
+        {MovimientoBanco.orden: MovimientoBanco.orden + offset},
+        synchronize_session=False,
+    )
+    db.commit()
+    return {"ok": True, "orden_corregidos": updated, "eliminados_resumen": eliminados}
+
+
 @router.post("/{extracto_id}/recuperar-orden")
 async def recuperar_orden(
     extracto_id: int,
