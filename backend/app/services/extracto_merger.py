@@ -94,10 +94,7 @@ def mergear_movimientos(
             max_lote = m.um_lote
 
     # Detectar duplicados internos del UM.
-    # Criterio: misma fecha + mismo titular (normalizado) + mismo monto.
-    # El titular incluye el código de referencia del banco (ej. 76V4MR2Z7EG4...).
-    # Si la referencia también está disponible como columna separada, se usa
-    # como refuerzo (ref + monto). Primero aplica el criterio más preciso.
+    # Usa titular EXACTO + monto + fecha — no normalizar, para no generar falsos positivos.
     um_vistos: set = set()
     um_deduped: list = []
     duplicados_internos: list = []
@@ -105,12 +102,9 @@ def mergear_movimientos(
         m = _to_float(mov_data.get("monto"))
         fecha = mov_data.get("fecha")
         fecha_iso = fecha.isoformat() if isinstance(fecha, date) else (str(fecha) if fecha else "")
-        titular_norm = _normalizar_titular(mov_data.get("titular"))
-        ref = mov_data.get("orden")  # referencia del banco si viene como columna
-        if ref is not None and m is not None:
-            key = ("ref", ref, round(m, 2))
-        elif titular_norm and m is not None and fecha_iso:
-            key = ("tit", fecha_iso, titular_norm, round(m, 2))
+        titular = (mov_data.get("titular") or "").strip()
+        if titular and m is not None and fecha_iso:
+            key = (fecha_iso, titular, round(m, 2))
         else:
             key = None
         if key is not None and key in um_vistos:
