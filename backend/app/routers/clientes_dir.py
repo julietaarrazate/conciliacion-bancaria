@@ -73,7 +73,7 @@ def guardar_planilla_en_carpeta(
         mov = movs_map.get(r.orden_movimiento_acreditado) if r.orden_movimiento_acreditado else None
         rows_data.append({
             "monto": r.monto, "cuit": r.cuit, "titular": r.titular, "status": r.status,
-            "orden_movimiento_acreditado": r.orden_movimiento_acreditado,
+            "orden_movimiento_acreditado": mov.orden if mov else None,
             "mov_titular": mov.titular if mov else None,
             "mov_fecha": mov.fecha if mov else None,
             "mov_fecha_acred": mov.fecha_acred if mov else None,
