@@ -40,3 +40,6 @@ reportlab==4.2.5
 
 # Web Push notifications (VAPID)
 pywebpush>=1.14.0
+
+# Storage S3/R2 (opcional, activado via env vars S3_*)
+boto3==1.35.49

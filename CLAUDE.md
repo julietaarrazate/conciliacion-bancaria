@@ -155,6 +155,33 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   `/contabilidad/stats` autenticado; libro mayor valida org; OP compartir valida org
 - **Páginas legales**: `/privacidad` y `/terminos` públicas (Ley 25.326 Argentina)
 - **Suite de tests**: 124 tests (29 nuevos en `test_audit_fixes.py`)
+- **Storage S3/R2 con fallback**: `app/services/storage.py` sube fotos a S3-compatible si las env vars
+  `S3_ENDPOINT/S3_BUCKET/S3_ACCESS_KEY/S3_SECRET_KEY/S3_PUBLIC_URL` están seteadas; si no, mantiene base64 en DB
+- **Org isolation completa**: POST `/caja/op/registrar`, PUT `/caja/arqueo/hoy` y GET `/caja/op/exportar-eft`
+  ahora aceptan `org_id` para que superadmin escriba/lea en la org seleccionada
+
+---
+
+## Storage de fotos (S3/R2 opcional)
+
+Por defecto las fotos de OPs y cheques se guardan como base64 en la DB. Para activar storage externo
+(recomendado Cloudflare R2 — 10 GB gratis, S3-compatible), setear en Render:
+
+```
+S3_ENDPOINT     = https://<accountid>.r2.cloudflarestorage.com
+S3_BUCKET       = conciliacion-fotos
+S3_ACCESS_KEY   = <de R2>
+S3_SECRET_KEY   = <de R2>
+S3_PUBLIC_URL   = https://pub-xxxx.r2.dev   (o tu dominio custom apuntado al bucket)
+S3_REGION       = auto                       (opcional, R2 acepta "auto")
+```
+
+Setup R2:
+1. Crear cuenta en Cloudflare → R2 Object Storage
+2. Crear bucket con visibilidad pública (o configurar dominio custom)
+3. Crear API token con permisos Read/Write sobre el bucket
+4. Pegar las 5 env vars en Render → Save and Deploy
+5. Las OPs nuevas guardarán URL; las viejas siguen funcionando como base64 (compatibilidad transparente)
 
 ---
 
@@ -162,11 +189,10 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 1. **2FA para superadmin** — código por email al login (medio esfuerzo, alta seguridad)
 2. **Google OAuth** — login con Google (medio esfuerzo, mejor UX)
-3. **Caja/OrdenDePago org switching** — el superadmin no puede cambiar de org en esos módulos (backend `_org_id` sin parámetro)
-4. **Rate limiting global** — slowapi en todos los endpoints, no solo auth
-5. **Storage externo (R2/S3)** — `foto_comprobante` actualmente en base64 en DB
-6. **IA Nivel 3** — predicción automática (requiere 3-6 meses de datos reales)
-7. **App móvil nativa** React Native (alto esfuerzo, cuando la PWA se quede corta)
+3. **Rate limiting global** — slowapi en todos los endpoints, no solo auth
+4. **Activar R2 en producción** — código ya está listo, solo crear bucket y pegar env vars
+5. **IA Nivel 3** — predicción automática (requiere 3-6 meses de datos reales)
+6. **App móvil nativa** React Native (alto esfuerzo, cuando la PWA se quede corta)
 
 ---
 

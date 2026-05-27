@@ -13,6 +13,7 @@ from app.models.cliente import Cliente
 from app.models.user import User
 from app.middleware.auth import get_current_user
 from app.services.auditoria import registrar_log
+from app.services.storage import upload_comprobante
 
 router = APIRouter(prefix="/caja", tags=["caja"])
 
@@ -81,7 +82,7 @@ def update_arqueo(
     current_user: User = Depends(get_current_user)
 ):
     """Actualiza saldo inicial, pesos agregados, ingresos o denominaciones físicas del día."""
-    org_id = _org_id(current_user)
+    org_id = _org_id(current_user, payload.get("org_id"))
     fecha_str = payload.get("fecha")
     fecha = date.fromisoformat(fecha_str) if fecha_str else date.today()
 
@@ -158,12 +159,13 @@ def registrar_op(
     - Descuenta denominaciones del arqueo físico
     - Registra en AuditoriaLog
     """
-    org_id = _org_id(current_user)
+    org_id = _org_id(current_user, payload.get("org_id"))
 
     cliente_id = payload.get("cliente_id")
     beneficiario = payload.get("beneficiario", "").strip()
     importe = Decimal(str(payload.get("importe", 0)))
-    foto = payload.get("foto_base64")  # base64 de la foto del comprobante
+    foto_raw = payload.get("foto_base64")  # data URL base64 desde el frontend
+    foto = upload_comprobante(foto_raw, prefix=f"op/{org_id}")
     dens_usadas = payload.get("denominaciones", {})  # {"20000": 2, "10000": 1}
     notas = payload.get("notas")
 
@@ -359,6 +361,7 @@ def _op_response(op: OrdenDePago, con_foto: bool = False) -> dict:
 def exportar_eft(
     desde: Optional[date] = Query(None),
     hasta: Optional[date] = Query(None),
+    org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -367,7 +370,7 @@ def exportar_eft(
     from fastapi.responses import StreamingResponse
     from app.services.excel_export import export_eft_historial
 
-    org_id = _org_id(current_user)
+    org_id = _org_id(current_user, org_id)
     q = db.query(OrdenDePago).filter(OrdenDePago.organizacion_id == org_id)
     if desde:
         q = q.filter(OrdenDePago.fecha >= desde)
