@@ -5,6 +5,7 @@ Organización A sigue usando el algoritmo original (monto + CUIT/titular).
 """
 
 import re
+from decimal import Decimal
 from typing import List, Optional, Tuple, Dict, Any
 from datetime import date
 from sqlalchemy.orm import Session
@@ -76,7 +77,7 @@ def normalizar_nombre(texto: str) -> str:
 
 
 def parse_importe(v) -> Optional[float]:
-    if isinstance(v, (int, float)):
+    if isinstance(v, (int, float, Decimal)):
         return round(float(v), 2)
     if isinstance(v, str):
         s = v.strip().replace('$', '').replace('\xa0', '').replace(' ', '')
@@ -96,8 +97,8 @@ def parse_importe(v) -> Optional[float]:
     return None
 
 
-def montos_iguales(a: float, b: float, tolerancia: float = 0.01) -> bool:
-    return abs(a - b) < tolerancia
+def montos_iguales(a, b, tolerancia: float = 0.01) -> bool:
+    return abs(float(a) - float(b)) < tolerancia
 
 
 def es_libre(cliente_acreditado: Optional[str]) -> bool:
