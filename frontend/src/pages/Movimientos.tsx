@@ -100,6 +100,8 @@ export const Movimientos: React.FC = () => {
   const [acredSaving, setAcredSaving] = useState(false)
   const [acredError, setAcredError] = useState('')
   const [renumerando, setRenumerando] = useState(false)
+  const [recuperando, setRecuperando] = useState(false)
+  const recuperarRef = useRef<HTMLInputElement>(null)
   const umRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -339,6 +341,38 @@ export const Movimientos: React.FC = () => {
             >
               📤 Para contador
             </button>
+          )}
+          {extractoId && user?.is_superadmin && (
+            <label
+              className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md font-medium cursor-pointer ${recuperando ? 'opacity-50 bg-gray-400 text-white' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
+              title="Superadmin: restaurar los números de orden exactos del Excel del contador"
+            >
+              {recuperando ? '⏳' : '🔧'} Restaurar orden (Excel)
+              <input ref={recuperarRef} type="file" accept=".xlsx,.xls" hidden disabled={recuperando}
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  if (!f || !extractoId) return
+                  const confirmed = await confirmDialog({
+                    title: 'Restaurar orden desde Excel del contador',
+                    message: `Voy a leer los números de orden del archivo "${f.name}" y restaurarlos en la DB, matcheando cada movimiento por fecha+monto+saldo.`,
+                    confirmLabel: 'Restaurar',
+                    danger: false,
+                  })
+                  if (!confirmed) { if (recuperarRef.current) recuperarRef.current.value = ''; return }
+                  setRecuperando(true)
+                  try {
+                    const r = await apiClient.recuperarOrden(extractoId!, f)
+                    setUmMsg(`✓ Orden restaurado — matcheados: ${r.matched}, sin match (UM): ${r.unmatched}, último orden: ${r.ultimo_orden}`)
+                    load()
+                  } catch (err: any) {
+                    setUmMsg(`✗ ${err.response?.data?.detail || err.message}`)
+                  } finally {
+                    setRecuperando(false)
+                    if (recuperarRef.current) recuperarRef.current.value = ''
+                  }
+                }}
+              />
+            </label>
           )}
           {extractoId && user?.is_superadmin && (
             <button
