@@ -1,416 +1,558 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useThemeStore } from '@/store/theme'
 
-// Hook para animar elementos al entrar en viewport
-function useReveal() {
+// ── Constantes de marca ──────────────────────────────────────────────────────
+const WA_NUMBER = '543774504024'
+const WA_LINK   = `https://wa.me/${WA_NUMBER}?text=Hola%20Julieta%2C%20me%20interesa%20conocer%20m%C3%A1s%20sobre%20Cuadra`
+
+// ── Scroll reveal hook ───────────────────────────────────────────────────────
+function useReveal(threshold = 0.1) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { el.classList.add('revealed'); observer.disconnect() } },
-      { threshold: 0.12 }
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) { el.dataset.visible = 'true'; obs.disconnect() } },
+      { threshold }
     )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [threshold])
   return ref
 }
 
-const Reveal: React.FC<{ children: React.ReactNode; delay?: number; className?: string }> = ({ children, delay = 0, className = '' }) => {
+const R: React.FC<{ children: React.ReactNode; delay?: number; className?: string }> = ({
+  children, delay = 0, className = ''
+}) => {
   const ref = useReveal()
   return (
-    <div
-      ref={ref}
-      className={`reveal-block ${className}`}
-      style={{ transitionDelay: `${delay}ms` }}
-    >
+    <div ref={ref} className={`land-reveal ${className}`} style={{ '--d': `${delay}ms` } as React.CSSProperties}>
       {children}
     </div>
   )
 }
 
-const features = [
-  {
-    icon: '⚡',
-    title: 'Conciliación automática',
-    desc: 'El motor cruza extractos bancarios con planillas de clientes por CUIT, CBU y referencia. Lo que cuadra, cuadra solo.',
-  },
-  {
-    icon: '📸',
-    title: 'Órdenes de pago con foto',
-    desc: 'Registrá OPs firmadas desde el celular. Foto del comprobante, importe y cliente en tres pasos.',
-  },
-  {
-    icon: '🏦',
-    title: 'Cheques y pagos',
-    desc: 'Seguimiento de cheques propios y de terceros. Alertas automáticas antes del vencimiento.',
-  },
-  {
-    icon: '📊',
-    title: 'Caja diaria',
-    desc: 'Arqueo físico de billetes, saldo inicial, ingresos y pagos del día. El cruce en tiempo real.',
-  },
-  {
-    icon: '🏢',
-    title: 'Multi-empresa',
-    desc: 'Gestionás todos tus clientes desde un solo lugar. Cada empresa ve solo sus propios datos.',
-  },
-  {
-    icon: '📤',
-    title: 'Export para el contador',
-    desc: 'Excel formato Macro, PDF de cierre mensual y estado de cuenta por cliente. Todo listo para entregar.',
-  },
+// ── Datos ────────────────────────────────────────────────────────────────────
+const FEATURES = [
+  { icon: '⚡', title: 'Conciliación automática', desc: 'Cruza extractos bancarios con planillas de clientes por CUIT, CBU y referencia. Lo que cuadra, cuadra solo — sin tocar nada.' },
+  { icon: '📸', title: 'OPs desde el celular', desc: 'Registrá órdenes de pago firmadas con foto del comprobante. Tres pasos, desde el celular, en movimiento.' },
+  { icon: '🏦', title: 'Cheques y pagos', desc: 'Seguimiento de cheques propios y de terceros con alertas automáticas antes del vencimiento.' },
+  { icon: '💰', title: 'Caja diaria', desc: 'Arqueo físico de billetes, saldo inicial e ingresos. El cruce contra la caja en tiempo real.' },
+  { icon: '🏢', title: 'Multi-empresa', desc: 'Todos tus clientes desde un solo lugar. Cada empresa ve solo sus propios datos, sin mezclas.' },
+  { icon: '📤', title: 'Export para el contador', desc: 'Excel formato Macro, PDF de cierre mensual y estado de cuenta por cliente. Listo para entregar.' },
 ]
 
-const steps = [
-  {
-    n: '01',
-    title: 'Subís el extracto',
-    desc: 'Arrastrás el Excel del banco. El sistema lo parsea automáticamente.',
-  },
-  {
-    n: '02',
-    title: 'Cargás la planilla',
-    desc: 'Subís la planilla de pagos de tu cliente. La conciliación corre sola.',
-  },
-  {
-    n: '03',
-    title: 'Revisás y exportás',
-    desc: 'Lo que no cuadró queda para revisión manual. El resto ya está listo para el contador.',
-  },
+const STEPS = [
+  { n: '01', title: 'Subís el extracto bancario', desc: 'Arrastrás el Excel del banco. El sistema lo parsea automáticamente.' },
+  { n: '02', title: 'Cargás la planilla del cliente', desc: 'Subís la planilla de pagos. La conciliación corre sola.' },
+  { n: '03', title: 'Revisás y exportás', desc: 'Lo ambiguo queda para revisión manual. El resto, listo para el contador.' },
 ]
 
+const STATS = [
+  { value: '124', label: 'tests automatizados' },
+  { value: '99%', label: 'uptime en producción' },
+  { value: '< 1s', label: 'tiempo de conciliación' },
+  { value: '0', label: 'instalaciones necesarias' },
+]
+
+// ── Componente principal ─────────────────────────────────────────────────────
 export const Landing: React.FC = () => {
-  const { theme } = useThemeStore()
+  const [form, setForm] = useState({ nombre: '', email: '', mensaje: '' })
+  const [formSent, setFormSent] = useState(false)
+
+  const handleContact = (e: React.FormEvent) => {
+    e.preventDefault()
+    const texto = encodeURIComponent(
+      `Hola Julieta, soy ${form.nombre}${form.email ? ` (${form.email})` : ''}.\n\n${form.mensaje}`
+    )
+    window.open(`https://wa.me/${WA_NUMBER}?text=${texto}`, '_blank')
+    setFormSent(true)
+  }
 
   return (
-    <div className="min-h-screen bg-[#F4F4F5] dark:bg-[#0B0B0F] text-[#18181B] dark:text-[#E4E4E7] overflow-x-hidden">
+    <div className="landing-root">
 
-      {/* ── Estilos de animación inline ── */}
+      {/* ── Estilos ── */}
       <style>{`
-        .reveal-block {
+        .landing-root {
+          min-height: 100vh;
+          background: #09090D;
+          color: #E4E4E7;
+          font-family: 'Inter', -apple-system, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          overflow-x: hidden;
+        }
+
+        /* Scroll reveal */
+        .land-reveal {
           opacity: 0;
-          transform: translateY(24px);
-          transition: opacity 0.6s ease, transform 0.6s ease;
+          transform: translateY(20px);
+          transition: opacity 0.65s ease calc(var(--d, 0ms)), transform 0.65s ease calc(var(--d, 0ms));
         }
-        .reveal-block.revealed {
+        .land-reveal[data-visible="true"] {
           opacity: 1;
-          transform: translateY(0);
+          transform: none;
         }
-        .hero-glow {
-          animation: heroGlow 4s ease-in-out infinite alternate;
+
+        /* Gradient text */
+        .grad-text {
+          background: linear-gradient(135deg, #4ADE80 0%, #22C55E 50%, #86EFAC 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
         }
-        @keyframes heroGlow {
-          0%   { opacity: 0.4; transform: scale(1); }
-          100% { opacity: 0.7; transform: scale(1.08); }
+
+        /* Glow pulsante del hero */
+        @keyframes glowPulse {
+          0%, 100% { opacity: 0.3; transform: scale(1); }
+          50%       { opacity: 0.6; transform: scale(1.05); }
         }
-        .badge-pulse {
-          animation: badgePulse 2s ease-in-out infinite;
+        .glow-orb { animation: glowPulse 5s ease-in-out infinite; }
+
+        /* Mockup flotante */
+        @keyframes floatMock {
+          0%   { transform: translateY(0) rotateX(2deg); }
+          100% { transform: translateY(-10px) rotateX(0deg); }
         }
-        @keyframes badgePulse {
+        .mock-float { animation: floatMock 3.5s ease-in-out infinite alternate; }
+
+        /* Borde gradiente en cards */
+        .grad-border {
+          position: relative;
+          background: #13131A;
+          border-radius: 16px;
+        }
+        .grad-border::before {
+          content: '';
+          position: absolute;
+          inset: -1px;
+          border-radius: 17px;
+          background: linear-gradient(135deg, #22C55E22, #1E1E2A, #22C55E11);
+          z-index: -1;
+        }
+        .grad-border:hover::before {
+          background: linear-gradient(135deg, #22C55E55, #1E1E2A, #22C55E33);
+          transition: background 0.3s ease;
+        }
+
+        /* Nav */
+        .land-nav {
+          position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 16px 24px;
+          background: rgba(9,9,13,0.85);
+          backdrop-filter: blur(16px);
+          border-bottom: 1px solid #1E1E26;
+        }
+
+        /* Botones */
+        .btn-green {
+          display: inline-flex; align-items: center; gap: 8px;
+          padding: 10px 22px; border-radius: 10px;
+          background: #22C55E; color: #000; font-weight: 600; font-size: 14px;
+          border: none; cursor: pointer;
+          transition: background 0.15s, transform 0.1s;
+          text-decoration: none;
+        }
+        .btn-green:hover { background: #4ADE80; }
+        .btn-green:active { transform: scale(0.97); }
+        .btn-green.large { padding: 14px 32px; font-size: 16px; border-radius: 12px; }
+
+        .btn-ghost {
+          display: inline-flex; align-items: center; gap: 8px;
+          padding: 10px 22px; border-radius: 10px;
+          background: transparent; color: #A1A1AA; font-weight: 500; font-size: 14px;
+          border: 1px solid #2A2A35; cursor: pointer;
+          transition: all 0.15s;
+          text-decoration: none;
+        }
+        .btn-ghost:hover { background: #16161C; color: #E4E4E7; border-color: #3A3A48; }
+
+        /* Input */
+        .land-input {
+          width: 100%;
+          background: #111118; border: 1px solid #2A2A35; border-radius: 10px;
+          padding: 12px 16px; color: #E4E4E7; font-size: 14px;
+          outline: none; transition: border 0.15s;
+          font-family: inherit;
+        }
+        .land-input:focus { border-color: #22C55E66; box-shadow: 0 0 0 3px #22C55E11; }
+        .land-input::placeholder { color: #52525B; }
+
+        /* Badge */
+        @keyframes badgeFade {
           0%, 100% { opacity: 1; }
           50%       { opacity: 0.6; }
         }
-        .float-card {
-          animation: floatCard 3s ease-in-out infinite alternate;
+        .live-badge { animation: badgeFade 2.5s ease-in-out infinite; }
+
+        /* WA hover */
+        .wa-btn {
+          display: inline-flex; align-items: center; gap: 10px;
+          padding: 14px 28px; border-radius: 12px;
+          background: #25D366; color: #fff; font-weight: 600; font-size: 15px;
+          border: none; cursor: pointer; text-decoration: none;
+          transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+          box-shadow: 0 4px 24px #25D36633;
         }
-        @keyframes floatCard {
-          0%   { transform: translateY(0px) rotate(-1deg); }
-          100% { transform: translateY(-8px) rotate(0deg); }
-        }
+        .wa-btn:hover { background: #20C25A; box-shadow: 0 6px 32px #25D36644; }
+        .wa-btn:active { transform: scale(0.97); }
       `}</style>
 
-      {/* ── Nav ── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4
-                      bg-[#F4F4F5]/80 dark:bg-[#0B0B0F]/80 backdrop-blur-md
-                      border-b border-[#E4E4E7] dark:border-[#1E1E26]">
-        <span className="text-lg font-bold tracking-tight dark:text-[#22C55E] text-[#5E6AD2]">
+      {/* ── NAV ── */}
+      <nav className="land-nav">
+        <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.5px', color: '#22C55E' }}>
           Cuadra
         </span>
-        <div className="flex items-center gap-3">
-          <a href="#features" className="hidden sm:block text-sm text-[#71717A] hover:text-[#18181B] dark:hover:text-white transition-colors">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <a href="#features" className="btn-ghost" style={{ padding: '7px 14px', display: 'none' }}>
             Features
           </a>
-          <a href="#como-funciona" className="hidden sm:block text-sm text-[#71717A] hover:text-[#18181B] dark:hover:text-white transition-colors">
-            Cómo funciona
+          <a href="#contacto" className="btn-ghost" style={{ padding: '7px 14px' }}>
+            Contacto
           </a>
-          <Link
-            to="/login"
-            className="px-4 py-2 rounded-lg text-sm font-semibold
-                       bg-[#5E6AD2] text-white hover:bg-[#4A55BE]
-                       dark:bg-[#22C55E] dark:text-black dark:hover:bg-[#4ADE80]
-                       transition-all duration-150 active:scale-[0.98]"
-          >
+          <Link to="/login" className="btn-green">
             Ingresar →
           </Link>
         </div>
       </nav>
 
-      {/* ── Hero ── */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-24 pb-16 text-center overflow-hidden">
+      {/* ── HERO ── */}
+      <section style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '96px 24px 64px', textAlign: 'center', overflow: 'hidden' }}>
 
-        {/* Glow de fondo */}
-        <div className="hero-glow absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] rounded-full
-                          bg-[#5E6AD2]/10 dark:bg-[#22C55E]/8 blur-3xl" />
+        {/* Orbes de fondo */}
+        <div className="glow-orb" style={{ position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)', width: 700, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, #22C55E18 0%, transparent 70%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', top: '30%', left: '25%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, #5E6AD218 0%, transparent 70%)', pointerEvents: 'none', opacity: 0.5 }} />
+
+        {/* Badge live */}
+        <div className="live-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 999, background: '#22C55E12', border: '1px solid #22C55E30', color: '#22C55E', fontSize: 12, fontWeight: 600, marginBottom: 28 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', display: 'inline-block' }} />
+          Sistema de conciliación bancaria · en producción
         </div>
 
-        {/* Badge */}
-        <div className="badge-pulse inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium mb-6
-                        bg-[#5E6AD2]/10 text-[#5E6AD2] border border-[#5E6AD2]/20
-                        dark:bg-[#22C55E]/10 dark:text-[#22C55E] dark:border-[#22C55E]/20">
-          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-          Sistema de conciliación bancaria
-        </div>
-
-        {/* Título */}
-        <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight leading-[1.1] mb-6 max-w-3xl">
-          Los números{' '}
-          <span className="text-[#5E6AD2] dark:text-[#22C55E]">cuadran</span>
-          {' '}solos
+        {/* Headline */}
+        <h1 style={{ fontSize: 'clamp(40px, 7vw, 80px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-2px', maxWidth: 800, marginBottom: 24 }}>
+          Los números<br />
+          <span className="grad-text">cuadran solos.</span>
         </h1>
 
-        <p className="text-lg sm:text-xl text-[#71717A] dark:text-[#71717A] max-w-xl mb-10 leading-relaxed">
-          Conciliá extractos bancarios, gestioná caja, cheques y órdenes de pago.
-          Todo desde el celular o la web, para vos y tu equipo.
+        <p style={{ fontSize: 'clamp(16px, 2.5vw, 20px)', color: '#71717A', maxWidth: 520, lineHeight: 1.65, marginBottom: 40 }}>
+          Conciliación bancaria automática, gestión de caja, cheques y órdenes de pago.
+          Para vos y tu equipo, desde el celular o la web.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 mb-16">
-          <Link
-            to="/login"
-            className="px-6 py-3 rounded-xl text-base font-semibold
-                       bg-[#5E6AD2] text-white hover:bg-[#4A55BE]
-                       dark:bg-[#22C55E] dark:text-black dark:hover:bg-[#4ADE80]
-                       transition-all duration-150 active:scale-[0.98] shadow-lg"
-          >
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginBottom: 72 }}>
+          <Link to="/login" className="btn-green large">
             Ingresar al sistema →
           </Link>
-          <a
-            href="#como-funciona"
-            className="px-6 py-3 rounded-xl text-base font-medium
-                       border border-[#E4E4E7] dark:border-[#1E1E26]
-                       text-[#71717A] hover:text-[#18181B] dark:hover:text-white
-                       hover:bg-white dark:hover:bg-[#16161C]
-                       transition-all duration-150"
-          >
-            Ver cómo funciona
+          <a href="#contacto" className="btn-ghost" style={{ padding: '14px 28px', fontSize: 16, borderRadius: 12 }}>
+            Conocer más
           </a>
         </div>
 
-        {/* Mockup flotante */}
-        <div className="float-card relative w-full max-w-sm mx-auto">
-          <div className="rounded-2xl border border-[#E4E4E7] dark:border-[#1E1E26]
-                          bg-white dark:bg-[#16161C] shadow-2xl overflow-hidden">
-            {/* Barra superior mockup */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#E4E4E7] dark:border-[#1E1E26]">
-              <span className="text-xs font-semibold text-[#5E6AD2] dark:text-[#22C55E]">Cuadra</span>
-              <div className="flex gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#E4E4E7] dark:bg-[#1E1E26]" />
-                <div className="w-2.5 h-2.5 rounded-full bg-[#E4E4E7] dark:bg-[#1E1E26]" />
-                <div className="w-2.5 h-2.5 rounded-full bg-[#22C55E]" />
-              </div>
-            </div>
-            {/* Filas mockup conciliación */}
-            <div className="p-4 space-y-2">
-              {[
-                { label: 'Green SRL', monto: '$124.500', estado: 'ok' },
-                { label: 'Tucu Inversiones', monto: '$89.200', estado: 'ok' },
-                { label: 'David Prop.', monto: '$212.000', estado: 'warn' },
-                { label: 'Innova SA', monto: '$56.800', estado: 'ok' },
-              ].map((row, i) => (
-                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg
-                                        bg-[#F4F4F5] dark:bg-[#111116]">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-1.5 h-1.5 rounded-full ${row.estado === 'ok' ? 'bg-[#22C55E]' : 'bg-[#F59E0B]'}`} />
-                    <span className="text-xs font-medium text-[#18181B] dark:text-[#E4E4E7]">{row.label}</span>
-                  </div>
-                  <span className="text-xs font-mono text-[#71717A]">{row.monto}</span>
-                </div>
-              ))}
-              <div className="pt-2 flex items-center justify-between">
-                <span className="text-xs text-[#71717A]">3 conciliados · 1 pendiente</span>
-                <span className="text-xs font-semibold text-[#22C55E]">↓ Exportar</span>
-              </div>
-            </div>
-          </div>
+        {/* Mockup */}
+        <div className="mock-float" style={{ width: '100%', maxWidth: 560, perspective: 1000 }}>
+          <div style={{ borderRadius: 20, border: '1px solid #1E1E26', background: '#13131A', boxShadow: '0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px #22C55E18', overflow: 'hidden' }}>
 
-          {/* Card flotante de caja */}
-          <div className="absolute -right-4 -bottom-4 rounded-xl border border-[#E4E4E7] dark:border-[#1E1E26]
-                          bg-white dark:bg-[#16161C] shadow-xl p-3 w-40">
-            <p className="text-2xs font-semibold text-[#71717A] uppercase tracking-wider mb-1">Caja hoy</p>
-            <p className="text-base font-bold font-mono text-[#18181B] dark:text-[#E4E4E7]">$482.300</p>
-            <p className="text-2xs text-[#22C55E] font-semibold mt-0.5">✓ Cuadra</p>
+            {/* Topbar mockup */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #1E1E26', background: '#0F0F16' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: '#22C55E18', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>⚡</div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#22C55E' }}>Cuadra</span>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {['#FF5F57','#FFBD2E','#28C840'].map(c => <div key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />)}
+              </div>
+            </div>
+
+            {/* Contenido mockup */}
+            <div style={{ padding: 16 }}>
+              {/* Stats row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+                {[
+                  { label: 'Conciliados', val: '47', color: '#22C55E' },
+                  { label: 'Pendientes', val: '3', color: '#F59E0B' },
+                  { label: 'Caja', val: '$482k', color: '#5E6AD2' },
+                ].map(s => (
+                  <div key={s.label} style={{ background: '#0F0F16', borderRadius: 10, padding: '10px 12px', border: '1px solid #1E1E26' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: s.color, fontFamily: 'monospace' }}>{s.val}</div>
+                    <div style={{ fontSize: 10, color: '#52525B', marginTop: 2 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Filas conciliación */}
+              <div style={{ fontSize: 11, color: '#52525B', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Planilla Mayo 2025
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {[
+                  { cliente: 'Green SRL', importe: '$124.500', ok: true },
+                  { cliente: 'Tucu Inversiones', importe: '$89.200', ok: true },
+                  { cliente: 'David Prop.', importe: '$212.000', ok: false },
+                  { cliente: 'Innova SA', importe: '$56.800', ok: true },
+                  { cliente: 'Gwinn Group', importe: '$98.400', ok: true },
+                ].map((r, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: '#0F0F16', border: '1px solid #1A1A24' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: r.ok ? '#22C55E' : '#F59E0B', boxShadow: r.ok ? '0 0 6px #22C55E66' : '0 0 6px #F59E0B66' }} />
+                      <span style={{ fontSize: 12, fontWeight: 500, color: '#D4D4D8' }}>{r.cliente}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#71717A' }}>{r.importe}</span>
+                      <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: r.ok ? '#22C55E18' : '#F59E0B18', color: r.ok ? '#22C55E' : '#F59E0B', fontWeight: 600 }}>
+                        {r.ok ? 'OK' : 'REVISAR'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer mockup */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid #1E1E26' }}>
+                <span style={{ fontSize: 11, color: '#52525B' }}>4 conciliados · 1 para revisar</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#22C55E', fontWeight: 600, cursor: 'pointer' }}>
+                  ↓ Exportar Excel
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── Features ── */}
-      <section id="features" className="px-6 py-24 max-w-5xl mx-auto">
-        <Reveal className="text-center mb-16">
-          <p className="text-sm font-semibold text-[#5E6AD2] dark:text-[#22C55E] uppercase tracking-wider mb-3">
-            Todo en un lugar
-          </p>
-          <h2 className="text-3xl sm:text-4xl font-bold">
-            Diseñado para el trabajo diario
-          </h2>
-        </Reveal>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {features.map((f, i) => (
-            <Reveal key={f.title} delay={i * 80}>
-              <div className="h-full rounded-2xl border border-[#E4E4E7] dark:border-[#1E1E26]
-                              bg-white dark:bg-[#16161C]
-                              hover:border-[#5E6AD2]/40 dark:hover:border-[#22C55E]/30
-                              hover:shadow-lg transition-all duration-200 p-6">
-                <div className="text-3xl mb-4">{f.icon}</div>
-                <h3 className="font-semibold text-base mb-2">{f.title}</h3>
-                <p className="text-sm text-[#71717A] leading-relaxed">{f.desc}</p>
+      {/* ── STATS ── */}
+      <section style={{ padding: '0 24px 80px' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 1, background: '#1A1A24', borderRadius: 16, overflow: 'hidden', border: '1px solid #1E1E26' }}>
+          {STATS.map((s, i) => (
+            <R key={s.label} delay={i * 60}>
+              <div style={{ padding: '28px 24px', background: '#09090D', textAlign: 'center' }}>
+                <div style={{ fontSize: 32, fontWeight: 800, color: '#22C55E', fontFamily: 'monospace', letterSpacing: '-1px' }}>{s.value}</div>
+                <div style={{ fontSize: 12, color: '#52525B', marginTop: 4 }}>{s.label}</div>
               </div>
-            </Reveal>
+            </R>
           ))}
         </div>
       </section>
 
-      {/* ── Cómo funciona ── */}
-      <section id="como-funciona" className="px-6 py-24 bg-white dark:bg-[#111116]">
-        <div className="max-w-4xl mx-auto">
-          <Reveal className="text-center mb-16">
-            <p className="text-sm font-semibold text-[#5E6AD2] dark:text-[#22C55E] uppercase tracking-wider mb-3">
-              Simple por diseño
-            </p>
-            <h2 className="text-3xl sm:text-4xl font-bold">
-              De la planilla al Excel del contador
-            </h2>
-            <p className="text-[#71717A] mt-4 max-w-lg mx-auto">
-              En tres pasos. Sin configuración compleja.
-            </p>
-          </Reveal>
+      {/* ── FEATURES ── */}
+      <section id="features" style={{ padding: '80px 24px' }}>
+        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+          <R className="">
+            <div style={{ textAlign: 'center', marginBottom: 56 }}>
+              <div style={{ display: 'inline-block', padding: '5px 14px', borderRadius: 999, background: '#22C55E12', border: '1px solid #22C55E25', color: '#22C55E', fontSize: 12, fontWeight: 600, marginBottom: 16, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Todo en un lugar
+              </div>
+              <h2 style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 800, letterSpacing: '-1px', marginBottom: 12 }}>
+                Diseñado para el trabajo diario
+              </h2>
+              <p style={{ color: '#71717A', fontSize: 16, maxWidth: 460, margin: '0 auto' }}>
+                Cada módulo construido para que sea rápido usarlo, no para que sea lindo explicarlo.
+              </p>
+            </div>
+          </R>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {steps.map((s, i) => (
-              <Reveal key={s.n} delay={i * 120}>
-                <div className="relative">
-                  {/* Línea conectora */}
-                  {i < 2 && (
-                    <div className="hidden md:block absolute top-6 left-full w-full h-px
-                                    bg-gradient-to-r from-[#E4E4E7] dark:from-[#1E1E26] to-transparent
-                                    -translate-x-4" />
-                  )}
-                  <div className="text-4xl font-bold font-mono
-                                  text-[#5E6AD2]/20 dark:text-[#22C55E]/20 mb-4">
-                    {s.n}
-                  </div>
-                  <h3 className="font-semibold text-lg mb-2">{s.title}</h3>
-                  <p className="text-sm text-[#71717A] leading-relaxed">{s.desc}</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            {FEATURES.map((f, i) => (
+              <R key={f.title} delay={i * 70}>
+                <div className="grad-border" style={{ padding: 24, height: '100%', cursor: 'default', transition: 'transform 0.2s' }}
+                     onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-3px)')}
+                     onMouseLeave={e => (e.currentTarget.style.transform = '')}>
+                  <div style={{ fontSize: 28, marginBottom: 14 }}>{f.icon}</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, color: '#E4E4E7' }}>{f.title}</div>
+                  <div style={{ fontSize: 13, color: '#71717A', lineHeight: 1.65 }}>{f.desc}</div>
                 </div>
-              </Reveal>
+              </R>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Para tu equipo ── */}
-      <section className="px-6 py-24 max-w-4xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-          <Reveal>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Desde el celular o la web
-            </h2>
-            <p className="text-[#71717A] leading-relaxed mb-6">
-              Instalala como app en el celular para registrar OPs y cheques en movimiento.
-              Usá la web para subir extractos, conciliar y exportar al contador.
-            </p>
-            <ul className="space-y-3">
-              {[
-                'PWA instalable — sin App Store, sin Play Store',
-                'Android e iPhone',
-                'Funciona sin conexión para consultas',
-                'Actualizaciones automáticas — sin reinstalar',
-              ].map(item => (
-                <li key={item} className="flex items-start gap-3 text-sm">
-                  <span className="text-[#22C55E] font-bold mt-0.5">✓</span>
-                  <span className="text-[#71717A]">{item}</span>
-                </li>
-              ))}
-            </ul>
-          </Reveal>
-
-          <Reveal delay={150}>
-            <div className="rounded-2xl border border-[#E4E4E7] dark:border-[#1E1E26]
-                            bg-white dark:bg-[#16161C] p-6 space-y-4">
-              <div className="flex items-center gap-3 pb-4 border-b border-[#E4E4E7] dark:border-[#1E1E26]">
-                <div className="w-10 h-10 rounded-xl bg-[#5E6AD2]/10 dark:bg-[#22C55E]/10
-                                flex items-center justify-center text-xl">
-                  📱
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">Campo / cobranza</p>
-                  <p className="text-xs text-[#71717A]">Celular · PWA instalada</p>
-                </div>
+      {/* ── CÓMO FUNCIONA ── */}
+      <section style={{ padding: '80px 24px', background: '#0D0D13', borderTop: '1px solid #1A1A24', borderBottom: '1px solid #1A1A24' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto' }}>
+          <R>
+            <div style={{ textAlign: 'center', marginBottom: 56 }}>
+              <div style={{ display: 'inline-block', padding: '5px 14px', borderRadius: 999, background: '#22C55E12', border: '1px solid #22C55E25', color: '#22C55E', fontSize: 12, fontWeight: 600, marginBottom: 16, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Simple por diseño
               </div>
-              <div className="flex items-center gap-3 pb-4 border-b border-[#E4E4E7] dark:border-[#1E1E26]">
-                <div className="w-10 h-10 rounded-xl bg-[#5E6AD2]/10 dark:bg-[#22C55E]/10
-                                flex items-center justify-center text-xl">
-                  💻
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">Contabilidad / conciliación</p>
-                  <p className="text-xs text-[#71717A]">Web · cualquier navegador</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#5E6AD2]/10 dark:bg-[#22C55E]/10
-                                flex items-center justify-center text-xl">
-                  👁
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">Supervisión / auditoría</p>
-                  <p className="text-xs text-[#71717A]">Web o celular · modo lectura</p>
-                </div>
-              </div>
+              <h2 style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 800, letterSpacing: '-1px' }}>
+                De la planilla al Excel del contador
+              </h2>
             </div>
-          </Reveal>
+          </R>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
+            {STEPS.map((s, i) => (
+              <R key={s.n} delay={i * 100}>
+                <div style={{ padding: '28px 24px', borderRadius: 16, background: '#13131A', border: '1px solid #1E1E26', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ fontSize: 56, fontWeight: 900, color: '#22C55E10', fontFamily: 'monospace', lineHeight: 1, marginBottom: 12, letterSpacing: '-2px' }}>{s.n}</div>
+                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: '#E4E4E7' }}>{s.title}</div>
+                  <div style={{ fontSize: 13, color: '#71717A', lineHeight: 1.65 }}>{s.desc}</div>
+                  {i < STEPS.length - 1 && (
+                    <div style={{ position: 'absolute', top: '50%', right: -16, width: 32, height: 1, background: 'linear-gradient(to right, #22C55E40, transparent)', display: 'none' }} />
+                  )}
+                </div>
+              </R>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ── CTA final ── */}
-      <section className="px-6 py-24 bg-white dark:bg-[#111116]">
-        <Reveal className="max-w-2xl mx-auto text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-            ¿Ya tenés acceso?
-          </h2>
-          <p className="text-[#71717A] mb-8">
-            El sistema requiere cuenta habilitada. Si sos parte de un equipo que ya usa Cuadra, ingresá directamente.
-          </p>
-          <Link
-            to="/login"
-            className="inline-flex px-8 py-4 rounded-xl text-base font-semibold
-                       bg-[#5E6AD2] text-white hover:bg-[#4A55BE]
-                       dark:bg-[#22C55E] dark:text-black dark:hover:bg-[#4ADE80]
-                       transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#5E6AD2]/20 dark:shadow-[#22C55E]/20"
-          >
-            Ingresar al sistema →
-          </Link>
-        </Reveal>
+      {/* ── PARA TU EQUIPO ── */}
+      <section style={{ padding: '80px 24px' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 48, alignItems: 'center' }}>
+          <R>
+            <div>
+              <div style={{ display: 'inline-block', padding: '5px 14px', borderRadius: 999, background: '#22C55E12', border: '1px solid #22C55E25', color: '#22C55E', fontSize: 12, fontWeight: 600, marginBottom: 20, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                PWA instalable
+              </div>
+              <h2 style={{ fontSize: 'clamp(26px, 3.5vw, 38px)', fontWeight: 800, letterSpacing: '-1px', marginBottom: 16, lineHeight: 1.2 }}>
+                Desde el celular<br />o la web
+              </h2>
+              <p style={{ color: '#71717A', lineHeight: 1.7, marginBottom: 24, fontSize: 15 }}>
+                Instalala como app sin pasar por el App Store ni el Play Store.
+                Actualizaciones automáticas — sin reinstalar nunca.
+              </p>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {['Android e iPhone', 'Sin instalación desde tiendas', 'Actualizaciones silenciosas', 'Notificaciones push'].map(item => (
+                  <li key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: '#A1A1AA' }}>
+                    <span style={{ color: '#22C55E', fontWeight: 700, fontSize: 16 }}>✓</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </R>
+
+          <R delay={150}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[
+                { icon: '📱', title: 'Campo / cobranza', sub: 'Celular · OPs, fotos, caja', color: '#22C55E' },
+                { icon: '💻', title: 'Contabilidad', sub: 'Web · extractos, conciliación, exports', color: '#5E6AD2' },
+                { icon: '👁', title: 'Supervisión', sub: 'Web o celular · solo lectura', color: '#F59E0B' },
+              ].map(r => (
+                <div key={r.title} className="grad-border" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: `${r.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+                    {r.icon}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#E4E4E7' }}>{r.title}</div>
+                    <div style={{ fontSize: 12, color: '#52525B', marginTop: 2 }}>{r.sub}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </R>
+        </div>
       </section>
 
-      {/* ── Footer ── */}
-      <footer className="px-6 py-8 border-t border-[#E4E4E7] dark:border-[#1E1E26]">
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <span className="text-sm font-semibold text-[#5E6AD2] dark:text-[#22C55E]">Cuadra</span>
-          <div className="flex items-center gap-6 text-xs text-[#71717A]">
-            <Link to="/privacidad" className="hover:text-[#18181B] dark:hover:text-white transition-colors">
+      {/* ── CONTACTO ── */}
+      <section id="contacto" style={{ padding: '80px 24px', background: '#0D0D13', borderTop: '1px solid #1A1A24' }}>
+        <div style={{ maxWidth: 560, margin: '0 auto' }}>
+          <R>
+            <div style={{ textAlign: 'center', marginBottom: 40 }}>
+              <div style={{ display: 'inline-block', padding: '5px 14px', borderRadius: 999, background: '#22C55E12', border: '1px solid #22C55E25', color: '#22C55E', fontSize: 12, fontWeight: 600, marginBottom: 16, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Contacto
+              </div>
+              <h2 style={{ fontSize: 'clamp(26px, 3.5vw, 38px)', fontWeight: 800, letterSpacing: '-1px', marginBottom: 12 }}>
+                ¿Querés implementar Cuadra?
+              </h2>
+              <p style={{ color: '#71717A', fontSize: 15, lineHeight: 1.65 }}>
+                Escribime directo por WhatsApp o completá el formulario y te contacto a la brevedad.
+              </p>
+            </div>
+          </R>
+
+          <R delay={100}>
+            {/* WhatsApp directo */}
+            <div style={{ textAlign: 'center', marginBottom: 32 }}>
+              <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="wa-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+                Escribir por WhatsApp
+              </a>
+            </div>
+
+            {/* Separador */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
+              <div style={{ flex: 1, height: 1, background: '#1E1E26' }} />
+              <span style={{ fontSize: 12, color: '#52525B' }}>o completá el formulario</span>
+              <div style={{ flex: 1, height: 1, background: '#1E1E26' }} />
+            </div>
+
+            {/* Formulario */}
+            {formSent ? (
+              <div style={{ textAlign: 'center', padding: '32px 24px', borderRadius: 16, background: '#22C55E10', border: '1px solid #22C55E30' }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>✅</div>
+                <div style={{ fontWeight: 700, color: '#22C55E', marginBottom: 8 }}>¡Mensaje enviado!</div>
+                <div style={{ fontSize: 13, color: '#71717A' }}>Te abrió WhatsApp con tu mensaje. Respondemos a la brevedad.</div>
+              </div>
+            ) : (
+              <form onSubmit={handleContact} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: '#A1A1AA', display: 'block', marginBottom: 6 }}>Nombre</label>
+                    <input
+                      className="land-input"
+                      placeholder="Tu nombre"
+                      value={form.nombre}
+                      onChange={e => setForm(p => ({ ...p, nombre: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: '#A1A1AA', display: 'block', marginBottom: 6 }}>Email (opcional)</label>
+                    <input
+                      className="land-input"
+                      type="email"
+                      placeholder="tu@email.com"
+                      value={form.email}
+                      onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: '#A1A1AA', display: 'block', marginBottom: 6 }}>¿En qué puedo ayudarte?</label>
+                  <textarea
+                    className="land-input"
+                    placeholder="Contame sobre tu empresa y qué necesitás..."
+                    rows={4}
+                    value={form.mensaje}
+                    onChange={e => setForm(p => ({ ...p, mensaje: e.target.value }))}
+                    required
+                    style={{ resize: 'vertical' }}
+                  />
+                </div>
+                <button type="submit" className="btn-green" style={{ padding: '13px 24px', fontSize: 15, borderRadius: 12, justifyContent: 'center' }}>
+                  Enviar por WhatsApp →
+                </button>
+                <p style={{ fontSize: 11, color: '#52525B', textAlign: 'center', marginTop: -4 }}>
+                  Al enviar, se abre WhatsApp con tu mensaje listo para mandar.
+                </p>
+              </form>
+            )}
+          </R>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer style={{ padding: '28px 24px', borderTop: '1px solid #1A1A24' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <span style={{ fontWeight: 700, color: '#22C55E', fontSize: 15 }}>Cuadra</span>
+          <div style={{ display: 'flex', gap: 20 }}>
+            <Link to="/privacidad" style={{ fontSize: 12, color: '#52525B', textDecoration: 'none' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#A1A1AA')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#52525B')}>
               Política de privacidad
             </Link>
-            <Link to="/terminos" className="hover:text-[#18181B] dark:hover:text-white transition-colors">
+            <Link to="/terminos" style={{ fontSize: 12, color: '#52525B', textDecoration: 'none' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#A1A1AA')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#52525B')}>
               Términos y condiciones
             </Link>
           </div>
-          <span className="text-xs text-[#A1A1AA]">
-            © {new Date().getFullYear()} Julieta Arrazate
-          </span>
+          <span style={{ fontSize: 11, color: '#3A3A48' }}>© {new Date().getFullYear()} Julieta Arrazate</span>
         </div>
       </footer>
     </div>
