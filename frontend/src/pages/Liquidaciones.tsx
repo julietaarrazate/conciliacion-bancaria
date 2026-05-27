@@ -53,7 +53,8 @@ export const Liquidaciones: React.FC = () => {
   const [form, setForm] = useState({
     periodo_inicio: '',
     periodo_fin: '',
-    notas: ''
+    notas: '',
+    porcentaje_comision: '' as string,
   })
 
   const isAdmin = user?.is_superadmin || user?.role === 'admin'
@@ -83,7 +84,16 @@ export const Liquidaciones: React.FC = () => {
     setSaving(true)
     setMsg('')
     try {
-      await apiClient.client.post('/liquidaciones/generar', form)
+      const payload: Record<string, any> = {
+        periodo_inicio: form.periodo_inicio,
+        periodo_fin: form.periodo_fin,
+        notas: form.notas,
+      }
+      if (form.porcentaje_comision !== '') {
+        const pct = parseFloat(form.porcentaje_comision)
+        if (!isNaN(pct) && pct > 0) payload.porcentaje_comision = pct
+      }
+      await apiClient.client.post('/liquidaciones/generar', payload)
       setMsg('✓ Liquidación generada en estado borrador')
       setShowGenerar(false)
       load()
@@ -197,6 +207,34 @@ export const Liquidaciones: React.FC = () => {
                 <label className="label">Notas (opcional)</label>
                 <input className="input-field" placeholder="Observaciones..."
                   value={form.notas} onChange={e => setForm(p => ({ ...p, notas: e.target.value }))} />
+              </div>
+              <div className="md:col-span-2">
+                <label className="label">Comisión (% — dejar vacío usa config de la org)</label>
+                <div className="flex gap-2 flex-wrap items-center">
+                  {['1.5', '1.8', '2'].map(pct => (
+                    <button key={pct} type="button"
+                      onClick={() => setForm(p => ({ ...p, porcentaje_comision: p.porcentaje_comision === pct ? '' : pct }))}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                        form.porcentaje_comision === pct
+                          ? 'bg-ml-blue text-white border-ml-blue dark:bg-ml-green dark:border-ml-green'
+                          : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-ml-blue dark:hover:border-ml-green'
+                      }`}>
+                      {pct}%
+                    </button>
+                  ))}
+                  <input
+                    type="number" step="0.1" min="0" max="100"
+                    placeholder="Otro %"
+                    className="input-field w-28"
+                    value={form.porcentaje_comision}
+                    onChange={e => setForm(p => ({ ...p, porcentaje_comision: e.target.value }))}
+                  />
+                  {form.porcentaje_comision !== '' && (
+                    <span className="text-xs text-gray-400 dark:text-zinc-500">
+                      = {form.porcentaje_comision}% para todos los clientes
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex gap-2 mt-3 justify-end">

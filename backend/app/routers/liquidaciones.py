@@ -103,6 +103,14 @@ def generar_liquidacion(
     if cierre:
         raise HTTPException(400, "Ya existe un cierre para este período")
 
+    # Comisión override manual (si se pasa en el payload, aplica a todos los clientes)
+    pct_override = payload.get("porcentaje_comision")
+    if pct_override is not None:
+        try:
+            pct_override = Decimal(str(pct_override))
+        except Exception:
+            pct_override = None
+
     # Obtener clientes activos de la org
     clientes = db.query(Cliente).filter(Cliente.organizacion_id == org_id).all()
 
@@ -115,7 +123,7 @@ def generar_liquidacion(
         if monto == 0:
             continue
 
-        pct = _comision_cliente(config, cliente.nombre)
+        pct = pct_override if pct_override is not None else _comision_cliente(config, cliente.nombre)
         comision = round(monto * pct / 100, 2)
         neto = round(monto - comision, 2)
 
