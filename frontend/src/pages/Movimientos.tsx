@@ -100,7 +100,9 @@ export const Movimientos: React.FC = () => {
   const [acredSaving, setAcredSaving] = useState(false)
   const [acredError, setAcredError] = useState('')
   const [renumerando, setRenumerando] = useState(false)
+  const [recuperando, setRecuperando] = useState(false)
   const umRef = useRef<HTMLInputElement>(null)
+  const recuperarRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     apiClient.listExtractos(activeOrgId).then(data => {
@@ -331,6 +333,46 @@ export const Movimientos: React.FC = () => {
             >
               📤 Para contador
             </button>
+          )}
+          {extractoId && user?.is_superadmin && (
+            <label
+              className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md font-medium cursor-pointer ${recuperando ? 'opacity-50 bg-gray-400 text-white' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
+              title="Superadmin: recuperar valores reales de orden subiendo el Excel original del extracto"
+            >
+              {recuperando ? '⏳' : '🔧'} Recuperar orden (Excel)
+              <input
+                ref={recuperarRef}
+                type="file"
+                accept=".xlsx,.xls"
+                hidden
+                disabled={recuperando}
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  if (!f || !extractoId) return
+                  const confirmed = await confirmDialog({
+                    title: 'Recuperar orden desde Excel',
+                    message: `Voy a parsear "${f.name}" y restaurar los valores de orden originales del banco. Los movimientos que no estén en el Excel (UM agregados después) reciben orden consecutivo arrancando desde el último del Excel.`,
+                    confirmLabel: 'Recuperar',
+                    danger: false,
+                  })
+                  if (!confirmed) {
+                    if (recuperarRef.current) recuperarRef.current.value = ''
+                    return
+                  }
+                  setRecuperando(true)
+                  try {
+                    const r = await apiClient.recuperarOrden(extractoId, f)
+                    setUmMsg(`✓ Recuperación OK — Excel: ${r.excel_movs} movs, DB: ${r.total_db}, matcheados: ${r.matched}, sin match (UM): ${r.unmatched}, último orden: ${r.ultimo_orden}`)
+                    load()
+                  } catch (err: any) {
+                    setUmMsg(`✗ Recuperar: ${err.response?.data?.detail || err.message}`)
+                  } finally {
+                    setRecuperando(false)
+                    if (recuperarRef.current) recuperarRef.current.value = ''
+                  }
+                }}
+              />
+            </label>
           )}
           {extractoId && user?.is_superadmin && (
             <button

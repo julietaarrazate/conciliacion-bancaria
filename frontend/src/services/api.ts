@@ -416,6 +416,20 @@ class ApiClient {
     return res.data
   }
 
+  async recuperarOrden(extractoId: number, file: File): Promise<{
+    ok: boolean; total_db: number; excel_movs: number; matched: number;
+    unmatched: number; max_excel_orden: number; ultimo_orden: number;
+  }> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await this.client.post(
+      `/extractos/${extractoId}/recuperar-orden`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    )
+    return res.data
+  }
+
   async guardarEnCarpeta(planillaId: number): Promise<{ path?: string; blob: Blob }> {
     const res = await this.client.post(`/clientes/planillas/${planillaId}/guardar`, {}, { responseType: 'blob' })
     const savedPath = res.headers['x-saved-path'] as string | undefined

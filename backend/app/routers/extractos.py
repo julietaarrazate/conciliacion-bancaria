@@ -599,6 +599,94 @@ def delete_movimiento(
         raise HTTPException(500, "Error al borrar el movimiento. Intentá de nuevo.")
 
 
+@router.post("/{extracto_id}/recuperar-orden")
+async def recuperar_orden(
+    extracto_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Recupera los valores reales de `orden` (numeracion del banco) a partir
+    del Excel original del extracto. Matchea movimientos de la DB por
+    (fecha, monto, saldo) → asigna el orden del Excel. Los movimientos que
+    no matchean (UM agregados despues) reciben orden consecutivo arrancando
+    desde (max_orden_excel + 1), ordenados por (fecha DESC, id ASC).
+    """
+    if not current_user.is_superadmin:
+        raise HTTPException(403, "Solo superadmin")
+    extracto = _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
+
+    contents = await file.read()
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+        parsed = parsear_extracto_bancario(tmp_path)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+    movs_excel = parsed["movimientos"]
+
+    def _key(fecha, monto, saldo):
+        if fecha is None or monto is None or saldo is None:
+            return None
+        fecha_iso = fecha.isoformat() if hasattr(fecha, "isoformat") else str(fecha)
+        return (fecha_iso, round(float(monto), 2), round(float(saldo), 2))
+
+    excel_index: dict = {}
+    max_excel_orden = 0
+    for m in movs_excel:
+        if m.get("orden") is None:
+            continue
+        k = _key(m.get("fecha"), m.get("monto"), m.get("saldo"))
+        if k is None:
+            continue
+        excel_index.setdefault(k, []).append(int(m["orden"]))
+        if int(m["orden"]) > max_excel_orden:
+            max_excel_orden = int(m["orden"])
+
+    db_movs = (
+        db.query(MovimientoBanco)
+        .filter(MovimientoBanco.extracto_id == extracto.id)
+        .all()
+    )
+
+    matched = 0
+    unmatched_movs = []
+    for m in db_movs:
+        k = _key(m.fecha, m.monto, m.saldo)
+        if k is not None and k in excel_index and excel_index[k]:
+            m.orden = excel_index[k].pop(0)
+            matched += 1
+        else:
+            unmatched_movs.append(m)
+
+    unmatched_movs.sort(
+        key=lambda x: (
+            -(x.fecha.toordinal() if x.fecha else 0),
+            x.id,
+        )
+    )
+    next_orden = max_excel_orden + len(unmatched_movs)
+    for m in unmatched_movs:
+        m.orden = next_orden
+        next_orden -= 1
+
+    db.commit()
+
+    return {
+        "ok": True,
+        "total_db": len(db_movs),
+        "excel_movs": len(movs_excel),
+        "matched": matched,
+        "unmatched": len(unmatched_movs),
+        "max_excel_orden": max_excel_orden,
+        "ultimo_orden": max_excel_orden + len(unmatched_movs),
+    }
+
+
 @router.post("/{extracto_id}/renumerar-orden")
 def renumerar_orden(
     extracto_id: int,
