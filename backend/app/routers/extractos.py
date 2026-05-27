@@ -593,6 +593,28 @@ def delete_movimiento(
         raise HTTPException(500, "Error al borrar el movimiento. Intentá de nuevo.")
 
 
+@router.post("/{extracto_id}/renumerar-orden")
+def renumerar_orden(
+    extracto_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Renumera los movimientos del extracto de 1..N cerrando cualquier hueco."""
+    if not current_user.superadmin:
+        raise HTTPException(403, "Solo superadmin")
+    extracto = _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
+    movs = (
+        db.query(MovimientoBanco)
+        .filter(MovimientoBanco.extracto_id == extracto.id)
+        .order_by(MovimientoBanco.orden.nullslast(), MovimientoBanco.id)
+        .all()
+    )
+    for i, m in enumerate(movs):
+        m.orden = i + 1
+    db.commit()
+    return {"ok": True, "total": len(movs), "ultimo_orden": len(movs)}
+
+
 @router.get("/{extracto_id}", response_model=ExtractoBancarioResponse)
 def get_extracto(extracto_id: int, db: Session = Depends(get_db),
                  current_user: User = Depends(get_current_user)):

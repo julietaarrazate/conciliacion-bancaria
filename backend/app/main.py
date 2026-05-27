@@ -360,34 +360,6 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error seed contabilidad: %s", ex)
 
-    # 7b. Renumerar movimientos con huecos en el orden (one-shot, idempotente)
-    try:
-        from app.database import SessionLocal as SL
-        from app.models.extracto import ExtractoBancario, MovimientoBanco
-        db = SL()
-        extractos = db.query(ExtractoBancario).filter(ExtractoBancario.deleted_at.is_(None)).all()
-        total_renumerados = 0
-        for ext in extractos:
-            movs = (db.query(MovimientoBanco)
-                    .filter(MovimientoBanco.extracto_id == ext.id,
-                            MovimientoBanco.orden.isnot(None))
-                    .order_by(MovimientoBanco.orden)
-                    .all())
-            if not movs:
-                continue
-            expected = list(range(1, len(movs) + 1))
-            actual   = [m.orden for m in movs]
-            if actual != expected:
-                for i, m in enumerate(movs):
-                    m.orden = i + 1
-                    total_renumerados += 1
-        if total_renumerados:
-            db.commit()
-            logger.info("Renumeración: %d movimientos corregidos", total_renumerados)
-        db.close()
-    except Exception as ex:
-        logger.warning("Error renumeración movimientos: %s", ex)
-
     # 7. Backfill contabilidad — genera asientos para extractos/planillas existentes
     try:
         from app.database import SessionLocal as SL
