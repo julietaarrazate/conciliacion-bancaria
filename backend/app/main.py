@@ -273,6 +273,7 @@ def _init_db():
             ("1-1-1-1", "Caja chica",           "activo",   "1-1-1-0",  4),
             ("1-1-1-2", "Efectivo",             "activo",   "1-1-1-0",  4),
             ("1-1-1-3", "Banco",                "activo",   "1-1-1-0",  4),
+            ("1-1-1-3-1", "Banco Macro",        "activo",   "1-1-1-3",  5),
             ("2-1-1-1", "No identificado",      "pasivo",   "2-1-1-0",  4),
             ("2-1-2-1", "Green",                "pasivo",   "2-1-2-0",  4),
             ("2-1-2-2", "Tucu",                 "pasivo",   "2-1-2-0",  4),
@@ -317,6 +318,27 @@ def _init_db():
         else:
             # Build code→id map from existing rows (needed for reglas seed below)
             code_to_id = {c.codigo: c.id for c in db.query(PlanCuenta).filter(PlanCuenta.organizacion_id == 1).all()}
+
+        # Patch: add new accounts to existing seeds (runs every boot, idempotent)
+        PLAN_PATCH = [
+            ("1-1-1-3-1", "Banco Macro", "activo", "1-1-1-3", 5),
+        ]
+        patch_added = 0
+        for codigo, nombre, tipo, parent_codigo, nivel in PLAN_PATCH:
+            if codigo not in code_to_id:
+                parent_id = code_to_id.get(parent_codigo)
+                c = PlanCuenta(
+                    codigo=codigo, nombre=nombre, tipo=tipo,
+                    parent_id=parent_id, nivel=nivel,
+                    activo=True, organizacion_id=1
+                )
+                db.add(c)
+                db.flush()
+                code_to_id[codigo] = c.id
+                patch_added += 1
+        if patch_added:
+            db.commit()
+            logger.info("Plan patch: %d cuentas nuevas agregadas", patch_added)
 
         # Seed reglas if missing (independent of cuentas seed)
         if n_reglas == 0 and code_to_id:
