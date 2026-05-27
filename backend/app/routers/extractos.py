@@ -571,19 +571,21 @@ def delete_movimiento(
     if periodo_esta_cerrado(db, extracto.organizacion_id or 1, fecha_check):
         raise HTTPException(409, "El periodo ya está cerrado — este movimiento no se puede borrar")
     try:
-        orden_borrado = mov.orden
         db.query(PlanillaRow).filter(
             PlanillaRow.orden_movimiento_acreditado == mov_id
         ).update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
         db.flush()
         db.delete(mov)
         db.flush()
-        # Renumerar: corrimiento -1 para todos los movimientos posteriores del mismo extracto
-        if orden_borrado is not None:
-            db.query(MovimientoBanco).filter(
-                MovimientoBanco.extracto_id == extracto_id,
-                MovimientoBanco.orden > orden_borrado
-            ).update({"orden": MovimientoBanco.orden - 1}, synchronize_session="fetch")
+        # Renumerar todo el extracto 1..N para cerrar el hueco
+        movs = (
+            db.query(MovimientoBanco)
+            .filter(MovimientoBanco.extracto_id == extracto_id)
+            .order_by(MovimientoBanco.orden.nullslast(), MovimientoBanco.id)
+            .all()
+        )
+        for i, m in enumerate(movs):
+            m.orden = i + 1
         db.commit()
         registrar_log(db, current_user.id, "movimientos_banco", mov_id, "DELETE", {})
         return {"ok": True}
