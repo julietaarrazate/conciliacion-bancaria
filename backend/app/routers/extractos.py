@@ -163,9 +163,17 @@ async def upload_extracto(file: UploadFile = File(...),
         extracto = ExtractoBancario(nombre_archivo=file.filename, creado_por=current_user.id, fingerprint=fp, banco=banco_final)
         db.add(extracto)
         db.flush()
-        for m in movs:
+        # Orden: contador global secuencial — NO usar valores del banco.
+        # El más antiguo recibe max_global+1, el más reciente max_global+N.
+        # Los movimientos del parser vienen newest-first → se asigna en reversa.
+        from sqlalchemy import func as _func
+        max_global = db.query(_func.max(MovimientoBanco.orden)).scalar() or 0
+        n_movs = len(movs)
+        for i, m in enumerate(movs):
+            # i=0 es el más reciente → orden más alto
+            orden_asignado = max_global + (n_movs - i)
             db.add(MovimientoBanco(
-                extracto_id=extracto.id, orden=m.get("orden"),
+                extracto_id=extracto.id, orden=orden_asignado,
                 fecha=m.get("fecha"), mes=m.get("mes"),
                 titular=m.get("titular"), monto=m.get("monto"), saldo=m.get("saldo"),
                 cliente_acreditado=m.get("cliente_acreditado"),
@@ -574,8 +582,20 @@ def delete_movimiento(
         db.query(PlanillaRow).filter(
             PlanillaRow.orden_movimiento_acreditado == mov_id
         ).update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
+        orden_borrado = mov.orden
         db.flush()
         db.delete(mov)
+        db.flush()
+        # Cerrar el hueco: todos los movimientos con orden mayor al borrado
+        # dentro del mismo extracto decrementan en 1.
+        if orden_borrado is not None:
+            db.query(MovimientoBanco).filter(
+                MovimientoBanco.extracto_id == extracto_id,
+                MovimientoBanco.orden > orden_borrado,
+            ).update(
+                {MovimientoBanco.orden: MovimientoBanco.orden - 1},
+                synchronize_session=False,
+            )
         db.commit()
         registrar_log(db, current_user.id, "movimientos_banco", mov_id, "DELETE", {})
         return {"ok": True}
