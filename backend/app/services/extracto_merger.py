@@ -93,28 +93,6 @@ def mergear_movimientos(
         if m.um_lote and m.um_lote > max_lote:
             max_lote = m.um_lote
 
-    # Detectar duplicados internos del UM.
-    # Usa titular EXACTO + monto + fecha — no normalizar, para no generar falsos positivos.
-    um_vistos: set = set()
-    um_deduped: list = []
-    duplicados_internos: list = []
-    for mov_data in movimientos_nuevos:
-        m = _to_float(mov_data.get("monto"))
-        fecha = mov_data.get("fecha")
-        fecha_iso = fecha.isoformat() if isinstance(fecha, date) else (str(fecha) if fecha else "")
-        titular = (mov_data.get("titular") or "").strip()
-        if titular and m is not None and fecha_iso:
-            key = (fecha_iso, titular, round(m, 2))
-        else:
-            key = None
-        if key is not None and key in um_vistos:
-            duplicados_internos.append(mov_data)
-        else:
-            if key is not None:
-                um_vistos.add(key)
-            um_deduped.append(mov_data)
-    movimientos_nuevos = um_deduped
-
     corte_idx: Optional[int] = None
     corte_metodo = "ninguno"
 
@@ -220,9 +198,8 @@ def mergear_movimientos(
     return {
         "agregados": agregados,
         "duplicados": duplicados,
-        "duplicados_internos": len(duplicados_internos),
         "corte_en": corte_idx,
         "corte_metodo": corte_metodo,
         "corte_saldo_detectado": corte_saldo_detectado,
-        "total_recibido": len(movimientos_nuevos) + len(duplicados_internos),
+        "total_recibido": len(movimientos_nuevos),
     }
