@@ -375,14 +375,11 @@ def _init_db():
                     .all())
             if not movs:
                 continue
-            min_orden = movs[0].orden
-            tiene_hueco = any(
-                movs[i].orden != movs[i-1].orden + 1
-                for i in range(1, len(movs))
-            )
-            if tiene_hueco:
+            expected = list(range(1, len(movs) + 1))
+            actual   = [m.orden for m in movs]
+            if actual != expected:
                 for i, m in enumerate(movs):
-                    m.orden = min_orden + i
+                    m.orden = i + 1
                     total_renumerados += 1
         if total_renumerados:
             db.commit()
