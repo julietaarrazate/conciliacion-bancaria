@@ -94,19 +94,21 @@ def mergear_movimientos(
             max_lote = m.um_lote
 
     # Eliminar duplicados internos dentro del UM (mismo archivo con fila repetida).
-    um_seen: list = []
+    # Solo usa saldo+monto: el saldo es acumulativo y nunca se repite en dos
+    # transacciones distintas, así que es el único criterio seguro para duplicados
+    # reales dentro del mismo archivo.
+    um_saldos_vistos: set = set()
     um_deduped: list = []
     duplicados_internos: list = []
     for mov_data in movimientos_nuevos:
-        if _match_existente(mov_data, um_seen):
+        s = _to_float(mov_data.get("saldo"))
+        m = _to_float(mov_data.get("monto"))
+        key = (round(s, 2), round(m, 2)) if s is not None and m is not None else None
+        if key is not None and key in um_saldos_vistos:
             duplicados_internos.append(mov_data)
         else:
-            monto_n = _to_float(mov_data.get("monto"))
-            saldo_n = _to_float(mov_data.get("saldo"))
-            fecha = mov_data.get("fecha")
-            fecha_iso = fecha.isoformat() if isinstance(fecha, date) else (str(fecha) if fecha else "")
-            titular_norm = _normalizar_titular(mov_data.get("titular"))
-            um_seen.append((monto_n, saldo_n, fecha_iso, titular_norm))
+            if key is not None:
+                um_saldos_vistos.add(key)
             um_deduped.append(mov_data)
     movimientos_nuevos = um_deduped
 
