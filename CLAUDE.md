@@ -166,8 +166,17 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - **Plan de cuentas**: sub-cuenta `1-1-1-3-1 Banco Macro` bajo `1-1-1-3 Banco`; PLAN_PATCH idempotente
   agrega cuentas nuevas en cada deploy sin romper instalaciones existentes
 - **Renumeración de movimientos**: al borrar un movimiento duplicado, el `orden` de los siguientes se
-  decrementa automáticamente; startup detecta huecos y renumera siempre 1..N (último orden = total
-  de movimientos del extracto); idempotente en cada deploy
+  decrementa automáticamente (-1 shift); `orden` es un contador secuencial global (NO es número del banco),
+  el más alto = el más reciente. Import asigna `max_global + (n-i)`; UM merger continúa desde `max_orden`.
+- **Boton Borrar UM**: en `/movimientos`, elimina el último lote UM y desvincula planillas afectadas
+  (status queda "ok", `orden_movimiento_acreditado` queda NULL). Al re-subir el UM las planillas
+  se re-concilian normalmente o el export usa fallback automático.
+- **Export planilla robusto**: si una fila "ok" tiene el link al movimiento roto (FK NULL), el export
+  busca el movimiento por monto + cliente en el extracto y rellena igual todas las columnas. Fallback
+  a `row.fecha_acred` para la columna Fecha acred.
+- **Comisión en liquidaciones**: al generar una liquidación se puede elegir 1.5% / 1.8% / 2% (presets)
+  o ingresar un % manual. Si se deja vacío usa el default de la org (1.5%). Aplica a todos los clientes.
+  Comisión por cliente individual: en `org.configuracion.comisiones.por_cliente.{nombre}` (sin UI aún).
 
 ---
 
