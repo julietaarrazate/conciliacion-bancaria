@@ -409,6 +409,11 @@ class ApiClient {
     await this.client.delete(`/extractos/${extractoId}/movimientos/${movId}`)
   }
 
+  async renumerarOrden(extractoId: number): Promise<{ ok: boolean; total: number; ultimo_orden: number }> {
+    const res = await this.client.post(`/extractos/${extractoId}/renumerar-orden`)
+    return res.data
+  }
+
   async guardarEnCarpeta(planillaId: number): Promise<{ path?: string; blob: Blob }> {
     const res = await this.client.post(`/clientes/planillas/${planillaId}/guardar`, {}, { responseType: 'blob' })
     const savedPath = res.headers['x-saved-path'] as string | undefined

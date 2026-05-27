@@ -4,6 +4,7 @@ import { apiClient } from '@/services/api'
 import { ExtractoListItem, MovimientoFiltrado, MovimientosFiltros } from '@/types'
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
+import { useAuthStore } from '@/store/auth'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -76,6 +77,7 @@ const EMPTY: ColFilter = { cliente:'', cuit:'', titular:'', desde:'', hasta:'', 
 export const Movimientos: React.FC = () => {
   const [searchParams] = useSearchParams()
   const { activeOrgId } = useOrgStore()
+  const user = useAuthStore(s => s.user)
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [movimientos, setMovimientos] = useState<MovimientoFiltrado[]>([])
@@ -97,6 +99,7 @@ export const Movimientos: React.FC = () => {
   const [acredModal, setAcredModal] = useState<{ mov: MovimientoFiltrado; cliente: string; fecha: string } | null>(null)
   const [acredSaving, setAcredSaving] = useState(false)
   const [acredError, setAcredError] = useState('')
+  const [renumerando, setRenumerando] = useState(false)
   const umRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -327,6 +330,34 @@ export const Movimientos: React.FC = () => {
               title="Exportar extracto completo conciliado para el contador"
             >
               📤 Para contador
+            </button>
+          )}
+          {extractoId && user?.is_superadmin && (
+            <button
+              onClick={async () => {
+                const confirmed = await confirmDialog({
+                  title: 'Renumerar orden de movimientos',
+                  message: `¿Renumerar todos los movimientos del extracto #${extractoId}? Esto corrige gaps en el orden (ej: tras borrar un duplicado).`,
+                  confirmLabel: 'Renumerar',
+                  danger: false,
+                })
+                if (!confirmed) return
+                setRenumerando(true)
+                try {
+                  const r = await apiClient.renumerarOrden(extractoId!)
+                  setUmMsg(`✓ Orden corregido: ${r.total} movimientos, último orden: ${r.ultimo_orden}`)
+                  load()
+                } catch (err: any) {
+                  setUmMsg(`✗ Renumerar: ${err.response?.data?.detail || err.message}`)
+                } finally {
+                  setRenumerando(false)
+                }
+              }}
+              disabled={renumerando}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50 font-medium"
+              title="Superadmin: renumerar orden de movimientos (corrige gaps tras borrar duplicados)"
+            >
+              {renumerando ? '⏳' : '🔢'} Renumerar
             </button>
           )}
         </div>
