@@ -482,13 +482,32 @@ def _get_cuenta_por_codigo(db: Session, codigo: str, org_id: int) -> Optional[Pl
     )
 
 
-def _get_o_crear_cuenta_cliente(db: Session, cliente_nombre: str, org_id: int) -> Optional[PlanCuenta]:
-    """Busca la cuenta del cliente bajo 2-1-2-0. Si no existe la crea con el próximo código."""
+def _get_o_crear_cuenta_cliente(db: Session, cliente_id: int, org_id: int) -> Optional[PlanCuenta]:
+    """Resuelve la cuenta contable del Cliente EXISTENTE (vínculo 1:1).
+    1. Si el cliente ya tiene cuenta_contable_id → la reutiliza.
+    2. Si existe una cuenta bajo 2-1-2-0 con el mismo nombre → la adopta y la vincula.
+    3. Si no existe ninguna → crea la cuenta con el próximo código y la vincula al cliente.
+    Nunca crea entidades Cliente; solo la cuenta contable asociada al cliente que ya está en el sistema."""
     from sqlalchemy import func as _func
+    from app.models.cliente import Cliente
+
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente:
+        return None
+
+    # 1. Cuenta ya vinculada
+    if cliente.cuenta_contable_id:
+        cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == cliente.cuenta_contable_id).first()
+        if cuenta:
+            return cuenta
+
     padre = _get_cuenta_por_codigo(db, "2-1-2-0", org_id)
     if not padre:
         return None
-    nombre_norm = cliente_nombre.strip().title()
+
+    nombre_norm = (cliente.nombre or "").strip().title()
+
+    # 2. Adoptar cuenta existente por nombre (ej. Green/Tucu/Alojando del seed)
     cuenta = (
         db.query(PlanCuenta)
         .filter(
@@ -499,7 +518,11 @@ def _get_o_crear_cuenta_cliente(db: Session, cliente_nombre: str, org_id: int) -
         .first()
     )
     if cuenta:
+        cliente.cuenta_contable_id = cuenta.id
+        db.flush()
         return cuenta
+
+    # 3. Crear cuenta nueva con el próximo código y vincularla al cliente
     hijos = db.query(PlanCuenta).filter(PlanCuenta.parent_id == padre.id, PlanCuenta.organizacion_id == org_id).all()
     max_n = 0
     for hijo in hijos:
@@ -515,7 +538,9 @@ def _get_o_crear_cuenta_cliente(db: Session, cliente_nombre: str, org_id: int) -
     )
     db.add(nueva)
     db.flush()
-    logger.info("Cuenta cliente creada: %s %s (org %s)", nuevo_codigo, nombre_norm, org_id)
+    cliente.cuenta_contable_id = nueva.id
+    db.flush()
+    logger.info("Cuenta cliente creada: %s %s (cliente_id=%s, org %s)", nuevo_codigo, nombre_norm, cliente_id, org_id)
     return nueva
 
 
@@ -590,19 +615,20 @@ def registrar_reclasificacion_um(
     planilla_row_id: int,
     org_id: int,
     usuario_id: Optional[int],
+    cliente_id: int,
     cliente_nombre: str,
     monto,
     fecha: date,
 ) -> None:
     """Asiento de reclasificación al conciliar un movimiento UM: No identificado (D) / Cliente X (H).
-    La cuenta del cliente se crea automáticamente si no existe."""
+    La cuenta del cliente existente se resuelve/crea/vincula vía _get_o_crear_cuenta_cliente."""
     try:
         if _ya_existe(db, "um_reclass", planilla_row_id, org_id):
             return
         no_id = _get_cuenta_por_codigo(db, "2-1-1-1", org_id)
-        cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_nombre, org_id)
+        cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_id, org_id) if cliente_id else None
         if not no_id or not cuenta_cliente:
-            logger.warning("Cuentas reclasificación no encontradas org %s", org_id)
+            logger.warning("Cuentas reclasificación no encontradas org %s (cliente_id=%s)", org_id, cliente_id)
             return
         monto_d = abs(_monto(monto))
         if monto_d <= 0:

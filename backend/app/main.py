@@ -94,6 +94,7 @@ def _run_alembic():
         "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
         "ALTER TABLE planillas ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
         "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
+        "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cuenta_contable_id INTEGER REFERENCES plan_cuentas(id)",
     ]
     try:
         from sqlalchemy import text as _text
