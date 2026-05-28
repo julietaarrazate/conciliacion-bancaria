@@ -102,6 +102,12 @@ export const Historial: React.FC = () => {
               {filtered.length} planillas · {totalAcred}/{totalFilas} · {pct}%
             </p>
           </div>
+          <button
+            onClick={() => apiClient.exportHistorial({ cliente: filter || undefined })}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/60 transition-colors shrink-0"
+          >
+            📁 Exportar
+          </button>
         </div>
 
         {/* Barra de filtro */}
