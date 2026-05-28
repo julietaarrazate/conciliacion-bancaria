@@ -51,17 +51,15 @@ def _calcular_monto_y_comision(
 ) -> tuple:
     """
     Returns (monto_total, comision_total, pct_efectivo).
-    Priority: per-planilla/cheque % → pct_fallback → 0.
-    Includes planilla rows + acreditated cheques in the period.
+    Priority: per-planilla % → pct_fallback → 0.
+    Only includes planilla rows (TT). Cheques se liquidan por separado en su módulo.
     """
     from app.models.extracto import MovimientoBanco as MB
-    from app.models.cheque import Cheque
 
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
         return Decimal("0"), Decimal("0"), Decimal("0")
 
-    # ── Planilla rows ────────────────────────────────────────────────────────
     rows_q = db.query(PlanillaRow, Planilla).join(
         Planilla, PlanillaRow.planilla_id == Planilla.id
     ).filter(
@@ -100,26 +98,6 @@ def _calcular_monto_y_comision(
         )
         monto_total += monto_fila
         comision_total += monto_fila * pct / 100
-
-    # ── Cheques acreditados en el periodo ────────────────────────────────────
-    cheques = db.query(Cheque).filter(
-        Cheque.organizacion_id == org_id,
-        Cheque.cliente_id == cliente_id,
-        Cheque.estado == "acreditado",
-        Cheque.fecha_acred.isnot(None),
-        Cheque.fecha_acred >= desde,
-        Cheque.fecha_acred <= hasta,
-    ).all()
-
-    for ch in cheques:
-        monto_ch = ch.monto or Decimal("0")
-        pct = (
-            Decimal(str(ch.porcentaje_comision))
-            if ch.porcentaje_comision is not None
-            else (pct_fallback or Decimal("0"))
-        )
-        monto_total += monto_ch
-        comision_total += monto_ch * pct / 100
 
     pct_efectivo = (
         round(comision_total / monto_total * 100, 4) if monto_total > 0 else Decimal("0")

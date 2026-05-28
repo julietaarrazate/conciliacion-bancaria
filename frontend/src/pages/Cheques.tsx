@@ -29,7 +29,7 @@ interface Cheque {
   created_at: string
 }
 
-interface ClienteOpt { id: number; nombre: string }
+interface ClienteOpt { id: number; nombre: string; porcentaje_comision: number | null }
 
 const ESTADO_BADGE: Record<string, string> = {
   pendiente:  'bg-yellow-500/15 text-yellow-400',
@@ -141,7 +141,11 @@ export const Cheques: React.FC = () => {
     apiClient.client.get('/clientes/archivos').then(r => {
       const orgs: any[] = r.data?.organizaciones || []
       const list: ClienteOpt[] = []
-      orgs.forEach(org => (org.clientes || []).forEach((c: any) => list.push({ id: c.id, nombre: c.nombre })))
+      orgs.forEach(org => (org.clientes || []).forEach((c: any) => list.push({
+        id: c.id,
+        nombre: c.nombre,
+        porcentaje_comision: c.porcentaje_comision ?? null,
+      })))
       setClientes(list)
     }).catch(() => {})
   }, [])
@@ -398,7 +402,17 @@ export const Cheques: React.FC = () => {
               <div className="col-span-2">
                 <label className="block text-xs text-gray-400 mb-1">Cliente</label>
                 <select value={formData.cliente_id ?? ''}
-                  onChange={e => setFormData(p => ({ ...p, cliente_id: e.target.value ? parseInt(e.target.value) : null }))}
+                  onChange={e => {
+                    const id = e.target.value ? parseInt(e.target.value) : null
+                    const cli = clientes.find(c => c.id === id)
+                    setFormData(p => ({
+                      ...p,
+                      cliente_id: id,
+                      porcentaje_comision: p.porcentaje_comision != null
+                        ? p.porcentaje_comision
+                        : (cli?.porcentaje_comision ?? null),
+                    }))
+                  }}
                   className={inputClass}>
                   <option value="">Sin cliente</option>
                   {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -410,12 +424,18 @@ export const Cheques: React.FC = () => {
               {formField('monto', 'Monto *', 'number')}
               {formField('comision', 'Comisión banco', 'number')}
               <div>
-                <label className="block text-xs text-gray-400 mb-1">% Comisión liquidación</label>
+                <label className="block text-xs text-gray-400 mb-1">% Comisión</label>
                 <input type="number" step="0.1" min="0" max="100" placeholder="ej: 1.5"
                   className={inputClass}
                   value={formData.porcentaje_comision ?? ''}
                   onChange={e => setFormData(p => ({ ...p, porcentaje_comision: e.target.value === '' ? null : parseFloat(e.target.value) }))}
                 />
+                {formData.porcentaje_comision != null && (() => {
+                  const cli = clientes.find(c => c.id === formData.cliente_id)
+                  return cli?.porcentaje_comision === formData.porcentaje_comision
+                    ? <p className="text-xs text-gray-500 mt-0.5">↑ del cliente (podés cambiarlo)</p>
+                    : null
+                })()}
               </div>
               {formField('fecha_emision', 'Fecha emisión', 'date')}
               {formField('fecha_deposito', 'Fecha depósito', 'date')}
