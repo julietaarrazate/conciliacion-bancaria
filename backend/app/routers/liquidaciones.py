@@ -46,30 +46,31 @@ def _comision_cliente(config: dict, cliente_nombre: str) -> Decimal:
 
 def _calcular_monto_conciliado(db: Session, org_id: int, cliente_id: int,
                                 desde: date, hasta: date) -> Decimal:
-    """Suma montos de movimientos acreditados a este cliente en el periodo."""
-    from app.models.extracto import MovimientoBanco
-    from app.models.extracto import ExtractoBancario
+    """Suma montos de movimientos acreditados a este cliente en el periodo (por fecha_acred)."""
+    from app.models.extracto import MovimientoBanco as MB
 
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
         return Decimal("0")
 
-    planillas = db.query(Planilla).filter(
+    # Filter by fecha_acred (accreditation date set during conciliation) not fecha_carga (upload date)
+    rows = db.query(PlanillaRow).join(
+        Planilla, PlanillaRow.planilla_id == Planilla.id
+    ).filter(
         Planilla.organizacion_id == org_id,
         Planilla.cliente_id == cliente_id,
         Planilla.deleted_at.is_(None),
-        Planilla.fecha_carga >= datetime.combine(desde, datetime.min.time()),
-        Planilla.fecha_carga <= datetime.combine(hasta, datetime.max.time())
+        PlanillaRow.status == "ok",
+        PlanillaRow.fecha_acred >= desde,
+        PlanillaRow.fecha_acred <= hasta,
+        PlanillaRow.orden_movimiento_acreditado.isnot(None)
     ).all()
 
     total = Decimal("0")
-    for p in planillas:
-        for row in p.rows:
-            if row.status == "ok" and row.orden_movimiento_acreditado:
-                from app.models.extracto import MovimientoBanco as MB
-                mov = db.query(MB).filter(MB.id == row.orden_movimiento_acreditado).first()
-                if mov:
-                    total += mov.monto or Decimal("0")
+    for row in rows:
+        mov = db.query(MB).filter(MB.id == row.orden_movimiento_acreditado).first()
+        if mov:
+            total += mov.monto or Decimal("0")
     return round(total, 2)
 
 
