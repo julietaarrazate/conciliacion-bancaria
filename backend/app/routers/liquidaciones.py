@@ -2,7 +2,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, or_, func
 from typing import Optional
 from datetime import date, datetime
 import io
@@ -46,14 +46,15 @@ def _comision_cliente(config: dict, cliente_nombre: str) -> Decimal:
 
 def _calcular_monto_conciliado(db: Session, org_id: int, cliente_id: int,
                                 desde: date, hasta: date) -> Decimal:
-    """Suma montos de movimientos acreditados a este cliente en el periodo (por fecha_acred)."""
+    """Suma montos de filas ok en el período, usando fecha_acred cuando existe."""
     from app.models.extracto import MovimientoBanco as MB
 
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
         return Decimal("0")
 
-    # Filter by fecha_acred (accreditation date set during conciliation) not fecha_carga (upload date)
+    # Primary: rows with fecha_acred in range
+    # Fallback: rows where fecha_acred is NULL → use planilla.fecha_carga for date scoping
     rows = db.query(PlanillaRow).join(
         Planilla, PlanillaRow.planilla_id == Planilla.id
     ).filter(
@@ -61,16 +62,29 @@ def _calcular_monto_conciliado(db: Session, org_id: int, cliente_id: int,
         Planilla.cliente_id == cliente_id,
         Planilla.deleted_at.is_(None),
         PlanillaRow.status == "ok",
-        PlanillaRow.fecha_acred >= desde,
-        PlanillaRow.fecha_acred <= hasta,
-        PlanillaRow.orden_movimiento_acreditado.isnot(None)
+        or_(
+            and_(
+                PlanillaRow.fecha_acred.isnot(None),
+                PlanillaRow.fecha_acred >= desde,
+                PlanillaRow.fecha_acred <= hasta,
+            ),
+            and_(
+                PlanillaRow.fecha_acred.is_(None),
+                func.date(Planilla.fecha_carga) >= desde,
+                func.date(Planilla.fecha_carga) <= hasta,
+            ),
+        )
     ).all()
 
     total = Decimal("0")
     for row in rows:
-        mov = db.query(MB).filter(MB.id == row.orden_movimiento_acreditado).first()
-        if mov:
-            total += mov.monto or Decimal("0")
+        if row.orden_movimiento_acreditado:
+            mov = db.query(MB).filter(MB.id == row.orden_movimiento_acreditado).first()
+            # Use movement monto if found; fall back to row.monto if movement was deleted
+            total += (mov.monto if mov else row.monto) or Decimal("0")
+        else:
+            # FK is NULL (UM deleted or manual acreditation) — use row's own monto
+            total += row.monto or Decimal("0")
     return round(total, 2)
 
 
