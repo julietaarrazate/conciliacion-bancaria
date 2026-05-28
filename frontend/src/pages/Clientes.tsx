@@ -98,6 +98,16 @@ export const Clientes: React.FC = () => {
   const [editComisionVal, setEditComisionVal] = useState('')
   const [savingComision, setSavingComision] = useState(false)
 
+  // Renombrar cliente
+  const [renombrando, setRenombrando] = useState<number | null>(null)
+  const [renombreVal, setRenombreVal] = useState('')
+  const [savingRenombre, setSavingRenombre] = useState(false)
+
+  // Fusionar clientes
+  const [fusionandoId, setFusionandoId] = useState<number | null>(null) // source client id
+  const [fusionTargetId, setFusionTargetId] = useState<number | ''>('')
+  const [savingFusion, setSavingFusion] = useState(false)
+
   // Modal acreditar comprobante
   const [acreditarCli, setAcreditarCli] = useState<{ id: number; nombre: string } | null>(null)
   const [acrMonto, setAcrMonto] = useState('')
@@ -269,6 +279,41 @@ export const Clientes: React.FC = () => {
     } finally { setCreandoLoading(false) }
   }
 
+  const handleRenombrar = async (clienteId: number) => {
+    if (!renombreVal.trim()) return
+    setSavingRenombre(true)
+    try {
+      await apiClient.client.put(`/clientes/${clienteId}/renombrar`, { nombre: renombreVal.trim() })
+      setMsg(`✓ Cliente renombrado a "${renombreVal.trim()}"`)
+      setRenombrando(null)
+      apiClient.invalidateCache(activeOrgId ? `/clientes/archivos?org_id=${activeOrgId}` : '/clientes/archivos')
+      cargar()
+    } catch (e: any) {
+      setMsg(`✗ ${e.response?.data?.detail || 'Error al renombrar'}`)
+    } finally { setSavingRenombre(false) }
+  }
+
+  const handleFusionar = async (sourceId: number, sourceNombre: string) => {
+    if (!fusionTargetId) return
+    const targetCliente = orgs.flatMap(o => o.clientes).find(c => c.id === fusionTargetId)
+    if (!targetCliente) return
+    if (!await confirmDialog({
+      title: `Fusionar "${sourceNombre}" en "${targetCliente.nombre}"`,
+      message: `Se reasignarán todas las planillas y movimientos de "${sourceNombre}" a "${targetCliente.nombre}". Esta acción no se puede deshacer.`,
+      confirmLabel: 'Fusionar', danger: true,
+    })) return
+    setSavingFusion(true)
+    try {
+      const r = await apiClient.client.post(`/clientes/${sourceId}/fusionar`, { target_id: fusionTargetId })
+      setMsg(`✓ ${r.data.mensaje} · ${r.data.planillas_reasignadas} planilla(s) reasignada(s)`)
+      setFusionandoId(null); setFusionTargetId('')
+      apiClient.invalidateCache(activeOrgId ? `/clientes/archivos?org_id=${activeOrgId}` : '/clientes/archivos')
+      cargar()
+    } catch (e: any) {
+      setMsg(`✗ ${e.response?.data?.detail || 'Error al fusionar'}`)
+    } finally { setSavingFusion(false) }
+  }
+
   const handleGuardarComision = async (clienteId: number) => {
     setSavingComision(true)
     try {
@@ -393,8 +438,50 @@ export const Clientes: React.FC = () => {
                     ) : org.clientes.map(cliente => {
                       const cliKey = `${org.id}-${cliente.id}`
                       const cliOpen = openCli[cliKey]
+                      const otrosClientes = org.clientes.filter(c => c.id !== cliente.id)
                       return (
                         <div key={cliente.id}>
+                          {/* Fila renombrar (modo edición inline) */}
+                          {renombrando === cliente.id && (
+                            <div className="flex items-center gap-1.5 pl-6 pr-3 py-2 bg-amber-50 dark:bg-amber-900/10 border-b dark:border-slate-700/50">
+                              <input
+                                className="input-field text-xs flex-1"
+                                value={renombreVal}
+                                onChange={e => setRenombreVal(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleRenombrar(cliente.id); if (e.key === 'Escape') setRenombrando(null) }}
+                                autoFocus
+                                placeholder="Nuevo nombre"
+                              />
+                              <button onClick={() => handleRenombrar(cliente.id)} disabled={savingRenombre || !renombreVal.trim()}
+                                className="px-2 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-30">
+                                {savingRenombre ? '⏳' : 'Guardar'}
+                              </button>
+                              <button onClick={() => setRenombrando(null)} className="px-1.5 py-1 text-xs text-gray-400 hover:text-gray-600">✕</button>
+                            </div>
+                          )}
+                          {/* Fila fusionar */}
+                          {fusionandoId === cliente.id && (
+                            <div className="flex items-center gap-1.5 pl-6 pr-3 py-2 bg-purple-50 dark:bg-purple-900/10 border-b dark:border-slate-700/50">
+                              <span className="text-xs text-purple-700 dark:text-purple-300 shrink-0">Fusionar en →</span>
+                              <select
+                                className="input-field text-xs flex-1"
+                                value={fusionTargetId}
+                                onChange={e => setFusionTargetId(Number(e.target.value))}
+                              >
+                                <option value="">— seleccioná el cliente destino —</option>
+                                {otrosClientes.map(c => (
+                                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                                ))}
+                              </select>
+                              <button onClick={() => handleFusionar(cliente.id, cliente.nombre)}
+                                disabled={savingFusion || !fusionTargetId}
+                                className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-30">
+                                {savingFusion ? '⏳' : 'Fusionar'}
+                              </button>
+                              <button onClick={() => { setFusionandoId(null); setFusionTargetId('') }}
+                                className="px-1.5 py-1 text-xs text-gray-400 hover:text-gray-600">✕</button>
+                            </div>
+                          )}
                           <div className="flex items-center gap-1 pl-6 pr-3 py-2.5 hover:bg-gray-50 dark:hover:bg-slate-700/40 transition-colors">
                             <button
                               onClick={() => setOpenCli(o => ({ ...o, [cliKey]: !cliOpen }))}
@@ -451,6 +538,22 @@ export const Clientes: React.FC = () => {
                             >
                               💸<span className="hidden md:inline"> Acreditar</span>
                             </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setRenombrando(cliente.id); setRenombreVal(cliente.nombre) }}
+                              className="p-1 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded flex-shrink-0"
+                              title="Renombrar cliente"
+                            >
+                              ✏️
+                            </button>
+                            {otrosClientes.length > 0 && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setFusionandoId(cliente.id); setFusionTargetId('') }}
+                                className="p-1 text-purple-500 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded flex-shrink-0"
+                                title="Fusionar con otro cliente"
+                              >
+                                🔀
+                              </button>
+                            )}
                             <button
                               onClick={(e) => { e.stopPropagation(); handleBorrarCliente(cliente.id, cliente.nombre, cliente.total_archivos) }}
                               className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex-shrink-0"

@@ -694,6 +694,117 @@ def crear_cliente(payload: dict,
     return {"id": c.id, "nombre": c.nombre, "cuit": c.cuit, "organizacion_id": c.organizacion_id}
 
 
+@router.put("/{cliente_id}/renombrar")
+def renombrar_cliente(
+    cliente_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cambia el nombre de un cliente y actualiza todos los movimientos que lo referencian."""
+    from app.models.cliente import Cliente
+    from app.services.auditoria import registrar_log
+
+    nuevo_nombre = (payload.get("nombre") or "").strip()
+    if not nuevo_nombre:
+        raise HTTPException(400, "El nombre es obligatorio")
+
+    q = db.query(Cliente).filter(Cliente.id == cliente_id)
+    if not current_user.is_superadmin:
+        q = q.filter(Cliente.organizacion_id == current_user.organizacion_id)
+    cli = q.first()
+    if not cli:
+        raise HTTPException(404, "Cliente no encontrado")
+
+    # Verificar que no exista otro cliente con ese nombre (case-insensitive)
+    existente = db.query(Cliente).filter(
+        Cliente.nombre.ilike(nuevo_nombre),
+        Cliente.organizacion_id == cli.organizacion_id,
+        Cliente.id != cliente_id,
+    ).first()
+    if existente:
+        raise HTTPException(409, f"Ya existe el cliente '{existente.nombre}'")
+
+    nombre_anterior = cli.nombre
+    cli.nombre = nuevo_nombre
+
+    # Actualizar referencias en movimientos
+    db.query(MovimientoBanco).filter(
+        MovimientoBanco.cliente_acreditado.ilike(nombre_anterior),
+        MovimientoBanco.organizacion_id == cli.organizacion_id,
+    ).update({"cliente_acreditado": nuevo_nombre}, synchronize_session=False)
+
+    db.commit()
+    registrar_log(db, current_user.id, "clientes", cli.id, "UPDATE",
+                  {"nombre_anterior": nombre_anterior, "nombre_nuevo": nuevo_nombre})
+    return {"id": cli.id, "nombre": cli.nombre}
+
+
+@router.post("/{cliente_id}/fusionar")
+def fusionar_clientes(
+    cliente_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fusiona cliente_id (source) dentro de target_id.
+    Reasigna todas las planillas y movimientos del source al target, luego borra el source.
+    """
+    from app.models.cliente import Cliente
+    from app.services.auditoria import registrar_log
+
+    target_id = payload.get("target_id")
+    if not target_id:
+        raise HTTPException(400, "target_id es obligatorio")
+
+    if cliente_id == target_id:
+        raise HTTPException(400, "El cliente origen y destino deben ser distintos")
+
+    org_filter = {} if current_user.is_superadmin else {"organizacion_id": current_user.organizacion_id or 1}
+
+    source = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    target = db.query(Cliente).filter(Cliente.id == target_id).first()
+    if not source or not target:
+        raise HTTPException(404, "Cliente no encontrado")
+    if source.organizacion_id != target.organizacion_id:
+        raise HTTPException(400, "Los clientes deben pertenecer a la misma organización")
+    if not current_user.is_superadmin and source.organizacion_id != (current_user.organizacion_id or 1):
+        raise HTTPException(403, "Sin permiso para fusionar clientes de otra organización")
+
+    # Reasignar planillas
+    planillas_reasignadas = db.query(Planilla).filter(Planilla.cliente_id == cliente_id).count()
+    db.query(Planilla).filter(Planilla.cliente_id == cliente_id).update(
+        {"cliente_id": target_id}, synchronize_session=False
+    )
+
+    # Actualizar cliente_acreditado en movimientos
+    movs_actualizados = db.query(MovimientoBanco).filter(
+        MovimientoBanco.cliente_acreditado.ilike(source.nombre),
+        MovimientoBanco.organizacion_id == source.organizacion_id,
+    ).count()
+    db.query(MovimientoBanco).filter(
+        MovimientoBanco.cliente_acreditado.ilike(source.nombre),
+        MovimientoBanco.organizacion_id == source.organizacion_id,
+    ).update({"cliente_acreditado": target.nombre}, synchronize_session=False)
+
+    nombre_source = source.nombre
+    db.delete(source)
+    db.commit()
+
+    registrar_log(db, current_user.id, "clientes", target_id, "FUSIONAR",
+                  {"source": nombre_source, "target": target.nombre,
+                   "planillas_reasignadas": planillas_reasignadas,
+                   "movimientos_actualizados": movs_actualizados})
+
+    return {
+        "ok": True,
+        "mensaje": f"'{nombre_source}' fusionado en '{target.nombre}'",
+        "planillas_reasignadas": planillas_reasignadas,
+        "movimientos_actualizados": movs_actualizados,
+    }
+
+
 @router.put("/{cliente_id}/comision")
 def actualizar_comision_cliente(
     cliente_id: int,
