@@ -432,6 +432,45 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error backfill contabilidad: %s", ex)
 
+    # 7b. Backfill vínculo Cliente → cuenta contable (conservador)
+    # Vincula cada cliente sin cuenta a la cuenta existente bajo 2-1-2-0 cuyo
+    # nombre coincide (normalizado, sin acentos). Si no hay match claro, deja
+    # el cliente sin vincular — NUNCA crea cuentas dudosas. Idempotente.
+    try:
+        import unicodedata as _ud
+        from app.database import SessionLocal as SL
+        from app.models.cliente import Cliente as Cli
+        from app.models.contabilidad import PlanCuenta as PC
+
+        def _norm(s):
+            s = (s or "").strip().lower()
+            s = "".join(c for c in _ud.normalize("NFKD", s) if not _ud.combining(c))
+            return s
+
+        db = SL()
+        padre = db.query(PC).filter(PC.codigo == "2-1-2-0", PC.organizacion_id == 1).first()
+        if padre:
+            cuentas = db.query(PC).filter(PC.parent_id == padre.id, PC.organizacion_id == 1).all()
+            por_nombre = {}
+            for c in cuentas:
+                por_nombre.setdefault(_norm(c.nombre), c)  # primera gana ante homónimos
+            n_vinc = 0
+            sin_match = []
+            for cli in db.query(Cli).filter(Cli.organizacion_id == 1, Cli.cuenta_contable_id.is_(None)).all():
+                cuenta = por_nombre.get(_norm(cli.nombre))
+                if cuenta:
+                    cli.cuenta_contable_id = cuenta.id
+                    n_vinc += 1
+                else:
+                    sin_match.append(cli.nombre)
+            if n_vinc:
+                db.commit()
+            logger.info("Backfill cuentas cliente: %d vinculados, %d sin match (%s)",
+                        n_vinc, len(sin_match), ", ".join(sin_match[:10]) or "—")
+        db.close()
+    except Exception as ex:
+        logger.warning("Error backfill cuentas cliente: %s", ex)
+
     # 8. Seed usuarios
     try:
         from app.database import SessionLocal as SL
