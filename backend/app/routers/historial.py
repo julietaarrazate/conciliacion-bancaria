@@ -64,7 +64,11 @@ def list_planillas(
 
     items = []
     for p in planillas:
-        statuses = [r.status for r in p.rows]
+        rows = p.rows
+        statuses = [r.status for r in rows]
+        monto_ok = sum(
+            float(r.monto) for r in rows if r.status == "ok" and r.monto is not None
+        )
         items.append(
             PlanillaHistorialItem(
                 id=p.id,
@@ -79,7 +83,8 @@ def list_planillas(
                     1 for s in statuses
                     if s == "duplicado" or (isinstance(s, str) and s.startswith("acreditado"))
                 ),
-                sin_datos=sum(1 for s in statuses if s == "faltan datos")
+                sin_datos=sum(1 for s in statuses if s == "faltan datos"),
+                monto_conciliado=monto_ok,
             )
         )
 

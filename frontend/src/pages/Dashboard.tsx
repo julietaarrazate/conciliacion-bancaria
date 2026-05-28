@@ -259,6 +259,13 @@ export const Dashboard: React.FC = () => {
     ? Math.round((totalAcreditadas / totalProcesadas) * 100)
     : 0
 
+  // Monto conciliado HOY (planillas cargadas hoy)
+  const hoyStr = new Date().toISOString().split('T')[0]
+  const planillasHoy = planillas.filter(p => p.fecha_carga.startsWith(hoyStr))
+  const montoConciliadoHoy = planillasHoy.reduce((s, p) => s + (p.monto_conciliado ?? 0), 0)
+  const fmtMonto = (n: number) =>
+    n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
+
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="mb-6">
@@ -292,11 +299,18 @@ export const Dashboard: React.FC = () => {
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="kpi">
-          <p className="kpi-label">Movimientos (extracto activo)</p>
-          <p className="kpi-value">{totalMovimientos.toLocaleString('es-AR')}</p>
+          <p className="kpi-label">Conciliado hoy</p>
+          <p className="kpi-value text-ml-green dark:text-ml-green">
+            {montoConciliadoHoy > 0 ? fmtMonto(montoConciliadoHoy) : '—'}
+          </p>
+          {planillasHoy.length > 0 && (
+            <p className="text-xs text-ml-text-soft dark:text-gray-500 mt-0.5">
+              {planillasHoy.length} planilla{planillasHoy.length !== 1 ? 's' : ''}
+            </p>
+          )}
         </div>
         <div className="kpi">
-          <p className="kpi-label">Acreditadas</p>
+          <p className="kpi-label">Acreditadas (últimas 5)</p>
           <p className="kpi-value text-green-600">{totalAcreditadas}</p>
         </div>
         <div className="kpi">
@@ -304,8 +318,8 @@ export const Dashboard: React.FC = () => {
           <p className="kpi-value text-ml-blue">{accuracy}%</p>
         </div>
         <div className="kpi">
-          <p className="kpi-label">Extractos cargados</p>
-          <p className="kpi-value">{extractos.length}</p>
+          <p className="kpi-label">Movimientos extracto</p>
+          <p className="kpi-value">{totalMovimientos.toLocaleString('es-AR')}</p>
         </div>
       </div>
 

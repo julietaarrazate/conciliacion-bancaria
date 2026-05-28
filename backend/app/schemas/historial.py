@@ -14,6 +14,7 @@ class PlanillaHistorialItem(BaseModel):
     no_encontradas: int
     duplicadas: int
     sin_datos: int
+    monto_conciliado: float = 0.0
 
     class Config:
         from_attributes = True

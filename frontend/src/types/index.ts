@@ -80,6 +80,7 @@ export interface PlanillaHistorialItem {
   no_encontradas: number
   duplicadas: number
   sin_datos: number
+  monto_conciliado: number
 }
 
 export interface ExtractoHistorialItem {
