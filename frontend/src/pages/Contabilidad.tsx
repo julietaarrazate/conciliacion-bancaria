@@ -763,7 +763,7 @@ export const Contabilidad: React.FC = () => {
                           <td className="px-3 py-2 font-mono text-[11px] text-gray-400">{c.cuenta?.codigo}</td>
                           <td className="px-3 py-2 text-right font-mono text-gray-700 dark:text-gray-300">{fmtNum(c.saldo)}</td>
                           <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{c.ultimo_movimiento ? fmtDate(c.ultimo_movimiento) : '—'}</td>
-                          <td className="px-3 py-2"><span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${g.cls}`}>{g.label}</span></td>
+                          <td className="px-3 py-2"><span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${g.cls}`} title={c.estado_general === 'sin_actividad' ? 'Cuenta vinculada sin movimientos contables (no implica inactividad comercial)' : undefined}>{g.label}</span></td>
                           <td className="px-3 py-2 text-right"><span className="text-ml-blue text-[11px] hover:underline">Ver →</span></td>
                         </tr>
                       )
@@ -773,6 +773,9 @@ export const Contabilidad: React.FC = () => {
               </div>
             )
           })()}
+          <p className="text-[10px] text-gray-400 mt-2">
+            "Sin actividad" = cuenta contable vinculada pero sin movimientos en la cuenta corriente. No implica inactividad comercial del cliente.
+          </p>
         </div>
 
       ) : tab === 'ctacte' ? (

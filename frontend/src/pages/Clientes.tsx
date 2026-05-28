@@ -75,7 +75,7 @@ export const Clientes: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const { activeOrgId } = useOrgStore()
   const navigate = useNavigate()
-  const puedeVerCtaCte = useAuthStore(s => s.hasPermission('manage_users'))
+  const puedeVerCtaCte = useAuthStore(s => s.hasPermission('view_accounting'))
   const [orgs, setOrgs] = useState<OrgData[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -485,7 +485,7 @@ export const Clientes: React.FC = () => {
                                 className="px-1.5 py-1 text-xs text-gray-400 hover:text-gray-600">✕</button>
                             </div>
                           )}
-                          <div className="flex items-center gap-1 pl-6 pr-3 py-2.5 hover:bg-gray-50 dark:hover:bg-slate-700/40 transition-colors">
+                          <div className="flex items-center gap-1 pl-3 md:pl-6 pr-2 md:pr-3 py-2.5 hover:bg-gray-50 dark:hover:bg-slate-700/40 transition-colors">
                             <button
                               onClick={() => setOpenCli(o => ({ ...o, [cliKey]: !cliOpen }))}
                               className="flex items-center gap-2 flex-1 min-w-0 text-left"

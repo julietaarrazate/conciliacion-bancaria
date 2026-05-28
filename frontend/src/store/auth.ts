@@ -14,10 +14,10 @@ interface AuthState {
 }
 
 const rolePermissions: Record<UserRole, string[]> = {
-  [UserRole.ADMIN]: ['upload_files', 'reconcile', 'manage_users', 'view_audit'],
-  [UserRole.OPERADOR]: ['upload_files', 'reconcile'],
+  [UserRole.ADMIN]: ['upload_files', 'reconcile', 'manage_users', 'view_audit', 'view_accounting'],
+  [UserRole.OPERADOR]: ['upload_files', 'reconcile', 'view_accounting'],
   [UserRole.REVISOR]: ['view_results'],
-  [UserRole.AUDITOR]: ['view_audit']
+  [UserRole.AUDITOR]: ['view_audit', 'view_accounting']
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
