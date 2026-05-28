@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { Skeleton, SkeletonKpi } from '@/components/Skeleton'
@@ -65,6 +65,12 @@ export const Resumen: React.FC = () => {
   const [error, setError] = useState('')
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [evolucion, setEvolucion] = useState<{ label: string; conciliado: number; pendiente: number }[]>([])
+  const [refreshTick, setRefreshTick] = useState(0)
+
+  const refrescar = useCallback(() => {
+    apiClient.invalidateCache('/analisis')
+    setRefreshTick(t => t + 1)
+  }, [])
 
   useEffect(() => {
     let activo = true
@@ -85,7 +91,14 @@ export const Resumen: React.FC = () => {
       .catch((e) => { if (activo) setError(e.response?.data?.detail || 'Error cargando dashboard') })
       .finally(() => { if (activo) setLoading(false) })
     return () => { activo = false }
-  }, [periodo, anio, mes, activeOrgId])
+  }, [periodo, anio, mes, activeOrgId, refreshTick])
+
+  // Auto-refresh cuando la pestaña recupera foco (usuario vuelve de conciliar)
+  useEffect(() => {
+    const onFocus = () => refrescar()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [refrescar])
 
   const evolucionLine = useMemo(
     () => evolucion.map(m => ({ label: m.label, value: m.conciliado })),
@@ -153,21 +166,33 @@ export const Resumen: React.FC = () => {
             </p>
           </div>
 
-          {/* Selector de periodo (segment control) */}
-          <div className="flex items-center gap-1 bg-white dark:bg-ml-dark-surface rounded-lg border border-gray-200 dark:border-ml-dark-border p-1">
-            {(['hoy', 'semana', 'mes'] as Periodo[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriodo(p)}
-                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors capitalize ${
-                  periodo === p
-                    ? 'bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg'
-                    : 'text-ml-text-soft dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-white/5'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            {/* Selector de periodo (segment control) */}
+            <div className="flex items-center gap-1 bg-white dark:bg-ml-dark-surface rounded-lg border border-gray-200 dark:border-ml-dark-border p-1">
+              {(['hoy', 'semana', 'mes'] as Periodo[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriodo(p)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded transition-colors capitalize ${
+                    periodo === p
+                      ? 'bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg'
+                      : 'text-ml-text-soft dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={refrescar}
+              disabled={loading}
+              className="p-1.5 rounded-lg text-ml-text-soft dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-40"
+              title="Actualizar datos"
+            >
+              <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
           </div>
         </div>
 
