@@ -536,11 +536,12 @@ export const Clientes: React.FC = () => {
                             </a>
                             {puedeVerCtaCte && (
                               <button
-                                onClick={(e) => { e.stopPropagation(); navigate(`/contabilidad?cc=${cliente.id}`) }}
-                                className="px-2 py-1 text-[11px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded hover:bg-amber-200 dark:hover:bg-amber-900/60 font-medium flex-shrink-0"
+                                onClick={(e) => { e.stopPropagation(); navigate(`/cuentas-corrientes?cc=${cliente.id}`) }}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 rounded hover:bg-sky-200 dark:hover:bg-sky-900/60 font-medium flex-shrink-0"
                                 title="Ver cuenta corriente del cliente"
                               >
-                                💰<span className="hidden md:inline"> Cta. cte.</span>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M4.5 21V10.5m4 10.5V10.5m7 10.5V10.5m4 10.5V10.5M3 10.5h18M12 3l9 4.5H3L12 3z"/></svg>
+                                <span className="hidden md:inline">Cta. cte.</span>
                               </button>
                             )}
                             <button
@@ -574,7 +575,7 @@ export const Clientes: React.FC = () => {
                               🗑
                             </button>
                             <button onClick={() => setOpenCli(o => ({ ...o, [cliKey]: !cliOpen }))}
-                              className="text-gray-400 text-xs px-1">{cliOpen ? '▲' : '▼'}</button>
+                              className="hidden md:block text-gray-400 text-xs px-1">{cliOpen ? '▲' : '▼'}</button>
                           </div>
 
                           {cliOpen && cliente.meses.length === 0 && (

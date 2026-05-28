@@ -478,6 +478,40 @@ def crear_y_vincular_cuenta(
     return {"ok": True, "cliente_id": cliente_id, "cuenta": {"id": cuenta.id, "codigo": cuenta.codigo, "nombre": cuenta.nombre}}
 
 
+@router.post("/clientes/cuentas/crear-faltantes")
+def crear_cuentas_faltantes(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    """Crea/vincula la cuenta contable (2-1-2-X) de todos los clientes que aún
+    no tienen una. Reutiliza una cuenta existente con el mismo nombre si la hay
+    (no duplica); si no, crea la próxima. Acción explícita, idempotente."""
+    oid = _org_id(current_user, org_id)
+    padre = _cuenta_parent_cliente(db, oid)
+    if not padre:
+        raise HTTPException(400, "No existe la cuenta padre Cliente (2-1-2-0)")
+
+    from app.services.motor_contable import _get_o_crear_cuenta_cliente
+
+    sin_cuenta = (
+        db.query(Cliente)
+        .filter(Cliente.organizacion_id == oid, Cliente.cuenta_contable_id.is_(None))
+        .order_by(Cliente.nombre)
+        .all()
+    )
+    creados = []
+    for cli in sin_cuenta:
+        try:
+            cuenta = _get_o_crear_cuenta_cliente(db, cli.id, oid)
+            if cuenta:
+                creados.append({"cliente": cli.nombre, "codigo": cuenta.codigo})
+        except Exception as ex:
+            logger.warning("crear cuenta cliente %s: %s", cli.id, ex)
+    db.commit()
+    return {"ok": True, "creados": creados, "total": len(creados), "sin_cuenta_previa": len(sin_cuenta)}
+
+
 # ── Cuenta corriente del cliente (vista derivada de asientos) ─────────────────
 
 # modulo del asiento → (categoría de filtro, etiqueta legible)

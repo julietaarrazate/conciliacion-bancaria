@@ -152,6 +152,7 @@ export function App() {
               </ProtectedRoute>
             } />
             <Route path="/contabilidad" element={<ProtectedRoute permission="view_accounting"><Contabilidad /></ProtectedRoute>} />
+            <Route path="/cuentas-corrientes" element={<ProtectedRoute permission="manage_finance"><Contabilidad modo="ctacte" /></ProtectedRoute>} />
             <Route path="/cheques" element={<ProtectedRoute permission="reconcile"><Cheques /></ProtectedRoute>} />
             <Route path="/pagos-gastos" element={<ProtectedRoute permission="reconcile"><PagosGastos /></ProtectedRoute>} />
             <Route path="/papelera" element={<ProtectedRoute permission="manage_users"><Papelera /></ProtectedRoute>} />
