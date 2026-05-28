@@ -1,8 +1,21 @@
 """Servicio para registrar logs de auditoría automáticamente"""
 
+import json
+from decimal import Decimal
 from typing import Any, Optional
 from sqlalchemy.orm import Session
 from app.models.auditoria import AuditoriaLog
+
+
+def _serializable(obj: Any) -> Any:
+    """Convierte recursivamente Decimal→float para que el dict sea JSON-serializable."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, dict):
+        return {k: _serializable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_serializable(v) for v in obj]
+    return obj
 
 
 def registrar_log(
@@ -31,7 +44,7 @@ def registrar_log(
         tabla=tabla,
         registro_id=registro_id,
         accion=accion,
-        cambios=cambios
+        cambios=_serializable(cambios) if cambios else cambios,
     )
     db.add(log)
     if autocommit:
