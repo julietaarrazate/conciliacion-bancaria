@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
+import { toast } from '@/store/toast'
+
+interface CuentaCliente { id: number; codigo: string; nombre: string }
+interface ClienteCuentaRow {
+  cliente_id: number
+  cliente_nombre: string
+  cuenta: CuentaCliente | null
+}
 
 interface CuentaItem {
   id: number
@@ -88,7 +96,7 @@ const MODULO_LABEL: Record<string, string> = {
   extracto: '🏦 Extracto', planilla: '📋 Planilla', caja: '💵 Caja', cheque: '🗒️ Cheque',
 }
 
-type Tab = 'plan' | 'reglas' | 'diario' | 'sumas' | 'balance' | 'mayor'
+type Tab = 'plan' | 'reglas' | 'diario' | 'sumas' | 'balance' | 'mayor' | 'clientes'
 
 export const Contabilidad: React.FC = () => {
   const { activeOrgId } = useOrgStore()
@@ -106,6 +114,10 @@ export const Contabilidad: React.FC = () => {
   const [asientoLineas, setAsientoLineas] = useState<Record<number, AsientoLinea[]>>({})
   const [loadingLineas, setLoadingLineas] = useState<Set<number>>(new Set())
   const [tab, setTab]                 = useState<Tab>('plan')
+  const [cliCuentas, setCliCuentas]   = useState<ClienteCuentaRow[]>([])
+  const [cuentasDisp, setCuentasDisp] = useState<CuentaCliente[]>([])
+  const [loadingCli, setLoadingCli]   = useState(false)
+  const [savingCli, setSavingCli]     = useState<number | null>(null)
 
   useEffect(() => {
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
@@ -129,6 +141,46 @@ export const Contabilidad: React.FC = () => {
     apiClient.client.get(`/contabilidad/libro-mayor?cuenta_id=${id}`)
       .then(r => { setLibroMayor(r.data); setLoadingMayor(false) })
       .catch(() => setLoadingMayor(false))
+  }
+
+  const cargarClientesCuentas = () => {
+    setLoadingCli(true)
+    const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
+    apiClient.client.get(`/contabilidad/clientes-cuentas${q}`)
+      .then(r => { setCliCuentas(r.data.clientes); setCuentasDisp(r.data.cuentas_disponibles) })
+      .finally(() => setLoadingCli(false))
+  }
+
+  useEffect(() => {
+    if (tab === 'clientes') cargarClientesCuentas()
+  }, [tab, activeOrgId])
+
+  const qOrg = activeOrgId ? `?org_id=${activeOrgId}` : ''
+
+  const asignarCuenta = async (clienteId: number, cuentaId: number | null) => {
+    setSavingCli(clienteId)
+    try {
+      await apiClient.client.put(`/contabilidad/clientes/${clienteId}/cuenta${qOrg}`, { cuenta_id: cuentaId })
+      toast.success(cuentaId ? 'Cuenta vinculada' : 'Cuenta desvinculada')
+      cargarClientesCuentas()
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'No se pudo vincular')
+    } finally {
+      setSavingCli(null)
+    }
+  }
+
+  const crearCuenta = async (clienteId: number) => {
+    setSavingCli(clienteId)
+    try {
+      const r = await apiClient.client.post(`/contabilidad/clientes/${clienteId}/cuenta/crear${qOrg}`, {})
+      toast.success(`Cuenta ${r.data.cuenta.codigo} creada y vinculada`)
+      cargarClientesCuentas()
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'No se pudo crear la cuenta')
+    } finally {
+      setSavingCli(null)
+    }
   }
 
   const toggleAsiento = (id: number) => {
@@ -182,6 +234,7 @@ export const Contabilidad: React.FC = () => {
     ['sumas',   '🧾 Sumas y saldo'],
     ['balance', '⚖️ Balance'],
     ['mayor',   '📖 Libro mayor'],
+    ['clientes', '🔗 Clientes'],
   ]
 
   return (
@@ -463,6 +516,75 @@ export const Contabilidad: React.FC = () => {
                     <td className="px-4 py-2 text-right font-mono font-semibold">{fmtNum(libroMayor.saldo_final)}</td>
                   </tr>
                 </tfoot>
+              </table></div>
+            </div>
+          )}
+        </div>
+
+      ) : tab === 'clientes' ? (
+        <div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Vinculá cada cliente a su cuenta corriente contable (subcuenta de <span className="font-mono">2-1-2-0</span>).
+            Cada cuenta pertenece a un solo cliente. Los sin vincular se resuelven asignando una cuenta existente o creando una nueva.
+          </p>
+          {loadingCli ? (
+            <div className="py-12 text-center text-gray-400">Cargando...</div>
+          ) : cliCuentas.length === 0 ? (
+            <p className="text-center py-8 text-gray-400 text-sm">Sin clientes</p>
+          ) : (
+            <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
+              <div className="overflow-x-auto"><table className="w-full text-xs min-w-[520px]">
+                <thead className="bg-gray-50 dark:bg-slate-800">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-medium text-gray-500">Cliente</th>
+                    <th className="text-left px-4 py-2 font-medium text-gray-500">Cuenta contable</th>
+                    <th className="text-right px-4 py-2 font-medium text-gray-500">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
+                  {cliCuentas.map(row => {
+                    const saving = savingCli === row.cliente_id
+                    return (
+                      <tr key={row.cliente_id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
+                        <td className="px-4 py-2 font-medium text-ml-text dark:text-gray-200">{row.cliente_nombre}</td>
+                        <td className="px-4 py-2">
+                          {row.cuenta ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="font-mono text-[11px] text-gray-400">{row.cuenta.codigo}</span>
+                              <span className="text-amber-600 dark:text-amber-400">{row.cuenta.nombre}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-gray-300 dark:border-slate-600 text-gray-400">sin vincular</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            <select
+                              value={row.cuenta?.id ?? ''}
+                              disabled={saving}
+                              onChange={e => asignarCuenta(row.cliente_id, e.target.value ? Number(e.target.value) : null)}
+                              className="text-[11px] px-1.5 py-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 max-w-[180px]"
+                            >
+                              <option value="">— sin vincular —</option>
+                              {cuentasDisp.map(c => (
+                                <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>
+                              ))}
+                            </select>
+                            {!row.cuenta && (
+                              <button
+                                onClick={() => crearCuenta(row.cliente_id)}
+                                disabled={saving}
+                                className="text-[11px] px-2 py-1 rounded-md bg-ml-blue text-white hover:bg-ml-blue-dark disabled:opacity-50"
+                              >
+                                + Crear cuenta
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
               </table></div>
             </div>
           )}

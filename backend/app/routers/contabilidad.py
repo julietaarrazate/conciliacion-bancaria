@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from typing import Optional
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models.user import User
+from app.models.cliente import Cliente
 from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
 
 router = APIRouter(prefix="/contabilidad", tags=["contabilidad"])
@@ -320,3 +322,155 @@ def get_balance(
         "resultado": totales.get("resultado", {"total_debe": 0, "total_haber": 0, "saldo": 0}),
         "ecuacion_ok": round(activo, 2) == round(abs(pasivo) + abs(resultado), 2),
     }
+
+
+# ── Vinculación manual Cliente → cuenta contable ──────────────────────────────
+
+_CLIENTE_PARENT_COD = "2-1-2-0"
+
+
+def _cuenta_parent_cliente(db: Session, oid: int) -> Optional[PlanCuenta]:
+    return (
+        db.query(PlanCuenta)
+        .filter(PlanCuenta.codigo == _CLIENTE_PARENT_COD, PlanCuenta.organizacion_id == oid)
+        .first()
+    )
+
+
+@router.get("/clientes-cuentas")
+def get_clientes_cuentas(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lista clientes con su cuenta contable vinculada (o NULL) + las cuentas
+    disponibles bajo 2-1-2-0 para asignación manual."""
+    oid = _org_id(current_user, org_id)
+    padre = _cuenta_parent_cliente(db, oid)
+    cuentas_cliente = []
+    if padre:
+        cuentas_cliente = (
+            db.query(PlanCuenta)
+            .filter(PlanCuenta.parent_id == padre.id, PlanCuenta.organizacion_id == oid)
+            .order_by(PlanCuenta.codigo)
+            .all()
+        )
+    cuentas_by_id = {c.id: c for c in cuentas_cliente}
+
+    clientes = (
+        db.query(Cliente)
+        .filter(Cliente.organizacion_id == oid)
+        .order_by(Cliente.nombre)
+        .all()
+    )
+    items = []
+    for cli in clientes:
+        cuenta = cuentas_by_id.get(cli.cuenta_contable_id)
+        if cli.cuenta_contable_id and not cuenta:
+            cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == cli.cuenta_contable_id).first()
+        items.append({
+            "cliente_id": cli.id,
+            "cliente_nombre": cli.nombre,
+            "cuenta": {"id": cuenta.id, "codigo": cuenta.codigo, "nombre": cuenta.nombre} if cuenta else None,
+        })
+
+    return {
+        "clientes": items,
+        "cuentas_disponibles": [
+            {"id": c.id, "codigo": c.codigo, "nombre": c.nombre} for c in cuentas_cliente
+        ],
+    }
+
+
+class VincularCuentaBody(BaseModel):
+    cuenta_id: Optional[int] = None  # None = desvincular
+
+
+@router.put("/clientes/{cliente_id}/cuenta")
+def vincular_cuenta_cliente(
+    cliente_id: int,
+    body: VincularCuentaBody,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Asigna una cuenta existente a un cliente, corrige una vinculación o
+    desvincula (cuenta_id=null). La cuenta debe colgar de 2-1-2-0 y no estar
+    ya tomada por otro cliente (vínculo 1:1)."""
+    oid = _org_id(current_user, org_id)
+    cli = db.query(Cliente).filter(Cliente.id == cliente_id, Cliente.organizacion_id == oid).first()
+    if not cli:
+        raise HTTPException(404, "Cliente no encontrado")
+
+    if body.cuenta_id is None:
+        cli.cuenta_contable_id = None
+        db.commit()
+        return {"ok": True, "cliente_id": cliente_id, "cuenta": None}
+
+    padre = _cuenta_parent_cliente(db, oid)
+    cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == body.cuenta_id, PlanCuenta.organizacion_id == oid).first()
+    if not cuenta:
+        raise HTTPException(404, "Cuenta no encontrada")
+    if not padre or cuenta.parent_id != padre.id:
+        raise HTTPException(400, "La cuenta debe ser una subcuenta de Cliente (2-1-2-0)")
+
+    ocupada_por = (
+        db.query(Cliente)
+        .filter(Cliente.cuenta_contable_id == cuenta.id, Cliente.id != cliente_id, Cliente.organizacion_id == oid)
+        .first()
+    )
+    if ocupada_por:
+        raise HTTPException(409, f"La cuenta {cuenta.codigo} ya está vinculada a '{ocupada_por.nombre}'")
+
+    cli.cuenta_contable_id = cuenta.id
+    db.commit()
+    return {"ok": True, "cliente_id": cliente_id, "cuenta": {"id": cuenta.id, "codigo": cuenta.codigo, "nombre": cuenta.nombre}}
+
+
+class CrearCuentaBody(BaseModel):
+    nombre: Optional[str] = None  # default: nombre del cliente
+
+
+@router.post("/clientes/{cliente_id}/cuenta/crear")
+def crear_y_vincular_cuenta(
+    cliente_id: int,
+    body: CrearCuentaBody,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Crea una cuenta nueva bajo 2-1-2-0 con el próximo código y la vincula al
+    cliente. El cliente no debe tener cuenta previa (usar PUT para corregir)."""
+    oid = _org_id(current_user, org_id)
+    cli = db.query(Cliente).filter(Cliente.id == cliente_id, Cliente.organizacion_id == oid).first()
+    if not cli:
+        raise HTTPException(404, "Cliente no encontrado")
+    if cli.cuenta_contable_id:
+        raise HTTPException(409, "El cliente ya tiene cuenta vinculada; usá corregir/desvincular primero")
+
+    padre = _cuenta_parent_cliente(db, oid)
+    if not padre:
+        raise HTTPException(400, "No existe la cuenta padre Cliente (2-1-2-0)")
+
+    nombre = (body.nombre or cli.nombre or "").strip().title()
+    if not nombre:
+        raise HTTPException(400, "Nombre de cuenta requerido")
+
+    hijos = db.query(PlanCuenta).filter(PlanCuenta.parent_id == padre.id, PlanCuenta.organizacion_id == oid).all()
+    max_n = 0
+    for h in hijos:
+        try:
+            max_n = max(max_n, int(h.codigo.rsplit("-", 1)[-1]))
+        except (ValueError, IndexError):
+            pass
+    nuevo_codigo = f"2-1-2-{max_n + 1}"
+    cuenta = PlanCuenta(
+        codigo=nuevo_codigo, nombre=nombre, tipo="pasivo",
+        parent_id=padre.id, nivel=(padre.nivel or 3) + 1,
+        activo=True, organizacion_id=oid,
+    )
+    db.add(cuenta)
+    db.flush()
+    cli.cuenta_contable_id = cuenta.id
+    db.commit()
+    return {"ok": True, "cliente_id": cliente_id, "cuenta": {"id": cuenta.id, "codigo": cuenta.codigo, "nombre": cuenta.nombre}}
