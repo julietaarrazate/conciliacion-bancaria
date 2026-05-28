@@ -695,8 +695,10 @@ def estado_cuenta_cliente(
     org_cfg = (org.configuracion or {}) if org else {}
     pct_default = float(org_cfg.get("comisiones", {}).get("porcentaje_default", 1.5))
     porcentaje_comision = float(cliente.porcentaje_comision) if cliente.porcentaje_comision is not None else pct_default
-    comision_monto = round(total_conciliado * porcentaje_comision / 100, 2)
-    neto_calculado = round(total_conciliado - comision_monto, 2)
+    # total_conciliado puede ser Decimal (Numeric 12,2); convertir para no mezclar con float
+    total_conciliado_f = float(total_conciliado)
+    comision_monto = round(total_conciliado_f * porcentaje_comision / 100, 2)
+    neto_calculado = round(total_conciliado_f - comision_monto, 2)
 
     return {
         "cliente": {
