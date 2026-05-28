@@ -268,7 +268,7 @@ export const Layout: React.FC = () => {
           <CuadraLogo size={24} animate={false} />
         </div>
 
-        <span className="font-bold text-sm font-mono app-title absolute left-1/2 -translate-x-1/2 tracking-wide text-ml-green dark:text-white">
+        <span className="font-bold text-sm font-mono app-title absolute left-1/2 -translate-x-1/2 tracking-wide" style={{ color: '#22C55E' }}>
           Cuadra
         </span>
 
@@ -314,7 +314,7 @@ export const Layout: React.FC = () => {
           >
             {/* Header del drawer */}
             <div className="flex items-center justify-between px-4 h-12 bg-ml-text dark:bg-ml-dark-card border-b border-black dark:border-ml-dark-border shrink-0">
-              <span className="font-bold text-sm font-mono app-title tracking-wide text-ml-green dark:text-white">Cuadra</span>
+              <span className="font-bold text-sm font-mono app-title tracking-wide" style={{ color: '#22C55E' }}>Cuadra</span>
               <button
                 onClick={() => setDrawerOpen(false)}
                 className="p-1.5 rounded-lg text-ml-green/80 dark:text-gray-400 hover:bg-white/10 dark:hover:bg-ml-dark-hover"
@@ -335,7 +335,7 @@ export const Layout: React.FC = () => {
         <div className="h-14 flex items-center px-4 border-b border-black dark:border-ml-dark-border shrink-0 bg-ml-text dark:bg-ml-dark-card">
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <CuadraLogo size={28} />
-            <span className="font-bold text-base font-mono app-title tracking-wide text-ml-green dark:text-white">Cuadra</span>
+            <span className="font-bold text-base font-mono app-title tracking-wide" style={{ color: '#22C55E' }}>Cuadra</span>
           </div>
           <button
             onClick={() => setSearchOpen(true)}

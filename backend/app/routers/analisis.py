@@ -211,7 +211,8 @@ def _cheques_estado(db: Session, org_id: int) -> dict:
 
 def _cheques_proximos_vencimiento(db: Session, org_id: int, dias: int = 30) -> list:
     """Cheques pendientes con fecha_deposito en los proximos N dias."""
-    hoy = date.today()
+    from zoneinfo import ZoneInfo
+    hoy = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date()
     limite = hoy + timedelta(days=dias)
     cheques = (
         db.query(Cheque)
@@ -249,7 +250,8 @@ def _calcular_rango(periodo: str, anio: Optional[int], mes: Optional[int]) -> tu
     - "semana": ultimos 7 dias vs 7 dias previos
     - "mes" (default): mes seleccionado (o actual) vs mes anterior
     """
-    hoy = date.today()
+    from zoneinfo import ZoneInfo
+    hoy = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date()
     if periodo == "hoy":
         return hoy, hoy, hoy - timedelta(days=1), hoy - timedelta(days=1), "Hoy"
     if periodo == "semana":
@@ -330,7 +332,8 @@ def alertas(
 ):
     """Alertas operativas del día: cheques urgentes/vencidos, filas atrasadas, movimientos sin asignar."""
     organizacion_id = _resolver_org(current_user, org_id)
-    hoy = date.today()
+    from zoneinfo import ZoneInfo
+    hoy = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date()
 
     cheques_urgentes = db.query(func.count(Cheque.id)).filter(
         Cheque.organizacion_id == organizacion_id,
@@ -445,7 +448,8 @@ def clientes_aging(
     Buckets: 0-30, 31-60, 61-90, +90 dias.
     """
     organizacion_id = _resolver_org(current_user, org_id)
-    hoy = date.today()
+    from zoneinfo import ZoneInfo
+    hoy = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date()
 
     # Traer todas las filas pendientes con su planilla (joinedload implicito por la query)
     rows = (
@@ -576,7 +580,8 @@ def estado_cuenta_cliente(
 
     organizacion_id = cliente.organizacion_id or 1
 
-    hoy = date.today()
+    from zoneinfo import ZoneInfo
+    hoy = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date()
     h = hasta or hoy
     d = desde or (h - timedelta(days=90))
 
@@ -714,7 +719,8 @@ def estado_cuenta_cliente(
 
 def _meses_atras(n: int) -> list[tuple[int, int]]:
     """Retorna lista de (anio, mes) para los ultimos N meses, de mas viejo a mas nuevo."""
-    hoy = date.today()
+    from zoneinfo import ZoneInfo
+    hoy = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date()
     result = []
     a, m = hoy.year, hoy.month
     for _ in range(n):
