@@ -512,11 +512,85 @@ def crear_cuentas_faltantes(
     return {"ok": True, "creados": creados, "total": len(creados), "sin_cuenta_previa": len(sin_cuenta)}
 
 
+_STATUS_CONCILIADO = ("ok", "OK", "PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA")
+
+
+@router.post("/backfill-cuentas-corrientes")
+def backfill_cuentas_corrientes(
+    dry_run: bool = Query(False, description="Solo cuenta cuántas filas se procesarían, sin escribir"),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    """Reconstruye las cuentas corrientes desde las conciliaciones ya cargadas.
+    Por cada fila de planilla conciliada (status ok) de un cliente con cuenta,
+    genera un asiento neto Banco Macro (D) / Cliente (H). Idempotente: saltea las
+    filas que ya tienen asiento del flujo normal (um_reclass) o un cc_inicial previo."""
+    oid = _org_id(current_user, org_id)
+    from app.models.planilla import Planilla, PlanillaRow
+    from app.services.motor_contable import registrar_cc_inicial
+
+    rows = (
+        db.query(PlanillaRow, Planilla, Cliente)
+        .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
+        .join(Cliente, Planilla.cliente_id == Cliente.id)
+        .filter(
+            Planilla.organizacion_id == oid,
+            Planilla.deleted_at.is_(None),
+            PlanillaRow.status.in_(list(_STATUS_CONCILIADO)),
+            Cliente.cuenta_contable_id.isnot(None),
+        )
+        .all()
+    )
+
+    # Idempotencia en batch: filas que ya tienen asiento (normal o backfill previo)
+    ya = set(
+        r[0] for r in db.query(Asiento.referencia_id)
+        .filter(Asiento.organizacion_id == oid, Asiento.modulo.in_(["um_reclass", "cc_inicial"]))
+        .all()
+    )
+    pendientes = [(row, pl, cli) for (row, pl, cli) in rows if row.id not in ya]
+
+    if dry_run:
+        from decimal import Decimal as _D
+        monto_est = sum((row.monto or _D(0)) for row, _, _ in pendientes)
+        return {
+            "dry_run": True,
+            "total_filas_ok": len(rows),
+            "ya_cubiertas": len(rows) - len(pendientes),
+            "pendientes": len(pendientes),
+            "monto_estimado": monto_est,
+            "clientes": len({pl.cliente_id for _, pl, _ in pendientes}),
+        }
+
+    creados = 0
+    clientes_tocados = set()
+    for row, pl, cli in pendientes:
+        fecha = row.fecha_acred or (pl.fecha_carga.date() if pl.fecha_carga else None)
+        ok = registrar_cc_inicial(
+            db=db, planilla_row_id=row.id, org_id=oid, usuario_id=current_user.id,
+            cliente_id=pl.cliente_id, cliente_nombre=cli.nombre,
+            monto=row.monto, fecha=fecha, nombre_archivo=pl.nombre_archivo or "",
+        )
+        if ok:
+            creados += 1
+            clientes_tocados.add(pl.cliente_id)
+
+    return {
+        "ok": True,
+        "creados": creados,
+        "clientes": len(clientes_tocados),
+        "total_filas_ok": len(rows),
+        "ya_cubiertas": len(rows) - len(pendientes),
+    }
+
+
 # ── Cuenta corriente del cliente (vista derivada de asientos) ─────────────────
 
 # modulo del asiento → (categoría de filtro, etiqueta legible)
 _MODULO_TIPO = {
     "um_reclass":        ("banco",   "Conciliación bancaria (UM)"),
+    "cc_inicial":        ("banco",   "Acreditación (histórico)"),
     "planilla":          ("tt",      "Transferencia (TT)"),
     "planilla_comision": ("tt",      "Comisión TT"),
     "cheque_carga":      ("cheques", "Cheque"),
@@ -579,8 +653,8 @@ def get_cuenta_corriente(
         ):
             reversados.add(ref)
 
-    # Batch: PlanillaRow para um_reclass (referencia_id = planilla_row_id)
-    row_ids = [a.referencia_id for _, a in filas if (a.modulo or "").startswith("um_reclass") and a.referencia_id]
+    # Batch: PlanillaRow para um_reclass / cc_inicial (referencia_id = planilla_row_id)
+    row_ids = [a.referencia_id for _, a in filas if (a.modulo or "").startswith(("um_reclass", "cc_inicial")) and a.referencia_id]
     row_map = {}
     if row_ids:
         from app.models.planilla import PlanillaRow
@@ -610,18 +684,19 @@ def get_cuenta_corriente(
         estado = "Conciliado"
         if es_reverso or a.id in reversados:
             estado = "Revertido"
-        elif modulo.startswith("um_reclass"):
+        elif modulo.startswith(("um_reclass", "cc_inicial")):
             info = row_map.get(a.referencia_id)
-            if not info or not info.get("movimiento_id"):
-                # Trazabilidad rota → validación/log, NO un estado operativo
-                logger.warning(
-                    "Cta.cte. cliente %s: asiento %s (um_reclass) sin movimiento bancario vinculado",
-                    cliente_id, a.id,
-                )
-            else:
+            if info:
                 origen["planilla_id"] = info["planilla_id"]
-                origen["movimiento_id"] = info["movimiento_id"]
-                origen["extracto_id"] = mov_map.get(info["movimiento_id"])
+                if info.get("movimiento_id"):
+                    origen["movimiento_id"] = info["movimiento_id"]
+                    origen["extracto_id"] = mov_map.get(info["movimiento_id"])
+                elif modulo.startswith("um_reclass"):
+                    # Trazabilidad rota en el flujo normal → validación/log, NO estado operativo
+                    logger.warning(
+                        "Cta.cte. cliente %s: asiento %s (um_reclass) sin movimiento bancario vinculado",
+                        cliente_id, a.id,
+                    )
         elif modulo.startswith("planilla"):
             origen["planilla_id"] = a.referencia_id
         elif modulo.startswith("cheque"):
