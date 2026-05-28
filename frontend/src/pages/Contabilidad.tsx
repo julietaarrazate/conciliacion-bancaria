@@ -4,6 +4,7 @@ import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
 import { toast } from '@/store/toast'
+import { confirmDialog } from '@/store/confirm'
 
 interface CarteraItem {
   cliente_id: number
@@ -317,6 +318,33 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       toast.error(e.response?.data?.detail || 'No se pudo crear la cuenta')
     } finally {
       setSavingCli(null)
+    }
+  }
+
+  const [backfilling, setBackfilling] = useState(false)
+  const reconstruirCtaCte = async () => {
+    setBackfilling(true)
+    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    try {
+      const prev = await apiClient.client.post(`/contabilidad/backfill-cuentas-corrientes?dry_run=true${orgQ}`, {})
+      const { pendientes, clientes, ya_cubiertas } = prev.data
+      if (!pendientes) {
+        toast.success(ya_cubiertas > 0 ? 'Las cuentas corrientes ya están al día' : 'No hay conciliaciones para reconstruir')
+        return
+      }
+      const ok = await confirmDialog({
+        title: 'Reconstruir cuentas corrientes',
+        message: `Se generarán ${pendientes} acreditación(es) de ${clientes} cliente(s) a partir de las conciliaciones ya cargadas (Banco D / Cliente H). Es idempotente: no duplica lo ya registrado.`,
+        confirmLabel: 'Reconstruir',
+      })
+      if (!ok) return
+      const r = await apiClient.client.post(`/contabilidad/backfill-cuentas-corrientes?${orgQ.slice(1)}`, {})
+      toast.success(`${r.data.creados} acreditación(es) agregada(s) en ${r.data.clientes} cliente(s)`)
+      cargarCartera()
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'No se pudo reconstruir')
+    } finally {
+      setBackfilling(false)
     }
   }
 
@@ -778,6 +806,16 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   }`}>{label}</button>
               ))}
             </div>
+            {canAdminAccounting && (
+              <button
+                onClick={reconstruirCtaCte}
+                disabled={backfilling}
+                className="ml-auto text-xs px-3 py-1.5 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
+                title="Genera las acreditaciones históricas en cada cuenta corriente a partir de las conciliaciones ya cargadas"
+              >
+                {backfilling ? 'Reconstruyendo…' : '↻ Reconstruir desde conciliaciones'}
+              </button>
+            )}
           </div>
           {loadingCartera ? (
             <div className="py-12 text-center text-gray-400">Cargando...</div>

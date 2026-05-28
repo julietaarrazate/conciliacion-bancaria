@@ -652,6 +652,58 @@ def registrar_reclasificacion_um(
         logger.warning("Error asiento reclasif. row %s: %s", planilla_row_id, ex)
 
 
+def registrar_cc_inicial(
+    db: Session,
+    planilla_row_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    cliente_id: int,
+    cliente_nombre: str,
+    monto,
+    fecha: date,
+    nombre_archivo: str = "",
+) -> bool:
+    """Backfill histórico de cuenta corriente: acreditación ya conciliada →
+    Banco Macro (D) / Cliente X (H). Asiento neto y balanceado para reconstruir
+    las cuentas corrientes desde datos cargados antes de que existiera el motor.
+    Idempotente: no crea si la fila ya tiene asiento del flujo normal (um_reclass)
+    ni un cc_inicial previo. Devuelve True si creó el asiento."""
+    try:
+        if _ya_existe(db, "um_reclass", planilla_row_id, org_id):
+            return False
+        if _ya_existe(db, "cc_inicial", planilla_row_id, org_id):
+            return False
+        banco = _get_cuenta_por_codigo(db, "1-1-1-3-1", org_id)
+        cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_id, org_id) if cliente_id else None
+        if not banco or not cuenta_cliente:
+            return False
+        monto_d = abs(_monto(monto))
+        if monto_d <= 0:
+            return False
+        fecha_asiento = fecha if isinstance(fecha, date) else date.today()
+        desc = f"Acreditación histórica — {cliente_nombre}"
+        if nombre_archivo:
+            desc += f" ({nombre_archivo})"
+        a = Asiento(
+            fecha=fecha_asiento,
+            descripcion=desc,
+            modulo="cc_inicial",
+            referencia_id=planilla_row_id,
+            organizacion_id=org_id,
+            usuario_id=usuario_id,
+        )
+        db.add(a)
+        db.flush()
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco.id, debe=monto_d, haber=Decimal("0")))
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cliente.id, debe=Decimal("0"), haber=monto_d))
+        db.commit()
+        return True
+    except Exception as ex:
+        db.rollback()
+        logger.warning("Error cc_inicial row %s: %s", planilla_row_id, ex)
+        return False
+
+
 # ─── Reversión contable ──────────────────────────────────────────────────────
 
 def reversar_asientos(
