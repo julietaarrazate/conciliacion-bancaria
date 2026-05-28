@@ -74,6 +74,7 @@ export const Historial: React.FC = () => {
     try {
       const r = await apiClient.conciliarPlanilla(recModal.id, recFecha, true)
       setMsg(`✓ Re-conciliación de ${recModal.cliente_nombre}: ${r.acreditadas} acreditadas, ${r.no_encontradas} no encontradas`)
+      apiClient.invalidateCache('/analisis')
       setRecModal(null)
       load(filter)
     } catch (err: any) {

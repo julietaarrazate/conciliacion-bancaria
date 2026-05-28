@@ -102,6 +102,7 @@ export const Dashboard: React.FC = () => {
       }
     }
     setBulkRunning(false)
+    apiClient.invalidateCache('/analisis')
     apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then(d => setPlanillas(d.items))
   }
   const bulkPendingCount = bulkItems.filter(i => i.status === 'pending' || i.status === 'error').length
@@ -242,6 +243,7 @@ export const Dashboard: React.FC = () => {
       const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred, false, parseFloat(comisionPct) || 0)
       setResultado(r)
       setSuccess(`Conciliación completa: ${r.acreditadas}/${r.filas_procesadas} acreditadas`)
+      apiClient.invalidateCache('/analisis')
       apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then((d) => setPlanillas(d.items))
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error en la conciliación')
