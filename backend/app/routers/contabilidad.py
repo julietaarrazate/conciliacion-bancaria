@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from typing import Optional
 from pydantic import BaseModel
+import logging
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
@@ -11,6 +12,7 @@ from app.models.cliente import Cliente
 from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
 
 router = APIRouter(prefix="/contabilidad", tags=["contabilidad"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/stats")
@@ -568,7 +570,7 @@ def get_cuenta_corriente(
         modulo = a.modulo or ""
         cat, label = _tipo_de_modulo(modulo)
 
-        # Estado operativo de imputación
+        # Estado operativo de imputación (NO refleja errores de integridad)
         es_reverso = modulo.endswith("_reverso")
         origen = {"asiento_id": a.id}
         estado = "Conciliado"
@@ -577,7 +579,11 @@ def get_cuenta_corriente(
         elif modulo.startswith("um_reclass"):
             info = row_map.get(a.referencia_id)
             if not info or not info.get("movimiento_id"):
-                estado = "Pendiente"  # movimiento bancario desvinculado/borrado
+                # Trazabilidad rota → validación/log, NO un estado operativo
+                logger.warning(
+                    "Cta.cte. cliente %s: asiento %s (um_reclass) sin movimiento bancario vinculado",
+                    cliente_id, a.id,
+                )
             else:
                 origen["planilla_id"] = info["planilla_id"]
                 origen["movimiento_id"] = info["movimiento_id"]
@@ -609,4 +615,76 @@ def get_cuenta_corriente(
         "total_debito": round(sum(m["debito"] for m in movimientos), 2),
         "total_credito": round(sum(m["credito"] for m in movimientos), 2),
         "saldo_final": round(saldo, 2),
+    }
+
+
+@router.get("/cuentas-corrientes")
+def get_cuentas_corrientes(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Vista global de cartera: saldo, último movimiento y estado por cliente.
+    Vista derivada de los asientos sobre cada cuenta 2-1-2-X. No genera asientos."""
+    oid = _org_id(current_user, org_id)
+    clientes = (
+        db.query(Cliente)
+        .filter(Cliente.organizacion_id == oid, Cliente.cuenta_contable_id.isnot(None))
+        .order_by(Cliente.nombre)
+        .all()
+    )
+    cuenta_ids = [c.cuenta_contable_id for c in clientes]
+
+    cuentas_by_id = {}
+    agg = {}      # cuenta_id → {debe, haber}
+    ult = {}      # cuenta_id → fecha último movimiento
+    if cuenta_ids:
+        for c in db.query(PlanCuenta).filter(PlanCuenta.id.in_(cuenta_ids)).all():
+            cuentas_by_id[c.id] = c
+        rows = (
+            db.query(
+                AsientoDetalle.cuenta_id,
+                func.coalesce(func.sum(AsientoDetalle.debe), 0.0),
+                func.coalesce(func.sum(AsientoDetalle.haber), 0.0),
+                func.max(Asiento.fecha),
+            )
+            .join(Asiento, AsientoDetalle.asiento_id == Asiento.id)
+            .filter(AsientoDetalle.cuenta_id.in_(cuenta_ids), Asiento.organizacion_id == oid)
+            .group_by(AsientoDetalle.cuenta_id)
+            .all()
+        )
+        for cuenta_id, debe, haber, fecha_max in rows:
+            agg[cuenta_id] = {"debe": float(debe or 0), "haber": float(haber or 0)}
+            ult[cuenta_id] = fecha_max
+
+    items = []
+    for cli in clientes:
+        cuenta = cuentas_by_id.get(cli.cuenta_contable_id)
+        a = agg.get(cli.cuenta_contable_id)
+        debe = a["debe"] if a else 0.0
+        haber = a["haber"] if a else 0.0
+        saldo = round(debe - haber, 2)
+        tiene_actividad = a is not None
+        if not tiene_actividad:
+            estado_general = "sin_actividad"
+        elif saldo > 0:
+            estado_general = "deudor"
+        elif saldo < 0:
+            estado_general = "acreedor"
+        else:
+            estado_general = "equilibrado"
+        items.append({
+            "cliente_id": cli.id,
+            "cliente_nombre": cli.nombre,
+            "cuenta": {"id": cuenta.id, "codigo": cuenta.codigo, "nombre": cuenta.nombre} if cuenta else None,
+            "saldo": saldo,
+            "ultimo_movimiento": ult.get(cli.cuenta_contable_id),
+            "estado_general": estado_general,
+            "conciliacion": "sin_actividad" if not tiene_actividad else "conciliado",
+        })
+
+    return {
+        "items": items,
+        "total_deudor": round(sum(i["saldo"] for i in items if i["saldo"] > 0), 2),
+        "total_acreedor": round(sum(-i["saldo"] for i in items if i["saldo"] < 0), 2),
     }

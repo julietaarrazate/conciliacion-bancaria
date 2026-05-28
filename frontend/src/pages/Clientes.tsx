@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { apiClient } from '@/services/api'
 import { Skeleton } from '@/components/Skeleton'
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
+import { useAuthStore } from '@/store/auth'
 
 interface Archivo {
   id: number
@@ -73,6 +74,8 @@ const fmtFecha = (s: string) => {
 export const Clientes: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const { activeOrgId } = useOrgStore()
+  const navigate = useNavigate()
+  const puedeVerCtaCte = useAuthStore(s => s.hasPermission('manage_users'))
   const [orgs, setOrgs] = useState<OrgData[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -531,6 +534,15 @@ export const Clientes: React.FC = () => {
                             >
                               📊<span className="hidden md:inline"> Estado</span>
                             </a>
+                            {puedeVerCtaCte && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); navigate(`/contabilidad?cc=${cliente.id}`) }}
+                                className="px-2 py-1 text-[11px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded hover:bg-amber-200 dark:hover:bg-amber-900/60 font-medium flex-shrink-0"
+                                title="Ver cuenta corriente del cliente"
+                              >
+                                💰<span className="hidden md:inline"> Cta. cte.</span>
+                              </button>
+                            )}
                             <button
                               onClick={(e) => { e.stopPropagation(); abrirAcreditar({ id: cliente.id, nombre: cliente.nombre }) }}
                               className="px-2 py-1 text-[11px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded hover:bg-emerald-200 dark:hover:bg-emerald-900/60 font-medium flex-shrink-0"

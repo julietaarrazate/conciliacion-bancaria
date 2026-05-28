@@ -1,7 +1,18 @@
 import React, { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { toast } from '@/store/toast'
+
+interface CarteraItem {
+  cliente_id: number
+  cliente_nombre: string
+  cuenta: { id: number; codigo: string; nombre: string } | null
+  saldo: number
+  ultimo_movimiento: string | null
+  estado_general: 'deudor' | 'acreedor' | 'equilibrado' | 'sin_actividad'
+  conciliacion: string
+}
 
 interface CuentaCliente { id: number; codigo: string; nombre: string }
 interface ClienteCuentaRow {
@@ -136,6 +147,15 @@ const ESTADO_BADGE: Record<string, string> = {
   Parcial:    'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800',
 }
 
+const GEN_BADGE: Record<string, { label: string; cls: string }> = {
+  deudor:        { label: 'Deudor',       cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800' },
+  acreedor:      { label: 'Acreedor',     cls: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800' },
+  equilibrado:   { label: 'Equilibrado',  cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800' },
+  sin_actividad: { label: 'Sin actividad', cls: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-slate-800 dark:text-gray-400 dark:border-slate-600' },
+}
+
+type CcFiltro = 'todos' | 'deudores' | 'acreedores' | 'cero' | 'recientes' | 'sin_actividad'
+
 export const Contabilidad: React.FC = () => {
   const { activeOrgId } = useOrgStore()
   const [cuentas, setCuentas]         = useState<CuentaItem[]>([])
@@ -160,6 +180,12 @@ export const Contabilidad: React.FC = () => {
   const [ctaCteClienteId, setCtaCteClienteId] = useState<number | ''>('')
   const [loadingCtaCte, setLoadingCtaCte] = useState(false)
   const [catFiltro, setCatFiltro]     = useState<Set<string>>(new Set(CAT_KEYS))
+  const [ccMode, setCcMode]           = useState<'list' | 'detail'>('list')
+  const [cartera, setCartera]         = useState<CarteraItem[]>([])
+  const [loadingCartera, setLoadingCartera] = useState(false)
+  const [ccFiltro, setCcFiltro]       = useState<CcFiltro>('todos')
+  const [ccBusqueda, setCcBusqueda]   = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
 
   useEffect(() => {
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
@@ -194,8 +220,28 @@ export const Contabilidad: React.FC = () => {
   }
 
   useEffect(() => {
-    if (tab === 'clientes' || tab === 'ctacte') cargarClientesCuentas()
+    if (tab === 'clientes') cargarClientesCuentas()
+    if (tab === 'ctacte') { cargarClientesCuentas(); cargarCartera() }
   }, [tab, activeOrgId])
+
+  // Deep-link desde Clientes: /contabilidad?cc=<cliente_id>
+  useEffect(() => {
+    const cc = searchParams.get('cc')
+    if (cc) {
+      setTab('ctacte')
+      verCtaCteCliente(Number(cc))
+      searchParams.delete('cc')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [])
+
+  const cargarCartera = () => {
+    setLoadingCartera(true)
+    const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
+    apiClient.client.get(`/contabilidad/cuentas-corrientes${q}`)
+      .then(r => setCartera(r.data.items))
+      .finally(() => setLoadingCartera(false))
+  }
 
   const cargarCtaCte = (clienteId: number) => {
     setLoadingCtaCte(true)
@@ -205,6 +251,12 @@ export const Contabilidad: React.FC = () => {
       .then(r => setCtaCte(r.data))
       .catch(() => setCtaCte(null))
       .finally(() => setLoadingCtaCte(false))
+  }
+
+  const verCtaCteCliente = (clienteId: number) => {
+    setCtaCteClienteId(clienteId)
+    setCcMode('detail')
+    cargarCtaCte(clienteId)
   }
 
   const toggleCat = (cat: string) => {
@@ -295,7 +347,7 @@ export const Contabilidad: React.FC = () => {
     ['balance', '⚖️ Balance'],
     ['mayor',   '📖 Libro mayor'],
     ['clientes', '🔗 Clientes'],
-    ['ctacte',  '💰 Cta. corriente'],
+    ['ctacte',  '💰 Cuentas corrientes'],
   ]
 
   return (
@@ -651,20 +703,87 @@ export const Contabilidad: React.FC = () => {
           )}
         </div>
 
-      ) : tab === 'ctacte' ? (
+      ) : tab === 'ctacte' && ccMode === 'list' ? (
         <div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            Línea de tiempo financiera del cliente, derivada de los asientos contables. Es una vista operativa — no genera asientos.
+            Visión global de la cartera. Saldo, último movimiento y estado por cliente — vista derivada de los asientos. No genera asientos.
           </p>
           <div className="flex flex-wrap items-center gap-2 mb-3">
+            <input
+              type="text" placeholder="Buscar cliente…"
+              value={ccBusqueda} onChange={e => setCcBusqueda(e.target.value)}
+              className="input-field max-w-[200px]"
+            />
+            <div className="flex items-center gap-1 flex-wrap">
+              {([
+                ['todos', 'Todos'], ['deudores', 'Deudores'], ['acreedores', 'Acreedores'],
+                ['cero', 'Saldo cero'], ['recientes', 'Recientes'], ['sin_actividad', 'Sin actividad'],
+              ] as [CcFiltro, string][]).map(([f, label]) => (
+                <button key={f} onClick={() => setCcFiltro(f)}
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                    ccFiltro === f ? 'bg-ml-blue text-white' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-700'
+                  }`}>{label}</button>
+              ))}
+            </div>
+          </div>
+          {loadingCartera ? (
+            <div className="py-12 text-center text-gray-400">Cargando...</div>
+          ) : (() => {
+            const ahora = Date.now()
+            const filtradas = cartera.filter(c => {
+              if (ccBusqueda && !c.cliente_nombre.toLowerCase().includes(ccBusqueda.toLowerCase())) return false
+              if (ccFiltro === 'deudores') return c.saldo > 0
+              if (ccFiltro === 'acreedores') return c.saldo < 0
+              if (ccFiltro === 'cero') return c.saldo === 0 && c.estado_general !== 'sin_actividad'
+              if (ccFiltro === 'sin_actividad') return c.estado_general === 'sin_actividad'
+              if (ccFiltro === 'recientes') return c.ultimo_movimiento != null && (ahora - new Date(c.ultimo_movimiento).getTime()) < 30 * 86400000
+              return true
+            })
+            return filtradas.length === 0 ? (
+              <p className="text-center py-8 text-gray-400 text-sm">Sin clientes para este filtro.</p>
+            ) : (
+              <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                <div className="overflow-x-auto"><table className="w-full text-xs min-w-[560px]">
+                  <thead className="bg-gray-50 dark:bg-slate-800">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-gray-500">Cliente</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-500">Cuenta</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-500">Saldo</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-500">Último mov.</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-500">Estado</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-500"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
+                    {filtradas.map(c => {
+                      const g = GEN_BADGE[c.estado_general]
+                      return (
+                        <tr key={c.cliente_id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40 cursor-pointer" onClick={() => verCtaCteCliente(c.cliente_id)}>
+                          <td className="px-3 py-2 font-medium text-ml-text dark:text-gray-200">{c.cliente_nombre}</td>
+                          <td className="px-3 py-2 font-mono text-[11px] text-gray-400">{c.cuenta?.codigo}</td>
+                          <td className="px-3 py-2 text-right font-mono text-gray-700 dark:text-gray-300">{fmtNum(c.saldo)}</td>
+                          <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{c.ultimo_movimiento ? fmtDate(c.ultimo_movimiento) : '—'}</td>
+                          <td className="px-3 py-2"><span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${g.cls}`}>{g.label}</span></td>
+                          <td className="px-3 py-2 text-right"><span className="text-ml-blue text-[11px] hover:underline">Ver →</span></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table></div>
+              </div>
+            )
+          })()}
+        </div>
+
+      ) : tab === 'ctacte' ? (
+        <div>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <button onClick={() => { setCcMode('list'); setCtaCte(null); setCtaCteClienteId(''); cargarCartera() }}
+              className="text-xs text-ml-blue hover:underline">← Volver a cartera</button>
             <select
               value={ctaCteClienteId}
-              onChange={e => {
-                const v = e.target.value ? Number(e.target.value) : ''
-                setCtaCteClienteId(v)
-                if (v) cargarCtaCte(v)
-              }}
-              className="input-field max-w-[260px]"
+              onChange={e => { const v = e.target.value ? Number(e.target.value) : ''; if (v) verCtaCteCliente(v) }}
+              className="input-field max-w-[220px]"
             >
               <option value="">Elegí un cliente…</option>
               {cliCuentas.map(c => (
