@@ -179,15 +179,31 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - **Comisión por cliente**: campo `porcentaje_comision` en modelo `Cliente` (migración 008, Numeric 5,4).
   Chip inline editable en `/clientes` — muestra `% —` (gris) o `2%` (ámbar). Prioridad al generar liq:
   override manual del form > % propio del cliente > default de la org.
+- **Comisión por ítem (v3.5)**: `Planilla` y `Cheque` tienen su propio `porcentaje_comision` (Numeric 5,4).
+  Safety net en `main.py` agrega ambas columnas con `ADD COLUMN IF NOT EXISTS`. Cadena de herencia:
+  1. Al subir planilla → hereda `cliente.porcentaje_comision` automáticamente.
+  2. Al conciliar → si la planilla no tiene %, hereda del cliente.
+  3. Al crear cheque → selector de cliente pre-llena el % (editable antes de guardar).
+  4. Liquidaciones calcula comisión ítem por ítem (pct propio → fallback del form → 0).
+  5. Liquidaciones solo incluye TT (planillas). Cheques se gestionan en su módulo.
+- **Renombrar y fusionar clientes**: `PUT /clientes/{id}/renombrar` cambia nombre y propaga a movimientos.
+  `POST /clientes/{id}/fusionar` reasigna planillas+movimientos al cliente destino y elimina el origen.
+  UI en `/clientes`: botones ✏️ y 🔀 visibles solo en desktop (`hidden md:inline-flex`).
+- **Normalización nombres de clientes**: primera letra mayúscula; búsqueda `ilike` en crear cliente,
+  subir planilla y caja — "green" y "Green" son el mismo cliente.
 - **Fix botón ⬇️ Excel en Historial**: endpoint `/planillas/{id}/download` tenía NameError (`_` vs
   `current_user`) → 500 sin exportar. Corregido. Botón `📁 Exportar` en fila de planilla exporta el
   detalle completo (reemplazó el Excel global que era redundante).
 - **Borrar liquidaciones borrador**: endpoint `DELETE /liquidaciones/{id}` + botón 🗑️ en `/liquidaciones`
   visible solo para estado "borrador". Permite re-generar con distinta comisión.
+- **Fix liquidaciones período**: filtra por `PlanillaRow.fecha_acred` (no `fecha_carga`); fallback a
+  `fecha_carga` cuando `fecha_acred` es NULL; maneja FK de movimiento roto o borrado.
 - **Fix auditoria Decimal**: `registrar_log` fallaba con TypeError al guardar `Decimal` en JSON.
   `_serializable()` en `auditoria.py` convierte recursivamente Decimal→float antes de persistir.
-- **Safety net startup**: `ALTER TABLE clientes ADD COLUMN IF NOT EXISTS porcentaje_comision` en
-  `_run_alembic()` por si la migración 008 falla en Render — evita que la página de clientes crashee.
+- **Safety net startup**: `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` para `clientes.porcentaje_comision`,
+  `planillas.porcentaje_comision` y `cheques.porcentaje_comision` — evita crashes si Alembic falla.
+- **Responsive fixes**: Liquidaciones mobile — números usan `text-xs md:text-sm` + `truncate` + tabla
+  con `overflow-x-auto`. Clientes mobile — botones ✏️/🔀 ocultos en mobile para que se vea el nombre.
 - **Diseño unificado**: header/sidebar usan `bg-ml-blue` (Linear purple-blue #5E6AD2) en light mode
   en lugar del amarillo previo. `btn-yellow` también usa `bg-ml-blue` en light mode. Dark mode sin cambios.
 
@@ -247,7 +263,8 @@ Checkpoints disponibles:
 - `v3.1-stable-checkpoint` — antes de las 5 features de mayo 2026
 - `v3.2-stable-checkpoint` — después de seguridad hardening + Numeric migration + legal pages (mayo 2026)
 - `v3.3-stable-checkpoint` — después de export robusto, comisiones, landing page, Borrar UM
+- `v3.4-stable-checkpoint` — después de comisión por ítem, fusionar clientes, responsive fixes (mayo 2026)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.4
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.5
