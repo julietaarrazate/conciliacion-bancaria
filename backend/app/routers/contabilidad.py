@@ -474,3 +474,139 @@ def crear_y_vincular_cuenta(
     cli.cuenta_contable_id = cuenta.id
     db.commit()
     return {"ok": True, "cliente_id": cliente_id, "cuenta": {"id": cuenta.id, "codigo": cuenta.codigo, "nombre": cuenta.nombre}}
+
+
+# ── Cuenta corriente del cliente (vista derivada de asientos) ─────────────────
+
+# modulo del asiento → (categoría de filtro, etiqueta legible)
+_MODULO_TIPO = {
+    "um_reclass":        ("banco",   "Conciliación bancaria (UM)"),
+    "planilla":          ("tt",      "Transferencia (TT)"),
+    "planilla_comision": ("tt",      "Comisión TT"),
+    "cheque_carga":      ("cheques", "Cheque"),
+    "cheque_rechazo":    ("cheques", "Cheque rechazado"),
+    "pago":              ("ajustes", "Cobranza / Pago"),
+}
+
+
+def _tipo_de_modulo(modulo: str):
+    base = modulo[:-len("_reverso")] if modulo.endswith("_reverso") else modulo
+    cat, label = _MODULO_TIPO.get(base, ("ajustes", base))
+    if modulo.endswith("_reverso"):
+        label = f"Reverso: {label}"
+    return cat, label
+
+
+@router.get("/cuenta-corriente")
+def get_cuenta_corriente(
+    cliente_id: int = Query(..., description="ID del cliente"),
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cuenta corriente del cliente: línea de tiempo financiera unificada,
+    derivada de los asientos que impactan su cuenta contable. NO genera asientos."""
+    oid = _org_id(current_user, org_id)
+    cli = db.query(Cliente).filter(Cliente.id == cliente_id, Cliente.organizacion_id == oid).first()
+    if not cli:
+        raise HTTPException(404, "Cliente no encontrado")
+    if not cli.cuenta_contable_id:
+        return {
+            "cliente": {"id": cli.id, "nombre": cli.nombre},
+            "cuenta": None, "sin_cuenta": True, "movimientos": [],
+            "total_debito": 0, "total_credito": 0, "saldo_final": 0,
+        }
+    cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == cli.cuenta_contable_id).first()
+
+    q = (
+        db.query(AsientoDetalle, Asiento)
+        .join(Asiento, AsientoDetalle.asiento_id == Asiento.id)
+        .filter(AsientoDetalle.cuenta_id == cli.cuenta_contable_id, Asiento.organizacion_id == oid)
+    )
+    if desde:
+        q = q.filter(Asiento.fecha >= desde)
+    if hasta:
+        q = q.filter(Asiento.fecha <= hasta)
+    filas = q.order_by(Asiento.fecha, Asiento.id).all()
+
+    # Set de asientos revertidos (existe un *_reverso que los referencia)
+    asiento_ids = [a.id for _, a in filas]
+    reversados = set()
+    if asiento_ids:
+        for (ref,) in (
+            db.query(Asiento.referencia_id)
+            .filter(Asiento.organizacion_id == oid, Asiento.modulo.like("%_reverso"),
+                    Asiento.referencia_id.in_(asiento_ids))
+            .all()
+        ):
+            reversados.add(ref)
+
+    # Batch: PlanillaRow para um_reclass (referencia_id = planilla_row_id)
+    row_ids = [a.referencia_id for _, a in filas if (a.modulo or "").startswith("um_reclass") and a.referencia_id]
+    row_map = {}
+    if row_ids:
+        from app.models.planilla import PlanillaRow
+        for r in db.query(PlanillaRow).filter(PlanillaRow.id.in_(row_ids)).all():
+            row_map[r.id] = {"planilla_id": r.planilla_id, "movimiento_id": r.orden_movimiento_acreditado}
+
+    # Batch: extracto_id de los movimientos referidos
+    mov_ids = [v["movimiento_id"] for v in row_map.values() if v["movimiento_id"]]
+    mov_map = {}
+    if mov_ids:
+        from app.models.extracto import MovimientoBanco
+        for m in db.query(MovimientoBanco.id, MovimientoBanco.extracto_id).filter(MovimientoBanco.id.in_(mov_ids)).all():
+            mov_map[m.id] = m.extracto_id
+
+    movimientos = []
+    saldo = 0.0
+    for det, a in filas:
+        debe = float(det.debe or 0)
+        haber = float(det.haber or 0)
+        saldo += debe - haber
+        modulo = a.modulo or ""
+        cat, label = _tipo_de_modulo(modulo)
+
+        # Estado operativo de imputación
+        es_reverso = modulo.endswith("_reverso")
+        origen = {"asiento_id": a.id}
+        estado = "Conciliado"
+        if es_reverso or a.id in reversados:
+            estado = "Revertido"
+        elif modulo.startswith("um_reclass"):
+            info = row_map.get(a.referencia_id)
+            if not info or not info.get("movimiento_id"):
+                estado = "Pendiente"  # movimiento bancario desvinculado/borrado
+            else:
+                origen["planilla_id"] = info["planilla_id"]
+                origen["movimiento_id"] = info["movimiento_id"]
+                origen["extracto_id"] = mov_map.get(info["movimiento_id"])
+        elif modulo.startswith("planilla"):
+            origen["planilla_id"] = a.referencia_id
+        elif modulo.startswith("cheque"):
+            origen["cheque_id"] = a.referencia_id
+        elif modulo.startswith("pago"):
+            origen["pago_id"] = a.referencia_id
+
+        movimientos.append({
+            "fecha": a.fecha,
+            "tipo_cat": cat,
+            "tipo_label": label,
+            "referencia": a.descripcion or "—",
+            "debito": round(debe, 2),
+            "credito": round(haber, 2),
+            "saldo": round(saldo, 2),
+            "estado": estado,
+            "origen": origen,
+        })
+
+    return {
+        "cliente": {"id": cli.id, "nombre": cli.nombre},
+        "cuenta": {"id": cuenta.id, "codigo": cuenta.codigo, "nombre": cuenta.nombre} if cuenta else None,
+        "sin_cuenta": False,
+        "movimientos": movimientos,
+        "total_debito": round(sum(m["debito"] for m in movimientos), 2),
+        "total_credito": round(sum(m["credito"] for m in movimientos), 2),
+        "saldo_final": round(saldo, 2),
+    }

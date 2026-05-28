@@ -9,6 +9,34 @@ interface ClienteCuentaRow {
   cliente_nombre: string
   cuenta: CuentaCliente | null
 }
+interface CtaCteOrigen {
+  asiento_id: number
+  planilla_id?: number
+  movimiento_id?: number
+  extracto_id?: number
+  cheque_id?: number
+  pago_id?: number
+}
+interface CtaCteMov {
+  fecha: string
+  tipo_cat: 'banco' | 'tt' | 'cheques' | 'ajustes'
+  tipo_label: string
+  referencia: string
+  debito: number
+  credito: number
+  saldo: number
+  estado: string
+  origen: CtaCteOrigen
+}
+interface CtaCteData {
+  cliente: { id: number; nombre: string }
+  cuenta: CuentaCliente | null
+  sin_cuenta: boolean
+  movimientos: CtaCteMov[]
+  total_debito: number
+  total_credito: number
+  saldo_final: number
+}
 
 interface CuentaItem {
   id: number
@@ -96,7 +124,17 @@ const MODULO_LABEL: Record<string, string> = {
   extracto: '🏦 Extracto', planilla: '📋 Planilla', caja: '💵 Caja', cheque: '🗒️ Cheque',
 }
 
-type Tab = 'plan' | 'reglas' | 'diario' | 'sumas' | 'balance' | 'mayor' | 'clientes'
+type Tab = 'plan' | 'reglas' | 'diario' | 'sumas' | 'balance' | 'mayor' | 'clientes' | 'ctacte'
+
+const CAT_LABEL: Record<string, string> = { banco: 'Banco (UM)', tt: 'TT', cheques: 'Cheques', ajustes: 'Ajustes' }
+const CAT_KEYS = ['banco', 'tt', 'cheques', 'ajustes'] as const
+
+const ESTADO_BADGE: Record<string, string> = {
+  Conciliado: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800',
+  Pendiente:  'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800',
+  Revertido:  'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800',
+  Parcial:    'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800',
+}
 
 export const Contabilidad: React.FC = () => {
   const { activeOrgId } = useOrgStore()
@@ -118,6 +156,10 @@ export const Contabilidad: React.FC = () => {
   const [cuentasDisp, setCuentasDisp] = useState<CuentaCliente[]>([])
   const [loadingCli, setLoadingCli]   = useState(false)
   const [savingCli, setSavingCli]     = useState<number | null>(null)
+  const [ctaCte, setCtaCte]           = useState<CtaCteData | null>(null)
+  const [ctaCteClienteId, setCtaCteClienteId] = useState<number | ''>('')
+  const [loadingCtaCte, setLoadingCtaCte] = useState(false)
+  const [catFiltro, setCatFiltro]     = useState<Set<string>>(new Set(CAT_KEYS))
 
   useEffect(() => {
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
@@ -152,8 +194,26 @@ export const Contabilidad: React.FC = () => {
   }
 
   useEffect(() => {
-    if (tab === 'clientes') cargarClientesCuentas()
+    if (tab === 'clientes' || tab === 'ctacte') cargarClientesCuentas()
   }, [tab, activeOrgId])
+
+  const cargarCtaCte = (clienteId: number) => {
+    setLoadingCtaCte(true)
+    setCtaCte(null)
+    const q = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    apiClient.client.get(`/contabilidad/cuenta-corriente?cliente_id=${clienteId}${q}`)
+      .then(r => setCtaCte(r.data))
+      .catch(() => setCtaCte(null))
+      .finally(() => setLoadingCtaCte(false))
+  }
+
+  const toggleCat = (cat: string) => {
+    setCatFiltro(prev => {
+      const next = new Set(prev)
+      if (next.has(cat)) next.delete(cat); else next.add(cat)
+      return next
+    })
+  }
 
   const qOrg = activeOrgId ? `?org_id=${activeOrgId}` : ''
 
@@ -235,6 +295,7 @@ export const Contabilidad: React.FC = () => {
     ['balance', '⚖️ Balance'],
     ['mayor',   '📖 Libro mayor'],
     ['clientes', '🔗 Clientes'],
+    ['ctacte',  '💰 Cta. corriente'],
   ]
 
   return (
@@ -588,6 +649,110 @@ export const Contabilidad: React.FC = () => {
               </table></div>
             </div>
           )}
+        </div>
+
+      ) : tab === 'ctacte' ? (
+        <div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Línea de tiempo financiera del cliente, derivada de los asientos contables. Es una vista operativa — no genera asientos.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <select
+              value={ctaCteClienteId}
+              onChange={e => {
+                const v = e.target.value ? Number(e.target.value) : ''
+                setCtaCteClienteId(v)
+                if (v) cargarCtaCte(v)
+              }}
+              className="input-field max-w-[260px]"
+            >
+              <option value="">Elegí un cliente…</option>
+              {cliCuentas.map(c => (
+                <option key={c.cliente_id} value={c.cliente_id}>{c.cliente_nombre}</option>
+              ))}
+            </select>
+            <div className="flex items-center gap-2 flex-wrap">
+              {CAT_KEYS.map(cat => (
+                <label key={cat} className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300 cursor-pointer">
+                  <input type="checkbox" checked={catFiltro.has(cat)} onChange={() => toggleCat(cat)} className="accent-ml-blue" />
+                  {CAT_LABEL[cat]}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {loadingCtaCte ? (
+            <div className="py-12 text-center text-gray-400">Cargando...</div>
+          ) : !ctaCte ? (
+            <p className="text-center py-8 text-gray-400 text-sm">Elegí un cliente para ver su cuenta corriente.</p>
+          ) : ctaCte.sin_cuenta ? (
+            <div className="text-center py-8 text-sm text-amber-600 dark:text-amber-400">
+              {ctaCte.cliente.nombre} no tiene cuenta contable vinculada. Vinculala en el tab 🔗 Clientes.
+            </div>
+          ) : (() => {
+            const visibles = ctaCte.movimientos.filter(m => catFiltro.has(m.tipo_cat))
+            return (
+              <div>
+                <div className="flex flex-wrap gap-3 mb-3 text-xs">
+                  <span className="text-gray-500 dark:text-gray-400">Cuenta: <span className="font-mono text-amber-600 dark:text-amber-400">{ctaCte.cuenta?.codigo} {ctaCte.cuenta?.nombre}</span></span>
+                  <span className="text-gray-500 dark:text-gray-400">Saldo: <b className="text-ml-text dark:text-white">{fmtNum(ctaCte.saldo_final)}</b></span>
+                  <span className="text-gray-400">({visibles.length} de {ctaCte.movimientos.length} movimientos)</span>
+                </div>
+                {visibles.length === 0 ? (
+                  <p className="text-center py-8 text-gray-400 text-sm">Sin movimientos para los filtros elegidos.</p>
+                ) : (
+                  <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                    <div className="overflow-x-auto"><table className="w-full text-xs min-w-[640px]">
+                      <thead className="bg-gray-50 dark:bg-slate-800">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-gray-500">Fecha</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-500">Tipo</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-500">Referencia</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-500">Estado</th>
+                          <th className="text-right px-3 py-2 font-medium text-blue-600 dark:text-blue-400">Débito</th>
+                          <th className="text-right px-3 py-2 font-medium text-orange-600 dark:text-orange-400">Crédito</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-500">Saldo</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-500">Origen</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
+                        {visibles.map((m, i) => (
+                          <tr key={i} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
+                            <td className="px-3 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">{fmtDate(m.fecha)}</td>
+                            <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{m.tipo_label}</td>
+                            <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[200px] truncate" title={m.referencia}>{m.referencia}</td>
+                            <td className="px-3 py-2">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${ESTADO_BADGE[m.estado] || ''}`}>{m.estado}</span>
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-blue-700 dark:text-blue-300">{m.debito > 0 ? fmtNum(m.debito) : ''}</td>
+                            <td className="px-3 py-2 text-right font-mono text-orange-700 dark:text-orange-300">{m.credito > 0 ? fmtNum(m.credito) : ''}</td>
+                            <td className="px-3 py-2 text-right font-mono text-gray-700 dark:text-gray-300">{fmtNum(m.saldo)}</td>
+                            <td className="px-3 py-2 text-right whitespace-nowrap">
+                              {m.origen.extracto_id && (
+                                <a href={`/movimientos?extracto=${m.origen.extracto_id}`} className="text-ml-blue hover:underline mr-2" title="Movimiento bancario">🏦</a>
+                              )}
+                              {m.origen.planilla_id && (
+                                <a href={`/historial?planilla=${m.origen.planilla_id}`} className="text-ml-blue hover:underline" title="Planilla origen">📄</a>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-gray-50 dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700">
+                        <tr>
+                          <td colSpan={4} className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-400">Totales (todos los movimientos)</td>
+                          <td className="px-3 py-2 text-right font-mono font-semibold text-blue-700 dark:text-blue-300">{fmtNum(ctaCte.total_debito)}</td>
+                          <td className="px-3 py-2 text-right font-mono font-semibold text-orange-700 dark:text-orange-300">{fmtNum(ctaCte.total_credito)}</td>
+                          <td className="px-3 py-2 text-right font-mono font-semibold">{fmtNum(ctaCte.saldo_final)}</td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table></div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
       ) : null}
     </div>

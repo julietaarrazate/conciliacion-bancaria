@@ -87,7 +87,7 @@ const FAQ = [
   { q: '¿Cómo se instala?', a: 'No se instala. Abrís el link en el navegador y listo. Si querés tenerla como app en el celular, desde Chrome o Safari: menú → "Agregar a pantalla de inicio". Funciona como app nativa sin pasar por Play Store ni App Store.' },
   { q: '¿Mis datos están seguros?', a: 'Sí. Datos aislados por empresa, contraseñas hasheadas, autenticación JWT, backup diario encriptado y auditoría completa de cada acción. Conexiones por HTTPS en toda la app.' },
   { q: '¿Funciona sin conexión?', a: 'Las consultas básicas sí (lectura de cache). Para cargar planillas, registrar OPs o conciliar necesitás conexión.' },
-  { q: '¿Se conecta con AFIP?', a: 'Por ahora no directamente. Exporta Excel en formato Banco Macro y PDF de cierre mensual, todo listo para entregar al contador.' },
+  { q: '¿Se conecta con ARCA?', a: 'Por ahora no directamente. Exporta Excel en formato Banco Macro y PDF de cierre mensual, todo listo para entregar al contador.' },
   { q: '¿Cuántos usuarios puedo tener?', a: 'Sin límite. Cada empresa puede tener todos los empleados que necesite, con roles diferenciados (admin, operador, solo lectura).' },
   { q: '¿Puedo importar mis datos viejos?', a: 'Sí. Las planillas y extractos en Excel se importan directamente. Para datos en otros formatos, lo coordinamos en el onboarding inicial.' },
 ]
