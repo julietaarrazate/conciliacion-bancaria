@@ -176,7 +176,16 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   a `row.fecha_acred` para la columna Fecha acred.
 - **Comisión en liquidaciones**: al generar una liquidación se puede elegir 1.5% / 1.8% / 2% (presets)
   o ingresar un % manual. Si se deja vacío usa el default de la org (1.5%). Aplica a todos los clientes.
-  Comisión por cliente individual: en `org.configuracion.comisiones.por_cliente.{nombre}` (sin UI aún).
+- **Comisión por cliente**: campo `porcentaje_comision` en modelo `Cliente` (migración 008, Numeric 5,4).
+  Chip inline editable en `/clientes` — muestra `% —` (gris) o `2%` (ámbar). Prioridad al generar liq:
+  override manual del form > % propio del cliente > default de la org.
+- **Fix botón ⬇️ Excel en Historial**: endpoint `/planillas/{id}/download` tenía NameError (`_` vs
+  `current_user`) → 500 sin exportar. Corregido. Botón global Excel reemplazado por `📁 Exportar`
+  (resumen de todas las planillas). El `⬇️ Excel` por planilla exporta el detalle completo.
+- **Fix auditoria Decimal**: `registrar_log` fallaba con TypeError al guardar `Decimal` en JSON.
+  `_serializable()` en `auditoria.py` convierte recursivamente Decimal→float antes de persistir.
+- **Safety net startup**: `ALTER TABLE clientes ADD COLUMN IF NOT EXISTS porcentaje_comision` en
+  `_run_alembic()` por si la migración 008 falla en Render — evita que la página de clientes crashee.
 
 ---
 
