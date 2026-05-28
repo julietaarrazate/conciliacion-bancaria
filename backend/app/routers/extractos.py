@@ -309,7 +309,20 @@ def eliminar_movimientos_um(extracto_id: int,
                 MovimientoBanco.um_lote == max_lote,
             )
 
-        ids_a_borrar = [m.id for m in movs_query.all()]
+        movs_a_borrar = movs_query.all()
+        ids_a_borrar = [m.id for m in movs_a_borrar]
+
+        # Revertir asientos contables antes de eliminar los movimientos
+        try:
+            from app.services.motor_contable import reversar_asientos as _rev
+            _org_id = extracto.organizacion_id or 1
+            for _mv in movs_a_borrar:
+                _rev(db, "um_mov", _mv.id, _org_id, current_user.id, "Baja lote UM")
+            if movs_a_borrar:
+                _rev(db, "um_lote", movs_a_borrar[0].id, _org_id, current_user.id, "Baja lote UM")
+        except Exception as _mc_ex:
+            logger.warning("reverso UM asientos: %s", _mc_ex)
+
         if ids_a_borrar:
             db.query(PlanillaRow).filter(
                 PlanillaRow.orden_movimiento_acreditado.in_(ids_a_borrar)
@@ -332,6 +345,7 @@ async def agregar_ultimos_movimientos(
     extracto_id: int,
     file: UploadFile = File(...),
     corte_saldo: Optional[float] = Form(None),
+    modo_asiento: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -351,6 +365,31 @@ async def agregar_ultimos_movimientos(
         stats = mergear_movimientos(db, extracto_id, parsed["movimientos"], corte_saldo=corte_saldo)
         registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "APPEND_UM",
                       {"archivo": file.filename, **stats})
+
+        # Asiento contable automático para los movimientos UM nuevos
+        if stats["agregados"] > 0 and stats.get("nuevo_lote"):
+            try:
+                from app.services.motor_contable import registrar_um_import
+                from app.models.organizacion import Organizacion as _Org
+                _org_id = extracto.organizacion_id or 1
+                movs_nuevos = db.query(MovimientoBanco).filter(
+                    MovimientoBanco.extracto_id == extracto_id,
+                    MovimientoBanco.um_lote == stats["nuevo_lote"],
+                ).all()
+                _org = db.query(_Org).filter(_Org.id == _org_id).first()
+                _modo_config = ((_org.configuracion or {}).get("modo_asiento_um", "agrupado")) if _org else "agrupado"
+                _modo = modo_asiento if modo_asiento in ("individual", "agrupado") else _modo_config
+                registrar_um_import(
+                    db=db,
+                    extracto_id=extracto_id,
+                    org_id=_org_id,
+                    usuario_id=current_user.id,
+                    movimientos_nuevos=movs_nuevos,
+                    modo=_modo,
+                )
+            except Exception as _mc_ex:
+                logger.warning("motor_contable UM: %s", _mc_ex)
+
         return {"extracto_id": extracto_id, **stats}
     except HTTPException:
         raise

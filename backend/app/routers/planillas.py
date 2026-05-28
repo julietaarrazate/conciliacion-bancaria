@@ -207,6 +207,7 @@ def conciliar(
             org_config=org_config,
             org_id=org_id,
             solo_pendientes=solo_pendientes,
+            cliente_id=planilla.cliente_id,
         )
 
         # Save commission %: explicit param > existing planilla % > client's default %

@@ -376,6 +376,7 @@ def conciliar_planilla(
     org_config: Optional[Dict[str, Any]] = None,
     org_id: int = 1,
     solo_pendientes: bool = False,
+    cliente_id: Optional[int] = None,
 ) -> dict:
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
@@ -478,6 +479,23 @@ def conciliar_planilla(
             row.orden_movimiento_acreditado = mov.id
             procesados.add(mov.id)
             res["acreditadas"] += 1
+
+            # Asiento de reclasificación: solo para movimientos de UM y si conocemos el cliente
+            if getattr(mov, "source", None) == "um" and cliente_id:
+                try:
+                    from app.services.motor_contable import registrar_reclasificacion_um
+                    registrar_reclasificacion_um(
+                        db=db,
+                        planilla_row_id=row.id,
+                        org_id=org_id,
+                        usuario_id=None,
+                        cliente_id=cliente_id,
+                        cliente_nombre=cliente_nombre,
+                        monto=row.monto,
+                        fecha=mov.fecha_acred or mov.fecha,
+                    )
+                except Exception:
+                    pass
         else:
             if status == "no está":
                 res["no_encontradas"] += 1

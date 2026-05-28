@@ -472,6 +472,186 @@ def registrar_planilla(
         logger.warning("Error asiento planilla %s: %s", planilla_id, ex)
 
 
+# ─── UM: importación y reclasificación ──────────────────────────────────────
+
+def _get_cuenta_por_codigo(db: Session, codigo: str, org_id: int) -> Optional[PlanCuenta]:
+    return (
+        db.query(PlanCuenta)
+        .filter(PlanCuenta.codigo == codigo, PlanCuenta.organizacion_id == org_id, PlanCuenta.activo == True)
+        .first()
+    )
+
+
+def _get_o_crear_cuenta_cliente(db: Session, cliente_id: int, org_id: int) -> Optional[PlanCuenta]:
+    """Resuelve la cuenta contable del Cliente EXISTENTE (vínculo 1:1).
+    1. Si el cliente ya tiene cuenta_contable_id → la reutiliza.
+    2. Si existe una cuenta bajo 2-1-2-0 con el mismo nombre → la adopta y la vincula.
+    3. Si no existe ninguna → crea la cuenta con el próximo código y la vincula al cliente.
+    Nunca crea entidades Cliente; solo la cuenta contable asociada al cliente que ya está en el sistema."""
+    from sqlalchemy import func as _func
+    from app.models.cliente import Cliente
+
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente:
+        return None
+
+    # 1. Cuenta ya vinculada
+    if cliente.cuenta_contable_id:
+        cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == cliente.cuenta_contable_id).first()
+        if cuenta:
+            return cuenta
+
+    padre = _get_cuenta_por_codigo(db, "2-1-2-0", org_id)
+    if not padre:
+        return None
+
+    nombre_norm = (cliente.nombre or "").strip().title()
+
+    # 2. Adoptar cuenta existente por nombre (ej. Green/Tucu/Alojando del seed)
+    cuenta = (
+        db.query(PlanCuenta)
+        .filter(
+            PlanCuenta.parent_id == padre.id,
+            PlanCuenta.organizacion_id == org_id,
+            _func.lower(PlanCuenta.nombre) == nombre_norm.lower(),
+        )
+        .first()
+    )
+    if cuenta:
+        cliente.cuenta_contable_id = cuenta.id
+        db.flush()
+        return cuenta
+
+    # 3. Crear cuenta nueva con el próximo código y vincularla al cliente
+    hijos = db.query(PlanCuenta).filter(PlanCuenta.parent_id == padre.id, PlanCuenta.organizacion_id == org_id).all()
+    max_n = 0
+    for hijo in hijos:
+        try:
+            max_n = max(max_n, int(hijo.codigo.rsplit("-", 1)[-1]))
+        except (ValueError, IndexError):
+            pass
+    nuevo_codigo = f"2-1-2-{max_n + 1}"
+    nueva = PlanCuenta(
+        codigo=nuevo_codigo, nombre=nombre_norm, tipo="pasivo",
+        parent_id=padre.id, nivel=(padre.nivel or 3) + 1,
+        activo=True, organizacion_id=org_id,
+    )
+    db.add(nueva)
+    db.flush()
+    cliente.cuenta_contable_id = nueva.id
+    db.flush()
+    logger.info("Cuenta cliente creada: %s %s (cliente_id=%s, org %s)", nuevo_codigo, nombre_norm, cliente_id, org_id)
+    return nueva
+
+
+def registrar_um_import(
+    db: Session,
+    extracto_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    movimientos_nuevos,
+    modo: str = "agrupado",
+) -> None:
+    """Asiento al importar UM: Banco Macro (D) / No identificado (H).
+    modo='agrupado' → un asiento por lote (suma total).
+    modo='individual' → un asiento por movimiento."""
+    try:
+        if not movimientos_nuevos:
+            return
+        banco_macro = _get_cuenta_por_codigo(db, "1-1-1-3-1", org_id)
+        no_id = _get_cuenta_por_codigo(db, "2-1-1-1", org_id)
+        if not banco_macro or not no_id:
+            logger.warning("Cuentas UM no encontradas org %s (1-1-1-3-1 / 2-1-1-1)", org_id)
+            return
+        if modo == "individual":
+            for mov in movimientos_nuevos:
+                if _ya_existe(db, "um_mov", mov.id, org_id):
+                    continue
+                monto = abs(_monto(mov.monto))
+                if monto <= 0:
+                    continue
+                fecha_mov = mov.fecha if isinstance(mov.fecha, date) else date.today()
+                a = Asiento(
+                    fecha=fecha_mov,
+                    descripcion=f"UM: {mov.titular or 'Sin titular'}",
+                    modulo="um_mov",
+                    referencia_id=mov.id,
+                    organizacion_id=org_id,
+                    usuario_id=usuario_id,
+                )
+                db.add(a)
+                db.flush()
+                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=monto, haber=Decimal("0")))
+                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=Decimal("0"), haber=monto))
+        else:
+            primer_mov = movimientos_nuevos[0]
+            if _ya_existe(db, "um_lote", primer_mov.id, org_id):
+                return
+            total = sum(abs(_monto(m.monto)) for m in movimientos_nuevos)
+            if total <= 0:
+                return
+            fecha_ref = primer_mov.fecha if isinstance(primer_mov.fecha, date) else date.today()
+            lote = primer_mov.um_lote or 1
+            a = Asiento(
+                fecha=fecha_ref,
+                descripcion=f"UM lote {lote} — {len(movimientos_nuevos)} movimientos (extracto #{extracto_id})",
+                modulo="um_lote",
+                referencia_id=primer_mov.id,
+                organizacion_id=org_id,
+                usuario_id=usuario_id,
+            )
+            db.add(a)
+            db.flush()
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=total, haber=Decimal("0")))
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=Decimal("0"), haber=total))
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        logger.warning("Error asiento UM import %s: %s", extracto_id, ex)
+
+
+def registrar_reclasificacion_um(
+    db: Session,
+    planilla_row_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    cliente_id: int,
+    cliente_nombre: str,
+    monto,
+    fecha: date,
+) -> None:
+    """Asiento de reclasificación al conciliar un movimiento UM: No identificado (D) / Cliente X (H).
+    La cuenta del cliente existente se resuelve/crea/vincula vía _get_o_crear_cuenta_cliente."""
+    try:
+        if _ya_existe(db, "um_reclass", planilla_row_id, org_id):
+            return
+        no_id = _get_cuenta_por_codigo(db, "2-1-1-1", org_id)
+        cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_id, org_id) if cliente_id else None
+        if not no_id or not cuenta_cliente:
+            logger.warning("Cuentas reclasificación no encontradas org %s (cliente_id=%s)", org_id, cliente_id)
+            return
+        monto_d = abs(_monto(monto))
+        if monto_d <= 0:
+            return
+        fecha_asiento = fecha if isinstance(fecha, date) else date.today()
+        a = Asiento(
+            fecha=fecha_asiento,
+            descripcion=f"Reclasif. UM → {cliente_nombre}",
+            modulo="um_reclass",
+            referencia_id=planilla_row_id,
+            organizacion_id=org_id,
+            usuario_id=usuario_id,
+        )
+        db.add(a)
+        db.flush()
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=monto_d, haber=Decimal("0")))
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cliente.id, debe=Decimal("0"), haber=monto_d))
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        logger.warning("Error asiento reclasif. row %s: %s", planilla_row_id, ex)
+
+
 # ─── Reversión contable ──────────────────────────────────────────────────────
 
 def reversar_asientos(

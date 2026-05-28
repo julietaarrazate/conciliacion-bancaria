@@ -98,6 +98,7 @@ export const Movimientos: React.FC = () => {
   const [acredSaving, setAcredSaving] = useState(false)
   const [acredError, setAcredError] = useState('')
   const umRef = useRef<HTMLInputElement>(null)
+  const [modoAsiento, setModoAsiento] = useState<'agrupado' | 'individual'>('agrupado')
 
   useEffect(() => {
     apiClient.listExtractos(activeOrgId).then(data => {
@@ -268,7 +269,7 @@ export const Movimientos: React.FC = () => {
     if (!file || !extractoId) return
     setUmLoading(true); setUmMsg('')
     try {
-      const r = await apiClient.appendUM(extractoId, file)
+      const r = await apiClient.appendUM(extractoId, file, undefined, modoAsiento)
       let msg = `✓ ${r.agregados} nuevos agregados`
       if (r.duplicados > 0) msg += ` · ${r.duplicados} ya existían (ignorados)`
       if ((r as any).duplicados_internos > 0) msg += ` · ⚠️ ${(r as any).duplicados_internos} duplicado(s) en el archivo del banco eliminados automáticamente`
@@ -344,10 +345,22 @@ export const Movimientos: React.FC = () => {
             ))}
           </select>
         </div>
-        <label className={`flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium cursor-pointer transition-colors ${umLoading ? 'opacity-50' : 'bg-ml-blue text-white border-ml-blue hover:bg-ml-blue-dark'}`}>
-          {umLoading ? '⏳' : '📎'} {umLoading ? 'Procesando...' : 'Agregar UM'}
-          <input ref={umRef} type="file" accept="*/*" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
-        </label>
+        <div className="flex items-center gap-1">
+          <select
+            value={modoAsiento}
+            onChange={e => setModoAsiento(e.target.value as 'agrupado' | 'individual')}
+            className="text-xs px-2 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
+            title="Modo de asiento contable"
+            disabled={umLoading}
+          >
+            <option value="agrupado">Asiento agrupado</option>
+            <option value="individual">Asiento individual</option>
+          </select>
+          <label className={`flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium cursor-pointer transition-colors ${umLoading ? 'opacity-50' : 'bg-ml-blue text-white border-ml-blue hover:bg-ml-blue-dark'}`}>
+            {umLoading ? '⏳' : '📎'} {umLoading ? 'Procesando...' : 'Agregar UM'}
+            <input ref={umRef} type="file" accept="*/*" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
+          </label>
+        </div>
         {extractoId && umCount > 0 && (
           <button
             onClick={async () => {
