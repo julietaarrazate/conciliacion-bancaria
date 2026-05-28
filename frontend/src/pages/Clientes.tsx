@@ -430,12 +430,11 @@ export const Clientes: React.FC = () => {
                             ) : (
                               <button
                                 onClick={(e) => { e.stopPropagation(); setEditComisionId(cliente.id); setEditComisionVal(cliente.porcentaje_comision != null ? String(cliente.porcentaje_comision) : '') }}
-                                className="px-2 py-1 text-[11px] rounded font-medium flex-shrink-0 border transition-colors hover:border-amber-400 dark:hover:border-amber-500"
-                                style={{ borderColor: 'transparent', background: 'transparent' }}
-                                title="Comisión de este cliente — click para editar"
+                                className="px-2 py-1 text-[11px] rounded font-medium flex-shrink-0 transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                                title="% comisión de este cliente — click para editar"
                               >
-                                <span className={cliente.porcentaje_comision != null ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}>
-                                  {cliente.porcentaje_comision != null ? `${cliente.porcentaje_comision}%` : '—%'}
+                                <span className={cliente.porcentaje_comision != null ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-gray-400 dark:text-gray-500'}>
+                                  💰{cliente.porcentaje_comision != null ? ` ${cliente.porcentaje_comision}%` : ' —%'}
                                 </span>
                               </button>
                             )}
