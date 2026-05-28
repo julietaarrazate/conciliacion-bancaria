@@ -19,6 +19,7 @@ interface Cheque {
   titular: string | null
   monto: number
   comision: number
+  porcentaje_comision: number | null
   fecha_emision: string | null
   fecha_deposito: string | null
   fecha_acred: string | null
@@ -38,7 +39,7 @@ const ESTADO_BADGE: Record<string, string> = {
 
 const emptyForm = (): Partial<Cheque> => ({
   cliente_id: null, numero: '', banco_origen: '', titular: '',
-  monto: 0, comision: 0, fecha_emision: '', fecha_deposito: '', notas: '',
+  monto: 0, comision: 0, porcentaje_comision: null, fecha_emision: '', fecha_deposito: '', notas: '',
 })
 
 const inputClass = "w-full bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
@@ -161,11 +162,12 @@ export const Cheques: React.FC = () => {
         numero:        formData.numero || null,
         banco_origen:  formData.banco_origen || null,
         titular:       formData.titular || null,
-        monto:         formData.monto,
-        comision:      formData.comision || 0,
-        fecha_emision: formData.fecha_emision || null,
-        fecha_deposito: formData.fecha_deposito || null,
-        notas:         formData.notas || null,
+        monto:               formData.monto,
+        comision:            formData.comision || 0,
+        porcentaje_comision: formData.porcentaje_comision || null,
+        fecha_emision:       formData.fecha_emision || null,
+        fecha_deposito:      formData.fecha_deposito || null,
+        notas:               formData.notas || null,
       })
       // Si hay foto, subirla
       if (formFoto && res.data.id) {
@@ -406,7 +408,15 @@ export const Cheques: React.FC = () => {
               {formField('banco_origen', 'Banco origen')}
               {formField('numero', 'N° de cheque')}
               {formField('monto', 'Monto *', 'number')}
-              {formField('comision', 'Comisión', 'number')}
+              {formField('comision', 'Comisión banco', 'number')}
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">% Comisión liquidación</label>
+                <input type="number" step="0.1" min="0" max="100" placeholder="ej: 1.5"
+                  className={inputClass}
+                  value={formData.porcentaje_comision ?? ''}
+                  onChange={e => setFormData(p => ({ ...p, porcentaje_comision: e.target.value === '' ? null : parseFloat(e.target.value) }))}
+                />
+              </div>
               {formField('fecha_emision', 'Fecha emisión', 'date')}
               {formField('fecha_deposito', 'Fecha depósito', 'date')}
               <div className="col-span-2">

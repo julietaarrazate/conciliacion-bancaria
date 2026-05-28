@@ -85,6 +85,7 @@ def list_planillas(
                 ),
                 sin_datos=sum(1 for s in statuses if s == "faltan datos"),
                 monto_conciliado=monto_ok,
+                porcentaje_comision=float(p.porcentaje_comision) if p.porcentaje_comision is not None else None,
             )
         )
 

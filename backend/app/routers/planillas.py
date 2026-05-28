@@ -208,6 +208,11 @@ def conciliar(
             solo_pendientes=solo_pendientes,
         )
 
+        # Save commission % on planilla if explicitly provided
+        if comision_pct > 0:
+            planilla.porcentaje_comision = Decimal(str(comision_pct))
+            db.flush()
+
         registrar_log(
             db=db,
             usuario_id=current_user.id,
@@ -590,6 +595,33 @@ def download_planilla_conciliada(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'}
     )
+
+
+@router.put("/{planilla_id}/comision")
+def actualizar_comision_planilla(
+    planilla_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Setea o borra el % de comisión propio de esta planilla para liquidaciones."""
+    planilla = _planilla_for_user(db, planilla_id, current_user)
+    pct_raw = payload.get("porcentaje_comision")
+    if pct_raw is None or pct_raw == "":
+        planilla.porcentaje_comision = None
+    else:
+        try:
+            pct = Decimal(str(pct_raw))
+            if pct < 0 or pct > 100:
+                raise HTTPException(400, "Porcentaje debe ser entre 0 y 100")
+            planilla.porcentaje_comision = pct
+        except Exception:
+            raise HTTPException(400, "Porcentaje inválido")
+    db.commit()
+    return {
+        "id": planilla.id,
+        "porcentaje_comision": float(planilla.porcentaje_comision) if planilla.porcentaje_comision is not None else None,
+    }
 
 
 @router.delete("/{planilla_id}")

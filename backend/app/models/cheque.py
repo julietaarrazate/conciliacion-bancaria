@@ -15,6 +15,7 @@ class Cheque(Base):
     titular         = Column(String, nullable=True)
     monto           = Column(Numeric(12, 2), nullable=False)
     comision        = Column(Numeric(12, 2), nullable=False, default=0.0)
+    porcentaje_comision = Column(Numeric(5, 4), nullable=True)  # % comisión para liquidación
     fecha_emision   = Column(Date, nullable=True)
     fecha_deposito  = Column(Date, nullable=True)
     fecha_acred     = Column(Date, nullable=True)

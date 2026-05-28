@@ -44,18 +44,25 @@ def _comision_cliente(config: dict, cliente_nombre: str) -> Decimal:
     return Decimal(str(comisiones.get("porcentaje_default", 1.5)))
 
 
-def _calcular_monto_conciliado(db: Session, org_id: int, cliente_id: int,
-                                desde: date, hasta: date) -> Decimal:
-    """Suma montos de filas ok en el período, usando fecha_acred cuando existe."""
+def _calcular_monto_y_comision(
+    db: Session, org_id: int, cliente_id: int,
+    desde: date, hasta: date,
+    pct_fallback: Optional[Decimal] = None,
+) -> tuple:
+    """
+    Returns (monto_total, comision_total, pct_efectivo).
+    Priority: per-planilla/cheque % → pct_fallback → 0.
+    Includes planilla rows + acreditated cheques in the period.
+    """
     from app.models.extracto import MovimientoBanco as MB
+    from app.models.cheque import Cheque
 
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
-        return Decimal("0")
+        return Decimal("0"), Decimal("0"), Decimal("0")
 
-    # Primary: rows with fecha_acred in range
-    # Fallback: rows where fecha_acred is NULL → use planilla.fecha_carga for date scoping
-    rows = db.query(PlanillaRow).join(
+    # ── Planilla rows ────────────────────────────────────────────────────────
+    rows_q = db.query(PlanillaRow, Planilla).join(
         Planilla, PlanillaRow.planilla_id == Planilla.id
     ).filter(
         Planilla.organizacion_id == org_id,
@@ -76,16 +83,48 @@ def _calcular_monto_conciliado(db: Session, org_id: int, cliente_id: int,
         )
     ).all()
 
-    total = Decimal("0")
-    for row in rows:
+    monto_total = Decimal("0")
+    comision_total = Decimal("0")
+
+    for row, planilla in rows_q:
         if row.orden_movimiento_acreditado:
             mov = db.query(MB).filter(MB.id == row.orden_movimiento_acreditado).first()
-            # Use movement monto if found; fall back to row.monto if movement was deleted
-            total += (mov.monto if mov else row.monto) or Decimal("0")
+            monto_fila = (mov.monto if mov else row.monto) or Decimal("0")
         else:
-            # FK is NULL (UM deleted or manual acreditation) — use row's own monto
-            total += row.monto or Decimal("0")
-    return round(total, 2)
+            monto_fila = row.monto or Decimal("0")
+
+        pct = (
+            Decimal(str(planilla.porcentaje_comision))
+            if planilla.porcentaje_comision is not None
+            else (pct_fallback or Decimal("0"))
+        )
+        monto_total += monto_fila
+        comision_total += monto_fila * pct / 100
+
+    # ── Cheques acreditados en el periodo ────────────────────────────────────
+    cheques = db.query(Cheque).filter(
+        Cheque.organizacion_id == org_id,
+        Cheque.cliente_id == cliente_id,
+        Cheque.estado == "acreditado",
+        Cheque.fecha_acred.isnot(None),
+        Cheque.fecha_acred >= desde,
+        Cheque.fecha_acred <= hasta,
+    ).all()
+
+    for ch in cheques:
+        monto_ch = ch.monto or Decimal("0")
+        pct = (
+            Decimal(str(ch.porcentaje_comision))
+            if ch.porcentaje_comision is not None
+            else (pct_fallback or Decimal("0"))
+        )
+        monto_total += monto_ch
+        comision_total += monto_ch * pct / 100
+
+    pct_efectivo = (
+        round(comision_total / monto_total * 100, 4) if monto_total > 0 else Decimal("0")
+    )
+    return round(monto_total, 2), round(comision_total, 2), pct_efectivo
 
 
 # ── POST /liquidaciones/generar ───────────────────────────────────────────────
@@ -118,13 +157,11 @@ def generar_liquidacion(
     if cierre:
         raise HTTPException(400, "Ya existe un cierre para este período")
 
-    # Comisión override manual (si se pasa en el payload, aplica a todos los clientes)
-    pct_override = payload.get("porcentaje_comision")
-    if pct_override is not None:
-        try:
-            pct_override = Decimal(str(pct_override))
-        except Exception:
-            pct_override = None
+    # % fallback: se aplica solo a ítems que NO tienen su propio %. Prioridad:
+    # override del form → % propio del cliente → default de org
+    pct_form = payload.get("porcentaje_comision")
+    pct_form = Decimal(str(pct_form)) if pct_form is not None else None
+    pct_default = _comision_cliente(config, "")  # org default
 
     # Obtener clientes activos de la org
     clientes = db.query(Cliente).filter(Cliente.organizacion_id == org_id).all()
@@ -134,25 +171,28 @@ def generar_liquidacion(
     total_comision   = Decimal("0")
 
     for cliente in clientes:
-        monto = _calcular_monto_conciliado(db, org_id, cliente.id, periodo_inicio, periodo_fin)
+        # Fallback chain for items without their own %:
+        # form override → client's own % → org default
+        if pct_form is not None:
+            pct_fallback = pct_form
+        elif cliente.porcentaje_comision is not None:
+            pct_fallback = Decimal(str(cliente.porcentaje_comision))
+        else:
+            pct_fallback = pct_default
+
+        monto, comision, pct_efectivo = _calcular_monto_y_comision(
+            db, org_id, cliente.id, periodo_inicio, periodo_fin, pct_fallback
+        )
         if monto == 0:
             continue
 
-        # Prioridad: override manual > % propio del cliente > config org
-        if pct_override is not None:
-            pct = pct_override
-        elif cliente.porcentaje_comision is not None:
-            pct = Decimal(str(cliente.porcentaje_comision))
-        else:
-            pct = _comision_cliente(config, cliente.nombre)
-        comision = round(monto * pct / 100, 2)
         neto = round(monto - comision, 2)
 
         detalles.append({
             "cliente_id": cliente.id,
             "cliente_nombre": cliente.nombre,
             "monto_conciliado": monto,
-            "porcentaje_comision": pct,
+            "porcentaje_comision": pct_efectivo,
             "monto_comision": comision,
             "monto_neto": neto
         })

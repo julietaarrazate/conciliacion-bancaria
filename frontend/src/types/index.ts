@@ -81,6 +81,7 @@ export interface PlanillaHistorialItem {
   duplicadas: number
   sin_datos: number
   monto_conciliado: number
+  porcentaje_comision: number | null
 }
 
 export interface ExtractoHistorialItem {

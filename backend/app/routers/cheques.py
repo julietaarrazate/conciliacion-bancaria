@@ -20,15 +20,16 @@ router = APIRouter(prefix="/cheques", tags=["cheques"])
 
 
 class ChequeIn(BaseModel):
-    cliente_id:     Optional[int] = None
-    numero:         Optional[str] = None
-    banco_origen:   Optional[str] = None
-    titular:        Optional[str] = None
-    monto:          float = Field(..., gt=0)
-    comision:       float = Field(0.0, ge=0)
-    fecha_emision:  Optional[date] = None
-    fecha_deposito: Optional[date] = None
-    notas:          Optional[str] = None
+    cliente_id:          Optional[int] = None
+    numero:              Optional[str] = None
+    banco_origen:        Optional[str] = None
+    titular:             Optional[str] = None
+    monto:               float = Field(..., gt=0)
+    comision:            float = Field(0.0, ge=0)
+    porcentaje_comision: Optional[float] = None  # % comisión para liquidaciones
+    fecha_emision:       Optional[date] = None
+    fecha_deposito:      Optional[date] = None
+    notas:               Optional[str] = None
 
 
 class AcreditarIn(BaseModel):
@@ -51,7 +52,8 @@ def _cheque_dict(c: Cheque) -> dict:
         "banco_origen":   c.banco_origen,
         "titular":        c.titular,
         "monto":          c.monto,
-        "comision":       c.comision,
+        "comision":            c.comision,
+        "porcentaje_comision": float(c.porcentaje_comision) if c.porcentaje_comision is not None else None,
         "fecha_emision":  c.fecha_emision,
         "fecha_deposito": c.fecha_deposito,
         "fecha_acred":    c.fecha_acred,
@@ -110,6 +112,7 @@ def crear_cheque(
         titular=body.titular,
         monto=body.monto,
         comision=body.comision,
+        porcentaje_comision=Decimal(str(body.porcentaje_comision)) if body.porcentaje_comision is not None else None,
         fecha_emision=body.fecha_emision,
         fecha_deposito=body.fecha_deposito or date.today(),
         estado="pendiente",
@@ -174,6 +177,8 @@ def editar_cheque(
         if val is not None:
             cambios[field] = {"de": str(getattr(c, field)), "a": str(val)}
             setattr(c, field, val)
+    if body.porcentaje_comision is not None:
+        c.porcentaje_comision = Decimal(str(body.porcentaje_comision))
     if cambios:
         registrar_log(db, current_user.id, "cheques", c.id, "UPDATE", cambios)
     db.commit()

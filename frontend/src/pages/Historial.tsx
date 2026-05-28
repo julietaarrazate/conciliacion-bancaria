@@ -22,6 +22,11 @@ export const Historial: React.FC = () => {
   const [recRunning, setRecRunning] = useState(false)
   const [recError, setRecError] = useState('')
 
+  // Chip comisión por planilla
+  const [editComId, setEditComId] = useState<number | null>(null)
+  const [editComVal, setEditComVal] = useState('')
+  const [savingCom, setSavingCom] = useState(false)
+
   const load = async (f = filter) => {
     setLoading(true)
     try {
@@ -65,6 +70,20 @@ export const Historial: React.FC = () => {
     setDownloadingId(id)
     try { await apiClient.downloadPlanillaConciliada(id) }
     finally { setDownloadingId(null) }
+  }
+
+  const handleGuardarComision = async (planillaId: number) => {
+    setSavingCom(true)
+    try {
+      const pct = editComVal.trim() === '' ? null : parseFloat(editComVal.replace(',', '.'))
+      await apiClient.client.put(`/planillas/${planillaId}/comision`, { porcentaje_comision: pct })
+      setItems(prev => prev.map(i =>
+        i.id === planillaId ? { ...i, porcentaje_comision: pct } : i
+      ))
+      setEditComId(null)
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'Error al guardar comisión')
+    } finally { setSavingCom(false) }
   }
 
   const handleReconciliar = async () => {
@@ -159,7 +178,7 @@ export const Historial: React.FC = () => {
               <div key={it.id}
                 className="bg-white dark:bg-ml-dark-surface rounded-xl border border-gray-100 dark:border-ml-dark-border p-4 active:bg-gray-50 dark:active:bg-ml-dark-card"
               >
-                {/* Fila 1: cliente + badge */}
+                {/* Fila 1: cliente + badge + chip comisión */}
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0">
                     <p className="font-semibold dark:text-white truncate">{it.cliente_nombre}</p>
@@ -168,9 +187,37 @@ export const Historial: React.FC = () => {
                       {new Date(it.fecha_carga).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}
                     </p>
                   </div>
-                  <span className={`shrink-0 badge ${acc === 100 ? 'badge-ok' : acc >= 80 ? 'badge-warn' : 'badge-error'}`}>
-                    {acc}%
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Chip comisión editable */}
+                    {editComId === it.id ? (
+                      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="number" step="0.1" min="0" max="100" placeholder="%"
+                          className="input-field text-xs w-16 py-0.5 px-1.5"
+                          value={editComVal}
+                          onChange={e => setEditComVal(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleGuardarComision(it.id); if (e.key === 'Escape') setEditComId(null) }}
+                          autoFocus
+                        />
+                        <button onClick={() => handleGuardarComision(it.id)} disabled={savingCom}
+                          className="px-1.5 py-0.5 text-[10px] bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-30">
+                          {savingCom ? '⏳' : '✓'}
+                        </button>
+                        <button onClick={() => setEditComId(null)} className="text-[10px] text-gray-400 hover:text-gray-600 px-0.5">✕</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setEditComId(it.id); setEditComVal(it.porcentaje_comision != null ? String(it.porcentaje_comision) : '') }}
+                        className={`px-2 py-1 text-[11px] rounded font-medium transition-colors ${it.porcentaje_comision != null ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200' : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-200'}`}
+                        title="% comisión — click para editar"
+                      >
+                        {it.porcentaje_comision != null ? `${it.porcentaje_comision}% comi` : 'comi —'}
+                      </button>
+                    )}
+                    <span className={`badge ${acc === 100 ? 'badge-ok' : acc >= 80 ? 'badge-warn' : 'badge-error'}`}>
+                      {acc}%
+                    </span>
+                  </div>
                 </div>
 
                 {/* Fila 2: stats */}

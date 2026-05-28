@@ -22,6 +22,7 @@ class Planilla(Base):
     nombre_archivo = Column(String, nullable=False)
     fecha_carga = Column(DateTime, default=datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True, index=True)  # soft delete: NULL = activo
+    porcentaje_comision = Column(Numeric(5, 4), nullable=True)  # % comisión para liquidación
 
     # Relationships
     cliente = relationship("Cliente", back_populates="planillas")

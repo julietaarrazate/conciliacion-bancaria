@@ -15,6 +15,7 @@ class PlanillaHistorialItem(BaseModel):
     duplicadas: int
     sin_datos: int
     monto_conciliado: float = 0.0
+    porcentaje_comision: Optional[float] = None
 
     class Config:
         from_attributes = True

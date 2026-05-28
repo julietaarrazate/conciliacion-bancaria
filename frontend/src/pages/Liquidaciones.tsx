@@ -221,7 +221,7 @@ export const Liquidaciones: React.FC = () => {
                   value={form.notas} onChange={e => setForm(p => ({ ...p, notas: e.target.value }))} />
               </div>
               <div className="md:col-span-2">
-                <label className="label">Comisión (% — dejar vacío usa config de la org)</label>
+                <label className="label">% Comisión fallback <span className="font-normal text-gray-400">(para ítems sin % propio — dejar vacío usa config de org)</span></label>
                 <div className="flex gap-2 flex-wrap items-center">
                   {['1.5', '1.8', '2'].map(pct => (
                     <button key={pct} type="button"

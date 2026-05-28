@@ -90,15 +90,19 @@ def _run_alembic():
         logger.warning("Alembic error: %s", ex)
 
     # Safety net: columnas que deben existir aunque Alembic falle
+    _safety_cols = [
+        "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
+        "ALTER TABLE planillas ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
+        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
+    ]
     try:
         from sqlalchemy import text as _text
         with engine.connect() as _conn:
-            _conn.execute(_text(
-                "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)"
-            ))
+            for _sql in _safety_cols:
+                _conn.execute(_text(_sql))
             _conn.commit()
     except Exception as ex:
-        logger.warning("Safety net clientes.porcentaje_comision: %s", ex)
+        logger.warning("Safety net columnas: %s", ex)
 
 
 def _init_db():
