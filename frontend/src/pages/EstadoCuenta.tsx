@@ -11,6 +11,9 @@ type Resumen = {
   cheques_acreditados_monto: number
   cheques_rechazados_monto: number
   pagos_realizados_monto: number
+  porcentaje_comision: number
+  comision_monto: number
+  neto_calculado: number
 }
 type Fila = {
   id: number
@@ -49,7 +52,7 @@ type PagoData = {
   fecha: string | null
 }
 type EstadoCuentaData = {
-  cliente: { id: number; nombre: string; cuit: string | null; organizacion_id: number }
+  cliente: { id: number; nombre: string; cuit: string | null; organizacion_id: number; porcentaje_comision: number }
   periodo: { desde: string; hasta: string }
   resumen: Resumen
   planillas: PlanillaData[]
@@ -131,7 +134,6 @@ export const EstadoCuenta: React.FC = () => {
   if (!data) return null
 
   const r = data.resumen
-  const saldoNeto = r.conciliado_periodo - r.pagos_realizados_monto
 
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-7xl">
@@ -191,26 +193,39 @@ export const EstadoCuenta: React.FC = () => {
       </div>
 
       {/* KPIs del cliente */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 rounded-xl p-4">
           <p className="text-[10px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400 font-semibold">Conciliado</p>
           <p className="text-xl font-bold text-emerald-800 dark:text-emerald-300 mt-1">{fmtMoney(r.conciliado_periodo)}</p>
-          <p className="text-[10px] text-emerald-700 dark:text-emerald-500 mt-1">{r.cantidad_filas} filas en {r.cantidad_planillas} planillas</p>
+          <p className="text-[10px] text-emerald-700 dark:text-emerald-500 mt-1">{r.cantidad_filas} filas · {r.cantidad_planillas} planillas</p>
         </div>
         <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl p-4">
-          <p className="text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400 font-semibold">Pendiente</p>
-          <p className="text-xl font-bold text-amber-800 dark:text-amber-300 mt-1">{fmtMoney(r.pendiente_periodo)}</p>
-          <p className="text-[10px] text-amber-700 dark:text-amber-500 mt-1">no conciliado aún</p>
+          <p className="text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400 font-semibold">
+            Comisión <span className="font-normal normal-case">({r.porcentaje_comision}%)</span>
+          </p>
+          <p className="text-xl font-bold text-amber-800 dark:text-amber-300 mt-1">{fmtMoney(r.comision_monto)}</p>
+          <p className="text-[10px] text-amber-700 dark:text-amber-500 mt-1">
+            Neto: <span className="font-semibold">{fmtMoney(r.neto_calculado)}</span>
+          </p>
         </div>
         <div className="bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/40 rounded-xl p-4">
-          <p className="text-[10px] uppercase tracking-wide text-indigo-700 dark:text-indigo-400 font-semibold">Cheques pendientes</p>
-          <p className="text-xl font-bold text-indigo-800 dark:text-indigo-300 mt-1">{fmtMoney(r.cheques_pendientes_monto)}</p>
-          <p className="text-[10px] text-indigo-700 dark:text-indigo-500 mt-1">en cartera</p>
+          <p className="text-[10px] uppercase tracking-wide text-indigo-700 dark:text-indigo-400 font-semibold">Pendiente</p>
+          <p className="text-xl font-bold text-indigo-800 dark:text-indigo-300 mt-1">{fmtMoney(r.pendiente_periodo)}</p>
+          <p className="text-[10px] text-indigo-700 dark:text-indigo-500 mt-1">no conciliado aún</p>
+        </div>
+      </div>
+
+      {/* Fila secundaria: cheques y pagos */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white dark:bg-ml-dark-surface border border-gray-200 dark:border-ml-dark-border rounded-xl p-4">
+          <p className="text-[10px] uppercase tracking-wide text-ml-text-soft dark:text-zinc-500 font-semibold">Cheques pendientes</p>
+          <p className="text-lg font-bold text-ml-text dark:text-white mt-1">{fmtMoney(r.cheques_pendientes_monto)}</p>
+          <p className="text-[10px] text-ml-text-soft dark:text-zinc-600 mt-1">en cartera</p>
         </div>
         <div className="bg-white dark:bg-ml-dark-surface border border-gray-200 dark:border-ml-dark-border rounded-xl p-4">
           <p className="text-[10px] uppercase tracking-wide text-ml-text-soft dark:text-zinc-500 font-semibold">Pagos al cliente</p>
-          <p className="text-xl font-bold text-ml-text dark:text-white mt-1">{fmtMoney(r.pagos_realizados_monto)}</p>
-          <p className="text-[10px] text-ml-text-soft dark:text-zinc-600 mt-1">Saldo neto: {fmtMoney(saldoNeto)}</p>
+          <p className="text-lg font-bold text-ml-text dark:text-white mt-1">{fmtMoney(r.pagos_realizados_monto)}</p>
+          <p className="text-[10px] text-ml-text-soft dark:text-zinc-600 mt-1">Saldo neto: {fmtMoney(r.conciliado_periodo - r.pagos_realizados_monto)}</p>
         </div>
       </div>
 

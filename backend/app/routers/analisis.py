@@ -689,12 +689,22 @@ def estado_cuenta_cliente(
     ]
     pagos_total = sum(p["monto"] for p in pagos_data)
 
+    # Comisión: usa % propio del cliente si lo tiene, si no el default de la org
+    from app.models.organizacion import Organizacion as _Org
+    org = db.query(_Org).filter(_Org.id == organizacion_id).first()
+    org_cfg = (org.configuracion or {}) if org else {}
+    pct_default = float(org_cfg.get("comisiones", {}).get("porcentaje_default", 1.5))
+    porcentaje_comision = float(cliente.porcentaje_comision) if cliente.porcentaje_comision is not None else pct_default
+    comision_monto = round(total_conciliado * porcentaje_comision / 100, 2)
+    neto_calculado = round(total_conciliado - comision_monto, 2)
+
     return {
         "cliente": {
             "id": cliente.id,
             "nombre": cliente.nombre,
             "cuit": cliente.cuit,
             "organizacion_id": cliente.organizacion_id,
+            "porcentaje_comision": porcentaje_comision,
         },
         "periodo": {"desde": d.isoformat(), "hasta": h.isoformat()},
         "resumen": {
@@ -706,6 +716,9 @@ def estado_cuenta_cliente(
             "cheques_acreditados_monto": cheques_acreditados_total,
             "cheques_rechazados_monto": cheques_rechazados_total,
             "pagos_realizados_monto": pagos_total,
+            "porcentaje_comision": porcentaje_comision,
+            "comision_monto": comision_monto,
+            "neto_calculado": neto_calculado,
         },
         "planillas": planillas_data,
         "cheques": cheques_data,
