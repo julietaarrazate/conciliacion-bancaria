@@ -786,9 +786,21 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
 
       ) : tab === 'ctacte' && ccMode === 'list' ? (
         <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            Visión global de la cartera. Saldo, último movimiento y estado por cliente — vista derivada de los asientos. No genera asientos.
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
+            <p className="text-xs text-gray-500 dark:text-gray-400 flex-1">
+              Visión global de la cartera. Saldo, último movimiento y estado por cliente — vista derivada de los asientos. No genera asientos.
+            </p>
+            {canAdminAccounting && (
+              <button
+                onClick={reconstruirCtaCte}
+                disabled={backfilling}
+                className="shrink-0 w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
+                title="Genera las acreditaciones históricas en cada cuenta corriente a partir de las conciliaciones ya cargadas"
+              >
+                {backfilling ? 'Reconstruyendo…' : '↻ Reconstruir desde conciliaciones'}
+              </button>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <input
               type="text" placeholder="Buscar cliente…"
@@ -806,16 +818,6 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   }`}>{label}</button>
               ))}
             </div>
-            {canAdminAccounting && (
-              <button
-                onClick={reconstruirCtaCte}
-                disabled={backfilling}
-                className="ml-auto text-xs px-3 py-1.5 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
-                title="Genera las acreditaciones históricas en cada cuenta corriente a partir de las conciliaciones ya cargadas"
-              >
-                {backfilling ? 'Reconstruyendo…' : '↻ Reconstruir desde conciliaciones'}
-              </button>
-            )}
           </div>
           {loadingCartera ? (
             <div className="py-12 text-center text-gray-400">Cargando...</div>
