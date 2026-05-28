@@ -182,12 +182,13 @@ def registrar_op(
         except Exception:
             pass
     if not cliente and cliente_nombre_libre:
+        nombre_norm = cliente_nombre_libre[:1].upper() + cliente_nombre_libre[1:] if cliente_nombre_libre else cliente_nombre_libre
         cliente = db.query(Cliente).filter(
-            Cliente.nombre == cliente_nombre_libre,
+            Cliente.nombre.ilike(nombre_norm),
             Cliente.organizacion_id == org_id
         ).first()
         if not cliente:
-            cliente = Cliente(nombre=cliente_nombre_libre, organizacion_id=org_id)
+            cliente = Cliente(nombre=nombre_norm, organizacion_id=org_id)
             db.add(cliente)
             db.flush()
     if not cliente:

@@ -75,14 +75,20 @@ async def upload_planilla(
 
     org_id = current_user.organizacion_id or 1
 
+    # Normalize: first letter uppercase, preserve rest
+    cliente_nombre = cliente_nombre[:1].upper() + cliente_nombre[1:] if cliente_nombre else cliente_nombre
+
     cliente = db.query(Cliente).filter(
-        Cliente.nombre == cliente_nombre,
+        Cliente.nombre.ilike(cliente_nombre),
         Cliente.organizacion_id == org_id
     ).first()
     if not cliente:
         cliente = Cliente(nombre=cliente_nombre, organizacion_id=org_id)
         db.add(cliente)
         db.flush()
+    else:
+        # Use canonical name from DB (avoids writing "green" when DB has "Green")
+        cliente_nombre = cliente.nombre
 
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:

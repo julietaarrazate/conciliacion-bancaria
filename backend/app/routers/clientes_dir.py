@@ -660,6 +660,7 @@ def crear_cliente(payload: dict,
     from app.services.auditoria import registrar_log
 
     nombre = (payload.get("nombre") or "").strip()
+    nombre = nombre[:1].upper() + nombre[1:] if nombre else nombre
     cuit_raw = (payload.get("cuit") or "").strip()
     cuit = cuit_raw or None
     org_id = payload.get("organizacion_id") or current_user.organizacion_id or 1
@@ -706,6 +707,7 @@ def renombrar_cliente(
     from app.services.auditoria import registrar_log
 
     nuevo_nombre = (payload.get("nombre") or "").strip()
+    nuevo_nombre = nuevo_nombre[:1].upper() + nuevo_nombre[1:] if nuevo_nombre else nuevo_nombre
     if not nuevo_nombre:
         raise HTTPException(400, "El nombre es obligatorio")
 
