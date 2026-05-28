@@ -321,6 +321,54 @@ def marcar_compartido(
     return {"ok": True, "op_id": op_id, "compartido": True}
 
 
+@router.delete("/op/{op_id}")
+def eliminar_op(
+    op_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Elimina una OP. Reversa el asiento contable, repone las denominaciones
+    usadas al arqueo del día y registra la baja en auditoría."""
+    q = db.query(OrdenDePago).filter(OrdenDePago.id == op_id)
+    if not current_user.is_superadmin:
+        q = q.filter(OrdenDePago.organizacion_id == (current_user.organizacion_id or 1))
+    op = q.first()
+    if not op:
+        raise HTTPException(404, "OP no encontrada")
+
+    org_id = op.organizacion_id
+
+    # Reverso contable (fault-tolerant): deja el asiento original + su reverso
+    try:
+        from app.services.motor_contable import reversar_asientos
+        reversar_asientos(
+            db=db, modulo="caja_op", referencia_id=op.id,
+            org_id=org_id, usuario_id=current_user.id,
+            motivo="Baja de OP",
+        )
+    except Exception as ex:
+        logger.warning("reversar_asientos caja_op %s: %s", op.id, ex)
+
+    # Reponer denominaciones físicas al arqueo
+    arqueo = db.query(ArqueoDiario).filter(ArqueoDiario.id == op.arqueo_id).first()
+    if arqueo and op.denominaciones_usadas:
+        dens = dict(arqueo.denominaciones or denominaciones_vacias())
+        for den_str, cant in op.denominaciones_usadas.items():
+            dens[str(den_str)] = int(dens.get(str(den_str), 0)) + int(cant)
+        arqueo.denominaciones = dens
+
+    registrar_log(db, current_user.id, "ordenes_de_pago", op.id, "DELETE", {
+        "beneficiario": op.beneficiario,
+        "importe": op.importe,
+    })
+
+    db.delete(op)
+    db.commit()
+    if arqueo:
+        db.refresh(arqueo)
+    return {"ok": True, "op_id": op_id, "arqueo": _arqueo_response(arqueo) if arqueo else None}
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _arqueo_response(a: ArqueoDiario) -> dict:
