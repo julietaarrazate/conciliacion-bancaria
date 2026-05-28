@@ -102,6 +102,18 @@ export const Liquidaciones: React.FC = () => {
     } finally { setSaving(false) }
   }
 
+  const handleEliminar = async (id: number) => {
+    if (!await confirmDialog({ title: 'Eliminar borrador', message: '¿Eliminar esta liquidación en borrador? Esta acción no se puede deshacer.', confirmLabel: 'Eliminar', danger: true })) return
+    try {
+      await apiClient.client.delete(`/liquidaciones/${id}`)
+      setMsg('✓ Borrador eliminado')
+      if (selected?.id === id) setSelected(null)
+      load()
+    } catch (err: any) {
+      setMsg(err.response?.data?.detail || 'Error al eliminar')
+    }
+  }
+
   const handleAprobar = async (id: number) => {
     if (!await confirmDialog({ title: 'Aprobar liquidación', message: '¿Aprobar esta liquidación?', confirmLabel: 'Aprobar' })) return
     try {
@@ -302,11 +314,22 @@ export const Liquidaciones: React.FC = () => {
                       Creado por {liq.creador} · {new Date(liq.created_at).toLocaleDateString('es-AR')}
                     </p>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-bold text-ml-green dark:text-ml-green font-mono">
-                      {fmt(liq.total_neto)}
-                    </p>
-                    <p className="text-xs text-gray-400 dark:text-zinc-500">neto</p>
+                  <div className="flex items-start gap-2 shrink-0">
+                    <div className="text-right">
+                      <p className="font-bold text-ml-green dark:text-ml-green font-mono">
+                        {fmt(liq.total_neto)}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-zinc-500">neto</p>
+                    </div>
+                    {liq.estado === 'borrador' && isAdmin && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleEliminar(liq.id) }}
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                        title="Eliminar borrador"
+                      >
+                        🗑️
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-ml-gray dark:border-ml-dark-border">

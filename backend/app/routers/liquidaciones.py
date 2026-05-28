@@ -247,7 +247,22 @@ def marcar_pagada(
     return {"ok": True, "estado": "pagada"}
 
 
-# ── GET /liquidaciones/{id}/exportar ─────────────────────────────────────────
+# ── DELETE /liquidaciones/{id} ────────────────────────────────────────────────
+
+@router.delete("/{liq_id}")
+def eliminar_liquidacion(
+    liq_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("reconcile"))
+):
+    """Elimina una liquidación en estado borrador. No se pueden borrar aprobadas ni pagadas."""
+    liq = _liquidacion_for_user(db, liq_id, current_user)
+    if liq.estado != "borrador":
+        raise HTTPException(400, "Solo se pueden eliminar liquidaciones en estado borrador")
+    db.query(LiquidacionDetalle).filter(LiquidacionDetalle.liquidacion_id == liq.id).delete()
+    db.delete(liq)
+    db.commit()
+    return {"ok": True}
 
 @router.get("/{liq_id}/exportar")
 def exportar_liquidacion(
