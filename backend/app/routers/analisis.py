@@ -63,8 +63,13 @@ def _suma_planilla_rows(
     desde: date,
     hasta: date,
     solo_status: Optional[set[str]] = None,
+    usar_fecha_acred: bool = False,
 ) -> dict:
-    """Suma de monto y count de PlanillaRow filtrados por fecha de carga de la planilla."""
+    """Suma de monto y count de PlanillaRow.
+
+    usar_fecha_acred=True: filtra por PlanillaRow.fecha_acred (cuando se acreditó).
+    usar_fecha_acred=False: filtra por Planilla.fecha_carga (cuando se cargó).
+    """
     q = (
         db.query(
             func.coalesce(func.sum(PlanillaRow.monto), 0.0).label("total"),
@@ -74,10 +79,18 @@ def _suma_planilla_rows(
         .filter(
             Planilla.organizacion_id == org_id,
             Planilla.deleted_at.is_(None),
+        )
+    )
+    if usar_fecha_acred:
+        q = q.filter(
+            PlanillaRow.fecha_acred >= desde,
+            PlanillaRow.fecha_acred <= hasta,
+        )
+    else:
+        q = q.filter(
             func.date(Planilla.fecha_carga) >= desde,
             func.date(Planilla.fecha_carga) <= hasta,
         )
-    )
     if solo_status:
         q = q.filter(PlanillaRow.status.in_(list(solo_status)))
     row = q.one()
@@ -86,7 +99,9 @@ def _suma_planilla_rows(
 
 def _kpis_periodo(db: Session, org_id: int, desde: date, hasta: date) -> dict:
     """KPIs base de un periodo arbitrario. Se reutiliza para periodo actual y anterior."""
-    conciliado = _suma_planilla_rows(db, org_id, desde, hasta, _STATUS_OK)
+    # Conciliado: por fecha_acred (cuando Julieta marcó la acreditación)
+    conciliado = _suma_planilla_rows(db, org_id, desde, hasta, _STATUS_OK, usar_fecha_acred=True)
+    # Pendiente y total: por fecha_carga (planillas cargadas en el período)
     pendiente = _suma_planilla_rows(db, org_id, desde, hasta, _STATUS_PENDIENTE)
     todo = _suma_planilla_rows(db, org_id, desde, hasta, None)
 
