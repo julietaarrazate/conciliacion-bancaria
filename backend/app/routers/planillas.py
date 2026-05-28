@@ -504,7 +504,7 @@ def delete_row(
 def download_planilla_conciliada(
     planilla_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Descarga xlsx con Hoja1=planilla+estado y Hoja2=movimientos acreditados"""
     import io
@@ -518,18 +518,43 @@ def download_planilla_conciliada(
     if mov_ids:
         movs_map = {m.id: m for m in db.query(MovimientoBanco).filter(MovimientoBanco.id.in_(mov_ids)).all()}
 
+    # Fallback: filas "ok" sin FK → buscar por monto + cliente en el extracto
+    fallback_map: dict = {}
+    ok_sin_link = [r for r in p.rows if r.status == "ok" and not r.orden_movimiento_acreditado]
+    if ok_sin_link and p.extracto_id:
+        ya_usados = set(movs_map.keys())
+        candidatos = (
+            db.query(MovimientoBanco)
+            .filter(
+                MovimientoBanco.extracto_id == p.extracto_id,
+                MovimientoBanco.cliente_acreditado == p.cliente.nombre,
+            )
+            .order_by(MovimientoBanco.orden)
+            .all()
+        )
+        for c in candidatos:
+            if c.id not in ya_usados:
+                key = float(c.monto) if c.monto is not None else None
+                if key is not None and key not in fallback_map:
+                    fallback_map[key] = c
+                    ya_usados.add(c.id)
+
     rows_data = []
     movimientos_acreditados = []
     ids_acred_vistos = set()
 
     for r in p.rows:
         mov = movs_map.get(r.orden_movimiento_acreditado) if r.orden_movimiento_acreditado else None
+        if mov is None and r.status == "ok":
+            monto_key = float(r.monto) if r.monto is not None else None
+            mov = fallback_map.get(monto_key) if monto_key is not None else None
+        fecha_acred_fallback = r.fecha_acred
         rows_data.append({
             "monto": r.monto, "cuit": r.cuit, "titular": r.titular, "status": r.status,
-            "orden_movimiento_acreditado": r.orden_movimiento_acreditado,
+            "orden_movimiento_acreditado": mov.orden if mov else None,
             "mov_titular": mov.titular if mov else None,
             "mov_fecha": mov.fecha if mov else None,
-            "mov_fecha_acred": mov.fecha_acred if mov else None,
+            "mov_fecha_acred": (mov.fecha_acred if mov else None) or fecha_acred_fallback,
         })
         if mov and mov.id not in ids_acred_vistos:
             ids_acred_vistos.add(mov.id)
