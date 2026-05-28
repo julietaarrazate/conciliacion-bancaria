@@ -338,9 +338,9 @@ export const Liquidaciones: React.FC = () => {
                     { l: 'Comisión', v: liq.total_comision },
                     { l: 'Neto', v: liq.total_neto },
                   ].map(k => (
-                    <div key={k.l}>
+                    <div key={k.l} className="min-w-0">
                       <p className="text-2xs text-gray-400 dark:text-zinc-600 uppercase tracking-wider">{k.l}</p>
-                      <p className="text-sm font-mono font-semibold dark:text-gray-200">{fmt(k.v)}</p>
+                      <p className="text-xs md:text-sm font-mono font-semibold dark:text-gray-200 truncate">{fmt(k.v)}</p>
                     </div>
                   ))}
                 </div>
@@ -401,9 +401,9 @@ export const Liquidaciones: React.FC = () => {
                 { l: 'Comisión', v: selected.total_comision, cls: 'text-amber-600 dark:text-amber-400' },
                 { l: 'Neto a cobrar', v: selected.total_neto, cls: 'text-green-600 dark:text-green-400' },
               ].map(k => (
-                <div key={k.l} className="kpi">
+                <div key={k.l} className="kpi min-w-0">
                   <p className="kpi-label">{k.l}</p>
-                  <p className={`text-lg font-bold font-mono ${k.cls}`}>{fmt(k.v)}</p>
+                  <p className={`text-sm md:text-lg font-bold font-mono truncate ${k.cls}`}>{fmt(k.v)}</p>
                 </div>
               ))}
             </div>
@@ -420,6 +420,7 @@ export const Liquidaciones: React.FC = () => {
                 <div className="px-4 py-2.5 border-b border-ml-gray dark:border-ml-dark-border">
                   <p className="font-semibold text-sm dark:text-white">Desglose por cliente</p>
                 </div>
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-ml-gray-bg dark:bg-ml-dark-card">
                     <tr>
@@ -443,6 +444,7 @@ export const Liquidaciones: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
           </div>

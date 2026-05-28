@@ -540,7 +540,7 @@ export const Clientes: React.FC = () => {
                             </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); setRenombrando(cliente.id); setRenombreVal(cliente.nombre) }}
-                              className="p-1 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded flex-shrink-0"
+                              className="hidden md:inline-flex p-1 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded flex-shrink-0"
                               title="Renombrar cliente"
                             >
                               ✏️
@@ -548,7 +548,7 @@ export const Clientes: React.FC = () => {
                             {otrosClientes.length > 0 && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); setFusionandoId(cliente.id); setFusionTargetId('') }}
-                                className="p-1 text-purple-500 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded flex-shrink-0"
+                                className="hidden md:inline-flex p-1 text-purple-500 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded flex-shrink-0"
                                 title="Fusionar con otro cliente"
                               >
                                 🔀
