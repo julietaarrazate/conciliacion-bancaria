@@ -89,6 +89,17 @@ def _run_alembic():
     except Exception as ex:
         logger.warning("Alembic error: %s", ex)
 
+    # Safety net: columnas que deben existir aunque Alembic falle
+    try:
+        from sqlalchemy import text as _text
+        with engine.connect() as _conn:
+            _conn.execute(_text(
+                "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)"
+            ))
+            _conn.commit()
+    except Exception as ex:
+        logger.warning("Safety net clientes.porcentaje_comision: %s", ex)
+
 
 def _init_db():
     """Crea tablas, migraciones y seed en background — no bloquea el arranque."""
