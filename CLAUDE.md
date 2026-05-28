@@ -132,7 +132,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ---
 
-## Features implementadas (estado actual — v3.3)
+## Features implementadas (estado actual — v3.4)
 
 - Conciliación bancaria multi-extracto con motor de scoring
 - Carga masiva con auto-conciliar al subir planillas
@@ -180,12 +180,16 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   Chip inline editable en `/clientes` — muestra `% —` (gris) o `2%` (ámbar). Prioridad al generar liq:
   override manual del form > % propio del cliente > default de la org.
 - **Fix botón ⬇️ Excel en Historial**: endpoint `/planillas/{id}/download` tenía NameError (`_` vs
-  `current_user`) → 500 sin exportar. Corregido. Botón global Excel reemplazado por `📁 Exportar`
-  (resumen de todas las planillas). El `⬇️ Excel` por planilla exporta el detalle completo.
+  `current_user`) → 500 sin exportar. Corregido. Botón `📁 Exportar` en fila de planilla exporta el
+  detalle completo (reemplazó el Excel global que era redundante).
+- **Borrar liquidaciones borrador**: endpoint `DELETE /liquidaciones/{id}` + botón 🗑️ en `/liquidaciones`
+  visible solo para estado "borrador". Permite re-generar con distinta comisión.
 - **Fix auditoria Decimal**: `registrar_log` fallaba con TypeError al guardar `Decimal` en JSON.
   `_serializable()` en `auditoria.py` convierte recursivamente Decimal→float antes de persistir.
 - **Safety net startup**: `ALTER TABLE clientes ADD COLUMN IF NOT EXISTS porcentaje_comision` en
   `_run_alembic()` por si la migración 008 falla en Render — evita que la página de clientes crashee.
+- **Diseño unificado**: header/sidebar usan `bg-ml-blue` (Linear purple-blue #5E6AD2) en light mode
+  en lugar del amarillo previo. `btn-yellow` también usa `bg-ml-blue` en light mode. Dark mode sin cambios.
 
 ---
 
@@ -242,7 +246,8 @@ git commit --allow-empty --author="Julieta Arrazate <julietaarrazate@gmail.com>"
 Checkpoints disponibles:
 - `v3.1-stable-checkpoint` — antes de las 5 features de mayo 2026
 - `v3.2-stable-checkpoint` — después de seguridad hardening + Numeric migration + legal pages (mayo 2026)
+- `v3.3-stable-checkpoint` — después de export robusto, comisiones, landing page, Borrar UM
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.3
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.4
