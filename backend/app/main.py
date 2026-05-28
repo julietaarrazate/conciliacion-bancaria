@@ -250,7 +250,8 @@ def _init_db():
                 "estados_habilitados": ["pendiente", "ok", "no está", "duplicado", "faltan datos"],
                 "requiere_cierre_periodo": False,
                 "notificaciones_whatsapp": False,
-                "exportar_formato_contador": "excel_actual"
+                "exportar_formato_contador": "excel_actual",
+                "modo_asiento_um": "agrupado",
             }
             db.add(Org(id=1, nombre="Organización A", plan="pro", configuracion=config_org, activo=True))
             db.commit()

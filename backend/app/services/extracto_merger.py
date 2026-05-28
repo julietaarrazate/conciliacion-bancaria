@@ -202,4 +202,5 @@ def mergear_movimientos(
         "corte_metodo": corte_metodo,
         "corte_saldo_detectado": corte_saldo_detectado,
         "total_recibido": len(movimientos_nuevos),
+        "nuevo_lote": nuevo_lote if agregados > 0 else None,
     }

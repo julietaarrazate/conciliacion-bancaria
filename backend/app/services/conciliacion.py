@@ -478,6 +478,22 @@ def conciliar_planilla(
             row.orden_movimiento_acreditado = mov.id
             procesados.add(mov.id)
             res["acreditadas"] += 1
+
+            # Asiento de reclasificación: solo para movimientos de UM
+            if getattr(mov, "source", None) == "um":
+                try:
+                    from app.services.motor_contable import registrar_reclasificacion_um
+                    registrar_reclasificacion_um(
+                        db=db,
+                        planilla_row_id=row.id,
+                        org_id=org_id,
+                        usuario_id=None,
+                        cliente_nombre=cliente_nombre,
+                        monto=row.monto,
+                        fecha=mov.fecha_acred or mov.fecha,
+                    )
+                except Exception:
+                    pass
         else:
             if status == "no está":
                 res["no_encontradas"] += 1
