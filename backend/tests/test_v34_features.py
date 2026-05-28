@@ -418,28 +418,22 @@ class TestSoftDeleteHermetico:
 
 class TestCSSDesign:
 
-    def test_btn_yellow_no_usa_ml_yellow_en_light(self):
-        """btn-yellow debe usar ml-blue en light mode, no ml-yellow."""
-        import re
-        css_path = (
-            __file__.replace("tests/test_v34_features.py", "")
-            + "../frontend/src/styles/index.css"
-        )
-        import os
+    def test_btn_yellow_usa_ml_green(self):
+        """btn-yellow debe usar ml-green (verde fluorescente), no ml-yellow ni ml-blue."""
+        import re, os
         css_path = os.path.normpath(
             os.path.join(os.path.dirname(__file__), "../../frontend/src/styles/index.css")
         )
         with open(css_path) as f:
             content = f.read()
 
-        # Encontrar el bloque btn-yellow
         match = re.search(r'\.btn-yellow\s*\{([^}]+)\}', content, re.DOTALL)
         assert match, "No se encontró .btn-yellow en el CSS"
         block = match.group(1)
 
-        assert "bg-ml-blue" in block, "btn-yellow debe usar bg-ml-blue en light mode"
-        assert "bg-ml-yellow" not in block.split("dark:")[0], \
-            "btn-yellow no debe usar bg-ml-yellow en light mode"
+        assert "bg-ml-green" in block, "btn-yellow debe usar bg-ml-green"
+        assert "bg-ml-yellow" not in block, "btn-yellow no debe usar bg-ml-yellow"
+        assert "bg-ml-blue" not in block, "btn-yellow no debe usar bg-ml-blue"
 
     def test_layout_logo_no_usa_ml_yellow(self):
         """El header/sidebar del Layout no debe tener bg-ml-yellow."""

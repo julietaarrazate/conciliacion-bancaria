@@ -263,26 +263,26 @@ export const Layout: React.FC = () => {
       <AppLockGuard />
 
       {/* ── Header mobile ──────────────────────────────── */}
-      <header className="md:hidden shrink-0 bg-ml-blue dark:bg-ml-dark-surface border-b border-ml-blue-dark dark:border-ml-dark-border flex items-center justify-between px-4 h-12 z-30 relative">
+      <header className="md:hidden shrink-0 bg-white dark:bg-ml-dark-surface border-b border-ml-gray dark:border-ml-dark-border flex items-center justify-between px-4 h-12 z-30 relative">
         <div className="w-8 flex items-center">
           <CuadraLogo size={24} animate={false} />
         </div>
 
-        <span className="font-bold text-sm font-mono app-title absolute left-1/2 -translate-x-1/2 tracking-wide text-white dark:text-white">
+        <span className="font-bold text-sm font-mono app-title absolute left-1/2 -translate-x-1/2 tracking-wide text-ml-green dark:text-white">
           Cuadra
         </span>
 
         <div className="flex items-center gap-1">
           <button
             onClick={() => setSearchOpen(true)}
-            className="p-1.5 rounded-lg text-white/80 dark:text-gray-400 hover:bg-white/15 dark:hover:bg-ml-dark-hover transition-colors"
+            className="p-1.5 rounded-lg text-ml-text-soft dark:text-gray-400 hover:bg-ml-gray dark:hover:bg-ml-dark-hover transition-colors"
             title="Buscar (⌘K)"
           >
             <Icon.Search />
           </button>
           <button
             onClick={() => { setAlertasCount(0); navigate('/resumen') }}
-            className="relative p-1.5 rounded-lg text-white/80 dark:text-gray-400 hover:bg-white/15 dark:hover:bg-ml-dark-hover transition-colors"
+            className="relative p-1.5 rounded-lg text-ml-text-soft dark:text-gray-400 hover:bg-ml-gray dark:hover:bg-ml-dark-hover transition-colors"
           >
             <Icon.Bell />
             {alertasCount > 0 && (
@@ -293,7 +293,7 @@ export const Layout: React.FC = () => {
           </button>
           <button
             onClick={toggle}
-            className="p-1.5 rounded-lg text-white/80 dark:text-gray-400 hover:bg-white/15 dark:hover:bg-ml-dark-hover transition-colors"
+            className="p-1.5 rounded-lg text-ml-text-soft dark:text-gray-400 hover:bg-ml-gray dark:hover:bg-ml-dark-hover transition-colors"
           >
             {theme === 'light' ? <Icon.Moon /> : <Icon.Sun />}
           </button>
@@ -313,11 +313,11 @@ export const Layout: React.FC = () => {
             onTouchEnd={handleDrawerTouchEnd}
           >
             {/* Header del drawer */}
-            <div className="flex items-center justify-between px-4 h-12 bg-ml-blue dark:bg-ml-dark-card border-b border-ml-blue-dark dark:border-ml-dark-border shrink-0">
-              <span className="font-bold text-sm font-mono app-title tracking-wide text-white dark:text-white">Cuadra</span>
+            <div className="flex items-center justify-between px-4 h-12 bg-white dark:bg-ml-dark-card border-b border-ml-gray dark:border-ml-dark-border shrink-0">
+              <span className="font-bold text-sm font-mono app-title tracking-wide text-ml-green dark:text-white">Cuadra</span>
               <button
                 onClick={() => setDrawerOpen(false)}
-                className="p-1.5 rounded-lg text-white/80 dark:text-gray-400 hover:bg-white/15 dark:hover:bg-ml-dark-hover"
+                className="p-1.5 rounded-lg text-ml-text-soft dark:text-gray-400 hover:bg-ml-gray dark:hover:bg-ml-dark-hover"
               >
                 <Icon.Close />
               </button>
@@ -332,21 +332,21 @@ export const Layout: React.FC = () => {
       {/* ── Sidebar desktop ────────────────────────────── */}
       <aside className="hidden md:flex w-56 bg-white dark:bg-ml-dark-surface border-r border-ml-gray dark:border-ml-dark-border flex-col shrink-0">
         {/* Logo */}
-        <div className="h-14 flex items-center px-4 border-b border-ml-blue-dark dark:border-ml-dark-border shrink-0 bg-ml-blue dark:bg-ml-dark-card">
+        <div className="h-14 flex items-center px-4 border-b border-ml-gray dark:border-ml-dark-border shrink-0 bg-white dark:bg-ml-dark-card">
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <CuadraLogo size={28} />
-            <span className="font-bold text-base font-mono app-title tracking-wide text-white dark:text-white">Cuadra</span>
+            <span className="font-bold text-base font-mono app-title tracking-wide text-ml-green dark:text-white">Cuadra</span>
           </div>
           <button
             onClick={() => setSearchOpen(true)}
-            className="p-1.5 rounded-lg text-white/80 dark:text-gray-400 hover:bg-white/15 dark:hover:bg-ml-dark-hover transition-colors shrink-0"
+            className="p-1.5 rounded-lg text-ml-text-soft dark:text-gray-400 hover:bg-ml-gray dark:hover:bg-ml-dark-hover transition-colors shrink-0"
             title="Buscar (⌘K)"
           >
             <Icon.Search />
           </button>
           <button
             onClick={() => { setAlertasCount(0); navigate('/resumen') }}
-            className="relative p-1.5 rounded-lg text-white/80 dark:text-gray-400 hover:bg-white/15 dark:hover:bg-ml-dark-hover transition-colors shrink-0"
+            className="relative p-1.5 rounded-lg text-ml-text-soft dark:text-gray-400 hover:bg-ml-gray dark:hover:bg-ml-dark-hover transition-colors shrink-0"
           >
             <Icon.Bell />
             {alertasCount > 0 && (

@@ -62,13 +62,14 @@ input, textarea, [contenteditable="true"],
            dark:shadow-green-sm;
   }
 
-  /* Botón amarillo → azul en light, verde en dark */
+  /* Botón verde fluorescente — igual en light y dark */
   .btn-yellow {
     @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
-           bg-ml-blue text-white
-           hover:bg-ml-blue-dark active:scale-[0.98]
+           bg-ml-green text-black
+           hover:bg-ml-green-bright active:scale-[0.98]
            disabled:opacity-40 disabled:cursor-not-allowed
            transition-all duration-150
+           shadow-green-sm
            dark:bg-ml-green dark:text-black dark:hover:bg-ml-green-bright
            dark:shadow-green-sm;
   }
