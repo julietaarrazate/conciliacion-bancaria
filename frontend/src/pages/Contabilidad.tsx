@@ -168,7 +168,7 @@ const TAB_PERM: Record<Tab, string> = {
   ctacte:   'manage_finance',
 }
 
-export const Contabilidad: React.FC = () => {
+export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'full' }) => {
   const { activeOrgId } = useOrgStore()
   const { hasPermission } = useAuthStore()
   const canAdminAccounting = hasPermission('admin_accounting')
@@ -187,8 +187,9 @@ export const Contabilidad: React.FC = () => {
   const [asientoLineas, setAsientoLineas] = useState<Record<number, AsientoLinea[]>>({})
   const [loadingLineas, setLoadingLineas] = useState<Set<number>>(new Set())
   const [tab, setTab] = useState<Tab>(() => {
+    if (modo === 'ctacte') return 'ctacte'
     const s = useAuthStore.getState()
-    const ordered: Tab[] = ['plan', 'reglas', 'diario', 'sumas', 'balance', 'mayor', 'clientes', 'ctacte']
+    const ordered: Tab[] = ['plan', 'reglas', 'diario', 'sumas', 'balance', 'mayor', 'clientes']
     return ordered.find(t => s.hasPermission(TAB_PERM[t])) ?? 'diario'
   })
   const [cliCuentas, setCliCuentas]   = useState<ClienteCuentaRow[]>([])
@@ -207,6 +208,7 @@ export const Contabilidad: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
 
   useEffect(() => {
+    if (modo === 'ctacte') { setLoading(false); return }
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
     Promise.all([
       canAdminAccounting
@@ -318,6 +320,20 @@ export const Contabilidad: React.FC = () => {
     }
   }
 
+  const [creandoFaltantes, setCreandoFaltantes] = useState(false)
+  const crearCuentasFaltantes = async () => {
+    setCreandoFaltantes(true)
+    try {
+      const r = await apiClient.client.post(`/contabilidad/clientes/cuentas/crear-faltantes${qOrg}`, {})
+      toast.success(r.data.total > 0 ? `${r.data.total} cuenta(s) creada(s) y vinculada(s)` : 'Todos los clientes ya tienen cuenta')
+      cargarClientesCuentas()
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'No se pudieron crear las cuentas')
+    } finally {
+      setCreandoFaltantes(false)
+    }
+  }
+
   const toggleAsiento = (id: number) => {
     const next = new Set(openAsientos)
     if (next.has(id)) {
@@ -362,7 +378,7 @@ export const Contabilidad: React.FC = () => {
     )
   }
 
-  const ALL_TABS: [Tab, string][] = [
+  const FULL_TABS: [Tab, string][] = [
     ['plan',    '📊 Plan de cuentas'],
     ['reglas',  '⚙️ Reglas'],
     ['diario',  `📒 Libro diario${totalAsientos > 0 ? ` (${totalAsientos})` : ''}`],
@@ -370,19 +386,21 @@ export const Contabilidad: React.FC = () => {
     ['balance', '⚖️ Balance'],
     ['mayor',   '📖 Libro mayor'],
     ['clientes', '🔗 Clientes'],
-    ['ctacte',  '💰 Cuentas corrientes'],
   ]
-  const TABS = ALL_TABS.filter(([t]) => hasPermission(TAB_PERM[t]))
+  const TABS = modo === 'ctacte' ? [] : FULL_TABS.filter(([t]) => hasPermission(TAB_PERM[t]))
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-ml-text dark:text-white">Contabilidad</h1>
+        <h1 className="text-xl font-bold text-ml-text dark:text-white">{modo === 'ctacte' ? 'Cuentas corrientes' : 'Contabilidad'}</h1>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          {canAdminAccounting ? 'Plan de cuentas · Reglas · ' : ''}Libro diario · Sumas y saldo · Balance · Libro mayor{canManageFinance ? ' · Cuentas corrientes' : ''}
+          {modo === 'ctacte'
+            ? 'Cartera de clientes · saldo, movimientos y estado por cuenta'
+            : `${canAdminAccounting ? 'Plan de cuentas · Reglas · ' : ''}Libro diario · Sumas y saldo · Balance · Libro mayor`}
         </p>
       </div>
 
+      {TABS.length > 0 && (
       <div className="grid grid-cols-3 gap-2 mb-4">
         {TABS.map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)}
@@ -393,6 +411,7 @@ export const Contabilidad: React.FC = () => {
           </button>
         ))}
       </div>
+      )}
 
       {loading ? (
         <div className="py-16 text-center text-gray-400">Cargando...</div>
@@ -660,10 +679,20 @@ export const Contabilidad: React.FC = () => {
 
       ) : tab === 'clientes' ? (
         <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            Vinculá cada cliente a su cuenta corriente contable (subcuenta de <span className="font-mono">2-1-2-0</span>).
-            Cada cuenta pertenece a un solo cliente. Los sin vincular se resuelven asignando una cuenta existente o creando una nueva.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+            <p className="text-xs text-gray-500 dark:text-gray-400 flex-1 min-w-[220px]">
+              Vinculá cada cliente a su cuenta corriente contable (subcuenta de <span className="font-mono">2-1-2-0</span>).
+              Cada cuenta pertenece a un solo cliente. Los sin vincular se resuelven asignando una cuenta existente o creando una nueva.
+            </p>
+            <button
+              onClick={crearCuentasFaltantes}
+              disabled={creandoFaltantes}
+              className="shrink-0 text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
+              title="Crea y vincula la cuenta contable de todos los clientes que aún no tienen una"
+            >
+              {creandoFaltantes ? 'Creando…' : '+ Crear cuentas faltantes'}
+            </button>
+          </div>
           {loadingCli ? (
             <div className="py-12 text-center text-gray-400">Cargando...</div>
           ) : cliCuentas.length === 0 ? (
