@@ -378,7 +378,8 @@ export const Movimientos: React.FC = () => {
             className="px-3 py-2 text-sm font-medium bg-red-600 text-white rounded-md hover:bg-red-700"
           >
             🗑️ Borrar UM
-        </label>
+          </button>
+        )}
       </div>
 
       {umMsg && (
