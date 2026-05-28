@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
+import { useAuthStore } from '@/store/auth'
 import { toast } from '@/store/toast'
 
 interface CarteraItem {
@@ -156,8 +157,22 @@ const GEN_BADGE: Record<string, { label: string; cls: string }> = {
 
 type CcFiltro = 'todos' | 'deudores' | 'acreedores' | 'cero' | 'recientes' | 'sin_actividad'
 
+const TAB_PERM: Record<Tab, string> = {
+  plan:     'admin_accounting',
+  reglas:   'admin_accounting',
+  diario:   'view_accounting',
+  sumas:    'view_accounting',
+  balance:  'view_accounting',
+  mayor:    'view_accounting',
+  clientes: 'admin_accounting',
+  ctacte:   'manage_finance',
+}
+
 export const Contabilidad: React.FC = () => {
   const { activeOrgId } = useOrgStore()
+  const { hasPermission } = useAuthStore()
+  const canAdminAccounting = hasPermission('admin_accounting')
+  const canManageFinance   = hasPermission('manage_finance')
   const [cuentas, setCuentas]         = useState<CuentaItem[]>([])
   const [reglas, setReglas]           = useState<ReglaItem[]>([])
   const [asientos, setAsientos]       = useState<AsientoItem[]>([])
@@ -171,7 +186,11 @@ export const Contabilidad: React.FC = () => {
   const [openAsientos, setOpenAsientos] = useState<Set<number>>(new Set())
   const [asientoLineas, setAsientoLineas] = useState<Record<number, AsientoLinea[]>>({})
   const [loadingLineas, setLoadingLineas] = useState<Set<number>>(new Set())
-  const [tab, setTab]                 = useState<Tab>('plan')
+  const [tab, setTab] = useState<Tab>(() => {
+    const s = useAuthStore.getState()
+    const ordered: Tab[] = ['plan', 'reglas', 'diario', 'sumas', 'balance', 'mayor', 'clientes', 'ctacte']
+    return ordered.find(t => s.hasPermission(TAB_PERM[t])) ?? 'diario'
+  })
   const [cliCuentas, setCliCuentas]   = useState<ClienteCuentaRow[]>([])
   const [cuentasDisp, setCuentasDisp] = useState<CuentaCliente[]>([])
   const [loadingCli, setLoadingCli]   = useState(false)
@@ -190,8 +209,12 @@ export const Contabilidad: React.FC = () => {
   useEffect(() => {
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
     Promise.all([
-      apiClient.client.get(`/contabilidad/plan-cuentas${q}`).then(r => r.data),
-      apiClient.client.get(`/contabilidad/reglas${q}`).then(r => r.data),
+      canAdminAccounting
+        ? apiClient.client.get(`/contabilidad/plan-cuentas${q}`).then(r => r.data)
+        : Promise.resolve([]),
+      canAdminAccounting
+        ? apiClient.client.get(`/contabilidad/reglas${q}`).then(r => r.data)
+        : Promise.resolve([]),
       apiClient.client.get(`/contabilidad/asientos?limit=100${activeOrgId ? `&org_id=${activeOrgId}` : ''}`).then(r => r.data),
       apiClient.client.get(`/contabilidad/sumas-saldo${q}`).then(r => r.data),
       apiClient.client.get(`/contabilidad/balance${q}`).then(r => r.data),
@@ -220,14 +243,14 @@ export const Contabilidad: React.FC = () => {
   }
 
   useEffect(() => {
-    if (tab === 'clientes') cargarClientesCuentas()
-    if (tab === 'ctacte') { cargarClientesCuentas(); cargarCartera() }
+    if (tab === 'clientes' && canAdminAccounting) cargarClientesCuentas()
+    if (tab === 'ctacte' && canManageFinance) { cargarClientesCuentas(); cargarCartera() }
   }, [tab, activeOrgId])
 
   // Deep-link desde Clientes: /contabilidad?cc=<cliente_id>
   useEffect(() => {
     const cc = searchParams.get('cc')
-    if (cc) {
+    if (cc && canManageFinance) {
       setTab('ctacte')
       verCtaCteCliente(Number(cc))
       searchParams.delete('cc')
@@ -339,7 +362,7 @@ export const Contabilidad: React.FC = () => {
     )
   }
 
-  const TABS: [Tab, string][] = [
+  const ALL_TABS: [Tab, string][] = [
     ['plan',    '📊 Plan de cuentas'],
     ['reglas',  '⚙️ Reglas'],
     ['diario',  `📒 Libro diario${totalAsientos > 0 ? ` (${totalAsientos})` : ''}`],
@@ -349,13 +372,14 @@ export const Contabilidad: React.FC = () => {
     ['clientes', '🔗 Clientes'],
     ['ctacte',  '💰 Cuentas corrientes'],
   ]
+  const TABS = ALL_TABS.filter(([t]) => hasPermission(TAB_PERM[t]))
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-ml-text dark:text-white">Contabilidad</h1>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          Plan de cuentas · Reglas · Libro diario · Sumas y saldo · Balance · Libro mayor
+          {canAdminAccounting ? 'Plan de cuentas · Reglas · ' : ''}Libro diario · Sumas y saldo · Balance · Libro mayor{canManageFinance ? ' · Cuentas corrientes' : ''}
         </p>
       </div>
 

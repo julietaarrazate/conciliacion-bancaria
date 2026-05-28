@@ -64,10 +64,10 @@ def require_permission(permission: str):
             return current_user
 
         permissions = {
-            "admin": ["upload_files", "reconcile", "manage_users", "view_audit"],
-            "operador": ["upload_files", "reconcile"],
-            "revisor": ["view_results"],
-            "auditor": ["view_audit"]
+            "admin": ["upload_files", "reconcile", "manage_users", "view_audit", "view_accounting", "manage_finance", "admin_accounting"],
+            "operador": ["upload_files", "reconcile", "manage_finance", "view_accounting"],
+            "revisor": ["view_results", "view_accounting"],
+            "auditor": ["view_audit", "view_accounting", "manage_finance"],
         }
 
         role_value = current_user.role if isinstance(current_user.role, str) else getattr(current_user.role, "value", None)

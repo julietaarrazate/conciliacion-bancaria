@@ -6,7 +6,7 @@ from pydantic import BaseModel
 import logging
 
 from app.database import get_db
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, require_permission
 from app.models.user import User
 from app.models.cliente import Cliente
 from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
@@ -394,7 +394,7 @@ def vincular_cuenta_cliente(
     body: VincularCuentaBody,
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("admin_accounting")),
 ):
     """Asigna una cuenta existente a un cliente, corrige una vinculación o
     desvincula (cuenta_id=null). La cuenta debe colgar de 2-1-2-0 y no estar
@@ -439,7 +439,7 @@ def crear_y_vincular_cuenta(
     body: CrearCuentaBody,
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("admin_accounting")),
 ):
     """Crea una cuenta nueva bajo 2-1-2-0 con el próximo código y la vincula al
     cliente. El cliente no debe tener cuenta previa (usar PUT para corregir)."""
@@ -506,7 +506,7 @@ def get_cuenta_corriente(
     hasta: Optional[str] = Query(None),
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("manage_finance")),
 ):
     """Cuenta corriente del cliente: línea de tiempo financiera unificada,
     derivada de los asientos que impactan su cuenta contable. NO genera asientos."""
@@ -622,7 +622,7 @@ def get_cuenta_corriente(
 def get_cuentas_corrientes(
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("manage_finance")),
 ):
     """Vista global de cartera: saldo, último movimiento y estado por cliente.
     Vista derivada de los asientos sobre cada cuenta 2-1-2-X. No genera asientos."""
