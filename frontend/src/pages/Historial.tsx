@@ -102,12 +102,6 @@ export const Historial: React.FC = () => {
               {filtered.length} planillas · {totalAcred}/{totalFilas} · {pct}%
             </p>
           </div>
-          <button
-            onClick={() => apiClient.exportHistorial({ cliente: filter || undefined })}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/60 transition-colors shrink-0"
-          >
-            📁 Exportar
-          </button>
         </div>
 
         {/* Barra de filtro */}
@@ -209,19 +203,11 @@ export const Historial: React.FC = () => {
                     🔄 Re-conciliar
                   </button>
                   <button
-                    onClick={() => handleDownload(it.id)}
-                    disabled={downloadingId === it.id}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 font-medium disabled:opacity-40 active:scale-95"
-                  >
-                    {downloadingId === it.id ? '⏳' : '⬇️ Excel'}
-                  </button>
-                  <button
                     onClick={() => handleGuardar(it.id, it.cliente_nombre)}
                     disabled={savingId === it.id}
-                    className="flex items-center justify-center gap-1 py-2 px-3 text-sm rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 disabled:opacity-40 active:scale-95"
-                    title="Guardar en carpeta"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 font-medium disabled:opacity-40 active:scale-95"
                   >
-                    {savingId === it.id ? '⏳' : '📁'}
+                    {savingId === it.id ? '⏳' : '📁 Exportar'}
                   </button>
                   <button
                     onClick={() => handleDelete(it.id)}
