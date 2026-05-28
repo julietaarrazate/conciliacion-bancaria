@@ -102,12 +102,6 @@ export const Historial: React.FC = () => {
               {filtered.length} planillas · {totalAcred}/{totalFilas} · {pct}%
             </p>
           </div>
-          <button
-            onClick={() => apiClient.exportHistorial({ cliente: filter || undefined })}
-            className="btn-primary text-xs px-3 py-1.5 shrink-0"
-          >
-            ⬇️ Excel
-          </button>
         </div>
 
         {/* Barra de filtro */}
