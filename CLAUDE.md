@@ -132,7 +132,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ---
 
-## Features implementadas (estado actual — v3.4)
+## Features implementadas (estado actual — v3.6)
 
 - Conciliación bancaria multi-extracto con motor de scoring
 - Carga masiva con auto-conciliar al subir planillas
@@ -207,6 +207,55 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - **Diseño unificado**: header/sidebar usan `bg-ml-blue` (Linear purple-blue #5E6AD2) en light mode
   en lugar del amarillo previo. `btn-yellow` también usa `bg-ml-blue` en light mode. Dark mode sin cambios.
 
+### v3.6 — Contabilidad automática + Cuentas Corrientes (mayo 2026)
+
+- **Asientos automáticos al importar UM**: Banco Macro (1-1-1-3-1) D / No identificado (2-1-1-1) H.
+  Modo `agrupado` (un asiento por lote, default) o `individual` (uno por movimiento), elegible desde
+  `/movimientos`. Config por org: `modo_asiento_um`. Al borrar lote UM → `reversar_asientos()` (deja
+  asiento original + reverso, trazabilidad completa). En `services/motor_contable.py`.
+- **Reclasificación al conciliar**: No identificado (2-1-1-1) D / Cliente X (2-1-2-X) H. Se dispara en
+  `conciliar_planilla()` cuando `mov.source == "um"` y hay `cliente_id`. Modulo `um_reclass`.
+- **Cuenta contable por cliente (1:1)**: `Cliente.cuenta_contable_id` (FK a `plan_cuentas`, safety net
+  `ADD COLUMN IF NOT EXISTS`). `_get_o_crear_cuenta_cliente()` resuelve: cuenta vinculada → adopta por
+  nombre bajo 2-1-2-0 → crea la próxima 2-1-2-X. NUNCA crea entidades Cliente desde movimientos.
+- **Backfill de cuentas al arrancar**: vincula clientes existentes a cuentas por nombre normalizado
+  (`unicodedata.normalize NFKD`); sin match claro → queda sin vincular (solo log). Idempotente. En `main.py`.
+- **Módulo Contabilidad — tab 🔗 Clientes**: vinculación manual cliente↔cuenta. `GET /contabilidad/clientes-cuentas`,
+  `PUT /contabilidad/clientes/{id}/cuenta` (409 si la cuenta ya está tomada — 1:1), `POST .../cuenta/crear`.
+  Botón **"+ Crear cuentas faltantes"** → `POST /contabilidad/clientes/cuentas/crear-faltantes` crea/vincula
+  la cuenta de todos los clientes sin cuenta (adopta por nombre, no duplica).
+- **Cuentas Corrientes = MÓDULO PROPIO** (`/cuentas-corrientes`, permiso `manage_finance`, ícono banco en nav).
+  Es el mismo componente `Contabilidad.tsx` con prop `modo="ctacte"`. Vista derivada de asientos (NO genera).
+  Cartera global (`GET /contabilidad/cuentas-corrientes`: saldo, último mov, estado deudor/acreedor/equilibrado/
+  sin_actividad) + detalle por cliente (`GET /contabilidad/cuenta-corriente`: timeline con filtros Banco/TT/
+  Cheques/Ajustes, débito/crédito/saldo, links a planilla/movimiento). Botón "Cta. cte." en `/clientes`
+  (ícono banco, deep-link `/cuentas-corrientes?cc=<id>`).
+- **Backfill cuentas corrientes desde lo ya conciliado**: botón **"↻ Reconstruir desde conciliaciones"**
+  en `/cuentas-corrientes` (solo `admin_accounting`). `POST /contabilidad/backfill-cuentas-corrientes`
+  (soporta `?dry_run=true` para previsualizar conteo). Por cada fila de planilla conciliada (status ok)
+  de un cliente con cuenta, genera asiento NETO **Banco Macro (D) / Cliente (H)** (modulo `cc_inicial`).
+  Se eligió el neto Banco/Cliente para NO dejar "No identificado" en negativo. Idempotente: saltea filas
+  con `um_reclass` (flujo normal) o `cc_inicial` previo. **ORDEN DE USO: 1) "+ Crear cuentas faltantes"
+  → 2) "↻ Reconstruir desde conciliaciones".** El extracto solo dice que entró plata; la planilla
+  conciliada identifica al cliente → por eso el backfill recorre conciliaciones, no el extracto crudo.
+- **Permisos en 3 capas** (reemplaza el `view_accounting` monolítico):
+  - `view_accounting` — lectura contable formal: Libro diario, Mayor, Sumas y saldo, Balance.
+  - `manage_finance` — operación financiera diaria: Cuentas Corrientes.
+  - `admin_accounting` — config estructural: Plan de cuentas, Reglas, vinculación cliente↔cuenta, backfill.
+  - Mapeo: ADMIN = las 3 · OPERADOR = manage_finance + view_accounting · REVISOR = view_accounting ·
+    AUDITOR = view_accounting + manage_finance. Definido en `store/auth.ts` y `middleware/auth.py`.
+    Tabs de `/contabilidad` filtradas por permiso; guards `require_permission` en backend.
+- **Borrar OP en Caja**: `DELETE /caja/op/{op_id}` (ícono 🗑️ por OP del día, deshabilitado si arqueo
+  cerrado). Reversa el asiento `caja_op`, repone denominaciones físicas al arqueo y registra la baja.
+- **Fix estado de cuenta Decimal×float**: `total_conciliado` (Numeric 12,2 = Decimal) se convertía a float
+  antes de multiplicar por % comisión; sin eso lanzaba TypeError → 500 en clientes con filas conciliadas.
+- **Mobile clientes**: se ocultó la flecha gris ▼ de desplegar (tocar el cliente ya despliega).
+- **Landing**: FAQ dice "ARCA" en vez de "AFIP".
+- **Modulos de asiento (referencia para cta.cte.)**: `um_lote`/`um_mov` (import UM), `um_reclass` (reclasif.),
+  `cc_inicial` (backfill histórico Banco/Cliente), `planilla`/`planilla_comision` (TT), `cheque_carga`/
+  `cheque_rechazo`, `pago`, `caja_op`/`caja_efectivo`, `*_reverso` (reversos). La cta.cte. del cliente lee
+  los `AsientoDetalle` que tocan su `cuenta_contable_id`.
+
 ---
 
 ## Storage de fotos (S3/R2 opcional)
@@ -264,7 +313,9 @@ Checkpoints disponibles:
 - `v3.2-stable-checkpoint` — después de seguridad hardening + Numeric migration + legal pages (mayo 2026)
 - `v3.3-stable-checkpoint` — después de export robusto, comisiones, landing page, Borrar UM
 - `v3.4-stable-checkpoint` — después de comisión por ítem, fusionar clientes, responsive fixes (mayo 2026)
+- `v3.6` — contabilidad automática UM, cuentas corrientes como módulo propio, permisos en 3 capas,
+  backfill de cuentas corrientes, borrar OP (mayo 2026 — PRs #36–#39 mergeados a main)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.5
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.6
