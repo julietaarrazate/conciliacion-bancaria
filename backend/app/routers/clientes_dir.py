@@ -238,6 +238,7 @@ def get_archivos_por_cliente(
                 "id": c.id,
                 "nombre": c.nombre,
                 "cuit": c.cuit,
+                "porcentaje_comision": float(c.porcentaje_comision) if c.porcentaje_comision is not None else None,
                 "total_archivos": total_archivos,
                 "meses": meses,
             })
@@ -691,3 +692,45 @@ def crear_cliente(payload: dict,
     registrar_log(db, current_user.id, "clientes", c.id, "INSERT",
                   {"nombre": nombre, "organizacion_id": org_id})
     return {"id": c.id, "nombre": c.nombre, "cuit": c.cuit, "organizacion_id": c.organizacion_id}
+
+
+@router.put("/{cliente_id}/comision")
+def actualizar_comision_cliente(
+    cliente_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Setea o borra el % de comision propio del cliente. NULL = usa default de la org."""
+    from app.models.cliente import Cliente as Cli
+    from app.services.auditoria import registrar_log
+    from decimal import Decimal
+
+    org_id = current_user.organizacion_id or 1
+    q = db.query(Cli).filter(Cli.id == cliente_id)
+    if not current_user.is_superadmin:
+        q = q.filter(Cli.organizacion_id == org_id)
+    cliente = q.first()
+    if not cliente:
+        raise HTTPException(404, "Cliente no encontrado")
+
+    pct_raw = payload.get("porcentaje_comision")
+    if pct_raw is None or pct_raw == "":
+        cliente.porcentaje_comision = None
+    else:
+        try:
+            pct = Decimal(str(pct_raw))
+            if pct < 0 or pct > 100:
+                raise HTTPException(400, "El porcentaje debe estar entre 0 y 100")
+            cliente.porcentaje_comision = pct
+        except Exception:
+            raise HTTPException(400, "Porcentaje inválido")
+
+    db.commit()
+    registrar_log(db, current_user.id, "clientes", cliente.id, "UPDATE",
+                  {"porcentaje_comision": str(cliente.porcentaje_comision)})
+    return {
+        "id": cliente.id,
+        "nombre": cliente.nombre,
+        "porcentaje_comision": float(cliente.porcentaje_comision) if cliente.porcentaje_comision is not None else None,
+    }

@@ -123,7 +123,13 @@ def generar_liquidacion(
         if monto == 0:
             continue
 
-        pct = pct_override if pct_override is not None else _comision_cliente(config, cliente.nombre)
+        # Prioridad: override manual > % propio del cliente > config org
+        if pct_override is not None:
+            pct = pct_override
+        elif cliente.porcentaje_comision is not None:
+            pct = Decimal(str(cliente.porcentaje_comision))
+        else:
+            pct = _comision_cliente(config, cliente.nombre)
         comision = round(monto * pct / 100, 2)
         neto = round(monto - comision, 2)
 

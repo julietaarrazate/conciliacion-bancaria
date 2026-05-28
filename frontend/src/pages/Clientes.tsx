@@ -22,6 +22,7 @@ interface ClienteData {
   id: number
   nombre: string
   cuit?: string | null
+  porcentaje_comision?: number | null
   total_archivos: number
   meses: MesArchivos[]
 }
@@ -91,6 +92,11 @@ export const Clientes: React.FC = () => {
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoCuit, setNuevoCuit] = useState('')
   const [creandoLoading, setCreandoLoading] = useState(false)
+
+  // Editor comision por cliente
+  const [editComisionId, setEditComisionId] = useState<number | null>(null)
+  const [editComisionVal, setEditComisionVal] = useState('')
+  const [savingComision, setSavingComision] = useState(false)
 
   // Modal acreditar comprobante
   const [acreditarCli, setAcreditarCli] = useState<{ id: number; nombre: string } | null>(null)
@@ -263,6 +269,19 @@ export const Clientes: React.FC = () => {
     } finally { setCreandoLoading(false) }
   }
 
+  const handleGuardarComision = async (clienteId: number) => {
+    setSavingComision(true)
+    try {
+      const pct = editComisionVal.trim() === '' ? null : parseFloat(editComisionVal.replace(',', '.'))
+      await apiClient.client.put(`/clientes/${clienteId}/comision`, { porcentaje_comision: pct })
+      apiClient.invalidateCache(activeOrgId ? `/clientes/archivos?org_id=${activeOrgId}` : '/clientes/archivos')
+      cargar()
+      setEditComisionId(null)
+    } catch (e: any) {
+      setMsg(`✗ ${e.response?.data?.detail || 'Error al guardar comisión'}`)
+    } finally { setSavingComision(false) }
+  }
+
   return (
     <div className="p-3 md:p-6 max-w-4xl mx-auto">
       <div className="mb-3">
@@ -389,6 +408,37 @@ export const Clientes: React.FC = () => {
                                 </p>
                               </div>
                             </button>
+                            {/* Chip comisión */}
+                            {editComisionId === cliente.id ? (
+                              <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                <input
+                                  type="number" step="0.1" min="0" max="100"
+                                  placeholder="%"
+                                  className="input-field text-xs w-16 py-0.5 px-1.5"
+                                  value={editComisionVal}
+                                  onChange={e => setEditComisionVal(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') handleGuardarComision(cliente.id); if (e.key === 'Escape') setEditComisionId(null) }}
+                                  autoFocus
+                                />
+                                <button onClick={() => handleGuardarComision(cliente.id)} disabled={savingComision}
+                                  className="px-1.5 py-0.5 text-[10px] bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-30">
+                                  {savingComision ? '⏳' : '✓'}
+                                </button>
+                                <button onClick={() => setEditComisionId(null)}
+                                  className="text-[10px] text-gray-400 hover:text-gray-600 px-0.5">✕</button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditComisionId(cliente.id); setEditComisionVal(cliente.porcentaje_comision != null ? String(cliente.porcentaje_comision) : '') }}
+                                className="px-2 py-1 text-[11px] rounded font-medium flex-shrink-0 border transition-colors hover:border-amber-400 dark:hover:border-amber-500"
+                                style={{ borderColor: 'transparent', background: 'transparent' }}
+                                title="Comisión de este cliente — click para editar"
+                              >
+                                <span className={cliente.porcentaje_comision != null ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}>
+                                  {cliente.porcentaje_comision != null ? `${cliente.porcentaje_comision}%` : '—%'}
+                                </span>
+                              </button>
+                            )}
                             <a
                               href={`/clientes/${cliente.id}/estado-cuenta`}
                               onClick={(e) => e.stopPropagation()}
