@@ -74,8 +74,15 @@ export const Perfil: React.FC = () => {
           setPushEnabled(false)
         }
       } else {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+          toast.error('Las notificaciones están bloqueadas en este navegador. Hacé clic en el ícono 🔒 en la barra de direcciones y habilitá "Notificaciones".')
+          return
+        }
         const permission = await Notification.requestPermission()
-        if (permission !== 'granted') return
+        if (permission !== 'granted') {
+          toast.error('Se necesita permiso de notificaciones para activarlas.')
+          return
+        }
         const vapidKey = await apiClient.getPushPublicKey()
         if (!vapidKey) { toast.info('Notificaciones no configuradas aún. Contactá al admin.'); return }
         // Conversión base64url → Uint8Array (Safari no acepta string raw)
