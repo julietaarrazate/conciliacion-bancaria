@@ -25,6 +25,29 @@ export interface AuthResponse {
   user: User
 }
 
+export interface PendingApproval {
+  pending_approval: true
+  approval_id: number
+  poll_secret: string
+  expires_at: string
+}
+
+export interface LoginApprovalStatus {
+  status: 'pending' | 'approved' | 'denied' | 'expired'
+  access_token?: string
+  token_type?: string
+  user?: User
+}
+
+export interface PendingRequest {
+  id: number
+  user_email: string
+  user_name: string
+  ip: string | null
+  created_at: string
+  expires_at: string
+}
+
 export interface MovimientoBanco {
   id: number
   orden?: number

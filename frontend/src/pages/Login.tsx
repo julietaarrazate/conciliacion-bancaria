@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
@@ -18,6 +18,45 @@ export const Login: React.FC = () => {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [waking, setWaking] = useState(false)
+  // Aprobación en vivo (rol contador)
+  const [pending, setPending] = useState<{ id: number; secret: string } | null>(null)
+  const pollRef = useRef<number | null>(null)
+
+  // Polling del estado de aprobación mientras esperamos al superadmin
+  useEffect(() => {
+    if (!pending) return
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const st = await apiClient.getLoginApprovalStatus(pending.id, pending.secret)
+        if (cancelled) return
+        if (st.status === 'approved' && st.access_token && st.user) {
+          setUser(st.user)
+          setToken(st.access_token)
+          forceUnlock()
+          setPending(null)
+          navigate('/dashboard')
+        } else if (st.status === 'denied') {
+          setPending(null)
+          setError('El superadmin rechazó tu ingreso.')
+        } else if (st.status === 'expired') {
+          setPending(null)
+          setError('La solicitud expiró. Volvé a iniciar sesión.')
+        }
+      } catch {
+        if (!cancelled) {
+          setPending(null)
+          setError('No se pudo verificar la solicitud. Intentá de nuevo.')
+        }
+      }
+    }
+    pollRef.current = window.setInterval(tick, 3000)
+    tick()
+    return () => {
+      cancelled = true
+      if (pollRef.current) window.clearInterval(pollRef.current)
+    }
+  }, [pending, setUser, setToken, forceUnlock, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,6 +64,10 @@ export const Login: React.FC = () => {
     setLoading(true)
     try {
       const response = await apiClient.login(formData.email, formData.password)
+      if ('pending_approval' in response && response.pending_approval) {
+        setPending({ id: response.approval_id, secret: response.poll_secret })
+        return
+      }
       setUser(response.user)
       setToken(response.access_token)
       forceUnlock()
@@ -41,6 +84,11 @@ export const Login: React.FC = () => {
           await new Promise(r => setTimeout(r, 8000))
           try {
             const response2 = await apiClient.login(formData.email, formData.password)
+            if ('pending_approval' in response2 && response2.pending_approval) {
+              setWaking(false)
+              setPending({ id: response2.approval_id, secret: response2.poll_secret })
+              return
+            }
             setUser(response2.user)
             setToken(response2.access_token)
             forceUnlock()
@@ -85,6 +133,32 @@ export const Login: React.FC = () => {
         {/* Card */}
         <div className="bg-white dark:bg-ml-dark-surface rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-ml-dark-border dark:shadow-none">
 
+          {pending ? (
+            <div className="text-center py-6">
+              <div className="text-4xl mb-4 animate-pulse">🔐</div>
+              <h2 className="text-lg font-semibold text-ml-text dark:text-white mb-2">
+                Esperando aprobación
+              </h2>
+              <p className="text-sm text-ml-text-soft dark:text-zinc-400 mb-1">
+                Se le envió una solicitud al administrador para autorizar tu ingreso.
+              </p>
+              <p className="text-xs text-ml-text-soft dark:text-zinc-500 mb-5">
+                Dejá esta pantalla abierta — apenas te aprueben, entrás solo.
+              </p>
+              <div className="flex items-center justify-center gap-2 text-ml-green text-sm">
+                <span className="animate-spin text-base">⏳</span>
+                <span>Aguardando…</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setPending(null); setError('') }}
+                className="mt-6 text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-green transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          ) : (
+          <>
           {waking && (
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 text-sm dark:bg-amber-950/30 dark:border-amber-800/40 dark:text-amber-400 flex items-center gap-2">
               <span className="animate-spin text-base">⏳</span>
@@ -155,6 +229,8 @@ export const Login: React.FC = () => {
               </Link>
             </div>
           </form>
+          </>
+          )}
         </div>
 
         <p className="text-center text-xs text-gray-400 dark:text-zinc-700 mt-6 font-mono">

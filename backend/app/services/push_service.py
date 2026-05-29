@@ -30,6 +30,23 @@ def send_push(endpoint: str, p256dh: str, auth_key: str, title: str, body: str, 
         return False
 
 
+def send_push_to_user(db, user_id: int, title: str, body: str, url: str = "/") -> int:
+    """Envía push a todas las subscripciones de un usuario. Retorna cantidad enviadas."""
+    from app.models.push_subscription import PushSubscription
+    subs = db.query(PushSubscription).filter(PushSubscription.user_id == user_id).all()
+    ok = 0
+    dead = []
+    for s in subs:
+        if send_push(s.endpoint, s.p256dh, s.auth, title, body, url):
+            ok += 1
+        else:
+            dead.append(s.id)
+    if dead:
+        db.query(PushSubscription).filter(PushSubscription.id.in_(dead)).delete(synchronize_session=False)
+        db.commit()
+    return ok
+
+
 def send_push_to_all(db, title: str, body: str, url: str = "/") -> int:
     """Envía push a todas las subscripciones. Retorna cantidad de envíos exitosos."""
     from app.models.push_subscription import PushSubscription

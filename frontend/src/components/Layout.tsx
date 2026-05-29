@@ -55,6 +55,7 @@ const navItems = [
   { to: '/contabilidad',   label: 'Contabilidad',  Icon: Icon.Stack, permission: 'view_accounting' },
   { to: '/liquidaciones',  label: 'Liquidaciones', Icon: Icon.Chart, permission: 'reconcile' },
   { to: '/auditoria',      label: 'Auditoría',     Icon: Icon.Search, permission: 'view_audit' },
+  { to: '/aprobaciones',   label: 'Aprobaciones',  Icon: Icon.Bell, superadmin: true },
   { to: '/usuarios',       label: 'Usuarios',      Icon: Icon.Users,  permission: 'manage_users' },
   { to: '/actividad',      label: 'Actividad',   Icon: Icon.Activity, permission: 'manage_users' },
   { to: '/organizaciones', label: 'Orgs',          Icon: Icon.Building, permission: 'manage_users' },
@@ -161,7 +162,10 @@ export const Layout: React.FC = () => {
   }
 
   const visibleItems = navItems.filter(
-    item => !item.permission || hasPermission(item.permission)
+    item => {
+      if ((item as any).superadmin) return !!user?.is_superadmin
+      return !item.permission || hasPermission(item.permission)
+    }
   )
 
   const SidebarContent = ({ onNav }: { onNav?: () => void }) => (

@@ -31,6 +31,7 @@ from app.routers import push_router
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.push_subscription import PushSubscription  # noqa: F401
 from app.models.revoked_token import RevokedToken  # noqa: F401
+from app.models.login_approval import LoginApproval  # noqa: F401
 from app.models.organizacion import Organizacion
 
 # ── Decimal → float encoder para SQLAlchemy Numeric columns ──────────────────

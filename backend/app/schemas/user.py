@@ -7,6 +7,7 @@ class RoleEnum(str, Enum):
     OPERADOR = "operador"
     REVISOR = "revisor"
     AUDITOR = "auditor"
+    CONTADOR = "contador"
 
 class UserRegister(BaseModel):
     email: EmailStr

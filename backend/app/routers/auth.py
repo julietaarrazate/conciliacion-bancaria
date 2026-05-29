@@ -1,6 +1,9 @@
+import hashlib
 import logging
+import secrets
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
@@ -10,7 +13,8 @@ from jose import jwt as jose_jwt, JWTError
 
 from app.database import get_db
 from app.models.revoked_token import RevokedToken
-from app.models.user import User
+from app.models.user import User, RoleEnum
+from app.models.login_approval import LoginApproval
 from app.schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse
 from app.services.auth import register_user, authenticate_user, create_access_token
 from app.services.password_reset import (
@@ -18,8 +22,18 @@ from app.services.password_reset import (
     validar_y_cambiar_password,
 )
 from app.services.auditoria import registrar_log
+from app.services.push_service import send_push_to_user
 from app.middleware.auth import require_superadmin
 from app.config import get_settings
+
+# Sesión del contador de prueba: más corta (4h) y gateada por aprobación en vivo
+CONTADOR_SESSION_MINUTES = 240
+# El pedido de ingreso pendiente caduca si el superadmin no decide a tiempo
+APPROVAL_REQUEST_TTL_MINUTES = 10
+
+
+def _serialize_user(user: User) -> dict:
+    return UserResponse.model_validate(user).model_dump(mode="json")
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -55,16 +69,56 @@ def register(
     return user
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 @limiter.limit("10/minute")
 def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db)):
-    """Autentica un usuario y retorna JWT token"""
+    """Autentica un usuario y retorna JWT token.
+
+    Para el rol `contador` no devuelve token directo: crea un pedido de
+    aprobación (202) que el superadmin debe aceptar en vivo. El cliente del
+    contador hace polling a /auth/login-approval/{id} hasta recibir el token
+    (sesión de 4h). Pasadas las 4h el token expira y se repite la aprobación.
+    """
     user = authenticate_user(db, credentials.email, credentials.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contraseña inválidos"
         )
+
+    # Contador → flujo de aprobación en vivo
+    if user.role == RoleEnum.CONTADOR.value and not user.is_superadmin:
+        secret = secrets.token_urlsafe(32)
+        ap = LoginApproval(
+            user_id=user.id,
+            status="pending",
+            poll_secret_hash=hashlib.sha256(secret.encode()).hexdigest(),
+            ip=get_remote_address(request),
+            request_expires_at=datetime.utcnow() + timedelta(minutes=APPROVAL_REQUEST_TTL_MINUTES),
+        )
+        db.add(ap)
+        db.commit()
+        db.refresh(ap)
+        # Notificar a los superadmins (best-effort)
+        try:
+            for sa in db.query(User).filter(User.is_superadmin == True).all():  # noqa: E712
+                send_push_to_user(
+                    db, sa.id, "Solicitud de ingreso",
+                    f"{user.full_name} ({user.email}) quiere ingresar", "/aprobaciones",
+                )
+        except Exception:
+            logger.exception("No se pudo notificar la solicitud de ingreso")
+        try:
+            registrar_log(db, user.id, "auth", ap.id, "LOGIN_PENDING",
+                          {"email": user.email, "ip": ap.ip})
+        except Exception:
+            pass
+        return JSONResponse(status_code=202, content={
+            "pending_approval": True,
+            "approval_id": ap.id,
+            "poll_secret": secret,
+            "expires_at": ap.request_expires_at.isoformat(),
+        })
 
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
@@ -75,8 +129,114 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user": user
+        "user": _serialize_user(user),
     }
+
+
+class DecisionBody(BaseModel):
+    approve: bool
+
+
+@router.get("/login-approval/{approval_id}")
+@limiter.limit("120/minute")
+def login_approval_status(
+    request: Request,
+    approval_id: int,
+    secret: str,
+    db: Session = Depends(get_db),
+):
+    """Polling del contador: devuelve el estado del pedido. Si fue aprobado,
+    entrega el token UNA sola vez (luego se limpia). Requiere el poll_secret."""
+    ap = db.query(LoginApproval).filter(LoginApproval.id == approval_id).first()
+    if not ap or hashlib.sha256(secret.encode()).hexdigest() != ap.poll_secret_hash:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+
+    if ap.status == "pending" and datetime.utcnow() > ap.request_expires_at:
+        ap.status = "expired"
+        db.commit()
+
+    if ap.status == "approved" and ap.access_token:
+        token = ap.access_token
+        ap.access_token = None  # entregar una sola vez
+        db.commit()
+        user = db.query(User).filter(User.id == ap.user_id).first()
+        return {
+            "status": "approved",
+            "access_token": token,
+            "token_type": "bearer",
+            "user": _serialize_user(user) if user else None,
+        }
+
+    return {"status": ap.status}
+
+
+@router.get("/pending-approvals")
+def pending_approvals(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """Lista de pedidos de ingreso pendientes (para el panel del superadmin)."""
+    now = datetime.utcnow()
+    out = []
+    for ap in db.query(LoginApproval).filter(LoginApproval.status == "pending").order_by(LoginApproval.created_at.desc()).all():
+        if now > ap.request_expires_at:
+            ap.status = "expired"
+            continue
+        u = db.query(User).filter(User.id == ap.user_id).first()
+        out.append({
+            "id": ap.id,
+            "user_email": u.email if u else "—",
+            "user_name": u.full_name if u else "—",
+            "ip": ap.ip,
+            "created_at": ap.created_at.isoformat(),
+            "expires_at": ap.request_expires_at.isoformat(),
+        })
+    db.commit()
+    return out
+
+
+@router.post("/login-approval/{approval_id}/decide")
+def decide_login_approval(
+    approval_id: int,
+    body: DecisionBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_superadmin),
+):
+    """El superadmin aprueba o rechaza un pedido de ingreso. Al aprobar se
+    genera el JWT del contador con expiración de 4h."""
+    ap = db.query(LoginApproval).filter(LoginApproval.id == approval_id).first()
+    if not ap:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+    if ap.status != "pending":
+        raise HTTPException(status_code=409, detail="La solicitud ya fue resuelta o expiró")
+    if datetime.utcnow() > ap.request_expires_at:
+        ap.status = "expired"
+        db.commit()
+        raise HTTPException(status_code=409, detail="La solicitud expiró")
+
+    user = db.query(User).filter(User.id == ap.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if body.approve:
+        token = create_access_token(
+            data={"sub": user.email, "user_id": user.id, "role": user.role},
+            expires_delta=timedelta(minutes=CONTADOR_SESSION_MINUTES),
+        )
+        ap.access_token = token
+        ap.status = "approved"
+    else:
+        ap.status = "denied"
+    ap.decided_at = datetime.utcnow()
+    ap.decided_by = current_user.id
+    db.commit()
+    try:
+        registrar_log(db, current_user.id, "auth", ap.id,
+                      "LOGIN_APPROVED" if body.approve else "LOGIN_DENIED",
+                      {"contador": user.email})
+    except Exception:
+        pass
+    return {"status": ap.status}
 
 
 @router.post("/forgot-password")
