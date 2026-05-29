@@ -82,10 +82,10 @@ def _suma_planilla_rows(
         )
     )
     if usar_fecha_acred:
-        q = q.filter(
-            PlanillaRow.fecha_acred >= desde,
-            PlanillaRow.fecha_acred <= hasta,
-        )
+        # Fallback a fecha_carga cuando fecha_acred es NULL (extractos viejos,
+        # link al movimiento roto, etc.) para no excluir filas conciliadas.
+        fecha_ef = func.coalesce(PlanillaRow.fecha_acred, func.date(Planilla.fecha_carga))
+        q = q.filter(fecha_ef >= desde, fecha_ef <= hasta)
     else:
         q = q.filter(
             func.date(Planilla.fecha_carga) >= desde,
