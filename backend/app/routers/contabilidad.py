@@ -845,8 +845,8 @@ def revertir_planillas_extracto(
     current_user: User = Depends(require_permission("admin_accounting")),
 ):
     """Revierte las planillas creadas automáticamente desde el extracto:
-    soft-delete de las planillas 'Extracto auto-recuperado' + reverso de los
-    asientos cc_inicial vinculados a sus filas. Deja trazabilidad completa."""
+    hard-delete de las planillas 'Extracto auto-recuperado' (y sus filas en cascade)
+    + reverso de los asientos cc_inicial vinculados. Los movimientos quedan libres."""
     from datetime import datetime as _dt, date as _date
     from decimal import Decimal as _D
     from app.models.planilla import Planilla, PlanillaRow
@@ -925,14 +925,9 @@ def revertir_planillas_extracto(
                     haber=l.debe,
                 ))
 
-    # Desvincula movimientos para que queden huérfanos y puedan volver a recuperarse
-    for fila in filas:
-        fila.orden_movimiento_acreditado = None
-
-    # Soft-delete planillas (las filas quedan en DB para trazabilidad)
-    now = _dt.utcnow()
+    # Hard-delete planillas y sus filas (cascade) — libera la DB y los movimientos quedan huérfanos
     for pl in planillas:
-        pl.deleted_at = now
+        db.delete(pl)
 
     db.commit()
 
