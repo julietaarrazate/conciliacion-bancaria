@@ -12,17 +12,39 @@ export const AppLockGuard: React.FC = () => {
   const lock = useLockStore(s => s.lock)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const idleTimer = useRef<number | null>(null)
+  const didLockOnMount = useRef(false)
 
   const active = enabled && !!pinHash && isAuthenticated
 
-  // Bloquear al minimizar / pasar a background
+  // Bloquear siempre al cargar la app (nuevo tab, link externo, refresh)
+  useEffect(() => {
+    if (active && !didLockOnMount.current) {
+      didLockOnMount.current = true
+      lock()
+    }
+  }, [active, lock])
+
+  // Bloquear al minimizar / pasar a background.
+  // Debounce de 500ms para evitar falsos positivos durante animaciones de
+  // navegación en mobile (Chrome Android dispara visibilitychange brevemente).
+  const bgTimer = useRef<number | null>(null)
   useEffect(() => {
     if (!active) return
     const handler = () => {
-      if (document.hidden) lock()
+      if (document.hidden) {
+        bgTimer.current = window.setTimeout(() => lock(), 500)
+      } else {
+        if (bgTimer.current) {
+          window.clearTimeout(bgTimer.current)
+          bgTimer.current = null
+        }
+      }
     }
     document.addEventListener('visibilitychange', handler)
-    return () => document.removeEventListener('visibilitychange', handler)
+    return () => {
+      document.removeEventListener('visibilitychange', handler)
+      if (bgTimer.current) window.clearTimeout(bgTimer.current)
+    }
   }, [active, lock])
 
   // Bloquear por inactividad (5 min sin tocar nada)
