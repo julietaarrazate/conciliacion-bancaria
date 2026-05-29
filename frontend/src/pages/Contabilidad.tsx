@@ -327,14 +327,19 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
     try {
       const prev = await apiClient.client.post(`/contabilidad/backfill-cuentas-corrientes?dry_run=true${orgQ}`, {})
-      const { pendientes, clientes, ya_cubiertas } = prev.data
+      const { pendientes, clientes, ya_cubiertas, total_filas_ok, sin_cuenta_cliente } = prev.data
       if (!pendientes) {
-        toast.success(ya_cubiertas > 0 ? 'Las cuentas corrientes ya están al día' : 'No hay conciliaciones para reconstruir')
+        if (ya_cubiertas > 0) {
+          const extra = sin_cuenta_cliente > 0 ? ` · ${sin_cuenta_cliente} fila(s) sin cuenta de cliente` : ''
+          toast.success(`Cuentas corrientes al día — ${ya_cubiertas} de ${total_filas_ok} fila(s) cubiertas${extra}`)
+        } else {
+          toast.success('No hay conciliaciones para reconstruir')
+        }
         return
       }
       const ok = await confirmDialog({
         title: 'Reconstruir cuentas corrientes',
-        message: `Se generarán ${pendientes} acreditación(es) de ${clientes} cliente(s) a partir de las conciliaciones ya cargadas (Banco D / Cliente H). Es idempotente: no duplica lo ya registrado.`,
+        message: `Se generarán ${pendientes} acreditación(es) de ${clientes} cliente(s) a partir de las conciliaciones ya cargadas (Banco D / Cliente H). Es idempotente: no duplica lo ya registrado.${sin_cuenta_cliente > 0 ? ` Nota: ${sin_cuenta_cliente} fila(s) sin cuenta de cliente serán ignoradas.` : ''}`,
         confirmLabel: 'Reconstruir',
       })
       if (!ok) return
