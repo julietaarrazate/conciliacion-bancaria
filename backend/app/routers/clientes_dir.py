@@ -25,6 +25,7 @@ from app.models.user import User
 from app.middleware.auth import get_current_user
 from app.services.excel_export import export_planilla_conciliada
 from sqlalchemy.orm import Session
+from sqlalchemy import func, case
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
 
@@ -199,26 +200,39 @@ def get_archivos_por_cliente(
     orgs = orgs_q.order_by(Organizacion.id).all()
 
     # Indexar planillas por org_id -> cliente_id -> "anio/mes"
-    pq = db.query(Planilla).join(Cliente)
+    # Solo planillas activas (no soft-deleted) para evitar N+1 con filas de planillas borradas
+    from app.models.planilla import PlanillaRow
+    pq = db.query(Planilla).join(Cliente).filter(Planilla.deleted_at.is_(None))
     if current_user.is_superadmin and org_id:
         pq = pq.filter(Planilla.organizacion_id == org_id)
     elif not current_user.is_superadmin:
         pq = pq.filter(Planilla.organizacion_id == (current_user.organizacion_id or 1))
     planillas = pq.order_by(Planilla.fecha_carga.desc()).all()
 
+    # Precompute total y acreditadas por planilla en una sola query (evita N+1)
+    counts_map: dict = {}
+    if planillas:
+        pl_ids = [p.id for p in planillas]
+        rows_agg = db.query(
+            PlanillaRow.planilla_id,
+            func.count(PlanillaRow.id).label("total"),
+            func.sum(case((PlanillaRow.status == "ok", 1), else_=0)).label("acreditadas"),
+        ).filter(PlanillaRow.planilla_id.in_(pl_ids)).group_by(PlanillaRow.planilla_id).all()
+        counts_map = {r.planilla_id: (int(r.total), int(r.acreditadas or 0)) for r in rows_agg}
+
     archivos_idx: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     for p in planillas:
-        statuses = [r.status for r in p.rows]
-        org_id = p.organizacion_id or 1
+        total, acreditadas = counts_map.get(p.id, (0, 0))
+        p_org_id = p.organizacion_id or 1
         anio_str = str(p.fecha_carga.year)
         mes_nombre = MESES[p.fecha_carga.month - 1]
-        archivos_idx[org_id][p.cliente_id][f"{anio_str}/{mes_nombre}"].append({
+        archivos_idx[p_org_id][p.cliente_id][f"{anio_str}/{mes_nombre}"].append({
             "id": p.id,
             "nombre_archivo": p.nombre_archivo,
             "fecha_carga": p.fecha_carga.isoformat(),
             "fecha_dia": p.fecha_carga.strftime("%d/%m"),
-            "total": len(statuses),
-            "acreditadas": sum(1 for s in statuses if s == "ok"),
+            "total": total,
+            "acreditadas": acreditadas,
         })
 
     # Construir respuesta jerarquica
