@@ -652,6 +652,161 @@ def backfill_cuentas_corrientes(
     }
 
 
+# ── Recuperación de planillas desde extracto ──────────────────────────────────
+
+def _norm_nombre(s: str) -> str:
+    """Normaliza nombre para comparación: NFKD, sin diacríticos, minúsculas."""
+    import unicodedata as _ud
+    if not s:
+        return ''
+    s = _ud.normalize('NFKD', s)
+    s = ''.join(c for c in s if not _ud.combining(c))
+    return s.lower().strip()
+
+
+@router.post("/planillas-desde-extracto")
+def planillas_desde_extracto(
+    dry_run: bool = Query(False, description="Solo previsualiza, no crea nada"),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    """Recupera planillas faltantes a partir de los movimientos del extracto bancario.
+    Para cada movimiento positivo sin planilla vinculada que coincida con un
+    cliente conocido (por nombre normalizado), crea Planilla + PlanillaRow
+    (status=ok, ya conciliada). Agrupa por cliente × mes. Idempotente: solo
+    procesa movimientos que aún no tienen ninguna fila de planilla vinculada."""
+    from decimal import Decimal as _D
+    from datetime import datetime as _dt
+    from app.models.extracto import MovimientoBanco, ExtractoBancario
+    from app.models.planilla import Planilla, PlanillaRow
+
+    oid = _org_id(current_user, org_id)
+
+    # Movimientos positivos del extracto activo sin planilla row vinculada
+    orphaned = (
+        db.query(MovimientoBanco)
+        .join(ExtractoBancario, MovimientoBanco.extracto_id == ExtractoBancario.id)
+        .outerjoin(PlanillaRow, PlanillaRow.orden_movimiento_acreditado == MovimientoBanco.id)
+        .filter(
+            MovimientoBanco.organizacion_id == oid,
+            ExtractoBancario.deleted_at.is_(None),
+            MovimientoBanco.monto > 0,
+            PlanillaRow.id.is_(None),
+        )
+        .all()
+    )
+
+    # Mapa clientes por nombre normalizado
+    clientes = db.query(Cliente).filter(Cliente.organizacion_id == oid).all()
+    cli_by_norm = {_norm_nombre(c.nombre): c for c in clientes}
+
+    # Agrupar por (cliente_id, año, mes)
+    grupos: dict = {}
+    no_id_count = 0
+
+    for mov in orphaned:
+        cliente = None
+        for field in [mov.cliente_acreditado, mov.titular]:
+            n = _norm_nombre(field or '')
+            if n and n in cli_by_norm:
+                cliente = cli_by_norm[n]
+                break
+        if not cliente:
+            no_id_count += 1
+            continue
+
+        year = mov.fecha.year if mov.fecha else None
+        month = mov.fecha.month if mov.fecha else None
+        key = (cliente.id, year, month)
+
+        if key not in grupos:
+            grupos[key] = {
+                "cliente": cliente,
+                "movs": [],
+                "extracto_id": mov.extracto_id,
+                "comision": cliente.porcentaje_comision,
+            }
+        grupos[key]["movs"].append(mov)
+
+    sort_key = lambda item: (item[0][0], item[0][1] or 0, item[0][2] or 0)
+    grupos_list = [
+        {
+            "cliente_id": k[0],
+            "cliente_nombre": g["cliente"].nombre,
+            "mes": f"{k[1]}-{k[2]:02d}" if k[1] and k[2] else "sin-fecha",
+            "count": len(g["movs"]),
+            "monto_total": round(sum(float(m.monto or 0) for m in g["movs"]), 2),
+        }
+        for k, g in sorted(grupos.items(), key=sort_key)
+    ]
+
+    total_ids = sum(len(g["movs"]) for g in grupos.values())
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "huerfanos": len(orphaned),
+            "identificados": total_ids,
+            "no_identificados": no_id_count,
+            "clientes": len({k[0] for k in grupos}),
+            "planillas_a_crear": len(grupos),
+            "filas_a_crear": total_ids,
+            "grupos": grupos_list,
+        }
+
+    # Crear planillas y rows
+    planillas_creadas = 0
+    filas_creadas = 0
+    clientes_tocados: set = set()
+
+    for (cli_id, year, month), g in grupos.items():
+        mes_str = f"{year}-{month:02d}" if year and month else "sin-fecha"
+        pl = Planilla(
+            cliente_id=cli_id,
+            extracto_id=g["extracto_id"],
+            usuario_id=current_user.id,
+            organizacion_id=oid,
+            nombre_archivo=f"Extracto auto-recuperado {mes_str}",
+            fecha_carga=_dt.utcnow(),
+            porcentaje_comision=g["comision"],
+        )
+        db.add(pl)
+        db.flush()
+
+        for mov in g["movs"]:
+            monto = abs(mov.monto) if mov.monto else _D("0")
+            db.add(PlanillaRow(
+                planilla_id=pl.id,
+                organizacion_id=oid,
+                monto=monto,
+                titular=mov.titular,
+                status='ok',
+                fecha_acred=mov.fecha,
+                monto_acreditado=monto,
+                orden_movimiento_acreditado=mov.id,
+            ))
+            filas_creadas += 1
+
+        planillas_creadas += 1
+        clientes_tocados.add(cli_id)
+
+    db.commit()
+
+    logger.info(
+        "planillas-desde-extracto: %d planillas, %d filas, %d clientes (org %d, user %d)",
+        planillas_creadas, filas_creadas, len(clientes_tocados), oid, current_user.id,
+    )
+
+    return {
+        "ok": True,
+        "planillas_creadas": planillas_creadas,
+        "filas_creadas": filas_creadas,
+        "clientes": len(clientes_tocados),
+        "no_identificados": no_id_count,
+    }
+
+
 # ── Cuenta corriente del cliente (vista derivada de asientos) ─────────────────
 
 # modulo del asiento → (categoría de filtro, etiqueta legible)
