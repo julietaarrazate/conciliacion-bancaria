@@ -8,6 +8,7 @@ class UserAdminUpdate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[RoleEnum] = None
     is_active: Optional[bool] = None
+    organizacion_id: Optional[int] = None
 
 
 class UserAdminResponse(BaseModel):
@@ -16,6 +17,7 @@ class UserAdminResponse(BaseModel):
     full_name: str
     role: RoleEnum
     is_active: bool
+    organizacion_id: Optional[int] = None
     created_at: datetime
 
     class Config:

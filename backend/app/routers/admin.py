@@ -60,7 +60,8 @@ def update_user(
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="Usá 'Mi Perfil' para editar tu propia cuenta")
 
-    antes = {"full_name": user.full_name, "role": user.role, "is_active": user.is_active}
+    antes = {"full_name": user.full_name, "role": user.role, "is_active": user.is_active,
+             "organizacion_id": user.organizacion_id}
 
     if payload.full_name is not None:
         user.full_name = payload.full_name
@@ -68,6 +69,11 @@ def update_user(
         user.role = payload.role.value
     if payload.is_active is not None:
         user.is_active = payload.is_active
+    if payload.organizacion_id is not None:
+        from app.models.organizacion import Organizacion as _Org
+        if not db.query(_Org).filter(_Org.id == payload.organizacion_id).first():
+            raise HTTPException(status_code=404, detail="Organización no encontrada")
+        user.organizacion_id = payload.organizacion_id
 
     db.commit()
     db.refresh(user)
@@ -78,7 +84,7 @@ def update_user(
         tabla="users",
         registro_id=user.id,
         accion="UPDATE",
-        cambios={"antes": antes, "despues": {"full_name": user.full_name, "role": user.role, "is_active": user.is_active}}
+        cambios={"antes": antes, "despues": {"full_name": user.full_name, "role": user.role, "is_active": user.is_active, "organizacion_id": user.organizacion_id}}
     )
 
     return user

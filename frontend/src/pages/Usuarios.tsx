@@ -3,8 +3,10 @@ import { apiClient } from '@/services/api'
 import { User, UserRole } from '@/types'
 import { toast } from '@/store/toast'
 import { confirmDialog } from '@/store/confirm'
+import { useAuthStore } from '@/store/auth'
 
 export const Usuarios: React.FC = () => {
+  const me = useAuthStore(s => s.user)
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<number | null>(null)
@@ -12,8 +14,9 @@ export const Usuarios: React.FC = () => {
   const [showForm, setShowForm] = useState(false)
   const [formError, setFormError] = useState('')
   const [formLoading, setFormLoading] = useState(false)
-  const [newUser, setNewUser] = useState({ email: '', full_name: '', password: '', role: UserRole.OPERADOR })
+  const [newUser, setNewUser] = useState<{ email: string; full_name: string; password: string; role: UserRole; orgId: number | '' }>({ email: '', full_name: '', password: '', role: UserRole.OPERADOR, orgId: '' })
   const [showPass, setShowPass] = useState(false)
+  const [orgs, setOrgs] = useState<{ id: number; nombre: string }[]>([])
 
   const load = async () => {
     setLoading(true)
@@ -25,6 +28,11 @@ export const Usuarios: React.FC = () => {
   }
 
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (me?.is_superadmin) {
+      apiClient.listOrganizaciones().then(setOrgs).catch(() => setOrgs([]))
+    }
+  }, [me?.is_superadmin])
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,12 +53,19 @@ export const Usuarios: React.FC = () => {
         password: newUser.password,
         role: newUser.role
       })
-      // Actualizar rol si no es OPERADOR (register crea como OPERADOR por defecto)
-      if (newUser.role !== UserRole.OPERADOR) {
+      // register crea como OPERADOR en la org por defecto; ajustamos rol y org
+      // (la org sólo la asigna el superadmin desde el selector).
+      const needsPatch = newUser.role !== UserRole.OPERADOR || (!!me?.is_superadmin && newUser.orgId !== '')
+      if (needsPatch) {
         const created = (await apiClient.getUsers({ limit: 200 })).items.find(u => u.email === newUser.email)
-        if (created) await apiClient.updateUser(created.id, { role: newUser.role })
+        if (created) {
+          const patch: { role?: UserRole; organizacion_id?: number } = {}
+          if (newUser.role !== UserRole.OPERADOR) patch.role = newUser.role
+          if (me?.is_superadmin && newUser.orgId !== '') patch.organizacion_id = Number(newUser.orgId)
+          await apiClient.updateUser(created.id, patch)
+        }
       }
-      setNewUser({ email: '', full_name: '', password: '', role: UserRole.OPERADOR })
+      setNewUser({ email: '', full_name: '', password: '', role: UserRole.OPERADOR, orgId: '' })
       setShowForm(false)
       await load()
     } catch (err: any) {
@@ -138,6 +153,19 @@ export const Usuarios: React.FC = () => {
                 <option value={UserRole.CONTADOR}>Contador — opera sin borrar (aprobación)</option>
               </select>
             </div>
+            {me?.is_superadmin && orgs.length > 0 && (
+              <div>
+                <label className="label">Organización</label>
+                <select className="input-field" value={newUser.orgId}
+                  onChange={e => setNewUser(p => ({ ...p, orgId: e.target.value === '' ? '' : Number(e.target.value) }))}>
+                  <option value="">Por defecto (Organización A)</option>
+                  {orgs.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+                </select>
+                <p className="text-xs text-ml-text-soft dark:text-zinc-500 mt-1">
+                  Para contadores de prueba, elegí la organización de prueba — no la real.
+                </p>
+              </div>
+            )}
             <div className="md:col-span-2 flex justify-end gap-3">
               <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">Cancelar</button>
               <button type="submit" disabled={formLoading} className="btn-yellow">

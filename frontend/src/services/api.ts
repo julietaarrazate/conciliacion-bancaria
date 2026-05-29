@@ -394,9 +394,14 @@ class ApiClient {
 
   async updateUser(
     userId: number,
-    payload: { full_name?: string; role?: UserRole; is_active?: boolean }
+    payload: { full_name?: string; role?: UserRole; is_active?: boolean; organizacion_id?: number }
   ): Promise<User> {
     const res = await this.client.patch(`/admin/users/${userId}`, payload)
+    return res.data
+  }
+
+  async listOrganizaciones(): Promise<{ id: number; nombre: string }[]> {
+    const res = await this.client.get('/admin/organizaciones')
     return res.data
   }
 
