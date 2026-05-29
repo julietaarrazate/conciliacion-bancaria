@@ -478,7 +478,7 @@ def _init_db():
         from app.models.cliente import Cliente as Cli
         from app.models.cheque import Cheque as Ch
         from app.models.pago import Pago as Pg
-        from app.models.liquidacion import LiquidacionItem as LI
+        from app.models.liquidacion import LiquidacionDetalle as LI
         db = SL()
         pl_auto = db.query(Pl).filter(Pl.nombre_archivo.like("Extracto auto-recuperado%")).all()
         if pl_auto:
