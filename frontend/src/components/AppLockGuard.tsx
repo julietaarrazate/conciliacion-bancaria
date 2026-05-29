@@ -12,8 +12,17 @@ export const AppLockGuard: React.FC = () => {
   const lock = useLockStore(s => s.lock)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const idleTimer = useRef<number | null>(null)
+  const didLockOnMount = useRef(false)
 
   const active = enabled && !!pinHash && isAuthenticated
+
+  // Bloquear siempre al cargar la app (nuevo tab, link externo, refresh)
+  useEffect(() => {
+    if (active && !didLockOnMount.current) {
+      didLockOnMount.current = true
+      lock()
+    }
+  }, [active, lock])
 
   // Bloquear al minimizar / pasar a background
   useEffect(() => {
