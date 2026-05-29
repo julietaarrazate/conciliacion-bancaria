@@ -405,6 +405,35 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     }
   }
 
+  const [limpiando, setLimpiando] = useState(false)
+  const limpiarClientesExtracto = async () => {
+    setLimpiando(true)
+    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    try {
+      const prev = await apiClient.client.post(`/contabilidad/limpiar-clientes-extracto?dry_run=true${orgQ}`, {})
+      const { clientes_a_borrar, nombres } = prev.data
+      if (!clientes_a_borrar) {
+        toast.success('No hay clientes del extracto para limpiar')
+        return
+      }
+      const lista = (nombres as string[]).slice(0, 10).map((n: string) => `• ${n}`).join('\n')
+      const extra = clientes_a_borrar > 10 ? `\n  …y ${clientes_a_borrar - 10} más` : ''
+      const ok = await confirmDialog({
+        title: 'Limpiar clientes del extracto',
+        message: `Se eliminarán ${clientes_a_borrar} cliente(s) creados automáticamente (solo tienen planillas auto-recuperadas):\n\n${lista}${extra}\n\nEsta acción no se puede deshacer.`,
+        confirmLabel: 'Eliminar',
+      })
+      if (!ok) return
+      const r = await apiClient.client.post(`/contabilidad/limpiar-clientes-extracto${orgQ ? `?${orgQ.slice(1)}` : ''}`, {})
+      toast.success(`${r.data.clientes_borrados} cliente(s) eliminado(s)`)
+      cargarCartera()
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'No se pudo limpiar clientes')
+    } finally {
+      setLimpiando(false)
+    }
+  }
+
   const [backfilling, setBackfilling] = useState(false)
   const reconstruirCtaCte = async () => {
     setBackfilling(true)
@@ -904,6 +933,14 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   title="Revierte las planillas creadas automáticamente desde el extracto (van a la papelera)"
                 >
                   {revirtiendo ? 'Revirtiendo…' : '↩ Revertir del extracto'}
+                </button>
+                <button
+                  onClick={limpiarClientesExtracto}
+                  disabled={limpiando || revirtiendo || recuperando || backfilling}
+                  className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 disabled:opacity-50"
+                  title="Elimina clientes creados automáticamente por la recuperación (solo tienen planillas auto-recuperadas)"
+                >
+                  {limpiando ? 'Limpiando…' : '🧹 Limpiar clientes'}
                 </button>
               </div>
             )}
