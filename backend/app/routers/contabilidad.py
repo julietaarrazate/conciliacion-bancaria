@@ -890,28 +890,46 @@ def revertir_planillas_extracto(
             "asientos_a_revertir": len(asientos_cc),
         }
 
-    # Crear asientos reverso (debe/haber invertidos) para cada cc_inicial
-    for asiento in asientos_cc:
-        lineas = db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id == asiento.id).all()
-        reverso = Asiento(
-            fecha=_date.today(),
-            descripcion=f"Reverso: {asiento.descripcion}",
-            modulo="cc_inicial_reverso",
-            referencia_id=asiento.id,
-            organizacion_id=oid,
-            usuario_id=current_user.id,
-        )
-        db.add(reverso)
-        db.flush()
-        for l in lineas:
-            db.add(AsientoDetalle(
-                asiento_id=reverso.id,
-                cuenta_id=l.cuenta_id,
-                debe=l.haber,
-                haber=l.debe,
-            ))
+    # Crear asientos reverso — un solo flush para todos, evita N roundtrips a la DB
+    if asientos_cc:
+        # Precargar todos los detalles en una sola query
+        asiento_ids_cc = [a.id for a in asientos_cc]
+        all_lineas = db.query(AsientoDetalle).filter(
+            AsientoDetalle.asiento_id.in_(asiento_ids_cc)
+        ).all()
+        lineas_por_asiento: dict = {}
+        for l in all_lineas:
+            lineas_por_asiento.setdefault(l.asiento_id, []).append(l)
 
-    # Soft-delete planillas (las filas quedan en DB con FK intacta para trazabilidad)
+        # Crear todos los asientos reverso y un único flush para obtener sus IDs
+        reversos = []
+        for asiento in asientos_cc:
+            reverso = Asiento(
+                fecha=_date.today(),
+                descripcion=f"Reverso: {asiento.descripcion}",
+                modulo="cc_inicial_reverso",
+                referencia_id=asiento.id,
+                organizacion_id=oid,
+                usuario_id=current_user.id,
+            )
+            db.add(reverso)
+            reversos.append((asiento, reverso))
+        db.flush()  # un solo roundtrip para obtener todos los IDs
+
+        for asiento, reverso in reversos:
+            for l in lineas_por_asiento.get(asiento.id, []):
+                db.add(AsientoDetalle(
+                    asiento_id=reverso.id,
+                    cuenta_id=l.cuenta_id,
+                    debe=l.haber,
+                    haber=l.debe,
+                ))
+
+    # Desvincula movimientos para que queden huérfanos y puedan volver a recuperarse
+    for fila in filas:
+        fila.orden_movimiento_acreditado = None
+
+    # Soft-delete planillas (las filas quedan en DB para trazabilidad)
     now = _dt.utcnow()
     for pl in planillas:
         pl.deleted_at = now
