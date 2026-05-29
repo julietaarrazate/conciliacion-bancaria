@@ -341,7 +341,8 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       })
       if (!ok) return
       const r = await apiClient.client.post(`/contabilidad/revertir-planillas-extracto${orgQ ? `?${orgQ.slice(1)}` : ''}`, {})
-      toast.success(`${r.data.planillas} planilla(s) revertida(s)${r.data.asientos_revertidos > 0 ? ` · ${r.data.asientos_revertidos} asiento(s) revertido(s)` : ''}`)
+      const clientesMsg = r.data.clientes_borrados > 0 ? ` · ${r.data.clientes_borrados} cliente(s) eliminado(s)` : ''
+      toast.success(`${r.data.planillas} planilla(s) revertida(s)${r.data.asientos_revertidos > 0 ? ` · ${r.data.asientos_revertidos} asiento(s) revertido(s)` : ''}${clientesMsg}`)
       cargarCartera()
     } catch (e: any) {
       toast.error(e.response?.data?.detail || 'No se pudo revertir')

@@ -926,14 +926,37 @@ def revertir_planillas_extracto(
                 ))
 
     # Hard-delete planillas y sus filas (cascade) — libera la DB y los movimientos quedan huérfanos
+    cliente_ids_afectados = list({p.cliente_id for p in planillas})
     for pl in planillas:
         db.delete(pl)
+    db.flush()
+
+    # Eliminar clientes que quedaron sin ninguna planilla (fueron creados por la recuperación)
+    from app.models.cheque import Cheque
+    from app.models.pago import Pago
+    from app.models.liquidacion import LiquidacionItem
+    clientes_borrados = []
+    for cid in cliente_ids_afectados:
+        restantes = db.query(Planilla).filter(Planilla.cliente_id == cid).count()
+        if restantes > 0:
+            continue
+        tiene_otros = (
+            db.query(Cheque).filter(Cheque.cliente_id == cid).count() > 0
+            or db.query(Pago).filter(Pago.cliente_id == cid).count() > 0
+            or db.query(LiquidacionItem).filter(LiquidacionItem.cliente_id == cid).count() > 0
+        )
+        if tiene_otros:
+            continue
+        cli = db.query(Cliente).get(cid)
+        if cli:
+            clientes_borrados.append(cli.nombre)
+            db.delete(cli)
 
     db.commit()
 
     logger.info(
-        "revertir-planillas-extracto: %d planillas, %d filas, %d asientos revertidos (org %d)",
-        len(planillas), len(fila_ids), len(asientos_cc), oid,
+        "revertir-planillas-extracto: %d planillas, %d filas, %d asientos revertidos, %d clientes eliminados (org %d)",
+        len(planillas), len(fila_ids), len(asientos_cc), len(clientes_borrados), oid,
     )
 
     return {
@@ -941,6 +964,7 @@ def revertir_planillas_extracto(
         "planillas": len(planillas),
         "filas": len(fila_ids),
         "asientos_revertidos": len(asientos_cc),
+        "clientes_borrados": len(clientes_borrados),
     }
 
 
