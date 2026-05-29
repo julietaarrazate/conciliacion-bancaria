@@ -82,9 +82,18 @@ def _suma_planilla_rows(
         )
     )
     if usar_fecha_acred:
-        # Fallback a fecha_carga cuando fecha_acred es NULL (extractos viejos,
-        # link al movimiento roto, etc.) para no excluir filas conciliadas.
-        fecha_ef = func.coalesce(PlanillaRow.fecha_acred, func.date(Planilla.fecha_carga))
+        # Prioridad: fecha_acred del row → fecha real del movimiento banco
+        # → fecha_carga de la planilla. Así no se excluyen filas conciliadas
+        # donde la conciliación no copió correctamente la fecha del extracto.
+        q = q.outerjoin(
+            MovimientoBanco,
+            MovimientoBanco.id == PlanillaRow.orden_movimiento_acreditado,
+        )
+        fecha_ef = func.coalesce(
+            PlanillaRow.fecha_acred,
+            MovimientoBanco.fecha,
+            func.date(Planilla.fecha_carga),
+        )
         q = q.filter(fecha_ef >= desde, fecha_ef <= hasta)
     else:
         q = q.filter(
