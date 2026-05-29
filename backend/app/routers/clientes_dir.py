@@ -22,7 +22,7 @@ from app.database import get_db
 from app.models.planilla import Planilla
 from app.models.extracto import MovimientoBanco
 from app.models.user import User
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, require_permission
 from app.services.excel_export import export_planilla_conciliada
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
@@ -560,7 +560,7 @@ def acreditar_movimiento_a_cliente(
 def borrar_cliente(cliente_id: int,
                    force: bool = False,
                    db: Session = Depends(get_db),
-                   current_user: User = Depends(get_current_user)):
+                   current_user: User = Depends(require_permission("delete_records"))):
     """
     Borra un cliente. Si tiene planillas asociadas y no se manda ?force=true,
     devuelve 409 con la cantidad de archivos para que el frontend pida

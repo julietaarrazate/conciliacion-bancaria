@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 import openpyxl
 
 from app.database import get_db
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, require_permission
 from app.models.user import User
 from app.models.cheque import Cheque
 from app.models.cliente import Cliente
@@ -262,7 +262,7 @@ def rechazar(
 def eliminar_cheque(
     cheque_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("delete_records")),
 ):
     oid = current_user.organizacion_id or 1
     c = db.query(Cheque).filter(Cheque.id == cheque_id).first()
@@ -334,7 +334,7 @@ def ver_foto(
 def eliminar_foto(
     cheque_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("delete_records")),
 ):
     oid = current_user.organizacion_id or 1
     c = db.query(Cheque).filter(Cheque.id == cheque_id).first()

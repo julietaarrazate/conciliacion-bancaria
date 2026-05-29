@@ -135,6 +135,7 @@ export const Usuarios: React.FC = () => {
                 <option value={UserRole.OPERADOR}>Operador — puede conciliar</option>
                 <option value={UserRole.REVISOR}>Revisor — solo lectura</option>
                 <option value={UserRole.AUDITOR}>Auditor — solo auditoría</option>
+                <option value={UserRole.CONTADOR}>Contador — opera sin borrar (aprobación)</option>
               </select>
             </div>
             <div className="md:col-span-2 flex justify-end gap-3">
@@ -186,6 +187,7 @@ export const Usuarios: React.FC = () => {
                           <option value={UserRole.OPERADOR}>Operador</option>
                           <option value={UserRole.REVISOR}>Revisor</option>
                           <option value={UserRole.AUDITOR}>Auditor</option>
+                          <option value={UserRole.CONTADOR}>Contador</option>
                         </select>
                       )}
                     </td>

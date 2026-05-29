@@ -134,7 +134,7 @@ export function App() {
             <Route path="/bulk" element={<Navigate to="/dashboard" replace />} />
             <Route path="/perfil" element={<Perfil />} />
             <Route path="/liquidaciones" element={
-              <ProtectedRoute permission="manage_users">
+              <ProtectedRoute permission="reconcile">
                 <Liquidaciones />
               </ProtectedRoute>
             } />

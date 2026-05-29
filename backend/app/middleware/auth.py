@@ -64,10 +64,14 @@ def require_permission(permission: str):
             return current_user
 
         permissions = {
-            "admin": ["upload_files", "reconcile", "manage_users", "view_audit", "view_accounting", "manage_finance", "admin_accounting"],
-            "operador": ["upload_files", "reconcile", "manage_finance", "view_accounting"],
+            "admin": ["upload_files", "reconcile", "manage_users", "view_audit", "view_accounting", "manage_finance", "admin_accounting", "delete_records"],
+            "operador": ["upload_files", "reconcile", "manage_finance", "view_accounting", "delete_records"],
             "revisor": ["view_results", "view_accounting"],
             "auditor": ["view_audit", "view_accounting", "manage_finance"],
+            # Contador de prueba: opera (sube, concilia, finanzas, liquidaciones) y ve
+            # contabilidad + auditoría/actividad en solo lectura. NO tiene delete_records
+            # (no puede borrar nada) ni manage_users (no ve Usuarios/Orgs/Papelera).
+            "contador": ["upload_files", "reconcile", "manage_finance", "view_accounting", "view_audit"],
         }
 
         role_value = current_user.role if isinstance(current_user.role, str) else getattr(current_user.role, "value", None)

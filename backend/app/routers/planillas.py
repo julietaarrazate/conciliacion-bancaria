@@ -487,7 +487,7 @@ def patch_row_status(
 def delete_row(
     row_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("delete_records"))
 ):
     row = db.query(PlanillaRow).filter(PlanillaRow.id == row_id).first()
     if not row:
@@ -633,7 +633,7 @@ def actualizar_comision_planilla(
 def delete_planilla(
     planilla_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("delete_records"))
 ):
     """Soft delete: marca la planilla como eliminada (deleted_at = now()).
     Las filas y acreditaciones se conservan, así si se restaura vuelve completa."""

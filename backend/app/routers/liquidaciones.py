@@ -286,7 +286,7 @@ def marcar_pagada(
 def eliminar_liquidacion(
     liq_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("reconcile"))
+    current_user: User = Depends(require_permission("delete_records"))
 ):
     """Elimina una liquidación en estado borrador. No se pueden borrar aprobadas ni pagadas."""
     liq = _liquidacion_for_user(db, liq_id, current_user)

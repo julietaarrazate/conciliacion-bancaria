@@ -10,6 +10,7 @@ class RoleEnum(str, enum.Enum):
     OPERADOR = "operador"
     REVISOR = "revisor"
     AUDITOR = "auditor"
+    CONTADOR = "contador"  # contador de prueba: opera pero NO borra; login por aprobación
 
 
 class User(Base):

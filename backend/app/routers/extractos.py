@@ -21,7 +21,7 @@ from app.services.extracto_merger import mergear_movimientos
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_movimientos, export_extracto_contador
 import logging
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, require_permission
 from app.config import get_settings
 
 
@@ -210,7 +210,7 @@ async def upload_extracto(file: UploadFile = File(...),
 
 @router.delete("/{extracto_id}")
 def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
-                    current_user: User = Depends(get_current_user)):
+                    current_user: User = Depends(require_permission("delete_records"))):
     """Soft delete: marca el extracto como eliminado (deleted_at = now()).
     Los movimientos y la relación con planillas se conservan, así si se restaura
     el extracto vuelve completo. Para borrar definitivo: usar /admin/papelera/purgar."""
@@ -275,7 +275,7 @@ def delete_todos_extractos(db: Session = Depends(get_db),
 def eliminar_movimientos_um(extracto_id: int,
                             forzar_todo: bool = Query(False),
                             db: Session = Depends(get_db),
-                            current_user: User = Depends(get_current_user)):
+                            current_user: User = Depends(require_permission("delete_records"))):
     """Elimina solo el ultimo lote de UM. Si no hay lotes asignados requiere forzar_todo=true."""
     extracto = _extracto_for_user(db, extracto_id, current_user)
     try:
@@ -602,7 +602,7 @@ def delete_movimiento(
     extracto_id: int,
     mov_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("delete_records"))
 ):
     from app.models.planilla import PlanillaRow
     extracto = _extracto_for_user(db, extracto_id, current_user, include_deleted=True)

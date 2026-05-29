@@ -53,7 +53,7 @@ const navItems = [
   { to: '/revision',       label: 'Revisión',      Icon: Icon.Flag, permission: 'reconcile' },
   { to: '/cuentas-corrientes', label: 'Cuentas corrientes', Icon: Icon.Bank, permission: 'manage_finance' },
   { to: '/contabilidad',   label: 'Contabilidad',  Icon: Icon.Stack, permission: 'view_accounting' },
-  { to: '/liquidaciones',  label: 'Liquidaciones', Icon: Icon.Chart, permission: 'manage_users' },
+  { to: '/liquidaciones',  label: 'Liquidaciones', Icon: Icon.Chart, permission: 'reconcile' },
   { to: '/auditoria',      label: 'Auditoría',     Icon: Icon.Search, permission: 'view_audit' },
   { to: '/usuarios',       label: 'Usuarios',      Icon: Icon.Users,  permission: 'manage_users' },
   { to: '/actividad',      label: 'Actividad',   Icon: Icon.Activity, permission: 'manage_users' },
