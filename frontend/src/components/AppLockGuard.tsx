@@ -24,14 +24,27 @@ export const AppLockGuard: React.FC = () => {
     }
   }, [active, lock])
 
-  // Bloquear al minimizar / pasar a background
+  // Bloquear al minimizar / pasar a background.
+  // Debounce de 500ms para evitar falsos positivos durante animaciones de
+  // navegación en mobile (Chrome Android dispara visibilitychange brevemente).
+  const bgTimer = useRef<number | null>(null)
   useEffect(() => {
     if (!active) return
     const handler = () => {
-      if (document.hidden) lock()
+      if (document.hidden) {
+        bgTimer.current = window.setTimeout(() => lock(), 500)
+      } else {
+        if (bgTimer.current) {
+          window.clearTimeout(bgTimer.current)
+          bgTimer.current = null
+        }
+      }
     }
     document.addEventListener('visibilitychange', handler)
-    return () => document.removeEventListener('visibilitychange', handler)
+    return () => {
+      document.removeEventListener('visibilitychange', handler)
+      if (bgTimer.current) window.clearTimeout(bgTimer.current)
+    }
   }, [active, lock])
 
   // Bloquear por inactividad (5 min sin tocar nada)
