@@ -524,15 +524,18 @@ def crear_cuentas_faltantes(
 
 @router.post("/recuperar-clientes-borrados")
 def recuperar_clientes_borrados(
-    dry_run: bool = Query(False, description="Solo previsualiza, no escribe nada"),
+    payload: Optional[dict] = None,
+    dry_run: bool = Query(False, description="Solo previsualiza la lista de candidatos"),
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("admin_accounting")),
 ):
     """Recrea clientes que están acreditados en el extracto (movimientos_banco)
     pero ya no existen como Cliente, y les crea/vincula su cuenta contable.
-    Útil para revertir un borrado accidental. Todo aditivo e idempotente:
-    nunca toca clientes existentes ni los movimientos."""
+    - dry_run=true → devuelve la lista de candidatos (nombres) para que el
+      usuario elija cuáles recrear (evita recrear nombres basura del extracto).
+    - POST con body {"nombres": [...]} → recrea SOLO esos (validados contra los
+      candidatos del extracto). Todo aditivo: nunca toca clientes ni movimientos."""
     from app.models.extracto import MovimientoBanco
     from app.services.motor_contable import _get_o_crear_cuenta_cliente
 
@@ -557,7 +560,7 @@ def recuperar_clientes_borrados(
         for c in db.query(Cliente).filter(Cliente.organizacion_id == oid).all()
     }
 
-    # Nombres únicos a recrear (dedup por forma normalizada)
+    # Candidatos únicos a recrear (dedup por forma normalizada): norm -> nombre presentable
     faltantes: dict = {}
     for (nombre_raw,) in nombres_rows:
         nombre = (nombre_raw or "").strip()
@@ -566,7 +569,6 @@ def recuperar_clientes_borrados(
         norm = _norm_nombre(nombre)
         if norm in existentes or norm in faltantes:
             continue
-        # Nombre presentable: primera letra mayúscula
         faltantes[norm] = nombre[:1].upper() + nombre[1:]
 
     if dry_run:
@@ -576,8 +578,18 @@ def recuperar_clientes_borrados(
             "nombres": sorted(faltantes.values()),
         }
 
+    # Selección explícita: solo recreamos los nombres pedidos (validados contra candidatos)
+    seleccion = (payload or {}).get("nombres") or []
+    seleccion_norm = {_norm_nombre(n) for n in seleccion if (n or "").strip()}
+    if not seleccion_norm:
+        raise HTTPException(400, "Indicá qué clientes recrear (lista vacía).")
+
+    a_crear = {norm: nombre for norm, nombre in faltantes.items() if norm in seleccion_norm}
+    if not a_crear:
+        raise HTTPException(400, "Ninguno de los nombres elegidos es un candidato válido del extracto.")
+
     recreados = []
-    for nombre in faltantes.values():
+    for nombre in a_crear.values():
         cli = Cliente(nombre=nombre, organizacion_id=oid)
         db.add(cli)
         db.flush()  # obtener id
