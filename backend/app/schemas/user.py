@@ -7,6 +7,7 @@ class RoleEnum(str, Enum):
     OPERADOR = "operador"
     REVISOR = "revisor"
     AUDITOR = "auditor"
+    CONTADOR = "contador"
 
 class UserRegister(BaseModel):
     email: EmailStr
@@ -25,6 +26,7 @@ class UserResponse(BaseModel):
     is_active: bool
     is_superadmin: bool = False
     organizacion_id: int | None = None
+    allowed_org_ids: list[int] = []
     created_at: datetime
 
     class Config:

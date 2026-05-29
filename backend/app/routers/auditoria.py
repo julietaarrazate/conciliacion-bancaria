@@ -12,7 +12,7 @@ from app.models.planilla import Planilla, PlanillaRow
 from app.models.cliente import Cliente
 from app.models.user import User
 from app.schemas.auditoria import AuditoriaListResponse, AuditoriaLogResponse
-from app.middleware.auth import require_permission, get_current_user
+from app.middleware.auth import require_permission, get_current_user, can_switch_org
 
 router = APIRouter(prefix="/auditoria", tags=["auditoria"])
 
@@ -38,7 +38,7 @@ def list_auditoria(
     q = db.query(AuditoriaLog)
 
     # Multi-tenant: filtrar por organizacion del actor
-    if current_user.is_superadmin and org_id:
+    if can_switch_org(current_user, org_id) and org_id:
         q = q.join(User, User.id == AuditoriaLog.usuario_id).filter(
             User.organizacion_id == org_id
         )
@@ -96,7 +96,7 @@ def get_patrones_aprendidos(
 ):
     """Lista patrones aprendidos de correcciones manuales para esta org."""
     from app.models.patron_aprendido import PatronAprendido
-    oid = org_id if current_user.is_superadmin and org_id else (current_user.organizacion_id or 1)
+    oid = org_id if can_switch_org(current_user, org_id) and org_id else (current_user.organizacion_id or 1)
     q = db.query(PatronAprendido).filter(
         PatronAprendido.organizacion_id == oid,
         PatronAprendido.activo == True
@@ -131,7 +131,7 @@ def get_insights(
     - Patrones aprendidos de correcciones (base para futura IA)
     """
     desde = datetime.utcnow() - timedelta(days=dias)
-    oid = org_id if current_user.is_superadmin and org_id else (current_user.organizacion_id or 1)
+    oid = org_id if can_switch_org(current_user, org_id) and org_id else (current_user.organizacion_id or 1)
 
     # ── 1. Stats de conciliacion desde planilla_rows ──────────────────────
     planillas_org = (

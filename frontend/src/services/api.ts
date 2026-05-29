@@ -2,6 +2,9 @@ import axios, { AxiosInstance } from 'axios'
 import {
   User,
   AuthResponse,
+  PendingApproval,
+  LoginApprovalStatus,
+  PendingRequest,
   ExtractoBancario,
   Planilla,
   ConciliacionResultado,
@@ -146,7 +149,7 @@ class ApiClient {
     return res.data
   }
 
-  async login(email: string, password: string): Promise<AuthResponse> {
+  async login(email: string, password: string): Promise<AuthResponse | PendingApproval> {
     const res = await this.client.post('/auth/login', {
       email,
       password
@@ -154,6 +157,25 @@ class ApiClient {
     if (res.data.access_token) {
       this.setToken(res.data.access_token)
     }
+    return res.data
+  }
+
+  // Login con aprobación en vivo (rol contador)
+  async getLoginApprovalStatus(approvalId: number, secret: string): Promise<LoginApprovalStatus> {
+    const res = await this.client.get(`/auth/login-approval/${approvalId}`, { params: { secret } })
+    if (res.data?.access_token) {
+      this.setToken(res.data.access_token)
+    }
+    return res.data
+  }
+
+  async getPendingApprovals(): Promise<PendingRequest[]> {
+    const res = await this.client.get('/auth/pending-approvals')
+    return res.data
+  }
+
+  async decideLoginApproval(approvalId: number, approve: boolean): Promise<{ status: string }> {
+    const res = await this.client.post(`/auth/login-approval/${approvalId}/decide`, { approve })
     return res.data
   }
 
@@ -372,9 +394,19 @@ class ApiClient {
 
   async updateUser(
     userId: number,
-    payload: { full_name?: string; role?: UserRole; is_active?: boolean }
+    payload: { full_name?: string; role?: UserRole; is_active?: boolean; organizacion_id?: number; allowed_org_ids?: number[] }
   ): Promise<User> {
     const res = await this.client.patch(`/admin/users/${userId}`, payload)
+    return res.data
+  }
+
+  async listOrganizaciones(): Promise<{ id: number; nombre: string }[]> {
+    const res = await this.client.get('/admin/organizaciones')
+    return res.data
+  }
+
+  async getAllowedOrgs(): Promise<{ id: number; nombre: string }[]> {
+    const res = await this.client.get('/me/allowed-orgs')
     return res.data
   }
 

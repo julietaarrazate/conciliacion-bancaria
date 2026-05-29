@@ -22,7 +22,7 @@ from app.database import get_db
 from app.models.planilla import Planilla
 from app.models.extracto import MovimientoBanco
 from app.models.user import User
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, require_permission, can_switch_org
 from app.services.excel_export import export_planilla_conciliada
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
@@ -193,7 +193,7 @@ def get_archivos_por_cliente(
 
     # Scope por org segun rol
     orgs_q = db.query(Organizacion)
-    if current_user.is_superadmin and org_id:
+    if can_switch_org(current_user, org_id) and org_id:
         orgs_q = orgs_q.filter(Organizacion.id == org_id)
     elif not current_user.is_superadmin:
         orgs_q = orgs_q.filter(Organizacion.id == (current_user.organizacion_id or 1))
@@ -203,7 +203,7 @@ def get_archivos_por_cliente(
     # Solo planillas activas (no soft-deleted) para evitar N+1 con filas de planillas borradas
     from app.models.planilla import PlanillaRow
     pq = db.query(Planilla).join(Cliente).filter(Planilla.deleted_at.is_(None))
-    if current_user.is_superadmin and org_id:
+    if can_switch_org(current_user, org_id) and org_id:
         pq = pq.filter(Planilla.organizacion_id == org_id)
     elif not current_user.is_superadmin:
         pq = pq.filter(Planilla.organizacion_id == (current_user.organizacion_id or 1))
@@ -560,7 +560,7 @@ def acreditar_movimiento_a_cliente(
 def borrar_cliente(cliente_id: int,
                    force: bool = False,
                    db: Session = Depends(get_db),
-                   current_user: User = Depends(get_current_user)):
+                   current_user: User = Depends(require_permission("delete_records"))):
     """
     Borra un cliente. Si tiene planillas asociadas y no se manda ?force=true,
     devuelve 409 con la cantidad de archivos para que el frontend pida
@@ -689,7 +689,7 @@ def crear_cliente(payload: dict,
         cuit = cuit_digits
 
     # Scope: usuarios no superadmin solo pueden crear en su org
-    if not current_user.is_superadmin and org_id != (current_user.organizacion_id or 1):
+    if not can_switch_org(current_user, org_id) and org_id != (current_user.organizacion_id or 1):
         raise HTTPException(403, "Solo podes crear clientes en tu organizacion")
 
     # No duplicar por (nombre, org)

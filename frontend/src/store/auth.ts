@@ -14,10 +14,14 @@ interface AuthState {
 }
 
 const rolePermissions: Record<UserRole, string[]> = {
-  [UserRole.ADMIN]: ['upload_files', 'reconcile', 'manage_users', 'view_audit', 'view_accounting', 'manage_finance', 'admin_accounting'],
-  [UserRole.OPERADOR]: ['upload_files', 'reconcile', 'manage_finance', 'view_accounting'],
+  [UserRole.ADMIN]: ['upload_files', 'reconcile', 'manage_users', 'view_audit', 'view_accounting', 'manage_finance', 'admin_accounting', 'delete_records'],
+  [UserRole.OPERADOR]: ['upload_files', 'reconcile', 'manage_finance', 'view_accounting', 'delete_records'],
   [UserRole.REVISOR]: ['view_results', 'view_accounting'],
   [UserRole.AUDITOR]: ['view_audit', 'view_accounting', 'manage_finance'],
+  // Contador de prueba: opera (sube, concilia, finanzas, liquidaciones) y ve
+  // contabilidad + auditoría en solo lectura. SIN delete_records (no borra nada)
+  // ni manage_users (no ve Usuarios/Orgs/Papelera/Actividad).
+  [UserRole.CONTADOR]: ['upload_files', 'reconcile', 'manage_finance', 'view_accounting', 'view_audit'],
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.models.user import User
+from app.models.organizacion import Organizacion
 from app.schemas.user import UserResponse
 from app.middleware.auth import get_current_user
 from app.database import get_db
@@ -13,6 +14,22 @@ router = APIRouter(tags=["me"])
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/me/allowed-orgs")
+def get_allowed_orgs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Devuelve las orgs a las que el usuario puede cambiar (superadmin: todas; otros: allowed_org_ids)."""
+    if current_user.is_superadmin:
+        orgs = db.query(Organizacion).order_by(Organizacion.id).all()
+    else:
+        ids = current_user.allowed_org_ids or []
+        if not ids:
+            return []
+        orgs = db.query(Organizacion).filter(Organizacion.id.in_(ids)).order_by(Organizacion.id).all()
+    return [{"id": o.id, "nombre": o.nombre} for o in orgs]
 
 
 class ChangePasswordRequest(BaseModel):

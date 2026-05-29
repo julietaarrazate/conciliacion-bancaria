@@ -20,6 +20,7 @@ const Dashboard         = lazyPage(() => import('@/pages/Dashboard'),         'D
 const Historial         = lazyPage(() => import('@/pages/Historial'),         'Historial')
 const Auditoria         = lazyPage(() => import('@/pages/Auditoria'),         'Auditoria')
 const Usuarios          = lazyPage(() => import('@/pages/Usuarios'),          'Usuarios')
+const Aprobaciones      = lazyPage(() => import('@/pages/Aprobaciones'),      'Aprobaciones')
 const Movimientos       = lazyPage(() => import('@/pages/Movimientos'),       'Movimientos')
 const Conciliaciones    = lazyPage(() => import('@/pages/Conciliaciones'),    'Conciliaciones')
 const Clientes          = lazyPage(() => import('@/pages/Clientes'),          'Clientes')
@@ -134,7 +135,7 @@ export function App() {
             <Route path="/bulk" element={<Navigate to="/dashboard" replace />} />
             <Route path="/perfil" element={<Perfil />} />
             <Route path="/liquidaciones" element={
-              <ProtectedRoute permission="manage_users">
+              <ProtectedRoute permission="reconcile">
                 <Liquidaciones />
               </ProtectedRoute>
             } />
@@ -146,6 +147,7 @@ export function App() {
               </ProtectedRoute>
             } />
             <Route path="/actividad" element={<ProtectedRoute permission="manage_users"><Actividad /></ProtectedRoute>} />
+            <Route path="/aprobaciones" element={<ProtectedRoute permission="manage_users"><Aprobaciones /></ProtectedRoute>} />
             <Route path="/organizaciones" element={
               <ProtectedRoute permission="manage_users">
                 <Organizaciones />

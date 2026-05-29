@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, can_switch_org
 from app.models.user import User
 from app.models.pago import Pago, Gasto
 from app.models.cliente import Cliente
@@ -18,7 +18,7 @@ router = APIRouter(tags=["pagos_gastos"])
 # ── helpers ─────────────────────────────────────────────────────
 
 def _org_id(current_user: User, org_id: Optional[int]) -> int:
-    if current_user.is_superadmin and org_id:
+    if can_switch_org(current_user, org_id) and org_id:
         return org_id
     return current_user.organizacion_id or 1
 

@@ -13,7 +13,7 @@ from app.models.planilla import Planilla, PlanillaRow
 from app.models.cliente import Cliente
 from app.models.organizacion import Organizacion
 from app.models.user import User
-from app.middleware.auth import get_current_user, require_permission
+from app.middleware.auth import get_current_user, require_permission, can_switch_org
 from app.services.auditoria import registrar_log
 
 router = APIRouter(prefix="/liquidaciones", tags=["liquidaciones"])
@@ -217,7 +217,7 @@ def list_liquidaciones(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    oid = org_id if current_user.is_superadmin and org_id else (current_user.organizacion_id or 1)
+    oid = org_id if can_switch_org(current_user, org_id) and org_id else (current_user.organizacion_id or 1)
     q = db.query(Liquidacion).filter(Liquidacion.organizacion_id == oid)
     if estado:
         q = q.filter(Liquidacion.estado == estado)
@@ -286,7 +286,7 @@ def marcar_pagada(
 def eliminar_liquidacion(
     liq_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("reconcile"))
+    current_user: User = Depends(require_permission("delete_records"))
 ):
     """Elimina una liquidación en estado borrador. No se pueden borrar aprobadas ni pagadas."""
     liq = _liquidacion_for_user(db, liq_id, current_user)

@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.models.user import User, RoleEnum
@@ -9,6 +9,7 @@ from app.services.auth import verify_token
 security = HTTPBearer()
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
@@ -44,7 +45,25 @@ async def get_current_user(
             detail="Usuario no encontrado o inactivo"
         )
 
+    # Override de org en memoria: si el request trae ?org_id= y el usuario
+    # tiene ese ID en su whitelist (o es superadmin), lo aplicamos sin persistir.
+    raw_org = request.query_params.get("org_id")
+    if raw_org and raw_org.isdigit():
+        requested_org = int(raw_org)
+        if user.is_superadmin or requested_org in (user.allowed_org_ids or []):
+            # Expunge para que SQLAlchemy no persista el cambio en el commit del endpoint
+            db.expunge(user)
+            user.organizacion_id = requested_org
+
     return user
+
+
+def can_switch_org(user: User, org_id: int) -> bool:
+    """True si el usuario puede operar en esa org (superadmin siempre; contador si está en allowed_org_ids)."""
+    if user.is_superadmin:
+        return True
+    allowed = user.allowed_org_ids or []
+    return org_id in allowed
 
 
 async def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
@@ -64,10 +83,14 @@ def require_permission(permission: str):
             return current_user
 
         permissions = {
-            "admin": ["upload_files", "reconcile", "manage_users", "view_audit", "view_accounting", "manage_finance", "admin_accounting"],
-            "operador": ["upload_files", "reconcile", "manage_finance", "view_accounting"],
+            "admin": ["upload_files", "reconcile", "manage_users", "view_audit", "view_accounting", "manage_finance", "admin_accounting", "delete_records"],
+            "operador": ["upload_files", "reconcile", "manage_finance", "view_accounting", "delete_records"],
             "revisor": ["view_results", "view_accounting"],
             "auditor": ["view_audit", "view_accounting", "manage_finance"],
+            # Contador de prueba: opera (sube, concilia, finanzas, liquidaciones) y ve
+            # contabilidad + auditoría/actividad en solo lectura. NO tiene delete_records
+            # (no puede borrar nada) ni manage_users (no ve Usuarios/Orgs/Papelera).
+            "contador": ["upload_files", "reconcile", "manage_finance", "view_accounting", "view_audit"],
         }
 
         role_value = current_user.role if isinstance(current_user.role, str) else getattr(current_user.role, "value", None)

@@ -31,6 +31,7 @@ from app.routers import push_router
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.push_subscription import PushSubscription  # noqa: F401
 from app.models.revoked_token import RevokedToken  # noqa: F401
+from app.models.login_approval import LoginApproval  # noqa: F401
 from app.models.organizacion import Organizacion
 
 # ── Decimal → float encoder para SQLAlchemy Numeric columns ──────────────────
@@ -95,6 +96,7 @@ def _run_alembic():
         "ALTER TABLE planillas ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
         "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
         "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cuenta_contable_id INTEGER REFERENCES plan_cuentas(id)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_org_ids JSONB DEFAULT '[]'",
     ]
     try:
         from sqlalchemy import text as _text

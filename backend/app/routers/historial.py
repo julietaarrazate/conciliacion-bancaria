@@ -18,7 +18,7 @@ from app.schemas.historial import (
     ExtractoHistorialItem
 )
 from app.services.excel_export import export_historial_planillas
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, can_switch_org
 
 router = APIRouter(prefix="/historial", tags=["historial"])
 
@@ -42,7 +42,7 @@ def list_planillas(
     )
 
     # Aislamiento por org
-    if current_user.is_superadmin and org_id:
+    if can_switch_org(current_user, org_id) and org_id:
         q = q.filter(Planilla.organizacion_id == org_id)
     elif not current_user.is_superadmin:
         q = q.filter(Planilla.organizacion_id == (current_user.organizacion_id or 1))
@@ -109,7 +109,7 @@ def export_historial_xlsx(
     )
 
     # Aislamiento multi-tenant
-    if current_user.is_superadmin and org_id:
+    if can_switch_org(current_user, org_id) and org_id:
         q = q.filter(Planilla.organizacion_id == org_id)
     elif not current_user.is_superadmin:
         q = q.filter(Planilla.organizacion_id == (current_user.organizacion_id or 1))
@@ -164,7 +164,7 @@ def list_extractos(
     q = db.query(ExtractoBancario).filter(ExtractoBancario.deleted_at.is_(None))
 
     # Aislamiento multi-tenant
-    if current_user.is_superadmin and org_id:
+    if can_switch_org(current_user, org_id) and org_id:
         q = q.filter(ExtractoBancario.organizacion_id == org_id)
     elif not current_user.is_superadmin:
         q = q.filter(ExtractoBancario.organizacion_id == (current_user.organizacion_id or 1))

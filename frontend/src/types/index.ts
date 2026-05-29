@@ -4,7 +4,8 @@ export enum UserRole {
   ADMIN = 'admin',
   OPERADOR = 'operador',
   REVISOR = 'revisor',
-  AUDITOR = 'auditor'
+  AUDITOR = 'auditor',
+  CONTADOR = 'contador'
 }
 
 export interface User {
@@ -15,6 +16,7 @@ export interface User {
   is_active: boolean
   is_superadmin: boolean
   organizacion_id?: number
+  allowed_org_ids?: number[]
   created_at: string
 }
 
@@ -22,6 +24,29 @@ export interface AuthResponse {
   access_token: string
   token_type: string
   user: User
+}
+
+export interface PendingApproval {
+  pending_approval: true
+  approval_id: number
+  poll_secret: string
+  expires_at: string
+}
+
+export interface LoginApprovalStatus {
+  status: 'pending' | 'approved' | 'denied' | 'expired'
+  access_token?: string
+  token_type?: string
+  user?: User
+}
+
+export interface PendingRequest {
+  id: number
+  user_email: string
+  user_name: string
+  ip: string | null
+  created_at: string
+  expires_at: string
 }
 
 export interface MovimientoBanco {
