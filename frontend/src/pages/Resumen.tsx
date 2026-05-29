@@ -5,7 +5,7 @@ import { Skeleton, SkeletonKpi } from '@/components/Skeleton'
 import { LineChart } from '@/components/charts/LineChart'
 import { useOrgStore } from '@/store/org'
 
-type Periodo = 'hoy' | 'semana' | 'mes'
+type Periodo = 'hoy' | 'semana' | 'mes' | 'rango'
 
 type Cantidad = { total: number; cantidad: number }
 type KpisPeriodo = {
@@ -60,6 +60,9 @@ export const Resumen: React.FC = () => {
   const [periodo, setPeriodo] = useState<Periodo>('hoy')
   const [anio, setAnio] = useState(hoy.getFullYear())
   const [mes, setMes] = useState(hoy.getMonth() + 1)
+  const fmtIso = (d: Date) => d.toISOString().slice(0, 10)
+  const [rangoDesde, setRangoDesde] = useState(() => fmtIso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)))
+  const [rangoHasta, setRangoHasta] = useState(() => fmtIso(hoy))
   const [data, setData] = useState<Dashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -78,6 +81,7 @@ export const Resumen: React.FC = () => {
     setError('')
     const params: any = { periodo }
     if (periodo === 'mes') { params.anio = anio; params.mes = mes }
+    if (periodo === 'rango') { params.desde = rangoDesde; params.hasta = rangoHasta }
     if (activeOrgId) params.org_id = activeOrgId
     Promise.all([
       apiClient.getDashboard(params),
@@ -91,7 +95,7 @@ export const Resumen: React.FC = () => {
       .catch((e) => { if (activo) setError(e.response?.data?.detail || 'Error cargando dashboard') })
       .finally(() => { if (activo) setLoading(false) })
     return () => { activo = false }
-  }, [periodo, anio, mes, activeOrgId, refreshTick])
+  }, [periodo, anio, mes, rangoDesde, rangoHasta, activeOrgId, refreshTick])
 
   // Auto-refresh cuando la pestaña recupera foco (usuario vuelve de conciliar)
   useEffect(() => {
@@ -163,26 +167,40 @@ export const Resumen: React.FC = () => {
               {periodo === 'hoy' && `Hoy · ${k.rango.desde}`}
               {periodo === 'semana' && `Últimos 7 días · ${k.rango.desde} → ${k.rango.hasta}`}
               {periodo === 'mes' && `${MESES[mes - 1]} ${anio} · ${k.rango.desde} → ${k.rango.hasta}`}
+              {periodo === 'rango' && `${rangoDesde} → ${rangoHasta}`}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Selector de periodo (segment control) */}
             <div className="flex items-center gap-1 bg-white dark:bg-ml-dark-surface rounded-lg border border-gray-200 dark:border-ml-dark-border p-1">
-              {(['hoy', 'semana', 'mes'] as Periodo[]).map((p) => (
+              {(['hoy', 'semana', 'mes', 'rango'] as Periodo[]).map((p) => (
                 <button
                   key={p}
                   onClick={() => setPeriodo(p)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded transition-colors capitalize ${
+                  className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
                     periodo === p
                       ? 'bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg'
                       : 'text-ml-text-soft dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-white/5'
                   }`}
                 >
-                  {p}
+                  {p === 'rango' ? 'rango' : p}
                 </button>
               ))}
             </div>
+            {periodo === 'rango' && (
+              <div className="flex items-center gap-1">
+                <input
+                  type="date" value={rangoDesde} onChange={e => setRangoDesde(e.target.value)}
+                  className="input-field text-xs py-1 px-2 w-[130px]"
+                />
+                <span className="text-xs text-ml-text-soft dark:text-zinc-500">→</span>
+                <input
+                  type="date" value={rangoHasta} onChange={e => setRangoHasta(e.target.value)}
+                  className="input-field text-xs py-1 px-2 w-[130px]"
+                />
+              </div>
+            )}
             <button
               onClick={refrescar}
               disabled={loading}

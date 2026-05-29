@@ -251,13 +251,15 @@ def _cheques_proximos_vencimiento(db: Session, org_id: int, dias: int = 30) -> l
     ]
 
 
-def _calcular_rango(periodo: str, anio: Optional[int], mes: Optional[int]) -> tuple[date, date, date, date, str]:
+def _calcular_rango(periodo: str, anio: Optional[int], mes: Optional[int],
+                    desde_custom: Optional[date] = None, hasta_custom: Optional[date] = None) -> tuple[date, date, date, date, str]:
     """Devuelve (desde, hasta, prev_desde, prev_hasta, label_periodo).
 
     Modos soportados:
     - "hoy": hoy vs ayer
     - "semana": ultimos 7 dias vs 7 dias previos
     - "mes" (default): mes seleccionado (o actual) vs mes anterior
+    - "rango": desde_custom→hasta_custom vs igual rango previo
     """
     from zoneinfo import ZoneInfo
     hoy = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date()
@@ -268,6 +270,12 @@ def _calcular_rango(periodo: str, anio: Optional[int], mes: Optional[int]) -> tu
         prev_hasta = desde - timedelta(days=1)
         prev_desde = prev_hasta - timedelta(days=6)
         return desde, hoy, prev_desde, prev_hasta, "Últimos 7 días"
+    if periodo == "rango" and desde_custom and hasta_custom:
+        duracion = (hasta_custom - desde_custom).days
+        prev_hasta = desde_custom - timedelta(days=1)
+        prev_desde = prev_hasta - timedelta(days=duracion)
+        label = f"{desde_custom.strftime('%d/%m/%Y')} → {hasta_custom.strftime('%d/%m/%Y')}"
+        return desde_custom, hasta_custom, prev_desde, prev_hasta, label
     # default: mes
     a = anio or hoy.year
     m = mes or hoy.month
@@ -281,27 +289,22 @@ def _calcular_rango(periodo: str, anio: Optional[int], mes: Optional[int]) -> tu
 
 @router.get("/dashboard")
 def dashboard(
-    periodo: str = Query("mes", description="hoy | semana | mes (default: mes)"),
-    anio: Optional[int] = Query(None, description="Solo cuando periodo=mes: anio (default: actual)"),
-    mes: Optional[int] = Query(None, ge=1, le=12, description="Solo cuando periodo=mes: mes 1-12 (default: actual)"),
-    org_id: Optional[int] = Query(None, description="Solo superadmin: filtrar otra org"),
+    periodo: str = Query("mes", description="hoy | semana | mes | rango"),
+    anio: Optional[int] = Query(None),
+    mes: Optional[int] = Query(None, ge=1, le=12),
+    desde: Optional[date] = Query(None, description="Solo cuando periodo=rango: fecha inicio YYYY-MM-DD"),
+    hasta: Optional[date] = Query(None, description="Solo cuando periodo=rango: fecha fin YYYY-MM-DD"),
+    org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Dashboard ejecutivo: KPIs del periodo elegido con comparativa al anterior.
-
-    `periodo` controla el rango:
-    - hoy     -> hoy vs ayer
-    - semana  -> ultimos 7 dias vs 7 dias previos
-    - mes     -> mes elegido (o actual) vs mes anterior
-
-    Incluye top clientes, cheques en cartera, cheques proximos a vencer.
-    """
+    """Dashboard ejecutivo: KPIs del periodo elegido con comparativa al anterior."""
     organizacion_id = _resolver_org(current_user, org_id)
-    if periodo not in ("hoy", "semana", "mes"):
+    if periodo not in ("hoy", "semana", "mes", "rango"):
         periodo = "mes"
 
-    desde, hasta, prev_desde, prev_hasta, label = _calcular_rango(periodo, anio, mes)
+    desde_r, hasta_r, prev_desde, prev_hasta, label = _calcular_rango(periodo, anio, mes, desde, hasta)
+    desde, hasta = desde_r, hasta_r
 
     kpis_actual = _kpis_periodo(db, organizacion_id, desde, hasta)
     kpis_prev = _kpis_periodo(db, organizacion_id, prev_desde, prev_hasta)
