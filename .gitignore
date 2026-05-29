@@ -63,3 +63,6 @@ uploads/
 # Logs
 logs/
 *.log
+
+# Config local de Claude (puede contener tokens) — NO versionar
+.claude/settings.local.json
