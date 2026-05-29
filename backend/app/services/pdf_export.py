@@ -294,7 +294,7 @@ def estado_cuenta_pdf(data: dict, generado_por: str = "Julieta Arrazate") -> byt
         sub += f'  ·  CUIT {cliente["cuit"]}'
     pct = resumen.get("porcentaje_comision")
     if pct:
-        sub += f'  ·  Comisión {float(pct) * 100:.2f}%'
+        sub += f'  ·  Comisión {float(pct):.2f}%'
     story.append(Paragraph(sub, s["subtitle"]))
 
     # KPIs
@@ -315,7 +315,7 @@ def estado_cuenta_pdf(data: dict, generado_por: str = "Julieta Arrazate") -> byt
             ("Total conciliado", _fmt_ars(resumen.get("conciliado_periodo")), _DARK, False),
         ]
         if comision is not None:
-            pct_txt = f' ({float(pct) * 100:.2f}%)' if pct else ""
+            pct_txt = f' ({float(pct):.2f}%)' if pct else ""
             items.append((f"Comisión{pct_txt}", "- " + _fmt_ars(comision), _AMBER, False))
         if neto is not None:
             items.append(("Neto a liquidar", _fmt_ars(neto), _BRAND_DARK, True))
