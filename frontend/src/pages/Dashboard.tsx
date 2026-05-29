@@ -5,6 +5,7 @@ import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { confirmDialog } from '@/store/confirm'
+import { useAuthStore } from '@/store/auth'
 import {
   ConciliacionResultado,
   ExtractoListItem,
@@ -22,6 +23,7 @@ function fmtFecha(s: string) {
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate()
+  const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
   const { activeOrgId, activeOrgNombre } = useOrgStore()
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [planillas, setPlanillas] = useState<PlanillaHistorialItem[]>([])
@@ -365,7 +367,7 @@ export const Dashboard: React.FC = () => {
                     </option>
                   ))}
                 </select>
-                {extractoId && (
+                {extractoId && canDelete && (
                   <button
                     onClick={() => handleDeleteExtracto(extractoId)}
                     className="px-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
@@ -373,7 +375,7 @@ export const Dashboard: React.FC = () => {
                   >🗑️</button>
                 )}
               </div>
-              {extractos.length > 1 && (
+              {extractos.length > 1 && canDelete && (
                 <details className="mt-2">
                   <summary className="text-xs text-gray-400 dark:text-zinc-600 cursor-pointer select-none">
                     Opciones avanzadas

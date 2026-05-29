@@ -105,7 +105,13 @@ class ApiClient {
       }
     })
 
-    const stored = localStorage.getItem('token')
+    // Migración única: mover token de localStorage a sessionStorage
+    const legacy = localStorage.getItem('token')
+    if (legacy) {
+      sessionStorage.setItem('token', legacy)
+      localStorage.removeItem('token')
+    }
+    const stored = sessionStorage.getItem('token')
     if (stored) {
       this.setToken(stored)
     }
@@ -143,12 +149,12 @@ class ApiClient {
 
   setToken(token: string) {
     this.token = token
-    localStorage.setItem('token', token)
+    sessionStorage.setItem('token', token)
   }
 
   clearToken() {
     this.token = null
-    localStorage.removeItem('token')
+    sessionStorage.removeItem('token')
   }
 
   // Auth endpoints

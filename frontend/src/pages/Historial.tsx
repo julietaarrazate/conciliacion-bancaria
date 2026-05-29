@@ -6,9 +6,11 @@ import { useOrgStore } from '@/store/org'
 import { confirmDialog } from '@/store/confirm'
 import { Skeleton } from '@/components/Skeleton'
 import { toast } from '@/store/toast'
+import { useAuthStore } from '@/store/auth'
 
 export const Historial: React.FC = () => {
   const { activeOrgId } = useOrgStore()
+  const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
   const [items, setItems] = useState<PlanillaHistorialItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
@@ -257,14 +259,16 @@ export const Historial: React.FC = () => {
                   >
                     {savingId === it.id ? '⏳' : '📁 Exportar'}
                   </button>
-                  <button
-                    onClick={() => handleDelete(it.id)}
-                    disabled={deletingId === it.id}
-                    className="flex items-center justify-center py-2 px-3 text-sm rounded-lg bg-red-50 dark:bg-red-900/20 text-red-400 dark:text-red-500 disabled:opacity-40 active:scale-95"
-                    title="Eliminar"
-                  >
-                    {deletingId === it.id ? '⏳' : '🗑️'}
-                  </button>
+                  {canDelete && (
+                    <button
+                      onClick={() => handleDelete(it.id)}
+                      disabled={deletingId === it.id}
+                      className="flex items-center justify-center py-2 px-3 text-sm rounded-lg bg-red-50 dark:bg-red-900/20 text-red-400 dark:text-red-500 disabled:opacity-40 active:scale-95"
+                      title="Eliminar"
+                    >
+                      {deletingId === it.id ? '⏳' : '🗑️'}
+                    </button>
+                  )}
                 </div>
               </div>
             )
@@ -276,7 +280,7 @@ export const Historial: React.FC = () => {
       <PlanillaPanel
         planillaId={panelId}
         onClose={() => setPanelId(null)}
-        onDelete={async id => { await apiClient.deletePlanilla(id); setPanelId(null); load(filter) }}
+        onDelete={canDelete ? async id => { await apiClient.deletePlanilla(id); setPanelId(null); load(filter) } : undefined}
       />
 
       {/* ── Modal re-conciliar ───────────────────────────── */}
