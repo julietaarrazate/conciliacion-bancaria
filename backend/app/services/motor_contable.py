@@ -482,11 +482,14 @@ def _get_cuenta_por_codigo(db: Session, codigo: str, org_id: int) -> Optional[Pl
     )
 
 
-def _get_o_crear_cuenta_cliente(db: Session, cliente_id: int, org_id: int) -> Optional[PlanCuenta]:
+def _get_o_crear_cuenta_cliente(db: Session, cliente_id: int, org_id: int, reusar_huecos: bool = False) -> Optional[PlanCuenta]:
     """Resuelve la cuenta contable del Cliente EXISTENTE (vínculo 1:1).
     1. Si el cliente ya tiene cuenta_contable_id → la reutiliza.
     2. Si existe una cuenta bajo 2-1-2-0 con el mismo nombre → la adopta y la vincula.
-    3. Si no existe ninguna → crea la cuenta con el próximo código y la vincula al cliente.
+    3. Si no existe ninguna → crea la cuenta y la vincula al cliente.
+       - reusar_huecos=False (default): usa el próximo código (max+1).
+       - reusar_huecos=True: usa el primer código libre en la secuencia (rellena
+         huecos dejados por cuentas borradas, ej. una 2-1-2-8 eliminada).
     Nunca crea entidades Cliente; solo la cuenta contable asociada al cliente que ya está en el sistema."""
     from sqlalchemy import func as _func
     from app.models.cliente import Cliente
@@ -522,15 +525,23 @@ def _get_o_crear_cuenta_cliente(db: Session, cliente_id: int, org_id: int) -> Op
         db.flush()
         return cuenta
 
-    # 3. Crear cuenta nueva con el próximo código y vincularla al cliente
+    # 3. Crear cuenta nueva y vincularla al cliente
     hijos = db.query(PlanCuenta).filter(PlanCuenta.parent_id == padre.id, PlanCuenta.organizacion_id == org_id).all()
-    max_n = 0
+    usados = set()
     for hijo in hijos:
         try:
-            max_n = max(max_n, int(hijo.codigo.rsplit("-", 1)[-1]))
+            usados.add(int(hijo.codigo.rsplit("-", 1)[-1]))
         except (ValueError, IndexError):
             pass
-    nuevo_codigo = f"2-1-2-{max_n + 1}"
+    if reusar_huecos:
+        # primer entero >=1 que no esté usado (rellena el hueco más bajo)
+        n = 1
+        while n in usados:
+            n += 1
+        nuevo_n = n
+    else:
+        nuevo_n = (max(usados) if usados else 0) + 1
+    nuevo_codigo = f"2-1-2-{nuevo_n}"
     nueva = PlanCuenta(
         codigo=nuevo_codigo, nombre=nombre_norm, tipo="pasivo",
         parent_id=padre.id, nivel=(padre.nivel or 3) + 1,
