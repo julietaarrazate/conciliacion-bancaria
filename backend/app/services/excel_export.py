@@ -680,10 +680,10 @@ def export_cierre_mensual_xlsx(planillas: list, anio: int, mes: int) -> bytes:
         ws.cell(row, 3, len(rows)).border = BORDER
         ws.cell(row, 4, len(ok)).border = BORDER
         ws.cell(row, 5, len(pendiente)).border = BORDER
-        c6 = ws.cell(row, 6, sum(r.monto for r in ok))
+        c6 = ws.cell(row, 6, float(sum(r.monto for r in ok)))
         c6.number_format = '"$"#,##0.00'
         c6.border = BORDER
-        c7 = ws.cell(row, 7, sum(r.monto for r in pendiente))
+        c7 = ws.cell(row, 7, float(sum(r.monto for r in pendiente)))
         c7.number_format = '"$"#,##0.00'
         c7.border = BORDER
         ws.row_dimensions[row].height = 15
@@ -708,7 +708,7 @@ def export_cierre_mensual_xlsx(planillas: list, anio: int, mes: int) -> bytes:
             ws2.row_dimensions[i].height = 15
             ws2.cell(i, 2, r.cuit or '—').border = BORDER
             ws2.cell(i, 3, r.titular or '—').border = BORDER
-            c = ws2.cell(i, 4, r.monto)
+            c = ws2.cell(i, 4, float(r.monto) if r.monto is not None else 0)
             c.number_format = '"$"#,##0.00'
             c.border = BORDER
             ws2.cell(i, 5, r.status).border = BORDER

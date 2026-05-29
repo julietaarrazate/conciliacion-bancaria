@@ -4,6 +4,7 @@ import { apiClient } from '@/services/api'
 import { Skeleton, SkeletonKpi } from '@/components/Skeleton'
 import { LineChart } from '@/components/charts/LineChart'
 import { useOrgStore } from '@/store/org'
+import { toast } from '@/store/toast'
 
 type Periodo = 'hoy' | 'semana' | 'mes' | 'rango'
 
@@ -67,6 +68,7 @@ export const Resumen: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [downloadingXlsx, setDownloadingXlsx] = useState(false)
   const [evolucion, setEvolucion] = useState<{ label: string; conciliado: number; pendiente: number }[]>([])
   const [refreshTick, setRefreshTick] = useState(0)
 
@@ -251,12 +253,15 @@ export const Resumen: React.FC = () => {
             </button>
             <button
               onClick={async () => {
-                try { await apiClient.downloadCierreMensualXlsx(anio, mes) }
-                catch { /* silently fail */ }
+                setDownloadingXlsx(true)
+                try { await apiClient.downloadCierreMensualXlsx(anio, mes, activeOrgId ?? undefined) }
+                catch (e: any) { toast.error(e?.response?.data?.detail || 'No se pudo generar el Excel') }
+                finally { setDownloadingXlsx(false) }
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+              disabled={downloadingXlsx || !data}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors disabled:opacity-50"
               title="Excel de cierre mensual para el contador"
-            >📊 Excel mes</button>
+            >{downloadingXlsx ? 'Generando…' : '📊 Excel mes'}</button>
           </div>
         )}
       </div>
