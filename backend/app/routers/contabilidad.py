@@ -911,7 +911,11 @@ def revertir_planillas_extracto(
                 haber=l.debe,
             ))
 
-    # Soft-delete planillas (las filas quedan en DB con FK intacta para trazabilidad)
+    # Desvincula movimientos para que queden huérfanos y puedan volver a recuperarse
+    for fila in filas:
+        fila.orden_movimiento_acreditado = None
+
+    # Soft-delete planillas (las filas quedan en DB para trazabilidad)
     now = _dt.utcnow()
     for pl in planillas:
         pl.deleted_at = now
