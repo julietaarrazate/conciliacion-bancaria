@@ -76,6 +76,7 @@ export const Clientes: React.FC = () => {
   const { activeOrgId } = useOrgStore()
   const navigate = useNavigate()
   const puedeVerCtaCte = useAuthStore(s => s.hasPermission('view_accounting'))
+  const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
   const [orgs, setOrgs] = useState<OrgData[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -567,13 +568,15 @@ export const Clientes: React.FC = () => {
                                 🔀
                               </button>
                             )}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleBorrarCliente(cliente.id, cliente.nombre, cliente.total_archivos) }}
-                              className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex-shrink-0"
-                              title="Borrar cliente"
-                            >
-                              🗑
-                            </button>
+                            {canDelete && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleBorrarCliente(cliente.id, cliente.nombre, cliente.total_archivos) }}
+                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex-shrink-0"
+                                title="Borrar cliente"
+                              >
+                                🗑
+                              </button>
+                            )}
                             <button onClick={() => setOpenCli(o => ({ ...o, [cliKey]: !cliOpen }))}
                               className="hidden md:block text-gray-400 text-xs px-1">{cliOpen ? '▲' : '▼'}</button>
                           </div>

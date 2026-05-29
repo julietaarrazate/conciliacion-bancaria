@@ -4,6 +4,7 @@ import { apiClient } from '@/services/api'
 import { ExtractoListItem, MovimientoFiltrado, MovimientosFiltros } from '@/types'
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
+import { useAuthStore } from '@/store/auth'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -75,6 +76,7 @@ const EMPTY: ColFilter = { cliente:'', cuit:'', titular:'', desde:'', hasta:'', 
 
 export const Movimientos: React.FC = () => {
   const [searchParams] = useSearchParams()
+  const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
   const { activeOrgId } = useOrgStore()
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [extractoId, setExtractoId] = useState<number | null>(null)
@@ -361,7 +363,7 @@ export const Movimientos: React.FC = () => {
             <input ref={umRef} type="file" accept="*/*" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
           </label>
         </div>
-        {extractoId && umCount > 0 && (
+        {extractoId && umCount > 0 && canDelete && (
           <button
             onClick={async () => {
               const confirmed = await confirmDialog({
@@ -561,7 +563,7 @@ export const Movimientos: React.FC = () => {
                     <td className="px-1 text-center">
                       <div className="flex gap-1 justify-center">
                         <button onClick={() => openModal(m)} title="Editar datos (titular, importe, fecha)" className="text-gray-400 hover:text-ml-blue dark:hover:text-blue-400 transition-colors">✏️</button>
-                        <button onClick={() => handleDeleteMovimiento(m)} title="Borrar movimiento" className="text-gray-400 hover:text-red-500 transition-colors">🗑</button>
+                        {canDelete && <button onClick={() => handleDeleteMovimiento(m)} title="Borrar movimiento" className="text-gray-400 hover:text-red-500 transition-colors">🗑</button>}
                       </div>
                     </td>
                   </tr>
