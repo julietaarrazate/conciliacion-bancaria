@@ -281,6 +281,21 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   operen en la **org de prueba** y NO en la Organización A (datos reales).
 - **Perfil**: la card de setup VAPID ya estaba gateada por `is_superadmin` → el contador no ve datos
   de superadmin en `/perfil` (ve solo su propia cuenta + PIN/push).
+- **Switch de org para contadores (`allowed_org_ids`)**: campo JSON en `User` con la lista de orgs
+  extra a las que puede cambiar. `can_switch_org(user, org_id)` (en `middleware/auth.py`) reemplaza
+  los chequeos `is_superadmin and org_id` en 9 routers (extractos, historial, clientes_dir, caja,
+  auditoria, cheques, pagos_gastos, contabilidad, liquidaciones). `get_current_user` lee `?org_id=`
+  del request y hace **override en memoria** (`db.expunge(user)` para NO persistir) si el ID está en
+  la whitelist o es superadmin. `GET /me/allowed-orgs` lista las orgs disponibles; selector en el
+  sidebar visible para contadores; multi-select de orgs al crear un CONTADOR en `/usuarios`.
+  Safety net: `ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_org_ids JSONB DEFAULT '[]'`.
+- **Fix email dominios reservados**: `UserRegister`/`UserLogin` dejaron de usar `EmailStr` (rechazaba
+  `.test`, `.local`) y usan validación de formato básica → permite crear cuentas de prueba con mails
+  inventados (`contador1@cuadra.test`). `ForgotPasswordRequest` mantiene `EmailStr` (manda mail real).
+- **Fix crash React #31**: el interceptor de respuesta de axios (`services/api.ts`) normaliza el
+  `detail` de errores 422 de Pydantic (array de objetos `{type, loc, msg, ...}`) a un string legible
+  antes de llegar a los componentes. Evita "Objects are not valid as a React child" al renderizar
+  `err.response.data.detail` (afectaba los 25 sitios con ese patrón).
 - **Pendiente (UX)**: ocultar los botones de borrar en el frontend para quien no tiene
   `delete_records` (hoy el backend bloquea con 403, pero el botón sigue visible).
 
@@ -344,7 +359,8 @@ Checkpoints disponibles:
 - `v3.6` — contabilidad automática UM, cuentas corrientes como módulo propio, permisos en 3 capas,
   backfill de cuentas corrientes, borrar OP (mayo 2026 — PRs #36–#39 mergeados a main)
 - `v3.7-stable-checkpoint` — rol CONTADOR + login por aprobación + PDF Cuadra + switch de org para
-  contadores (allowed_org_ids) (mayo 2026)
+  contadores (allowed_org_ids) + fix email .test + fix crash React #31 (mayo 2026 — PRs #56-#58
+  mergeados a main)
 
 ---
 
