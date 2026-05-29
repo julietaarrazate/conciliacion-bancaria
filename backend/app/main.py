@@ -471,6 +471,43 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error backfill cuentas cliente: %s", ex)
 
+    # 7c. Cleanup único: eliminar planillas auto-recuperadas y clientes huérfanos
+    try:
+        from app.database import SessionLocal as SL
+        from app.models.planilla import Planilla as Pl, PlanillaRow as PR
+        from app.models.cliente import Cliente as Cli
+        from app.models.cheque import Cheque as Ch
+        from app.models.pago import Pago as Pg
+        from app.models.liquidacion import LiquidacionItem as LI
+        db = SL()
+        pl_auto = db.query(Pl).filter(Pl.nombre_archivo.like("Extracto auto-recuperado%")).all()
+        if pl_auto:
+            cli_ids = list({p.cliente_id for p in pl_auto})
+            for pl in pl_auto:
+                db.delete(pl)
+            db.flush()
+            borrados = 0
+            for cid in cli_ids:
+                restantes = db.query(Pl).filter(Pl.cliente_id == cid).count()
+                if restantes > 0:
+                    continue
+                tiene_otros = (
+                    db.query(Ch).filter(Ch.cliente_id == cid).count() > 0
+                    or db.query(Pg).filter(Pg.cliente_id == cid).count() > 0
+                    or db.query(LI).filter(LI.cliente_id == cid).count() > 0
+                )
+                if tiene_otros:
+                    continue
+                cli = db.query(Cli).get(cid)
+                if cli:
+                    db.delete(cli)
+                    borrados += 1
+            db.commit()
+            logger.info("Cleanup auto-recuperados: %d planillas y %d clientes eliminados", len(pl_auto), borrados)
+        db.close()
+    except Exception as ex:
+        logger.warning("Error cleanup auto-recuperados: %s", ex)
+
     # 8. Seed usuarios
     try:
         from app.database import SessionLocal as SL
