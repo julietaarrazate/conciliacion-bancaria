@@ -716,9 +716,8 @@ def planillas_desde_extracto(
             no_id_count += 1
             continue
 
-        year = mov.fecha.year if mov.fecha else None
-        month = mov.fecha.month if mov.fecha else None
-        key = (cliente.id, year, month)
+        fecha = mov.fecha  # date object o None
+        key = (cliente.id, fecha)
 
         if key not in grupos:
             grupos[key] = {
@@ -729,12 +728,12 @@ def planillas_desde_extracto(
             }
         grupos[key]["movs"].append(mov)
 
-    sort_key = lambda item: (item[0][0], item[0][1] or 0, item[0][2] or 0)
+    sort_key = lambda item: (item[0][0], item[0][1] or 0)
     grupos_list = [
         {
             "cliente_id": k[0],
             "cliente_nombre": g["cliente"].nombre,
-            "mes": f"{k[1]}-{k[2]:02d}" if k[1] and k[2] else "sin-fecha",
+            "fecha": str(k[1]) if k[1] else "sin-fecha",
             "count": len(g["movs"]),
             "monto_total": round(sum(float(m.monto or 0) for m in g["movs"]), 2),
         }
@@ -760,14 +759,14 @@ def planillas_desde_extracto(
     filas_creadas = 0
     clientes_tocados: set = set()
 
-    for (cli_id, year, month), g in grupos.items():
-        mes_str = f"{year}-{month:02d}" if year and month else "sin-fecha"
+    for (cli_id, fecha), g in grupos.items():
+        fecha_str = str(fecha) if fecha else "sin-fecha"
         pl = Planilla(
             cliente_id=cli_id,
             extracto_id=g["extracto_id"],
             usuario_id=current_user.id,
             organizacion_id=oid,
-            nombre_archivo=f"Extracto auto-recuperado {mes_str}",
+            nombre_archivo=f"Extracto auto-recuperado {fecha_str}",
             fecha_carga=_dt.utcnow(),
             porcentaje_comision=g["comision"],
         )

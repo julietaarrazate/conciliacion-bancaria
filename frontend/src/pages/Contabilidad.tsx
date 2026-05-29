@@ -332,7 +332,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
         toast.success('No hay movimientos nuevos para recuperar del extracto')
         return
       }
-      const top5 = (grupos as any[]).slice(0, 5).map((g: any) => `• ${g.cliente_nombre} — ${g.mes} (${g.count} mov.)`)
+      const top5 = (grupos as any[]).slice(0, 5).map((g: any) => `• ${g.cliente_nombre} — ${g.fecha} (${g.count} mov.)`)
       const extra = grupos.length > 5 ? `\n  …y ${grupos.length - 5} grupo(s) más` : ''
       const noIdNote = no_identificados > 0 ? `\n\n⚠️ ${no_identificados} movimiento(s) sin cliente conocido serán ignorados.` : ''
       const ok = await confirmDialog({
