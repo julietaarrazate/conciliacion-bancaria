@@ -837,6 +837,100 @@ def planillas_desde_extracto(
     }
 
 
+@router.post("/revertir-planillas-extracto")
+def revertir_planillas_extracto(
+    dry_run: bool = Query(False, description="Solo previsualiza, no borra nada"),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    """Revierte las planillas creadas automáticamente desde el extracto:
+    soft-delete de las planillas 'Extracto auto-recuperado' + reverso de los
+    asientos cc_inicial vinculados a sus filas. Deja trazabilidad completa."""
+    from datetime import datetime as _dt, date as _date
+    from decimal import Decimal as _D
+    from app.models.planilla import Planilla, PlanillaRow
+
+    oid = _org_id(current_user, org_id)
+
+    # Planillas auto-recuperadas activas
+    planillas = (
+        db.query(Planilla)
+        .filter(
+            Planilla.organizacion_id == oid,
+            Planilla.deleted_at.is_(None),
+            Planilla.nombre_archivo.like("Extracto auto-recuperado%"),
+        )
+        .all()
+    )
+
+    if not planillas:
+        return {"dry_run": dry_run, "planillas": 0, "filas": 0, "asientos_revertidos": 0}
+
+    pl_ids = [p.id for p in planillas]
+    filas = db.query(PlanillaRow).filter(PlanillaRow.planilla_id.in_(pl_ids)).all()
+    fila_ids = [f.id for f in filas]
+
+    # Asientos cc_inicial vinculados a esas filas (si se corrió reconstruir)
+    asientos_cc = (
+        db.query(Asiento)
+        .filter(
+            Asiento.organizacion_id == oid,
+            Asiento.modulo == "cc_inicial",
+            Asiento.referencia_id.in_(fila_ids) if fila_ids else False,
+        )
+        .all()
+    ) if fila_ids else []
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "planillas": len(planillas),
+            "filas": len(fila_ids),
+            "asientos_a_revertir": len(asientos_cc),
+        }
+
+    # Crear asientos reverso (debe/haber invertidos) para cada cc_inicial
+    for asiento in asientos_cc:
+        lineas = db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id == asiento.id).all()
+        reverso = Asiento(
+            fecha=_date.today(),
+            descripcion=f"Reverso: {asiento.descripcion}",
+            modulo="cc_inicial_reverso",
+            referencia_id=asiento.id,
+            organizacion_id=oid,
+            usuario_id=current_user.id,
+        )
+        db.add(reverso)
+        db.flush()
+        for l in lineas:
+            db.add(AsientoDetalle(
+                asiento_id=reverso.id,
+                cuenta_id=l.cuenta_id,
+                debe=l.haber,
+                haber=l.debe,
+            ))
+
+    # Soft-delete planillas (las filas quedan en DB con FK intacta para trazabilidad)
+    now = _dt.utcnow()
+    for pl in planillas:
+        pl.deleted_at = now
+
+    db.commit()
+
+    logger.info(
+        "revertir-planillas-extracto: %d planillas, %d filas, %d asientos revertidos (org %d)",
+        len(planillas), len(fila_ids), len(asientos_cc), oid,
+    )
+
+    return {
+        "ok": True,
+        "planillas": len(planillas),
+        "filas": len(fila_ids),
+        "asientos_revertidos": len(asientos_cc),
+    }
+
+
 # ── Cuenta corriente del cliente (vista derivada de asientos) ─────────────────
 
 # modulo del asiento → (categoría de filtro, etiqueta legible)

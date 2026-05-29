@@ -321,6 +321,35 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     }
   }
 
+  const [revirtiendo, setRevirtiendo] = useState(false)
+  const revertirPlanillasExtracto = async () => {
+    setRevirtiendo(true)
+    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    try {
+      const prev = await apiClient.client.post(`/contabilidad/revertir-planillas-extracto?dry_run=true${orgQ}`, {})
+      const { planillas, filas, asientos_a_revertir } = prev.data
+      if (!planillas) {
+        toast.success('No hay planillas auto-recuperadas para revertir')
+        return
+      }
+      const asientosNote = asientos_a_revertir > 0
+        ? ` y se revertirán ${asientos_a_revertir} asiento(s) contable(s)` : ''
+      const ok = await confirmDialog({
+        title: 'Revertir planillas del extracto',
+        message: `Se borrarán ${planillas} planilla(s) con ${filas} fila(s) creadas automáticamente desde el extracto${asientosNote}.\n\nEsta acción es reversible: las planillas quedan en la papelera y los asientos quedan con su reverso contable.`,
+        confirmLabel: 'Revertir',
+      })
+      if (!ok) return
+      const r = await apiClient.client.post(`/contabilidad/revertir-planillas-extracto${orgQ ? `?${orgQ.slice(1)}` : ''}`, {})
+      toast.success(`${r.data.planillas} planilla(s) revertida(s)${r.data.asientos_revertidos > 0 ? ` · ${r.data.asientos_revertidos} asiento(s) revertido(s)` : ''}`)
+      cargarCartera()
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'No se pudo revertir')
+    } finally {
+      setRevirtiendo(false)
+    }
+  }
+
   const [recuperando, setRecuperando] = useState(false)
   const recuperarPlanillasExtracto = async () => {
     setRecuperando(true)
@@ -854,7 +883,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
               <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                 <button
                   onClick={reconstruirCtaCte}
-                  disabled={backfilling || recuperando}
+                  disabled={backfilling || recuperando || revirtiendo}
                   className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
                   title="Genera las acreditaciones históricas en cada cuenta corriente a partir de las conciliaciones ya cargadas"
                 >
@@ -862,11 +891,19 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                 </button>
                 <button
                   onClick={recuperarPlanillasExtracto}
-                  disabled={recuperando || backfilling}
+                  disabled={recuperando || backfilling || revirtiendo}
                   className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
                   title="Crea planillas faltantes a partir de los movimientos del extracto bancario que aún no tienen planilla vinculada"
                 >
                   {recuperando ? 'Buscando…' : '🔍 Recuperar del extracto'}
+                </button>
+                <button
+                  onClick={revertirPlanillasExtracto}
+                  disabled={revirtiendo || recuperando || backfilling}
+                  className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50"
+                  title="Revierte las planillas creadas automáticamente desde el extracto (van a la papelera)"
+                >
+                  {revirtiendo ? 'Revirtiendo…' : '↩ Revertir del extracto'}
                 </button>
               </div>
             )}
