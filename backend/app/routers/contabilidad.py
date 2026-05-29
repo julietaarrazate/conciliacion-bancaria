@@ -729,10 +729,12 @@ def planillas_desde_extracto(
                     break
 
     def _make_grupos(pairs):
-        """Agrupa (mov, cliente) por (cliente_id, fecha) → una planilla por cliente × día."""
+        """Agrupa (mov, cliente) por (cliente_id, fecha_acred) → una planilla por cliente × día.
+        Usa fecha_acred preferentemente (fecha real de crédito); fallback a fecha de movimiento."""
         g: dict = {}
         for mov, cli in pairs:
-            key = (cli.id, mov.fecha)
+            fecha_cred = mov.fecha_acred or mov.fecha  # fecha real de acreditación
+            key = (cli.id, fecha_cred)
             if key not in g:
                 g[key] = {"cliente": cli, "movs": [], "extracto_id": mov.extracto_id, "comision": cli.porcentaje_comision}
             g[key]["movs"].append(mov)
@@ -749,7 +751,7 @@ def planillas_desde_extracto(
         grupos_list = [
             {
                 "cliente_nombre": v["cliente"].nombre,
-                "fecha": str(k[1]) if k[1] else "sin-fecha",
+                "fecha": str(k[1]) if k[1] else "sin-fecha",  # k[1] = fecha_acred or fecha
                 "count": len(v["movs"]),
                 "monto_total": round(sum(float(m.monto or 0) for m in v["movs"]), 2),
             }
@@ -788,8 +790,8 @@ def planillas_desde_extracto(
     filas_creadas = 0
     clientes_tocados: set = set()
 
-    for (cli_id, fecha), g in grupos.items():
-        fecha_str = str(fecha) if fecha else "sin-fecha"
+    for (cli_id, fecha_cred), g in grupos.items():
+        fecha_str = str(fecha_cred) if fecha_cred else "sin-fecha"
         pl = Planilla(
             cliente_id=cli_id,
             extracto_id=g["extracto_id"],
@@ -810,7 +812,7 @@ def planillas_desde_extracto(
                 monto=monto,
                 titular=mov.titular,
                 status='ok',
-                fecha_acred=mov.fecha,
+                fecha_acred=mov.fecha_acred or mov.fecha,  # fecha real de crédito
                 monto_acreditado=monto,
                 orden_movimiento_acreditado=mov.id,
             ))
