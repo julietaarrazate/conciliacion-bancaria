@@ -124,6 +124,18 @@ class ApiClient {
           this.clearToken()
           window.location.href = '/login'
         }
+        // Normalizar el detail de errores de validación de Pydantic (array de
+        // objetos {type, loc, msg, ...}) a un string legible. Sin esto, los
+        // componentes que renderizan err.response.data.detail directamente
+        // crashean con "Objects are not valid as a React child" (error #31).
+        const d = err.response?.data?.detail
+        if (Array.isArray(d)) {
+          err.response.data.detail = d
+            .map((e: any) => (typeof e === 'string' ? e : e?.msg || 'Dato inválido'))
+            .join(' · ')
+        } else if (d && typeof d === 'object') {
+          err.response.data.detail = (d as any).msg || JSON.stringify(d)
+        }
         return Promise.reject(err)
       }
     )
