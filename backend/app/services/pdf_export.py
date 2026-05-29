@@ -23,11 +23,11 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether,
 )
 
-# ── Paleta de marca (alineada con la UI: Linear purple-blue) ──────────────────
-_BRAND = colors.HexColor("#5E6AD2")        # primario (header, tablas)
-_BRAND_DARK = colors.HexColor("#4A54B0")   # primario oscuro
-_BRAND_TINT = colors.HexColor("#EEF0FB")   # fondo suave de marca (tarjetas/box)
-_GREEN = colors.HexColor("#16A34A")        # positivo / conciliado
+# ── Paleta de marca Cuadra (negro + verde) ───────────────────────────────────
+_BRAND = colors.HexColor("#111827")        # primario negro (header, tablas)
+_BRAND_DARK = colors.HexColor("#00C853")   # acento verde Cuadra
+_BRAND_TINT = colors.HexColor("#F1FDF6")   # fondo suave verde claro (tarjetas/box)
+_GREEN = colors.HexColor("#00C853")        # positivo / conciliado (verde Cuadra)
 _RED = colors.HexColor("#DC2626")          # pendiente / negativo
 _AMBER = colors.HexColor("#D97706")        # alerta / comisión
 _DARK = colors.HexColor("#111827")         # texto principal
