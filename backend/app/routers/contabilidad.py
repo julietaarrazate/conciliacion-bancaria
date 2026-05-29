@@ -798,7 +798,7 @@ def planillas_desde_extracto(
             usuario_id=current_user.id,
             organizacion_id=oid,
             nombre_archivo=f"Extracto auto-recuperado {fecha_str}",
-            fecha_carga=_dt.utcnow(),
+            fecha_carga=_dt(fecha_cred.year, fecha_cred.month, fecha_cred.day) if fecha_cred else _dt.utcnow(),
             porcentaje_comision=g["comision"],
         )
         db.add(pl)
