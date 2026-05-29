@@ -367,6 +367,35 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     }
   }
 
+  const [recuperandoCli, setRecuperandoCli] = useState(false)
+  const recuperarClientesBorrados = async () => {
+    setRecuperandoCli(true)
+    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    try {
+      const prev = await apiClient.client.post(`/contabilidad/recuperar-clientes-borrados?dry_run=true${orgQ}`, {})
+      const { clientes_a_recrear, nombres } = prev.data
+      if (!clientes_a_recrear) {
+        toast.success('No hay clientes para recuperar — todos los acreditados del extracto ya existen')
+        return
+      }
+      const lista = (nombres as string[]).slice(0, 12).map((n: string) => `• ${n}`).join('\n')
+      const extra = clientes_a_recrear > 12 ? `\n  …y ${clientes_a_recrear - 12} más` : ''
+      const ok = await confirmDialog({
+        title: 'Recuperar clientes del extracto',
+        message: `Se recrearán ${clientes_a_recrear} cliente(s) que están acreditados en el extracto pero ya no existen, con su cuenta contable:\n\n${lista}${extra}`,
+        confirmLabel: 'Recuperar',
+      })
+      if (!ok) return
+      const r = await apiClient.client.post(`/contabilidad/recuperar-clientes-borrados${orgQ ? `?${orgQ.slice(1)}` : ''}`, {})
+      toast.success(`${r.data.recreados} cliente(s) recuperado(s) con su cuenta`)
+      cargarClientesCuentas()
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'No se pudieron recuperar los clientes')
+    } finally {
+      setRecuperandoCli(false)
+    }
+  }
+
   const toggleAsiento = (id: number) => {
     const next = new Set(openAsientos)
     if (next.has(id)) {
@@ -717,14 +746,24 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
               Vinculá cada cliente a su cuenta corriente contable (subcuenta de <span className="font-mono">2-1-2-0</span>).
               Cada cuenta pertenece a un solo cliente. Los sin vincular se resuelven asignando una cuenta existente o creando una nueva.
             </p>
-            <button
-              onClick={crearCuentasFaltantes}
-              disabled={creandoFaltantes}
-              className="shrink-0 text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
-              title="Crea y vincula la cuenta contable de todos los clientes que aún no tienen una"
-            >
-              {creandoFaltantes ? 'Creando…' : '+ Crear cuentas faltantes'}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+              <button
+                onClick={recuperarClientesBorrados}
+                disabled={recuperandoCli || creandoFaltantes}
+                className="text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+                title="Recrea clientes que están acreditados en el extracto pero ya no existen, con su cuenta contable"
+              >
+                {recuperandoCli ? 'Recuperando…' : '↺ Recuperar clientes borrados'}
+              </button>
+              <button
+                onClick={crearCuentasFaltantes}
+                disabled={creandoFaltantes || recuperandoCli}
+                className="text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
+                title="Crea y vincula la cuenta contable de todos los clientes que aún no tienen una"
+              >
+                {creandoFaltantes ? 'Creando…' : '+ Crear cuentas faltantes'}
+              </button>
+            </div>
           </div>
           {loadingCli ? (
             <div className="py-12 text-center text-gray-400">Cargando...</div>
