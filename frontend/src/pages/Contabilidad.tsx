@@ -367,6 +367,59 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     }
   }
 
+  const [recuperandoCli, setRecuperandoCli] = useState(false)
+  const [recModalOpen, setRecModalOpen] = useState(false)
+  const [recCandidatos, setRecCandidatos] = useState<string[]>([])
+  const [recSeleccion, setRecSeleccion] = useState<Set<string>>(new Set())
+  const [recGuardando, setRecGuardando] = useState(false)
+
+  const recuperarClientesBorrados = async () => {
+    setRecuperandoCli(true)
+    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    try {
+      const prev = await apiClient.client.post(`/contabilidad/recuperar-clientes-borrados?dry_run=true${orgQ}`, {})
+      const { clientes_a_recrear, nombres } = prev.data
+      if (!clientes_a_recrear) {
+        toast.success('No hay clientes para recuperar — todos los acreditados del extracto ya existen')
+        return
+      }
+      setRecCandidatos(nombres as string[])
+      setRecSeleccion(new Set())  // nada tildado por defecto → no recrear basura sin querer
+      setRecModalOpen(true)
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'No se pudieron buscar los clientes')
+    } finally {
+      setRecuperandoCli(false)
+    }
+  }
+
+  const toggleRecSel = (nombre: string) => {
+    setRecSeleccion(prev => {
+      const next = new Set(prev)
+      next.has(nombre) ? next.delete(nombre) : next.add(nombre)
+      return next
+    })
+  }
+
+  const confirmarRecuperarClientes = async () => {
+    if (recSeleccion.size === 0) { toast.error('Elegí al menos un cliente'); return }
+    setRecGuardando(true)
+    const orgQ = activeOrgId ? `?org_id=${activeOrgId}` : ''
+    try {
+      const r = await apiClient.client.post(
+        `/contabilidad/recuperar-clientes-borrados${orgQ}`,
+        { nombres: Array.from(recSeleccion) },
+      )
+      toast.success(`${r.data.recreados} cliente(s) recuperado(s) con su cuenta`)
+      setRecModalOpen(false)
+      cargarClientesCuentas()
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'No se pudieron recuperar los clientes')
+    } finally {
+      setRecGuardando(false)
+    }
+  }
+
   const toggleAsiento = (id: number) => {
     const next = new Set(openAsientos)
     if (next.has(id)) {
@@ -717,14 +770,24 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
               Vinculá cada cliente a su cuenta corriente contable (subcuenta de <span className="font-mono">2-1-2-0</span>).
               Cada cuenta pertenece a un solo cliente. Los sin vincular se resuelven asignando una cuenta existente o creando una nueva.
             </p>
-            <button
-              onClick={crearCuentasFaltantes}
-              disabled={creandoFaltantes}
-              className="shrink-0 text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
-              title="Crea y vincula la cuenta contable de todos los clientes que aún no tienen una"
-            >
-              {creandoFaltantes ? 'Creando…' : '+ Crear cuentas faltantes'}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+              <button
+                onClick={recuperarClientesBorrados}
+                disabled={recuperandoCli || creandoFaltantes}
+                className="text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+                title="Recrea clientes que están acreditados en el extracto pero ya no existen, con su cuenta contable"
+              >
+                {recuperandoCli ? 'Recuperando…' : '↺ Recuperar clientes borrados'}
+              </button>
+              <button
+                onClick={crearCuentasFaltantes}
+                disabled={creandoFaltantes || recuperandoCli}
+                className="text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
+                title="Crea y vincula la cuenta contable de todos los clientes que aún no tienen una"
+              >
+                {creandoFaltantes ? 'Creando…' : '+ Crear cuentas faltantes'}
+              </button>
+            </div>
           </div>
           {loadingCli ? (
             <div className="py-12 text-center text-gray-400">Cargando...</div>
@@ -977,6 +1040,57 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
           })()}
         </div>
       ) : null}
+
+      {recModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !recGuardando && setRecModalOpen(false)}>
+          <div className="bg-white dark:bg-ml-dark-surface rounded-xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-200 dark:border-ml-dark-border">
+              <h3 className="text-sm font-semibold text-ml-text dark:text-white">Recuperar clientes del extracto</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Tildá solo los clientes reales que querés recrear. Los demás (nombres sueltos del extracto) dejalos sin marcar.
+              </p>
+            </div>
+            <div className="p-2 overflow-y-auto flex-1">
+              <div className="flex items-center justify-between px-2 py-1 mb-1">
+                <button
+                  onClick={() => setRecSeleccion(new Set(recCandidatos))}
+                  className="text-xs text-ml-blue dark:text-ml-green hover:underline"
+                >Marcar todos</button>
+                <button
+                  onClick={() => setRecSeleccion(new Set())}
+                  className="text-xs text-gray-500 hover:underline"
+                >Limpiar</button>
+              </div>
+              {recCandidatos.map(nombre => (
+                <label key={nombre} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={recSeleccion.has(nombre)}
+                    onChange={() => toggleRecSel(nombre)}
+                    className="rounded"
+                  />
+                  <span className="text-sm text-ml-text dark:text-zinc-200">{nombre}</span>
+                </label>
+              ))}
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-ml-dark-border flex items-center justify-between gap-2">
+              <span className="text-xs text-gray-500">{recSeleccion.size} seleccionado(s)</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setRecModalOpen(false)}
+                  disabled={recGuardando}
+                  className="text-xs px-3 py-2 rounded-lg border border-gray-300 dark:border-ml-dark-border text-gray-600 dark:text-zinc-300 disabled:opacity-50"
+                >Cancelar</button>
+                <button
+                  onClick={confirmarRecuperarClientes}
+                  disabled={recGuardando || recSeleccion.size === 0}
+                  className="text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+                >{recGuardando ? 'Recuperando…' : `Recuperar ${recSeleccion.size || ''}`}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
