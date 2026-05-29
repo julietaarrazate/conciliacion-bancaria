@@ -845,8 +845,8 @@ def revertir_planillas_extracto(
     current_user: User = Depends(require_permission("admin_accounting")),
 ):
     """Revierte las planillas creadas automáticamente desde el extracto:
-    soft-delete de las planillas 'Extracto auto-recuperado' + reverso de los
-    asientos cc_inicial vinculados a sus filas. Deja trazabilidad completa."""
+    hard-delete de las planillas 'Extracto auto-recuperado' (y sus filas en cascade)
+    + reverso de los asientos cc_inicial vinculados. Los movimientos quedan libres."""
     from datetime import datetime as _dt, date as _date
     from decimal import Decimal as _D
     from app.models.planilla import Planilla, PlanillaRow
@@ -925,14 +925,9 @@ def revertir_planillas_extracto(
                     haber=l.debe,
                 ))
 
-    # Desvincula movimientos para que queden huérfanos y puedan volver a recuperarse
-    for fila in filas:
-        fila.orden_movimiento_acreditado = None
-
-    # Soft-delete planillas (las filas quedan en DB para trazabilidad)
-    now = _dt.utcnow()
+    # Hard-delete planillas y sus filas (cascade) — libera la DB y los movimientos quedan huérfanos
     for pl in planillas:
-        pl.deleted_at = now
+        db.delete(pl)
 
     db.commit()
 
@@ -947,6 +942,74 @@ def revertir_planillas_extracto(
         "filas": len(fila_ids),
         "asientos_revertidos": len(asientos_cc),
     }
+
+
+@router.post("/limpiar-clientes-extracto")
+def limpiar_clientes_extracto(
+    dry_run: bool = Query(False),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    """Elimina los clientes creados automáticamente por la recuperación del extracto.
+    Criterio: cliente cuyas planillas son TODAS 'Extracto auto-recuperado*' (activas o soft-deleted)
+    y no tiene cheques, pagos ni liquidaciones asociadas."""
+    from app.models.planilla import Planilla
+    from app.models.cheque import Cheque
+    from app.models.pago import Pago
+    from app.models.liquidacion import LiquidacionItem
+
+    oid = _org_id(current_user, org_id)
+
+    clientes_org = db.query(Cliente).filter(Cliente.organizacion_id == oid).all()
+
+    a_borrar = []
+    for c in clientes_org:
+        # Planillas activas con nombre NO auto-recuperado → cliente real, no tocar
+        reales = db.query(Planilla).filter(
+            Planilla.cliente_id == c.id,
+            Planilla.deleted_at.is_(None),
+            ~Planilla.nombre_archivo.like("Extracto auto-recuperado%"),
+        ).count()
+        if reales > 0:
+            continue
+
+        # Si tiene cheques, pagos o liquidaciones → no tocar
+        tiene_otros = (
+            db.query(Cheque).filter(Cheque.cliente_id == c.id).count() > 0
+            or db.query(Pago).filter(Pago.cliente_id == c.id).count() > 0
+            or db.query(LiquidacionItem).filter(LiquidacionItem.cliente_id == c.id).count() > 0
+        )
+        if tiene_otros:
+            continue
+
+        # Solo tiene planillas auto-recuperadas (o ninguna) → candidato a borrar
+        tiene_auto = db.query(Planilla).filter(
+            Planilla.cliente_id == c.id,
+            Planilla.nombre_archivo.like("Extracto auto-recuperado%"),
+        ).count()
+        if tiene_auto > 0:
+            a_borrar.append(c)
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "clientes_a_borrar": len(a_borrar),
+            "nombres": [c.nombre for c in a_borrar],
+        }
+
+    # Hard-delete planillas (cascade rows) y luego el cliente
+    for c in a_borrar:
+        planillas_c = db.query(Planilla).filter(Planilla.cliente_id == c.id).all()
+        for pl in planillas_c:
+            db.delete(pl)
+        db.flush()
+        db.delete(c)
+
+    db.commit()
+
+    logger.info("limpiar-clientes-extracto: %d clientes eliminados (org %d)", len(a_borrar), oid)
+    return {"ok": True, "clientes_borrados": len(a_borrar), "nombres": [c.nombre for c in a_borrar]}
 
 
 # ── Cuenta corriente del cliente (vista derivada de asientos) ─────────────────
