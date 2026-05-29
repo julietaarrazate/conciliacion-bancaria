@@ -526,9 +526,12 @@ def backfill_cuentas_corrientes(
     Por cada fila de planilla conciliada (status ok) de un cliente con cuenta,
     genera un asiento neto Banco Macro (D) / Cliente (H). Idempotente: saltea las
     filas que ya tienen asiento del flujo normal (um_reclass) o un cc_inicial previo."""
-    oid = _org_id(current_user, org_id)
+    from decimal import Decimal as _D
+    from datetime import date as _date
     from app.models.planilla import Planilla, PlanillaRow
-    from app.services.motor_contable import registrar_cc_inicial
+    from app.services.motor_contable import _get_cuenta_por_codigo, _get_o_crear_cuenta_cliente, _monto
+
+    oid = _org_id(current_user, org_id)
 
     rows = (
         db.query(PlanillaRow, Planilla, Cliente)
@@ -552,7 +555,6 @@ def backfill_cuentas_corrientes(
     pendientes = [(row, pl, cli) for (row, pl, cli) in rows if row.id not in ya]
 
     if dry_run:
-        from decimal import Decimal as _D
         monto_est = sum((row.monto or _D(0)) for row, _, _ in pendientes)
         return {
             "dry_run": True,
@@ -563,18 +565,67 @@ def backfill_cuentas_corrientes(
             "clientes": len({pl.cliente_id for _, pl, _ in pendientes}),
         }
 
+    # Extraer datos escalares antes de cualquier commit (evita expire-on-commit)
+    pendiente_data = [
+        {
+            "row_id": row.id,
+            "monto": row.monto,
+            "fecha_acred": row.fecha_acred,
+            "fecha_carga": pl.fecha_carga,
+            "nombre_archivo": pl.nombre_archivo,
+            "cliente_id": pl.cliente_id,
+            "cliente_nombre": cli.nombre,
+        }
+        for row, pl, cli in pendientes
+    ]
+
+    # Pre-cachear cuenta Banco Macro (1 query en lugar de 1 por fila)
+    banco = _get_cuenta_por_codigo(db, "1-1-1-3-1", oid)
+    if not banco:
+        raise HTTPException(400, "No existe la cuenta Banco Macro (1-1-1-3-1). Verificá el plan de cuentas.")
+    banco_id = banco.id
+
+    # Pre-cachear/crear cuentas de clientes únicos (M queries en lugar de N queries)
+    clientes_ids = {d["cliente_id"] for d in pendiente_data}
+    cuenta_por_cliente: dict = {}
+    for cli_id in clientes_ids:
+        c = _get_o_crear_cuenta_cliente(db, cli_id, oid)
+        if c:
+            cuenta_por_cliente[cli_id] = c.id
+    db.commit()  # commit de cuentas nuevas si se crearon
+
+    # Crear todos los asientos en una sola transacción (N flushes + 1 commit)
     creados = 0
-    clientes_tocados = set()
-    for row, pl, cli in pendientes:
-        fecha = row.fecha_acred or (pl.fecha_carga.date() if pl.fecha_carga else None)
-        ok = registrar_cc_inicial(
-            db=db, planilla_row_id=row.id, org_id=oid, usuario_id=current_user.id,
-            cliente_id=pl.cliente_id, cliente_nombre=cli.nombre,
-            monto=row.monto, fecha=fecha, nombre_archivo=pl.nombre_archivo or "",
+    clientes_tocados: set = set()
+    for d in pendiente_data:
+        cuenta_cliente_id = cuenta_por_cliente.get(d["cliente_id"])
+        if not cuenta_cliente_id:
+            continue
+        monto_d = abs(_monto(d["monto"]))
+        if monto_d <= 0:
+            continue
+        fecha_acred = d["fecha_acred"]
+        fecha_carga = d["fecha_carga"]
+        fecha_asiento = fecha_acred or (fecha_carga.date() if fecha_carga else _date.today())
+        desc = f"Acreditación histórica — {d['cliente_nombre']}"
+        if d["nombre_archivo"]:
+            desc += f" ({d['nombre_archivo']})"
+        a = Asiento(
+            fecha=fecha_asiento,
+            descripcion=desc,
+            modulo="cc_inicial",
+            referencia_id=d["row_id"],
+            organizacion_id=oid,
+            usuario_id=current_user.id,
         )
-        if ok:
-            creados += 1
-            clientes_tocados.add(pl.cliente_id)
+        db.add(a)
+        db.flush()  # necesario para obtener a.id
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_id, debe=monto_d, haber=_D("0")))
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cliente_id, debe=_D("0"), haber=monto_d))
+        creados += 1
+        clientes_tocados.add(d["cliente_id"])
+
+    db.commit()  # un solo commit para todos los asientos
 
     return {
         "ok": True,
