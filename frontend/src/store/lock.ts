@@ -31,11 +31,13 @@ interface LockState {
   isLocked: boolean
   biometricEnabled: boolean
   credentialId: string | null
+  suppressUntil: number  // timestamp: no bloquear por background hasta esta hora (descargas/PDF)
   setupPin: (pin: string) => Promise<void>
   removePin: (pin: string) => Promise<boolean>
   unlock: (pin: string) => Promise<boolean>
   lock: () => void
   forceUnlock: () => void
+  suppressLock: (ms?: number) => void
   enrollBiometric: () => Promise<{ ok: boolean; error?: string }>
   unlockBiometric: () => Promise<boolean>
   disableBiometric: () => void
@@ -49,6 +51,7 @@ export const useLockStore = create<LockState>()(
       isLocked: false,
       biometricEnabled: false,
       credentialId: null,
+      suppressUntil: 0,
       setupPin: async (pin) => {
         const h = await hashPin(pin)
         set({ pinHash: h, enabled: true, isLocked: false })
@@ -71,6 +74,10 @@ export const useLockStore = create<LockState>()(
         if (s.enabled && s.pinHash) set({ isLocked: true })
       },
       forceUnlock: () => set({ isLocked: false }),
+      // Evita el bloqueo automático por pérdida de foco durante una descarga
+      // deliberada (PDF/Excel): el navegador dispara visibilitychange al abrir
+      // el diálogo de guardar, pero no es que el usuario salió de la app.
+      suppressLock: (ms = 8000) => set({ suppressUntil: Date.now() + ms }),
 
       enrollBiometric: async () => {
         if (!(await isBiometricAvailable())) {
