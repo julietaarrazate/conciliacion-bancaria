@@ -595,7 +595,8 @@ def recuperar_clientes_borrados(
         db.flush()  # obtener id
         cuenta = None
         try:
-            cuenta = _get_o_crear_cuenta_cliente(db, cli.id, oid)
+            # reusar_huecos: si quedó un código libre (ej. 2-1-2-8 borrada), lo rellena
+            cuenta = _get_o_crear_cuenta_cliente(db, cli.id, oid, reusar_huecos=True)
         except Exception as ex:
             logger.warning("recuperar-clientes: cuenta de %s: %s", nombre, ex)
         recreados.append({"cliente": nombre, "codigo": cuenta.codigo if cuenta else None})
