@@ -667,15 +667,17 @@ def _norm_nombre(s: str) -> str:
 @router.post("/planillas-desde-extracto")
 def planillas_desde_extracto(
     dry_run: bool = Query(False, description="Solo previsualiza, no crea nada"),
+    crear_clientes: bool = Query(False, description="Crear clientes nuevos para movimientos no identificados"),
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("admin_accounting")),
 ):
     """Recupera planillas faltantes a partir de los movimientos del extracto bancario.
-    Para cada movimiento positivo sin planilla vinculada que coincida con un
-    cliente conocido (por nombre normalizado), crea Planilla + PlanillaRow
-    (status=ok, ya conciliada). Agrupa por cliente × mes. Idempotente: solo
-    procesa movimientos que aún no tienen ninguna fila de planilla vinculada."""
+    Por cada movimiento positivo sin planilla vinculada:
+      - Si coincide con cliente conocido (nombre normalizado): crea Planilla + PlanillaRow (status=ok).
+      - Si crear_clientes=True: crea el cliente del nombre del extracto y luego la planilla.
+    Agrupa por cliente × día. Idempotente: el outerjoin garantiza que no se tocan
+    movimientos que ya tienen planilla vinculada."""
     from decimal import Decimal as _D
     from datetime import datetime as _dt
     from app.models.extracto import MovimientoBanco, ExtractoBancario
@@ -697,13 +699,15 @@ def planillas_desde_extracto(
         .all()
     )
 
-    # Mapa clientes por nombre normalizado
-    clientes = db.query(Cliente).filter(Cliente.organizacion_id == oid).all()
-    cli_by_norm = {_norm_nombre(c.nombre): c for c in clientes}
+    # Mapa clientes existentes por nombre normalizado
+    cli_by_norm = {
+        _norm_nombre(c.nombre): c
+        for c in db.query(Cliente).filter(Cliente.organizacion_id == oid).all()
+    }
 
-    # Agrupar por (cliente_id, año, mes)
-    grupos: dict = {}
-    no_id_count = 0
+    # Separar movimientos matched (cliente conocido) y unmatched
+    matched: list = []   # (mov, cliente)
+    nuevos: dict = {}    # norm_nombre -> {nombre_titulo, movs}
 
     for mov in orphaned:
         cliente = None
@@ -712,55 +716,82 @@ def planillas_desde_extracto(
             if n and n in cli_by_norm:
                 cliente = cli_by_norm[n]
                 break
-        if not cliente:
-            no_id_count += 1
-            continue
+        if cliente:
+            matched.append((mov, cliente))
+        else:
+            # Colectar nombre para posible creación de cliente nuevo
+            for field in [mov.cliente_acreditado, mov.titular]:
+                n = _norm_nombre(field or '')
+                if n:
+                    if n not in nuevos:
+                        nuevos[n] = {"nombre": (field or '').strip().title(), "movs": []}
+                    nuevos[n]["movs"].append(mov)
+                    break
 
-        fecha = mov.fecha  # date object o None
-        key = (cliente.id, fecha)
+    def _make_grupos(pairs):
+        """Agrupa (mov, cliente) por (cliente_id, fecha_acred) → una planilla por cliente × día.
+        Usa fecha_acred preferentemente (fecha real de crédito); fallback a fecha de movimiento."""
+        g: dict = {}
+        for mov, cli in pairs:
+            fecha_cred = mov.fecha_acred or mov.fecha  # fecha real de acreditación
+            key = (cli.id, fecha_cred)
+            if key not in g:
+                g[key] = {"cliente": cli, "movs": [], "extracto_id": mov.extracto_id, "comision": cli.porcentaje_comision}
+            g[key]["movs"].append(mov)
+        return g
 
-        if key not in grupos:
-            grupos[key] = {
-                "cliente": cliente,
-                "movs": [],
-                "extracto_id": mov.extracto_id,
-                "comision": cliente.porcentaje_comision,
-            }
-        grupos[key]["movs"].append(mov)
+    grupos = _make_grupos(matched)
 
-    sort_key = lambda item: (item[0][0], item[0][1] or 0)
-    grupos_list = [
-        {
-            "cliente_id": k[0],
-            "cliente_nombre": g["cliente"].nombre,
-            "fecha": str(k[1]) if k[1] else "sin-fecha",
-            "count": len(g["movs"]),
-            "monto_total": round(sum(float(m.monto or 0) for m in g["movs"]), 2),
-        }
-        for k, g in sorted(grupos.items(), key=sort_key)
-    ]
-
-    total_ids = sum(len(g["movs"]) for g in grupos.values())
+    # Nombres nuevos ordenados por frecuencia (para el preview)
+    nuevos_sorted = sorted(nuevos.items(), key=lambda x: -len(x[1]["movs"]))
+    clientes_nuevos_names = [v["nombre"] for _, v in nuevos_sorted[:30]]
+    filas_nuevos = sum(len(v["movs"]) for v in nuevos.values())
 
     if dry_run:
+        grupos_list = [
+            {
+                "cliente_nombre": v["cliente"].nombre,
+                "fecha": str(k[1]) if k[1] else "sin-fecha",  # k[1] = fecha_acred or fecha
+                "count": len(v["movs"]),
+                "monto_total": round(sum(float(m.monto or 0) for m in v["movs"]), 2),
+            }
+            for k, v in sorted(grupos.items(), key=lambda x: (x[1]["cliente"].nombre, str(x[0][1] or '')))
+        ]
         return {
             "dry_run": True,
             "huerfanos": len(orphaned),
-            "identificados": total_ids,
-            "no_identificados": no_id_count,
-            "clientes": len({k[0] for k in grupos}),
+            "identificados": len(matched),
+            "no_identificados": len(orphaned) - len(matched),
+            "clientes": len({m[1].id for m in matched}),
             "planillas_a_crear": len(grupos),
-            "filas_a_crear": total_ids,
+            "filas_a_crear": len(matched),
             "grupos": grupos_list,
+            # Info sobre nombres desconocidos (para que el frontend ofrezca crear clientes)
+            "clientes_nuevos_count": len(nuevos),
+            "clientes_nuevos": clientes_nuevos_names,
+            "filas_nuevos": filas_nuevos,
         }
 
-    # Crear planillas y rows
+    # Si crear_clientes=True: crear los clientes nuevos primero
+    clientes_creados = 0
+    if crear_clientes and nuevos:
+        for norm, data in nuevos_sorted:
+            cli = Cliente(nombre=data["nombre"], organizacion_id=oid)
+            db.add(cli)
+            db.flush()
+            cli_by_norm[norm] = cli
+            for mov in data["movs"]:
+                matched.append((mov, cli))
+            clientes_creados += 1
+        grupos = _make_grupos(matched)
+
+    # Crear planillas y rows (una planilla por cliente × día)
     planillas_creadas = 0
     filas_creadas = 0
     clientes_tocados: set = set()
 
-    for (cli_id, fecha), g in grupos.items():
-        fecha_str = str(fecha) if fecha else "sin-fecha"
+    for (cli_id, fecha_cred), g in grupos.items():
+        fecha_str = str(fecha_cred) if fecha_cred else "sin-fecha"
         pl = Planilla(
             cliente_id=cli_id,
             extracto_id=g["extracto_id"],
@@ -781,7 +812,7 @@ def planillas_desde_extracto(
                 monto=monto,
                 titular=mov.titular,
                 status='ok',
-                fecha_acred=mov.fecha,
+                fecha_acred=mov.fecha_acred or mov.fecha,  # fecha real de crédito
                 monto_acreditado=monto,
                 orden_movimiento_acreditado=mov.id,
             ))
@@ -793,8 +824,8 @@ def planillas_desde_extracto(
     db.commit()
 
     logger.info(
-        "planillas-desde-extracto: %d planillas, %d filas, %d clientes (org %d, user %d)",
-        planillas_creadas, filas_creadas, len(clientes_tocados), oid, current_user.id,
+        "planillas-desde-extracto: %d planillas, %d filas, %d clientes (%d nuevos) (org %d)",
+        planillas_creadas, filas_creadas, len(clientes_tocados), clientes_creados, oid,
     )
 
     return {
@@ -802,7 +833,101 @@ def planillas_desde_extracto(
         "planillas_creadas": planillas_creadas,
         "filas_creadas": filas_creadas,
         "clientes": len(clientes_tocados),
-        "no_identificados": no_id_count,
+        "clientes_creados": clientes_creados,
+    }
+
+
+@router.post("/revertir-planillas-extracto")
+def revertir_planillas_extracto(
+    dry_run: bool = Query(False, description="Solo previsualiza, no borra nada"),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    """Revierte las planillas creadas automáticamente desde el extracto:
+    soft-delete de las planillas 'Extracto auto-recuperado' + reverso de los
+    asientos cc_inicial vinculados a sus filas. Deja trazabilidad completa."""
+    from datetime import datetime as _dt, date as _date
+    from decimal import Decimal as _D
+    from app.models.planilla import Planilla, PlanillaRow
+
+    oid = _org_id(current_user, org_id)
+
+    # Planillas auto-recuperadas activas
+    planillas = (
+        db.query(Planilla)
+        .filter(
+            Planilla.organizacion_id == oid,
+            Planilla.deleted_at.is_(None),
+            Planilla.nombre_archivo.like("Extracto auto-recuperado%"),
+        )
+        .all()
+    )
+
+    if not planillas:
+        return {"dry_run": dry_run, "planillas": 0, "filas": 0, "asientos_revertidos": 0}
+
+    pl_ids = [p.id for p in planillas]
+    filas = db.query(PlanillaRow).filter(PlanillaRow.planilla_id.in_(pl_ids)).all()
+    fila_ids = [f.id for f in filas]
+
+    # Asientos cc_inicial vinculados a esas filas (si se corrió reconstruir)
+    asientos_cc = (
+        db.query(Asiento)
+        .filter(
+            Asiento.organizacion_id == oid,
+            Asiento.modulo == "cc_inicial",
+            Asiento.referencia_id.in_(fila_ids) if fila_ids else False,
+        )
+        .all()
+    ) if fila_ids else []
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "planillas": len(planillas),
+            "filas": len(fila_ids),
+            "asientos_a_revertir": len(asientos_cc),
+        }
+
+    # Crear asientos reverso (debe/haber invertidos) para cada cc_inicial
+    for asiento in asientos_cc:
+        lineas = db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id == asiento.id).all()
+        reverso = Asiento(
+            fecha=_date.today(),
+            descripcion=f"Reverso: {asiento.descripcion}",
+            modulo="cc_inicial_reverso",
+            referencia_id=asiento.id,
+            organizacion_id=oid,
+            usuario_id=current_user.id,
+        )
+        db.add(reverso)
+        db.flush()
+        for l in lineas:
+            db.add(AsientoDetalle(
+                asiento_id=reverso.id,
+                cuenta_id=l.cuenta_id,
+                debe=l.haber,
+                haber=l.debe,
+            ))
+
+    # Soft-delete planillas (las filas quedan en DB con FK intacta para trazabilidad)
+    now = _dt.utcnow()
+    for pl in planillas:
+        pl.deleted_at = now
+
+    db.commit()
+
+    logger.info(
+        "revertir-planillas-extracto: %d planillas, %d filas, %d asientos revertidos (org %d)",
+        len(planillas), len(fila_ids), len(asientos_cc), oid,
+    )
+
+    return {
+        "ok": True,
+        "planillas": len(planillas),
+        "filas": len(fila_ids),
+        "asientos_revertidos": len(asientos_cc),
     }
 
 

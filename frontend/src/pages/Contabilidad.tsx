@@ -321,28 +321,82 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     }
   }
 
+  const [revirtiendo, setRevirtiendo] = useState(false)
+  const revertirPlanillasExtracto = async () => {
+    setRevirtiendo(true)
+    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    try {
+      const prev = await apiClient.client.post(`/contabilidad/revertir-planillas-extracto?dry_run=true${orgQ}`, {})
+      const { planillas, filas, asientos_a_revertir } = prev.data
+      if (!planillas) {
+        toast.success('No hay planillas auto-recuperadas para revertir')
+        return
+      }
+      const asientosNote = asientos_a_revertir > 0
+        ? ` y se revertirán ${asientos_a_revertir} asiento(s) contable(s)` : ''
+      const ok = await confirmDialog({
+        title: 'Revertir planillas del extracto',
+        message: `Se borrarán ${planillas} planilla(s) con ${filas} fila(s) creadas automáticamente desde el extracto${asientosNote}.\n\nEsta acción es reversible: las planillas quedan en la papelera y los asientos quedan con su reverso contable.`,
+        confirmLabel: 'Revertir',
+      })
+      if (!ok) return
+      const r = await apiClient.client.post(`/contabilidad/revertir-planillas-extracto${orgQ ? `?${orgQ.slice(1)}` : ''}`, {})
+      toast.success(`${r.data.planillas} planilla(s) revertida(s)${r.data.asientos_revertidos > 0 ? ` · ${r.data.asientos_revertidos} asiento(s) revertido(s)` : ''}`)
+      cargarCartera()
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'No se pudo revertir')
+    } finally {
+      setRevirtiendo(false)
+    }
+  }
+
   const [recuperando, setRecuperando] = useState(false)
   const recuperarPlanillasExtracto = async () => {
     setRecuperando(true)
     const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
     try {
+      // Paso 1: preview
       const prev = await apiClient.client.post(`/contabilidad/planillas-desde-extracto?dry_run=true${orgQ}`, {})
-      const { identificados, clientes, planillas_a_crear, filas_a_crear, no_identificados, grupos } = prev.data
-      if (!identificados) {
+      const { identificados, clientes, planillas_a_crear, filas_a_crear, grupos,
+              clientes_nuevos_count, clientes_nuevos, filas_nuevos } = prev.data
+
+      if (!identificados && !clientes_nuevos_count) {
         toast.success('No hay movimientos nuevos para recuperar del extracto')
         return
       }
-      const top5 = (grupos as any[]).slice(0, 5).map((g: any) => `• ${g.cliente_nombre} — ${g.fecha} (${g.count} mov.)`)
-      const extra = grupos.length > 5 ? `\n  …y ${grupos.length - 5} grupo(s) más` : ''
-      const noIdNote = no_identificados > 0 ? `\n\n⚠️ ${no_identificados} movimiento(s) sin cliente conocido serán ignorados.` : ''
-      const ok = await confirmDialog({
-        title: 'Recuperar planillas del extracto',
-        message: `Se encontraron ${identificados} movimiento(s) de ${clientes} cliente(s) sin planilla en el extracto.\nSe crearán ${planillas_a_crear} planilla(s) con ${filas_a_crear} fila(s) (status ok, ya conciliadas).\n\n${top5.join('\n')}${extra}${noIdNote}`,
-        confirmLabel: 'Recuperar',
-      })
-      if (!ok) return
-      const r = await apiClient.client.post(`/contabilidad/planillas-desde-extracto${orgQ ? `?${orgQ.slice(1)}` : ''}`, {})
-      toast.success(`${r.data.filas_creadas} fila(s) recuperada(s) en ${r.data.planillas_creadas} planilla(s) para ${r.data.clientes} cliente(s)`)
+
+      // Paso 2: recuperar clientes conocidos
+      if (identificados > 0) {
+        const top5 = (grupos as any[]).slice(0, 5).map((g: any) => `• ${g.cliente_nombre} — ${g.fecha} (${g.count} mov.)`)
+        const extra = grupos.length > 5 ? `\n  …y ${grupos.length - 5} grupo(s) más` : ''
+        const noIdNote = clientes_nuevos_count > 0
+          ? `\n\n⚠️ ${filas_nuevos} movimiento(s) de ${clientes_nuevos_count} nombre(s) no reconocidos (se ofrecerá a continuación).`
+          : ''
+        const ok = await confirmDialog({
+          title: 'Recuperar planillas del extracto',
+          message: `${identificados} movimiento(s) de ${clientes} cliente(s) → ${planillas_a_crear} planilla(s).\n\n${top5.join('\n')}${extra}${noIdNote}`,
+          confirmLabel: 'Recuperar',
+        })
+        if (!ok) return
+        const r = await apiClient.client.post(`/contabilidad/planillas-desde-extracto${orgQ ? `?${orgQ.slice(1)}` : ''}`, {})
+        toast.success(`${r.data.filas_creadas} fila(s) recuperada(s) en ${r.data.planillas_creadas} planilla(s)`)
+      }
+
+      // Paso 3: ofrecer crear clientes nuevos del extracto
+      if (clientes_nuevos_count > 0) {
+        const nombres = (clientes_nuevos as string[]).slice(0, 8).map((n: string) => `• ${n}`)
+        const extraN = clientes_nuevos_count > 8 ? `\n  …y ${clientes_nuevos_count - 8} más` : ''
+        const ok2 = await confirmDialog({
+          title: 'Crear clientes del extracto',
+          message: `Hay ${filas_nuevos} movimiento(s) de ${clientes_nuevos_count} nombre(s) no reconocidos en el extracto:\n${nombres.join('\n')}${extraN}\n\n¿Crear como clientes y recuperar sus planillas?`,
+          confirmLabel: 'Crear y recuperar',
+        })
+        if (ok2) {
+          const r2 = await apiClient.client.post(`/contabilidad/planillas-desde-extracto?crear_clientes=true${orgQ}`, {})
+          toast.success(`${r2.data.clientes_creados} cliente(s) creado(s) · ${r2.data.filas_creadas} fila(s) adicionales`)
+        }
+      }
+
       cargarCartera()
     } catch (e: any) {
       toast.error(e.response?.data?.detail || 'No se pudo recuperar del extracto')
@@ -829,7 +883,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
               <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                 <button
                   onClick={reconstruirCtaCte}
-                  disabled={backfilling || recuperando}
+                  disabled={backfilling || recuperando || revirtiendo}
                   className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
                   title="Genera las acreditaciones históricas en cada cuenta corriente a partir de las conciliaciones ya cargadas"
                 >
@@ -837,11 +891,19 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                 </button>
                 <button
                   onClick={recuperarPlanillasExtracto}
-                  disabled={recuperando || backfilling}
+                  disabled={recuperando || backfilling || revirtiendo}
                   className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
                   title="Crea planillas faltantes a partir de los movimientos del extracto bancario que aún no tienen planilla vinculada"
                 >
                   {recuperando ? 'Buscando…' : '🔍 Recuperar del extracto'}
+                </button>
+                <button
+                  onClick={revertirPlanillasExtracto}
+                  disabled={revirtiendo || recuperando || backfilling}
+                  className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50"
+                  title="Revierte las planillas creadas automáticamente desde el extracto (van a la papelera)"
+                >
+                  {revirtiendo ? 'Revirtiendo…' : '↩ Revertir del extracto'}
                 </button>
               </div>
             )}
