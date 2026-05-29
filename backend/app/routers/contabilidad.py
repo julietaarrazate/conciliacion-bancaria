@@ -667,15 +667,17 @@ def _norm_nombre(s: str) -> str:
 @router.post("/planillas-desde-extracto")
 def planillas_desde_extracto(
     dry_run: bool = Query(False, description="Solo previsualiza, no crea nada"),
+    crear_clientes: bool = Query(False, description="Crear clientes nuevos para movimientos no identificados"),
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("admin_accounting")),
 ):
     """Recupera planillas faltantes a partir de los movimientos del extracto bancario.
-    Para cada movimiento positivo sin planilla vinculada que coincida con un
-    cliente conocido (por nombre normalizado), crea Planilla + PlanillaRow
-    (status=ok, ya conciliada). Agrupa por cliente × mes. Idempotente: solo
-    procesa movimientos que aún no tienen ninguna fila de planilla vinculada."""
+    Por cada movimiento positivo sin planilla vinculada:
+      - Si coincide con cliente conocido (nombre normalizado): crea Planilla + PlanillaRow (status=ok).
+      - Si crear_clientes=True: crea el cliente del nombre del extracto y luego la planilla.
+    Agrupa por cliente × día. Idempotente: el outerjoin garantiza que no se tocan
+    movimientos que ya tienen planilla vinculada."""
     from decimal import Decimal as _D
     from datetime import datetime as _dt
     from app.models.extracto import MovimientoBanco, ExtractoBancario
@@ -697,13 +699,15 @@ def planillas_desde_extracto(
         .all()
     )
 
-    # Mapa clientes por nombre normalizado
-    clientes = db.query(Cliente).filter(Cliente.organizacion_id == oid).all()
-    cli_by_norm = {_norm_nombre(c.nombre): c for c in clientes}
+    # Mapa clientes existentes por nombre normalizado
+    cli_by_norm = {
+        _norm_nombre(c.nombre): c
+        for c in db.query(Cliente).filter(Cliente.organizacion_id == oid).all()
+    }
 
-    # Agrupar por (cliente_id, año, mes)
-    grupos: dict = {}
-    no_id_count = 0
+    # Separar movimientos matched (cliente conocido) y unmatched
+    matched: list = []   # (mov, cliente)
+    nuevos: dict = {}    # norm_nombre -> {nombre_titulo, movs}
 
     for mov in orphaned:
         cliente = None
@@ -712,49 +716,74 @@ def planillas_desde_extracto(
             if n and n in cli_by_norm:
                 cliente = cli_by_norm[n]
                 break
-        if not cliente:
-            no_id_count += 1
-            continue
+        if cliente:
+            matched.append((mov, cliente))
+        else:
+            # Colectar nombre para posible creación de cliente nuevo
+            for field in [mov.cliente_acreditado, mov.titular]:
+                n = _norm_nombre(field or '')
+                if n:
+                    if n not in nuevos:
+                        nuevos[n] = {"nombre": (field or '').strip().title(), "movs": []}
+                    nuevos[n]["movs"].append(mov)
+                    break
 
-        fecha = mov.fecha  # date object o None
-        key = (cliente.id, fecha)
+    def _make_grupos(pairs):
+        """Agrupa (mov, cliente) por (cliente_id, fecha) → una planilla por cliente × día."""
+        g: dict = {}
+        for mov, cli in pairs:
+            key = (cli.id, mov.fecha)
+            if key not in g:
+                g[key] = {"cliente": cli, "movs": [], "extracto_id": mov.extracto_id, "comision": cli.porcentaje_comision}
+            g[key]["movs"].append(mov)
+        return g
 
-        if key not in grupos:
-            grupos[key] = {
-                "cliente": cliente,
-                "movs": [],
-                "extracto_id": mov.extracto_id,
-                "comision": cliente.porcentaje_comision,
-            }
-        grupos[key]["movs"].append(mov)
+    grupos = _make_grupos(matched)
 
-    sort_key = lambda item: (item[0][0], item[0][1] or 0)
-    grupos_list = [
-        {
-            "cliente_id": k[0],
-            "cliente_nombre": g["cliente"].nombre,
-            "fecha": str(k[1]) if k[1] else "sin-fecha",
-            "count": len(g["movs"]),
-            "monto_total": round(sum(float(m.monto or 0) for m in g["movs"]), 2),
-        }
-        for k, g in sorted(grupos.items(), key=sort_key)
-    ]
-
-    total_ids = sum(len(g["movs"]) for g in grupos.values())
+    # Nombres nuevos ordenados por frecuencia (para el preview)
+    nuevos_sorted = sorted(nuevos.items(), key=lambda x: -len(x[1]["movs"]))
+    clientes_nuevos_names = [v["nombre"] for _, v in nuevos_sorted[:30]]
+    filas_nuevos = sum(len(v["movs"]) for v in nuevos.values())
 
     if dry_run:
+        grupos_list = [
+            {
+                "cliente_nombre": v["cliente"].nombre,
+                "fecha": str(k[1]) if k[1] else "sin-fecha",
+                "count": len(v["movs"]),
+                "monto_total": round(sum(float(m.monto or 0) for m in v["movs"]), 2),
+            }
+            for k, v in sorted(grupos.items(), key=lambda x: (x[1]["cliente"].nombre, str(x[0][1] or '')))
+        ]
         return {
             "dry_run": True,
             "huerfanos": len(orphaned),
-            "identificados": total_ids,
-            "no_identificados": no_id_count,
-            "clientes": len({k[0] for k in grupos}),
+            "identificados": len(matched),
+            "no_identificados": len(orphaned) - len(matched),
+            "clientes": len({m[1].id for m in matched}),
             "planillas_a_crear": len(grupos),
-            "filas_a_crear": total_ids,
+            "filas_a_crear": len(matched),
             "grupos": grupos_list,
+            # Info sobre nombres desconocidos (para que el frontend ofrezca crear clientes)
+            "clientes_nuevos_count": len(nuevos),
+            "clientes_nuevos": clientes_nuevos_names,
+            "filas_nuevos": filas_nuevos,
         }
 
-    # Crear planillas y rows
+    # Si crear_clientes=True: crear los clientes nuevos primero
+    clientes_creados = 0
+    if crear_clientes and nuevos:
+        for norm, data in nuevos_sorted:
+            cli = Cliente(nombre=data["nombre"], organizacion_id=oid)
+            db.add(cli)
+            db.flush()
+            cli_by_norm[norm] = cli
+            for mov in data["movs"]:
+                matched.append((mov, cli))
+            clientes_creados += 1
+        grupos = _make_grupos(matched)
+
+    # Crear planillas y rows (una planilla por cliente × día)
     planillas_creadas = 0
     filas_creadas = 0
     clientes_tocados: set = set()
@@ -793,8 +822,8 @@ def planillas_desde_extracto(
     db.commit()
 
     logger.info(
-        "planillas-desde-extracto: %d planillas, %d filas, %d clientes (org %d, user %d)",
-        planillas_creadas, filas_creadas, len(clientes_tocados), oid, current_user.id,
+        "planillas-desde-extracto: %d planillas, %d filas, %d clientes (%d nuevos) (org %d)",
+        planillas_creadas, filas_creadas, len(clientes_tocados), clientes_creados, oid,
     )
 
     return {
@@ -802,7 +831,7 @@ def planillas_desde_extracto(
         "planillas_creadas": planillas_creadas,
         "filas_creadas": filas_creadas,
         "clientes": len(clientes_tocados),
-        "no_identificados": no_id_count,
+        "clientes_creados": clientes_creados,
     }
 
 
