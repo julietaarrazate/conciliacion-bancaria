@@ -6,7 +6,7 @@ from pydantic import BaseModel
 import logging
 
 from app.database import get_db
-from app.middleware.auth import get_current_user, require_permission
+from app.middleware.auth import get_current_user, require_permission, can_switch_org
 from app.models.user import User
 from app.models.cliente import Cliente
 from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
@@ -32,7 +32,7 @@ def get_stats(
 
 
 def _org_id(current_user: User, org_id: Optional[int]) -> int:
-    if current_user.is_superadmin and org_id:
+    if can_switch_org(current_user, org_id) and org_id:
         return org_id
     return current_user.organizacion_id or 1
 

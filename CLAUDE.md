@@ -343,7 +343,9 @@ Checkpoints disponibles:
 - `v3.4-stable-checkpoint` — después de comisión por ítem, fusionar clientes, responsive fixes (mayo 2026)
 - `v3.6` — contabilidad automática UM, cuentas corrientes como módulo propio, permisos en 3 capas,
   backfill de cuentas corrientes, borrar OP (mayo 2026 — PRs #36–#39 mergeados a main)
+- `v3.7-stable-checkpoint` — rol CONTADOR + login por aprobación + PDF Cuadra + switch de org para
+  contadores (allowed_org_ids) (mayo 2026)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.6
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.7

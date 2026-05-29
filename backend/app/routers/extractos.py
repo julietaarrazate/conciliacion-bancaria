@@ -21,7 +21,7 @@ from app.services.extracto_merger import mergear_movimientos
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_movimientos, export_extracto_contador
 import logging
-from app.middleware.auth import get_current_user, require_permission
+from app.middleware.auth import get_current_user, require_permission, can_switch_org
 from app.config import get_settings
 
 
@@ -88,7 +88,7 @@ def list_extractos(skip: int = 0, limit: int = 50,
                    current_user: User = Depends(get_current_user)):
     q = db.query(ExtractoBancario).filter(ExtractoBancario.deleted_at.is_(None))
     # Superadmin puede filtrar por org; usuarios normales ven solo su org
-    if current_user.is_superadmin and org_id:
+    if can_switch_org(current_user, org_id) and org_id:
         q = q.filter(ExtractoBancario.organizacion_id == org_id)
     elif not current_user.is_superadmin:
         q = q.filter(ExtractoBancario.organizacion_id == (current_user.organizacion_id or 1))
@@ -665,7 +665,7 @@ def _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, t
         ~MovimientoBanco.cliente_acreditado.ilike("no identificado"),
     )
     # Scope por organizacion
-    if current_user.is_superadmin and org_id:
+    if can_switch_org(current_user, org_id) and org_id:
         q = q.filter(MovimientoBanco.organizacion_id == org_id)
     elif not current_user.is_superadmin:
         q = q.filter(MovimientoBanco.organizacion_id == (current_user.organizacion_id or 1))

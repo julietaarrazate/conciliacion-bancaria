@@ -16,6 +16,7 @@ export interface User {
   is_active: boolean
   is_superadmin: boolean
   organizacion_id?: number
+  allowed_org_ids?: number[]
   created_at: string
 }
 

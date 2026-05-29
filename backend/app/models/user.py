@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -25,6 +25,8 @@ class User(Base):
     # Multi-tenant
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
     is_superadmin = Column(Boolean, default=False, nullable=False)
+    # Lista de org IDs extras a los que este usuario puede cambiar (solo CONTADOR)
+    allowed_org_ids = Column(JSON, nullable=True, default=list)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

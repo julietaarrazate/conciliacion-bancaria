@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models.caja import ArqueoDiario, OrdenDePago, DENOMINACIONES, denominaciones_vacias
 from app.models.cliente import Cliente
 from app.models.user import User
-from app.middleware.auth import get_current_user, require_permission
+from app.middleware.auth import get_current_user, require_permission, can_switch_org
 from app.services.auditoria import registrar_log
 from app.services.storage import upload_comprobante
 
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/caja", tags=["caja"])
 
 
 def _org_id(user: User, org_id_param: Optional[int] = None) -> int:
-    if user.is_superadmin and org_id_param:
+    if can_switch_org(user, org_id_param) and org_id_param:
         return org_id_param
     return user.organizacion_id or 1
 

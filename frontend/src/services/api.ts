@@ -394,7 +394,7 @@ class ApiClient {
 
   async updateUser(
     userId: number,
-    payload: { full_name?: string; role?: UserRole; is_active?: boolean; organizacion_id?: number }
+    payload: { full_name?: string; role?: UserRole; is_active?: boolean; organizacion_id?: number; allowed_org_ids?: number[] }
   ): Promise<User> {
     const res = await this.client.patch(`/admin/users/${userId}`, payload)
     return res.data
@@ -402,6 +402,11 @@ class ApiClient {
 
   async listOrganizaciones(): Promise<{ id: number; nombre: string }[]> {
     const res = await this.client.get('/admin/organizaciones')
+    return res.data
+  }
+
+  async getAllowedOrgs(): Promise<{ id: number; nombre: string }[]> {
+    const res = await this.client.get('/me/allowed-orgs')
     return res.data
   }
 

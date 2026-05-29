@@ -96,6 +96,7 @@ def _run_alembic():
         "ALTER TABLE planillas ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
         "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
         "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cuenta_contable_id INTEGER REFERENCES plan_cuentas(id)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_org_ids JSONB DEFAULT '[]'",
     ]
     try:
         from sqlalchemy import text as _text

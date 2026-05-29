@@ -120,12 +120,13 @@ export const Layout: React.FC = () => {
   }, [drawerOpen])
 
   useEffect(() => {
-    if (user?.is_superadmin) {
-      apiClient.client.get('/admin/organizaciones')
-        .then(r => setOrgs(r.data))
+    if (!user) return
+    if (user.is_superadmin || (user.allowed_org_ids && user.allowed_org_ids.length > 0)) {
+      apiClient.getAllowedOrgs()
+        .then(setOrgs)
         .catch(() => {})
     }
-  }, [user?.is_superadmin])
+  }, [user?.is_superadmin, user?.allowed_org_ids?.join(',')])
 
   // Cmd+K / Ctrl+K global shortcut para búsqueda
   useEffect(() => {
@@ -200,8 +201,8 @@ export const Layout: React.FC = () => {
       {/* Footer */}
       <div className="px-2 py-3 border-t border-ml-gray dark:border-ml-dark-border space-y-1">
 
-        {/* Org switcher — solo superadmin */}
-        {user?.is_superadmin && orgs.length > 0 && (
+        {/* Org switcher — superadmin y contadores con orgs extra */}
+        {(user?.is_superadmin || (user?.allowed_org_ids && user.allowed_org_ids.length > 0)) && orgs.length > 0 && (
           <div className="px-1 pb-1">
             <p className="text-2xs uppercase tracking-widest font-semibold text-ml-text-soft dark:text-gray-600 px-1.5 mb-1">Organización</p>
             <select
@@ -214,7 +215,7 @@ export const Layout: React.FC = () => {
                 if (org) setActiveOrg(org.id, org.nombre)
               }}
             >
-              <option value="">— Todas —</option>
+              {user?.is_superadmin && <option value="">— Todas —</option>}
               {orgs.map(o => (
                 <option key={o.id} value={o.id}>{o.nombre}</option>
               ))}

@@ -61,7 +61,7 @@ def update_user(
         raise HTTPException(status_code=400, detail="Usá 'Mi Perfil' para editar tu propia cuenta")
 
     antes = {"full_name": user.full_name, "role": user.role, "is_active": user.is_active,
-             "organizacion_id": user.organizacion_id}
+             "organizacion_id": user.organizacion_id, "allowed_org_ids": user.allowed_org_ids}
 
     if payload.full_name is not None:
         user.full_name = payload.full_name
@@ -75,6 +75,13 @@ def update_user(
             raise HTTPException(status_code=404, detail="Organización no encontrada")
         user.organizacion_id = payload.organizacion_id
 
+    if payload.allowed_org_ids is not None:
+        from app.models.organizacion import Organizacion as _Org
+        for oid in payload.allowed_org_ids:
+            if not db.query(_Org).filter(_Org.id == oid).first():
+                raise HTTPException(status_code=404, detail=f"Organización {oid} no encontrada")
+        user.allowed_org_ids = payload.allowed_org_ids
+
     db.commit()
     db.refresh(user)
 
@@ -84,7 +91,7 @@ def update_user(
         tabla="users",
         registro_id=user.id,
         accion="UPDATE",
-        cambios={"antes": antes, "despues": {"full_name": user.full_name, "role": user.role, "is_active": user.is_active, "organizacion_id": user.organizacion_id}}
+        cambios={"antes": antes, "despues": {"full_name": user.full_name, "role": user.role, "is_active": user.is_active, "organizacion_id": user.organizacion_id, "allowed_org_ids": user.allowed_org_ids}}
     )
 
     return user

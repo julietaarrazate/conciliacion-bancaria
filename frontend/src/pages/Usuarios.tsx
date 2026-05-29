@@ -14,7 +14,7 @@ export const Usuarios: React.FC = () => {
   const [showForm, setShowForm] = useState(false)
   const [formError, setFormError] = useState('')
   const [formLoading, setFormLoading] = useState(false)
-  const [newUser, setNewUser] = useState<{ email: string; full_name: string; password: string; role: UserRole; orgId: number | '' }>({ email: '', full_name: '', password: '', role: UserRole.OPERADOR, orgId: '' })
+  const [newUser, setNewUser] = useState<{ email: string; full_name: string; password: string; role: UserRole; orgId: number | ''; allowedOrgIds: number[] }>({ email: '', full_name: '', password: '', role: UserRole.OPERADOR, orgId: '', allowedOrgIds: [] })
   const [showPass, setShowPass] = useState(false)
   const [orgs, setOrgs] = useState<{ id: number; nombre: string }[]>([])
 
@@ -53,19 +53,19 @@ export const Usuarios: React.FC = () => {
         password: newUser.password,
         role: newUser.role
       })
-      // register crea como OPERADOR en la org por defecto; ajustamos rol y org
-      // (la org sólo la asigna el superadmin desde el selector).
-      const needsPatch = newUser.role !== UserRole.OPERADOR || (!!me?.is_superadmin && newUser.orgId !== '')
+      // register crea como OPERADOR en la org por defecto; ajustamos rol, org y allowed_org_ids
+      const needsPatch = newUser.role !== UserRole.OPERADOR || (!!me?.is_superadmin && (newUser.orgId !== '' || newUser.allowedOrgIds.length > 0))
       if (needsPatch) {
         const created = (await apiClient.getUsers({ limit: 200 })).items.find(u => u.email === newUser.email)
         if (created) {
-          const patch: { role?: UserRole; organizacion_id?: number } = {}
+          const patch: { role?: UserRole; organizacion_id?: number; allowed_org_ids?: number[] } = {}
           if (newUser.role !== UserRole.OPERADOR) patch.role = newUser.role
           if (me?.is_superadmin && newUser.orgId !== '') patch.organizacion_id = Number(newUser.orgId)
+          if (me?.is_superadmin && newUser.allowedOrgIds.length > 0) patch.allowed_org_ids = newUser.allowedOrgIds
           await apiClient.updateUser(created.id, patch)
         }
       }
-      setNewUser({ email: '', full_name: '', password: '', role: UserRole.OPERADOR, orgId: '' })
+      setNewUser({ email: '', full_name: '', password: '', role: UserRole.OPERADOR, orgId: '', allowedOrgIds: [] })
       setShowForm(false)
       await load()
     } catch (err: any) {
@@ -155,7 +155,7 @@ export const Usuarios: React.FC = () => {
             </div>
             {me?.is_superadmin && orgs.length > 0 && (
               <div>
-                <label className="label">Organización</label>
+                <label className="label">Organización principal</label>
                 <select className="input-field" value={newUser.orgId}
                   onChange={e => setNewUser(p => ({ ...p, orgId: e.target.value === '' ? '' : Number(e.target.value) }))}>
                   <option value="">Por defecto (Organización A)</option>
@@ -163,6 +163,32 @@ export const Usuarios: React.FC = () => {
                 </select>
                 <p className="text-xs text-ml-text-soft dark:text-zinc-500 mt-1">
                   Para contadores de prueba, elegí la organización de prueba — no la real.
+                </p>
+              </div>
+            )}
+            {me?.is_superadmin && newUser.role === UserRole.CONTADOR && orgs.length > 0 && (
+              <div className="md:col-span-2">
+                <label className="label">Organizaciones permitidas (switch de org)</label>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {orgs.map(o => (
+                    <label key={o.id} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded accent-ml-blue"
+                        checked={newUser.allowedOrgIds.includes(o.id)}
+                        onChange={e => setNewUser(p => ({
+                          ...p,
+                          allowedOrgIds: e.target.checked
+                            ? [...p.allowedOrgIds, o.id]
+                            : p.allowedOrgIds.filter(id => id !== o.id)
+                        }))}
+                      />
+                      <span className="dark:text-gray-300">{o.nombre}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-ml-text-soft dark:text-zinc-500 mt-1">
+                  El contador podrá cambiar entre estas orgs desde el menú lateral.
                 </p>
               </div>
             )}
