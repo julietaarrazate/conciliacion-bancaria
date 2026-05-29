@@ -533,6 +533,7 @@ def backfill_cuentas_corrientes(
 
     oid = _org_id(current_user, org_id)
 
+    # Filas conciliadas de clientes CON cuenta contable
     rows = (
         db.query(PlanillaRow, Planilla, Cliente)
         .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
@@ -544,6 +545,20 @@ def backfill_cuentas_corrientes(
             Cliente.cuenta_contable_id.isnot(None),
         )
         .all()
+    )
+
+    # Filas conciliadas de clientes SIN cuenta (excluidas del backfill)
+    sin_cuenta_count = (
+        db.query(PlanillaRow)
+        .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
+        .join(Cliente, Planilla.cliente_id == Cliente.id)
+        .filter(
+            Planilla.organizacion_id == oid,
+            Planilla.deleted_at.is_(None),
+            PlanillaRow.status.in_(list(_STATUS_CONCILIADO)),
+            Cliente.cuenta_contable_id.is_(None),
+        )
+        .count()
     )
 
     # Idempotencia en batch: filas que ya tienen asiento (normal o backfill previo)
@@ -563,6 +578,7 @@ def backfill_cuentas_corrientes(
             "pendientes": len(pendientes),
             "monto_estimado": monto_est,
             "clientes": len({pl.cliente_id for _, pl, _ in pendientes}),
+            "sin_cuenta_cliente": sin_cuenta_count,
         }
 
     # Extraer datos escalares antes de cualquier commit (evita expire-on-commit)
