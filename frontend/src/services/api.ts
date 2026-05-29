@@ -15,6 +15,13 @@ import {
   MergeUMResult,
   MovimientosFiltros
 } from '@/types'
+import { useLockStore } from '@/store/lock'
+
+// Evita que una descarga deliberada (PDF/Excel) dispare el bloqueo por PIN/huella:
+// al abrir el diálogo de guardar, el navegador pierde foco un instante.
+function _suppressLockForDownload() {
+  try { useLockStore.getState().suppressLock() } catch { /* noop */ }
+}
 
 // Detecta la URL del backend automaticamente:
 // 1) VITE_API_URL (env var en build de Vercel/produccion)  → siempre tiene prioridad
@@ -196,6 +203,7 @@ class ApiClient {
   }
 
   async downloadEstadoCuentaPdf(clienteId: number, desde?: string, hasta?: string): Promise<void> {
+    _suppressLockForDownload()
     const res = await this.client.get(`/analisis/cliente/${clienteId}/estado-cuenta.pdf`, {
       params: { desde, hasta }, responseType: 'blob',
     })
@@ -216,6 +224,7 @@ class ApiClient {
   }
 
   async downloadCierreMensualXlsx(anio: number, mes: number, orgId?: number): Promise<void> {
+    _suppressLockForDownload()
     const params: any = {}
     if (orgId) params.org_id = orgId
     const res = await this.client.get(`/analisis/cierre/${anio}/${mes}/export-xlsx`, {
@@ -233,6 +242,7 @@ class ApiClient {
   }
 
   async downloadCierreMensualPdf(anio: number, mes: number, orgId?: number): Promise<void> {
+    _suppressLockForDownload()
     const res = await this.client.get(`/analisis/cierre/${anio}/${mes}.pdf`, {
       params: { org_id: orgId }, responseType: 'blob',
     })
@@ -460,6 +470,7 @@ class ApiClient {
 
   // Exportar Excel
   async downloadPlanillaConciliada(planillaId: number): Promise<void> {
+    _suppressLockForDownload()
     const res = await this.client.get(`/planillas/${planillaId}/download`, { responseType: 'blob' })
     const url = URL.createObjectURL(new Blob([res.data]))
     const a = document.createElement('a')
@@ -470,6 +481,7 @@ class ApiClient {
   }
 
   async exportMovimientos(extractoId: number, filters: MovimientosFiltros = {}): Promise<void> {
+    _suppressLockForDownload()
     const params: Record<string, string | number | boolean> = {}
     Object.entries(filters).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') params[k] = v as string | number | boolean
@@ -486,6 +498,7 @@ class ApiClient {
   }
 
   async exportExtractoContador(extractoId: number): Promise<void> {
+    _suppressLockForDownload()
     let res: any
     try {
       res = await this.client.get(`/extractos/${extractoId}/export-contador`, { responseType: 'blob' })
