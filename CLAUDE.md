@@ -256,6 +256,34 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   `cheque_rechazo`, `pago`, `caja_op`/`caja_efectivo`, `*_reverso` (reversos). La cta.cte. del cliente lee
   los `AsientoDetalle` que tocan su `cuenta_contable_id`.
 
+### v3.7 — Rol contador de prueba + login por aprobación (mayo 2026)
+
+- **Rol `CONTADOR`** (RoleEnum backend + UserRole frontend): opera (sube, concilia, finanzas,
+  liquidaciones) y ve contabilidad + auditoría en solo lectura. Permisos:
+  `upload_files, reconcile, manage_finance, view_accounting, view_audit`. NO ve Usuarios/Orgs/
+  Papelera/Actividad. El panel Actividad es cross-org de superadmin → queda fuera.
+- **Permiso `delete_records`** (nuevo): solo ADMIN + OPERADOR (+ superadmin) lo tienen. Todos los
+  DELETE destructivos pasaron a `require_permission("delete_records")`: cheques (+foto), caja OP,
+  clientes, planillas/filas, extractos, movimientos, mov-UM, liquidaciones. pagos/gastos y purgar
+  papelera ya eran admin/superadmin-only. El contador NO puede borrar nada (devuelve 403).
+- **Liquidaciones**: nav/route pasó de `manage_users` a `reconcile` (el contador genera borradores;
+  aprobar/pagar siguen siendo `manage_users`).
+- **Login por aprobación en vivo (solo contador)**: el login NO devuelve token; crea un
+  `LoginApproval` (tabla `login_approvals`, vía `create_all`) en estado `pending` (caduca a 10 min),
+  notifica a los superadmins por push y devuelve 202 con `{approval_id, poll_secret}`. El cliente del
+  contador hace polling a `GET /auth/login-approval/{id}?secret=` hasta recibir el token (1 sola vez).
+  El superadmin aprueba/rechaza en `/aprobaciones` (`GET /auth/pending-approvals`, `POST
+  .../decide`). Al aprobar se genera el JWT con **expiración de 4h** (`CONTADOR_SESSION_MINUTES`);
+  pasadas las 4h expira y se repite la aprobación. `push_service.send_push_to_user()` nuevo.
+  Robusto sin push: el panel `/aprobaciones` y el login del contador pollean igual.
+- **Asignar organización al crear usuario** (superadmin): `PATCH /admin/users/{id}` acepta
+  `organizacion_id`; selector de org en el alta de `/usuarios`. Para que los contadores de prueba
+  operen en la **org de prueba** y NO en la Organización A (datos reales).
+- **Perfil**: la card de setup VAPID ya estaba gateada por `is_superadmin` → el contador no ve datos
+  de superadmin en `/perfil` (ve solo su propia cuenta + PIN/push).
+- **Pendiente (UX)**: ocultar los botones de borrar en el frontend para quien no tiene
+  `delete_records` (hoy el backend bloquea con 403, pero el botón sigue visible).
+
 ---
 
 ## Storage de fotos (S3/R2 opcional)
