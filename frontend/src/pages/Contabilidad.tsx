@@ -439,7 +439,8 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       recargarTodo()
       cargarCartera()
     } catch (e: any) {
-      toast.error(e.response?.data?.detail || 'Error en el reset')
+      const detail = e.response?.data?.detail || e.message || 'Error desconocido'
+      alert(`❌ Error en el reset:\n\n${detail}`)
     }
   }
 
