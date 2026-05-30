@@ -1074,6 +1074,8 @@ def reset_y_rebuild_asientos(
         contador = 0
 
         # ── Reconstruir um_lote ───────────────────────────────────
+        # Acumula asientos y hace un único flush para obtener todos los IDs
+        pending_um: list = []
         for lote_key, movs in sorted(lotes.items()):
             total_pos = sum(max(_monto(m.monto), _D("0")) for m in movs)
             total_neg = sum(abs(min(_monto(m.monto), _D("0"))) for m in movs)
@@ -1090,18 +1092,25 @@ def reset_y_rebuild_asientos(
                 usuario_id=current_user.id,
             )
             db.add(a)
-            db.flush()
+            pending_um.append((a, total_pos, total_neg))
+        db.flush()
+        for a, total_pos, total_neg in pending_um:
             if total_pos > 0:
                 db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=total_pos, haber=_D("0")))
                 db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=_D("0"), haber=total_pos))
             if total_neg > 0:
                 db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=total_neg, haber=_D("0")))
                 db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=_D("0"), haber=total_neg))
-            contador += 1
+        contador += len(pending_um)
 
         # ── Reconstruir cc_inicial ────────────────────────────────
+        # Cache de cuentas por cliente + flush único al final del lote
+        _cuenta_cache: dict = {}
+        pending_cc: list = []
         for row, planilla, cliente in filas_ok:
-            cuenta_cli = _get_o_crear_cuenta_cliente(db, cliente.id, oid)
+            if cliente.id not in _cuenta_cache:
+                _cuenta_cache[cliente.id] = _get_o_crear_cuenta_cliente(db, cliente.id, oid)
+            cuenta_cli = _cuenta_cache[cliente.id]
             if not cuenta_cli:
                 continue
             monto = abs(_monto(row.monto))  # planilla rows son siempre ingresos (positivos)
@@ -1123,10 +1132,12 @@ def reset_y_rebuild_asientos(
                 usuario_id=current_user.id,
             )
             db.add(a)
-            db.flush()
+            pending_cc.append((a, monto, cuenta_cli.id))
+        db.flush()
+        for a, monto, cuenta_cli_id in pending_cc:
             db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=monto, haber=_D("0")))
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cli.id, debe=_D("0"), haber=monto))
-            contador += 1
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cli_id, debe=_D("0"), haber=monto))
+        contador += len(pending_cc)
 
         # ── Renumerar correlativamente ────────────────────────────
         nuevos = (
