@@ -667,7 +667,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                     </ExcelFilterCtb>
                   </th>
                   <th className="px-3 py-2 font-medium text-left">
-                    <ExcelFilterCtb label="Módulo" active={!!diarioModulo}>
+                    <ExcelFilterCtb label="Concepto" active={!!diarioModulo}>
                       <div className="flex flex-col gap-1">
                         {['', 'um_lote', 'um_mov', 'um_reclass', 'cc_inicial', 'planilla', 'planilla_comision', 'cheque_carga', 'cheque_rechazo', 'pago', 'caja_op', 'caja_efectivo'].map(m => (
                           <button key={m} onClick={() => setDiarioModulo(m)}
