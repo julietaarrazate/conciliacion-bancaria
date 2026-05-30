@@ -171,7 +171,7 @@ const TAB_PERM: Record<Tab, string> = {
 
 export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'full' }) => {
   const { activeOrgId } = useOrgStore()
-  const { hasPermission } = useAuthStore()
+  const { hasPermission, user } = useAuthStore()
   const canAdminAccounting = hasPermission('admin_accounting')
   const canManageFinance   = hasPermission('manage_finance')
   const [cuentas, setCuentas]         = useState<CuentaItem[]>([])
@@ -364,6 +364,28 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       toast.error(e.response?.data?.detail || 'No se pudieron crear las cuentas')
     } finally {
       setCreandoFaltantes(false)
+    }
+  }
+
+  const resetYRebuild = async () => {
+    const orgQ = activeOrgId ? `?org_id=${activeOrgId}` : ''
+    try {
+      // dry_run primero — muestra qué haría
+      const prev = await apiClient.client.post(`/contabilidad/reset-y-rebuild?dry_run=true${orgQ ? '&' + orgQ.slice(1) : ''}`, {})
+      const { a_borrar, a_crear } = prev.data
+      const confirmar = window.confirm(
+        `⚠️ RESET LIBRO DIARIO\n\n` +
+        `Se van a BORRAR: ${a_borrar.asientos} asientos (${a_borrar.detalles} líneas)\n` +
+        `Se van a CREAR: ${a_crear.total_asientos_nuevos} asientos nuevos\n` +
+        `  · ${a_crear.um_lotes} lote(s) UM\n` +
+        `  · ${a_crear.cc_iniciales} acreditaciones de clientes\n\n` +
+        `¿Confirmar el reset?`
+      )
+      if (!confirmar) return
+      const r = await apiClient.client.post(`/contabilidad/reset-y-rebuild?dry_run=false${orgQ ? '&' + orgQ.slice(1) : ''}`, {})
+      toast.success(r.data.msg)
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'Error en el reset')
     }
   }
 
@@ -868,6 +890,16 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                 >
                   {backfilling ? 'Reconstruyendo…' : '↻ Reconstruir desde conciliaciones'}
                 </button>
+                {user?.is_superadmin && (
+                  <button
+                    onClick={resetYRebuild}
+                    disabled={backfilling}
+                    className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-medium hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                    title="Borra TODOS los asientos y los reconstruye limpio desde los datos reales"
+                  >
+                    ⚠️ Reset Libro Diario
+                  </button>
+                )}
               </div>
             )}
           </div>

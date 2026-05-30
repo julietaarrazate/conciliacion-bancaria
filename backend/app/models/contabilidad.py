@@ -41,6 +41,7 @@ class Asiento(Base):
     __tablename__ = "asientos"
 
     id              = Column(Integer, primary_key=True, index=True)
+    numero_asiento  = Column(Integer, nullable=True, index=True)  # número correlativo de visualización
     fecha           = Column(Date, nullable=False)
     descripcion     = Column(String, nullable=True)
     modulo          = Column(String, nullable=True)   # "extracto" | "planilla" | "caja" | "cheque"
