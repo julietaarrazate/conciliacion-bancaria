@@ -64,7 +64,7 @@ export const Login: React.FC = () => {
     setLoading(true)
     try {
       const response = await apiClient.login(formData.email, formData.password)
-      if ('pending_approval' in response && response.pending_approval) {
+      if ('pending_approval' in response) {
         setPending({ id: response.approval_id, secret: response.poll_secret })
         return
       }
@@ -84,7 +84,7 @@ export const Login: React.FC = () => {
           await new Promise(r => setTimeout(r, 8000))
           try {
             const response2 = await apiClient.login(formData.email, formData.password)
-            if ('pending_approval' in response2 && response2.pending_approval) {
+            if ('pending_approval' in response2) {
               setWaking(false)
               setPending({ id: response2.approval_id, secret: response2.poll_secret })
               return
