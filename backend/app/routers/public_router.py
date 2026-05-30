@@ -9,7 +9,7 @@ from app.database import get_db
 from app.models.cliente import Cliente
 from app.models.planilla import Planilla, PlanillaRow
 from app.models.cheque import Cheque
-from app.models.pago import Pago
+from app.models.egreso import Egreso
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/public", tags=["public"])
@@ -48,9 +48,13 @@ def estado_cuenta_publico(token: str, db: Session = Depends(get_db)):
         .all()
     )
     pagos = (
-        db.query(Pago)
-        .filter(Pago.organizacion_id == org_id, Pago.cliente_id == client_id)
-        .order_by(Pago.fecha.desc())
+        db.query(Egreso)
+        .filter(
+            Egreso.organizacion_id == org_id,
+            Egreso.cliente_id == client_id,
+            Egreso.tipo == "pago_cliente",
+        )
+        .order_by(Egreso.fecha.desc())
         .limit(20)
         .all()
     )

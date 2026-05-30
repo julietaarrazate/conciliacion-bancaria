@@ -19,7 +19,7 @@ class ArqueoDiario(Base):
     fecha           = Column(Date, nullable=False, index=True)
 
     saldo_inicial   = Column(Numeric(12, 2), default=0)   # arrastrado del dia anterior
-    pesos_agregados = Column(Numeric(12, 2), default=0)   # efectivo que le dan para pagar mas OPs
+    pesos_agregados = Column(Numeric(12, 2), default=0)   # efectivo que le dan para pagar mas egresos
     ingresos        = Column(Numeric(12, 2), default=0)   # clientes que traen plata
 
     # Billetes fisicos: {"20000": 1500, "10000": 1419, "2000": 408, ...}
@@ -34,7 +34,8 @@ class ArqueoDiario(Base):
 
     organizacion    = relationship("Organizacion", foreign_keys=[organizacion_id])
     creador         = relationship("User", foreign_keys=[creado_por])
-    ordenes         = relationship("OrdenDePago", back_populates="arqueo", cascade="all, delete-orphan")
+    # Egresos en efectivo del día (reemplaza la vieja relación con OrdenDePago)
+    egresos         = relationship("Egreso", back_populates="arqueo", foreign_keys="Egreso.arqueo_id")
 
     @property
     def total_arqueo_fisico(self) -> float:
@@ -44,8 +45,8 @@ class ArqueoDiario(Base):
 
     @property
     def pagos_dia(self) -> float:
-        """Total pagado en OPs del dia"""
-        return sum(op.importe for op in self.ordenes if op.importe)
+        """Total pagado en efectivo en el día (egresos en efectivo)"""
+        return sum(e.monto for e in self.egresos if e.monto)
 
     @property
     def caja_restante(self) -> float:
@@ -55,33 +56,3 @@ class ArqueoDiario(Base):
     def cruce(self) -> float:
         """Debe ser 0: arqueo fisico - caja restante"""
         return self.total_arqueo_fisico - self.caja_restante
-
-
-class OrdenDePago(Base):
-    __tablename__ = "ordenes_de_pago"
-
-    id              = Column(Integer, primary_key=True, index=True)
-    organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=False, index=True)
-    cliente_id      = Column(Integer, ForeignKey("clientes.id"), nullable=False)
-    arqueo_id       = Column(Integer, ForeignKey("arqueos_diarios.id"), nullable=True)
-
-    fecha           = Column(Date, nullable=False, default=date.today)
-    beneficiario    = Column(String, nullable=False)   # nombre del proveedor
-    importe         = Column(Numeric(12, 2), nullable=False)
-
-    # Foto de la OP firmada (base64 comprimida)
-    foto_comprobante = Column(Text, nullable=True)
-
-    # Billetes usados para este pago {"20000": 2, "10000": 1}
-    denominaciones_usadas = Column(JSON, nullable=True)
-
-    compartido_whatsapp = Column(Boolean, default=False)
-    notas               = Column(Text, nullable=True)
-
-    creado_por   = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at   = Column(DateTime, default=datetime.utcnow)
-
-    organizacion = relationship("Organizacion", foreign_keys=[organizacion_id])
-    cliente      = relationship("Cliente",      foreign_keys=[cliente_id])
-    arqueo       = relationship("ArqueoDiario", back_populates="ordenes")
-    creador      = relationship("User",         foreign_keys=[creado_por])

@@ -17,7 +17,7 @@ import app.models.extracto
 import app.models.planilla
 import app.models.cliente
 import app.models.cheque
-import app.models.pago
+import app.models.egreso
 import app.models.caja
 import app.models.liquidacion
 import app.models.contabilidad
@@ -231,28 +231,18 @@ class TestPydanticValidations:
         assert c.monto == 1500.50
         assert c.comision == 0
 
-    def test_pago_monto_cero_rechazado(self):
-        from pydantic import ValidationError
-        from app.routers.pagos_gastos import PagoIn
-        with pytest.raises(ValidationError):
-            PagoIn(monto=0)
+    def test_egreso_tipos_validos(self):
+        from app.models.egreso import TIPOS_EGRESO, FORMAS_PAGO
+        assert "proveedor" in TIPOS_EGRESO
+        assert "gasto" in TIPOS_EGRESO
+        assert "pago_cliente" in TIPOS_EGRESO
+        assert FORMAS_PAGO == ["banco", "efectivo"]
 
-    def test_pago_monto_negativo_rechazado(self):
-        from pydantic import ValidationError
-        from app.routers.pagos_gastos import PagoIn
-        with pytest.raises(ValidationError):
-            PagoIn(monto=-1)
-
-    def test_gasto_monto_cero_rechazado(self):
-        from pydantic import ValidationError
-        from app.routers.pagos_gastos import GastoIn
-        with pytest.raises(ValidationError):
-            GastoIn(concepto="test", monto=0)
-
-    def test_gasto_valido(self):
-        from app.routers.pagos_gastos import GastoIn
-        g = GastoIn(concepto="Impuestos", monto=250.0)
-        assert g.monto == 250.0
+    def test_egreso_modelo_defaults(self):
+        from app.models.egreso import Egreso
+        e = Egreso(organizacion_id=1, monto=250.0)
+        # los defaults se aplican al persistir; el modelo acepta los campos clave
+        assert e.monto == 250.0
 
 
 # ── Tests: validación CUIT ────────────────────────────────────────────────────

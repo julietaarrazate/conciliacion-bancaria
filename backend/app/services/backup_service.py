@@ -27,8 +27,8 @@ from app.models.auditoria import AuditoriaLog
 from app.models.patron_aprendido import PatronAprendido
 from app.models.liquidacion import Liquidacion, LiquidacionDetalle, CierrePeriodo
 from app.models.cheque import Cheque
-from app.models.pago import Pago, Gasto
-from app.models.caja import ArqueoDiario, OrdenDePago
+from app.models.egreso import Egreso, CategoriaEgreso
+from app.models.caja import ArqueoDiario
 from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
 
 
@@ -95,18 +95,19 @@ def export_org_backup(db: Session, org_id: int) -> Dict[str, Any]:
         _row_to_dict(c) for c in db.query(Cheque).filter(Cheque.organizacion_id == org_id).all()
     ]
 
-    backup["pagos"] = [
-        _row_to_dict(p) for p in db.query(Pago).filter(Pago.organizacion_id == org_id).all()
+    # Egresos (módulo unificado: proveedores, gastos, pagos a clientes) + categorías
+    backup["egresos"] = [
+        _row_to_dict(e) for e in db.query(Egreso).filter(Egreso.organizacion_id == org_id).all()
     ]
-    backup["gastos"] = [
-        _row_to_dict(g) for g in db.query(Gasto).filter(Gasto.organizacion_id == org_id).all()
+    backup["categorias_egreso"] = [
+        _row_to_dict(c) for c in db.query(CategoriaEgreso).filter(CategoriaEgreso.organizacion_id == org_id).all()
     ]
 
-    # Caja: arqueos + OPs anidadas
+    # Caja: arqueos + egresos en efectivo anidados
     arqueos: List[Dict[str, Any]] = []
     for a in db.query(ArqueoDiario).filter(ArqueoDiario.organizacion_id == org_id).all():
         arq_dict = _row_to_dict(a)
-        arq_dict["ordenes_de_pago"] = [_row_to_dict(op) for op in a.ordenes]
+        arq_dict["egresos_efectivo"] = [_row_to_dict(eg) for eg in a.egresos]
         arqueos.append(arq_dict)
     backup["arqueos_diarios"] = arqueos
 
@@ -161,10 +162,10 @@ def export_org_backup(db: Session, org_id: int) -> Dict[str, Any]:
         "planillas":             len(backup["planillas"]),
         "filas_planilla_total":  sum(len(p["rows"]) for p in backup["planillas"]),
         "cheques":               len(backup["cheques"]),
-        "pagos":                 len(backup["pagos"]),
-        "gastos":                len(backup["gastos"]),
+        "egresos":               len(backup["egresos"]),
+        "categorias_egreso":     len(backup["categorias_egreso"]),
         "arqueos_diarios":       len(backup["arqueos_diarios"]),
-        "ordenes_pago_total":    sum(len(a["ordenes_de_pago"]) for a in backup["arqueos_diarios"]),
+        "egresos_efectivo_total": sum(len(a["egresos_efectivo"]) for a in backup["arqueos_diarios"]),
         "liquidaciones":         len(backup["liquidaciones"]),
         "cierres_periodo":       len(backup["cierres_periodo"]),
         "plan_cuentas":          len(backup["plan_cuentas"]),

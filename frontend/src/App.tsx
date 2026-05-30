@@ -35,10 +35,9 @@ const Actividad         = lazyPage(() => import('@/pages/Actividad'),         'A
 const Liquidaciones     = lazyPage(() => import('@/pages/Liquidaciones'),     'Liquidaciones')
 const Revision          = lazyPage(() => import('@/pages/Revision'),          'Revision')
 const Caja              = lazyPage(() => import('@/pages/Caja'),              'Caja')
-const OrdenDePago       = lazyPage(() => import('@/pages/OrdenDePago'),       'OrdenDePago')
 const Contabilidad      = lazyPage(() => import('@/pages/Contabilidad'),      'Contabilidad')
 const Cheques           = lazyPage(() => import('@/pages/Cheques'),           'Cheques')
-const PagosGastos       = lazyPage(() => import('@/pages/PagosGastos'),       'PagosGastos')
+const Pagos             = lazyPage(() => import('@/pages/Pagos'),             'Pagos')
 const Papelera          = lazyPage(() => import('@/pages/Papelera'),          'Papelera')
 const Compartir         = lazyPage(() => import('@/pages/Compartir'),         'Compartir')
 const FlujoCaja         = lazyPage(() => import('@/pages/FlujoCaja'),         'FlujoCaja')
@@ -144,7 +143,10 @@ export function App() {
               </ProtectedRoute>
             } />
             <Route path="/caja" element={<ProtectedRoute permission="reconcile"><Caja /></ProtectedRoute>} />
-            <Route path="/op" element={<ProtectedRoute permission="reconcile"><OrdenDePago /></ProtectedRoute>} />
+            <Route path="/pagos" element={<ProtectedRoute permission="reconcile"><Pagos /></ProtectedRoute>} />
+            {/* rutas viejas → redirigen al módulo unificado */}
+            <Route path="/op" element={<Navigate to="/pagos" replace />} />
+            <Route path="/pagos-gastos" element={<Navigate to="/pagos" replace />} />
             <Route path="/revision" element={
               <ProtectedRoute permission="reconcile">
                 <Revision />
@@ -160,7 +162,6 @@ export function App() {
             <Route path="/contabilidad" element={<ProtectedRoute permission="view_accounting"><Contabilidad /></ProtectedRoute>} />
             <Route path="/cuentas-corrientes" element={<ProtectedRoute permission="manage_finance"><Contabilidad modo="ctacte" /></ProtectedRoute>} />
             <Route path="/cheques" element={<ProtectedRoute permission="reconcile"><Cheques /></ProtectedRoute>} />
-            <Route path="/pagos-gastos" element={<ProtectedRoute permission="reconcile"><PagosGastos /></ProtectedRoute>} />
             <Route path="/papelera" element={<ProtectedRoute permission="manage_users"><Papelera /></ProtectedRoute>} />
             <Route path="/compartir" element={<Compartir />} />
             <Route path="/movimientos" element={<Movimientos />} />

@@ -172,7 +172,7 @@ export const Compartir: React.FC = () => {
         </button>
 
         <button
-          onClick={() => irA('pago', '/pagos-gastos?compartido=pago')}
+          onClick={() => irA('op', '/pagos?compartido=1')}
           disabled={files.length === 0}
           className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 rounded px-4 py-3 text-left transition"
         >
@@ -180,37 +180,7 @@ export const Compartir: React.FC = () => {
             <span className="text-2xl">💸</span>
             <span>
               <div className="text-gray-100 font-medium">Pago</div>
-              <div className="text-xs text-gray-400">Registrar pago recibido</div>
-            </span>
-          </span>
-          <span className="text-gray-500">→</span>
-        </button>
-
-        <button
-          onClick={() => irA('gasto', '/pagos-gastos?compartido=gasto')}
-          disabled={files.length === 0}
-          className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 rounded px-4 py-3 text-left transition"
-        >
-          <span className="flex items-center gap-3">
-            <span className="text-2xl">🧮</span>
-            <span>
-              <div className="text-gray-100 font-medium">Gasto</div>
-              <div className="text-xs text-gray-400">Registrar gasto</div>
-            </span>
-          </span>
-          <span className="text-gray-500">→</span>
-        </button>
-
-        <button
-          onClick={() => irA('op', '/op?compartido=1')}
-          disabled={files.length === 0}
-          className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 rounded px-4 py-3 text-left transition"
-        >
-          <span className="flex items-center gap-3">
-            <span className="text-2xl">📤</span>
-            <span>
-              <div className="text-gray-100 font-medium">Orden de pago</div>
-              <div className="text-xs text-gray-400">Adjuntar comprobante a una OP</div>
+              <div className="text-xs text-gray-400">Registrar pago a proveedor, gasto o cliente</div>
             </span>
           </span>
           <span className="text-gray-500">→</span>

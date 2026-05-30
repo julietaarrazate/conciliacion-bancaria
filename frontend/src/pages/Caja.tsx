@@ -34,17 +34,17 @@ interface Arqueo {
   denominaciones: Record<string, number>
   cerrado: boolean
   notas?: string
-  ordenes: OpResumen[]
+  egresos: EgresoResumen[]
 }
 
-interface OpResumen {
+interface EgresoResumen {
   id: number
-  beneficiario: string
-  cliente_nombre: string
-  importe: number
-  compartido_whatsapp: boolean
+  tipo: string
+  beneficiario: string | null
+  cliente_nombre: string | null
+  monto: number
   tiene_foto: boolean
-  created_at: string
+  denominaciones_usadas?: Record<string, number> | null
 }
 
 interface ArqueoResumen {
@@ -93,26 +93,20 @@ export const Caja: React.FC = () => {
 
   useEffect(() => { load() }, [load])
 
-  const eliminarOp = async (op: OpResumen) => {
+  const eliminarOp = async (op: EgresoResumen) => {
+    const nombre = op.beneficiario || op.cliente_nombre || 'egreso'
     const ok = await confirmDialog({
-      title: 'Eliminar OP',
-      message: `Se eliminará la OP de ${op.beneficiario} (${fmt(op.importe)}). Se reversa el asiento contable y se reponen las denominaciones al arqueo.`,
+      title: 'Eliminar pago',
+      message: `Se eliminará el pago a ${nombre} (${fmt(op.monto)}). Se reversa el asiento contable y se reponen las denominaciones al arqueo.`,
       confirmLabel: 'Eliminar',
       danger: true,
     })
     if (!ok) return
     try {
-      const res = await apiClient.client.delete(`/caja/op/${op.id}`)
-      if (res.data?.arqueo) {
-        setArqueo(res.data.arqueo)
-        setDens(Object.fromEntries(
-          Object.entries(res.data.arqueo.denominaciones).map(([k, v]) => [k, String(v)])
-        ))
-      } else {
-        load()
-      }
+      await apiClient.client.delete(`/pagos/${op.id}`)
+      load()
     } catch (e: any) {
-      setMsg(e.response?.data?.detail || 'No se pudo eliminar la OP')
+      setMsg(e.response?.data?.detail || 'No se pudo eliminar el pago')
     }
   }
 
@@ -178,10 +172,10 @@ export const Caja: React.FC = () => {
       if (filtroDesde) params.set('desde', filtroDesde)
       if (filtroHasta) params.set('hasta', filtroHasta)
       if (activeOrgId) params.set('org_id', String(activeOrgId))
-      const res = await apiClient.client.get(`/caja/op/exportar-eft?${params}`, { responseType: 'blob' })
+      const res = await apiClient.client.get(`/pagos/exportar?${params}`, { responseType: 'blob' })
       const url = URL.createObjectURL(res.data)
       const a = document.createElement('a')
-      a.href = url; a.download = `pago_eft.xlsx`; a.click()
+      a.href = url; a.download = `egresos.xlsx`; a.click()
       URL.revokeObjectURL(url)
     } catch { setMsg('Error al exportar') }
     finally { setExportando(false) }
@@ -374,32 +368,31 @@ export const Caja: React.FC = () => {
             </div>
           </div>
 
-          {/* OPs del día */}
-          {arqueo?.ordenes && arqueo.ordenes.length > 0 && (
+          {/* Pagos en efectivo del día */}
+          {arqueo?.egresos && arqueo.egresos.length > 0 && (
             <div className="card p-0 overflow-hidden">
               <div className="px-4 py-3 border-b border-ml-gray dark:border-ml-dark-border">
                 <p className="font-semibold text-sm dark:text-white">
-                  OPs pagadas ({arqueo.ordenes.length})
+                  Pagos en efectivo ({arqueo.egresos.length})
                 </p>
               </div>
               <div className="divide-y divide-ml-gray dark:divide-ml-dark-border">
-                {arqueo.ordenes.map(op => (
+                {arqueo.egresos.map(op => (
                   <div key={op.id} className="flex items-center gap-3 px-4 py-3">
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm dark:text-white truncate">{op.beneficiario}</p>
-                      <p className="text-xs text-gray-400 dark:text-zinc-500">{op.cliente_nombre}</p>
+                      <p className="font-medium text-sm dark:text-white truncate">{op.beneficiario || op.cliente_nombre || '—'}</p>
+                      <p className="text-xs text-gray-400 dark:text-zinc-500">{op.cliente_nombre || op.tipo}</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="font-mono font-semibold text-sm dark:text-white">{fmt(op.importe)}</p>
+                      <p className="font-mono font-semibold text-sm dark:text-white">{fmt(op.monto)}</p>
                       <div className="flex gap-1 justify-end mt-0.5">
                         {op.tiene_foto && <span className="badge badge-ok text-2xs">📷</span>}
-                        {op.compartido_whatsapp && <span className="badge badge-info text-2xs">WA</span>}
                       </div>
                     </div>
                     <button
                       onClick={() => eliminarOp(op)}
                       disabled={arqueo.cerrado}
-                      title={arqueo.cerrado ? 'Arqueo cerrado' : 'Eliminar OP'}
+                      title={arqueo.cerrado ? 'Arqueo cerrado' : 'Eliminar pago'}
                       className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
                     </button>
