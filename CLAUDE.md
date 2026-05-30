@@ -299,6 +299,41 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - **Pendiente (UX)**: ocultar los botones de borrar en el frontend para quien no tiene
   `delete_records` (hoy el backend bloquea con 403, pero el botón sigue visible).
 
+### v3.8 — Reset Libro Diario + filtros Excel + orden de fechas (mayo 2026 — PRs #63-#68)
+
+- **Reset y rebuild del Libro Diario**: `POST /contabilidad/reset-y-rebuild` (solo superadmin).
+  `dry_run=true` (default) devuelve conteos sin tocar nada (`a_borrar`, `a_crear`); `dry_run=false`
+  borra TODOS los asientos+detalles de la org y los reconstruye limpio desde los datos reales:
+  `um_lote` (un asiento por lote UM importado) + `cc_inicial` (un asiento por PlanillaRow conciliada
+  con cliente vinculado a cuenta). Renumera correlativo cronológico (`numero_asiento = 1,2,3…`,
+  asiento #1 = el más viejo). Sirve para limpiar basura de operaciones de recuperación previas.
+  Botón **"⚠️ Reset Libro Diario"** en `/contabilidad` → tab Cuentas Corrientes (visible solo
+  superadmin); muestra el dry_run en `window.confirm` antes de ejecutar. Al terminar llama
+  `recargarTodo()` + `cargarCartera()` para refrescar plan/sumas/balance/mayor sin F5.
+- **Campo `numero_asiento`** (Integer nullable) en modelo `Asiento`. Safety net en `main.py`
+  (`ALTER TABLE asientos ADD COLUMN IF NOT EXISTS numero_asiento INTEGER`). Además el propio endpoint
+  de reset ejecuta el ALTER con commit aislado al arrancar (auto-reparable si el safety net de startup
+  falló — corre todos los ALTER en una transacción y un fallo previo aborta el commit del lote).
+- **Filtros tipo Excel en el Libro Diario**: componente `ExcelFilterCtb` (desplegable en headers,
+  igual patrón que `/movimientos`). Columnas filtrables: **Fecha** (rango desde/hasta), **Concepto**
+  (selector de módulo: um_lote, um_mov, um_reclass, cc_inicial, planilla…), **Cuenta** (buscador del
+  plan). Chips de filtros activos + "✕ Limpiar". Backend `/contabilidad/asientos` acepta `?cuenta_id=`
+  (subquery sobre `asiento_detalle`) y devuelve `numero_asiento`.
+- **Orden de fechas — más reciente arriba**: tanto el Libro Diario (`/contabilidad/asientos`) como las
+  Conciliaciones (`/conciliaciones` + export) muestran lo más reciente arriba (`fecha DESC`). Las
+  conciliaciones ya estaban así (se revirtió un cambio intermedio). El `numero_asiento` se asigna
+  ascendente (cronológico) y el Libro Mayor/saldos mantienen orden ascendente para el saldo acumulado;
+  solo cambia el orden de **visualización** del listado.
+- **Columna "Módulo" → "Concepto"**: en el header del Libro Diario solo cambió la etiqueta visible;
+  el filtro interno sigue usando el campo `modulo`.
+- **Fix tipos TS preexistentes**: `App.tsx` — `lazyPage` ahora es genérico sobre módulo+key (antes
+  propagaba `any` y `<Contabilidad modo="ctacte" />` no validaba el prop). `Login.tsx` — el type guard
+  `'pending_approval' in response && response.pending_approval` no estrechaba el tipo (la 2ª condición
+  es expresión, no predicate); simplificado a `'pending_approval' in response`.
+- **ORDEN DE USO del reset**: 1) "+ Crear cuentas faltantes" (vincula clientes sin cuenta) →
+  2) "⚠️ Reset Libro Diario" (limpia y reconstruye numerado desde 1). El reset NO borra plan de
+  cuentas, reglas, sumas ni balance — solo asientos+detalles.
+
 ---
 
 ## Storage de fotos (S3/R2 opcional)
@@ -361,7 +396,10 @@ Checkpoints disponibles:
 - `v3.7-stable-checkpoint` — rol CONTADOR + login por aprobación + PDF Cuadra + switch de org para
   contadores (allowed_org_ids) + fix email .test + fix crash React #31 (mayo 2026 — PRs #56-#58
   mergeados a main)
+- `v3.8` — reset Libro Diario (reconstruye asientos limpio + numero_asiento), filtros Excel en el
+  diario (fecha/concepto/cuenta), orden de fechas más reciente arriba, columna "Concepto", fix tipos
+  TS (lazyPage, Login) (mayo 2026 — PRs #63-#68 mergeados a main)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.7
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.8
