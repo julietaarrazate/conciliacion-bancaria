@@ -589,8 +589,6 @@ def _init_db():
         logger.warning("Error seed users: %s", ex)
 
     # 9a. Eliminar asientos duplicados legacy (extracto + planilla)
-    # Estos módulos usaban cuentas madre incorrectas y duplicaban con um_lote/um_reclass.
-    # Se eliminan una sola vez; las funciones que los creaban ya fueron desactivadas.
     try:
         with engine.connect() as conn:
             conn.execute(text(
