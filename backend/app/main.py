@@ -587,6 +587,23 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error seed users: %s", ex)
 
+    # 9a. Eliminar asientos duplicados legacy (extracto + planilla)
+    # Estos módulos usaban cuentas madre incorrectas y duplicaban con um_lote/um_reclass.
+    # Se eliminan una sola vez; las funciones que los creaban ya fueron desactivadas.
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(
+                "DELETE FROM asiento_detalle WHERE asiento_id IN "
+                "(SELECT id FROM asientos WHERE modulo IN ('extracto','planilla','planilla_comision'))"
+            ))
+            conn.execute(text(
+                "DELETE FROM asientos WHERE modulo IN ('extracto','planilla','planilla_comision')"
+            ))
+            conn.commit()
+        logger.info("Asientos legacy extracto/planilla eliminados")
+    except Exception as ex:
+        logger.warning("Error limpiando asientos legacy: %s", ex)
+
     # 9. Fix numero_asiento NULL — asigna correlativo a asientos sin numerar
     try:
         from app.database import SessionLocal as SL
