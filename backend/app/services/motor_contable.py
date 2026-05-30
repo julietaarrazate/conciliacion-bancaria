@@ -578,8 +578,9 @@ def registrar_um_import(
             for mov in movimientos_nuevos:
                 if _ya_existe(db, "um_mov", mov.id, org_id):
                     continue
-                monto = abs(_monto(mov.monto))
-                if monto <= 0:
+                monto = _monto(mov.monto)
+                monto_abs = abs(monto)
+                if monto_abs <= 0:
                     continue
                 fecha_mov = mov.fecha if isinstance(mov.fecha, date) else date.today()
                 a = Asiento(
@@ -592,14 +593,21 @@ def registrar_um_import(
                 )
                 db.add(a)
                 db.flush()
-                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=monto, haber=Decimal("0")))
-                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=Decimal("0"), haber=monto))
+                if monto >= 0:
+                    # Ingreso: Banco Debe / No Identificado Haber
+                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=monto_abs, haber=Decimal("0")))
+                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=Decimal("0"), haber=monto_abs))
+                else:
+                    # Egreso: No Identificado Debe / Banco Haber
+                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=monto_abs, haber=Decimal("0")))
+                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=Decimal("0"), haber=monto_abs))
         else:
             primer_mov = movimientos_nuevos[0]
             if _ya_existe(db, "um_lote", primer_mov.id, org_id):
                 return
-            total = sum(abs(_monto(m.monto)) for m in movimientos_nuevos)
-            if total <= 0:
+            total_pos = sum(max(_monto(m.monto), Decimal("0")) for m in movimientos_nuevos)
+            total_neg = sum(abs(min(_monto(m.monto), Decimal("0"))) for m in movimientos_nuevos)
+            if total_pos <= 0 and total_neg <= 0:
                 return
             fecha_ref = primer_mov.fecha if isinstance(primer_mov.fecha, date) else date.today()
             lote = primer_mov.um_lote or 1
@@ -613,8 +621,14 @@ def registrar_um_import(
             )
             db.add(a)
             db.flush()
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=total, haber=Decimal("0")))
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=Decimal("0"), haber=total))
+            if total_pos > 0:
+                # Ingresos: Banco Debe / No Identificado Haber
+                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=total_pos, haber=Decimal("0")))
+                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=Decimal("0"), haber=total_pos))
+            if total_neg > 0:
+                # Egresos: No Identificado Debe / Banco Haber
+                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=total_neg, haber=Decimal("0")))
+                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=Decimal("0"), haber=total_neg))
         db.commit()
     except Exception as ex:
         db.rollback()
