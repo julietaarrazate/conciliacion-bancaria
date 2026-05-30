@@ -434,7 +434,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
         `¿Confirmar el reset?`
       )
       if (!confirmar) return
-      const r = await apiClient.client.post(`/contabilidad/reset-y-rebuild?dry_run=false${orgQ ? '&' + orgQ.slice(1) : ''}`, {})
+      const r = await apiClient.client.post(`/contabilidad/reset-y-rebuild?dry_run=false${orgQ ? '&' + orgQ.slice(1) : ''}`, {}, { timeout: 300000 })
       toast.success(r.data.msg)
       recargarTodo()
       cargarCartera()
