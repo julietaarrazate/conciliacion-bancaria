@@ -991,6 +991,16 @@ def reset_y_rebuild_asientos(
 
     oid = _org_id(current_user, org_id)
 
+    # Self-heal: garantiza la columna numero_asiento aunque Render no haya
+    # corrido el safety net de startup todavía. Sin esto, la query de renumerado
+    # falla con "column numero_asiento does not exist" y revierte el borrado.
+    try:
+        db.execute(text("ALTER TABLE asientos ADD COLUMN IF NOT EXISTS numero_asiento INTEGER"))
+        db.commit()
+    except Exception as _col_ex:
+        db.rollback()
+        logger.warning("reset-y-rebuild: no se pudo asegurar numero_asiento: %s", _col_ex)
+
     # ── Conteos actuales ──────────────────────────────────────────
     n_asientos = db.query(Asiento).filter(Asiento.organizacion_id == oid).count()
     n_detalles = (
