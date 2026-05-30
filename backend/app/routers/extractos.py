@@ -705,9 +705,9 @@ def listar_conciliaciones(
     q = _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, titular, org_id)
     total = q.count()
     rows = (
-        q.order_by(MovimientoBanco.fecha_acred.desc().nulls_last(),
-                   MovimientoBanco.fecha.desc().nulls_last(),
-                   MovimientoBanco.id.desc())
+        q.order_by(MovimientoBanco.fecha_acred.asc().nulls_last(),
+                   MovimientoBanco.fecha.asc().nulls_last(),
+                   MovimientoBanco.id.asc())
         .offset(skip).limit(limit if limit > 0 else 500).all()
     )
     items = [{
@@ -741,8 +741,8 @@ def export_conciliaciones(
     from openpyxl.styles import Font, PatternFill, Alignment
 
     q = _conc_query(db, current_user, cliente, desde, hasta, monto_min, monto_max, titular, org_id)
-    rows = q.order_by(MovimientoBanco.fecha_acred.desc().nulls_last(),
-                      MovimientoBanco.id.desc()).all()
+    rows = q.order_by(MovimientoBanco.fecha_acred.asc().nulls_last(),
+                      MovimientoBanco.id.asc()).all()
 
     wb = openpyxl.Workbook()
     ws = wb.active
