@@ -227,35 +227,9 @@ def conciliar(
             cambios=resultado
         )
 
-        # Motor contable — asiento automático (fault-tolerant)
-        try:
-            from app.services.motor_contable import registrar_planilla
-            from datetime import datetime as _dt, timedelta as _td
-            from zoneinfo import ZoneInfo as _ZI
-            _ARG = _ZI('America/Argentina/Buenos_Aires')
-            if fecha_acred.lower() == 'hoy':
-                _fecha = _dt.now(_ARG).date()
-            elif fecha_acred.lower() == 'ayer':
-                _fecha = (_dt.now(_ARG) - _td(days=1)).date()
-            else:
-                try:
-                    _fecha = _dt.fromisoformat(fecha_acred).date()
-                except Exception:
-                    _fecha = _dt.now(_ARG).date()
-            registrar_planilla(
-                db=db,
-                planilla_id=planilla_id,
-                org_id=org_id,
-                usuario_id=current_user.id,
-                cliente_nombre=planilla.cliente.nombre if planilla.cliente else "",
-                nombre_archivo=planilla.nombre_archivo or "",
-                rows=planilla.rows,
-                fecha_acred=_fecha,
-                solo_pendientes=solo_pendientes,
-                comision_pct=Decimal(str(comision_pct)),
-            )
-        except Exception as _mc_ex:
-            logger.warning("motor_contable planilla: %s", _mc_ex)
+        # La planilla NO genera asiento propio: la reclasificación ya la maneja
+        # um_reclass (No identificado D / Cliente X H con cuentas hoja correctas).
+        # registrar_planilla() usaba cuentas madre y duplicaba con um_reclass.
 
         return {
             "planilla_id": planilla_id,

@@ -9,6 +9,7 @@ import logging
 from datetime import date
 from decimal import Decimal
 from typing import Optional
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -41,6 +42,14 @@ def _ya_existe(db: Session, modulo: str, referencia_id: int, org_id: int) -> boo
     ) is not None
 
 
+def _next_numero_asiento(db: Session, org_id: int) -> int:
+    """Devuelve el próximo numero_asiento correlativo para la org."""
+    max_num = db.query(func.max(Asiento.numero_asiento)).filter(
+        Asiento.organizacion_id == org_id
+    ).scalar()
+    return (max_num or 0) + 1
+
+
 def _monto(v) -> Decimal:
     try:
         return round(Decimal(str(v).replace(",", ".").replace("$", "").strip()), 2)
@@ -66,6 +75,7 @@ def _crear_asiento(
         referencia_id=referencia_id,
         organizacion_id=org_id,
         usuario_id=usuario_id,
+        numero_asiento=_next_numero_asiento(db, org_id),
     )
     db.add(a)
     try:
@@ -246,6 +256,7 @@ def _crear_asiento_directo(
         referencia_id=referencia_id,
         organizacion_id=org_id,
         usuario_id=usuario_id,
+        numero_asiento=_next_numero_asiento(db, org_id),
     )
     db.add(a)
     try:
@@ -779,6 +790,7 @@ def reversar_asientos(
                 referencia_id=orig.id,
                 organizacion_id=org_id,
                 usuario_id=usuario_id,
+                numero_asiento=_next_numero_asiento(db, org_id),
             )
             db.add(reverso)
             db.flush()

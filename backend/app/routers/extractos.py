@@ -183,19 +183,9 @@ async def upload_extracto(file: UploadFile = File(...),
         db.refresh(extracto)
         registrar_log(db, current_user.id, "extractos_bancarios", extracto.id, "INSERT",
                       {"nombre_archivo": file.filename, "movimientos": len(movs)})
-        # Motor contable — asiento automático (fault-tolerant)
-        try:
-            from app.services.motor_contable import registrar_extracto
-            registrar_extracto(
-                db=db,
-                extracto_id=extracto.id,
-                org_id=extracto.organizacion_id or 1,
-                usuario_id=current_user.id,
-                nombre_archivo=extracto.nombre_archivo,
-                movimientos=extracto.movimientos,
-            )
-        except Exception as _mc_ex:
-            logger.warning("motor_contable extracto: %s", _mc_ex)
+        # El extracto NO genera asiento propio: el UM importa los movimientos
+        # con cuentas correctas (um_lote: 1-1-1-3-1 / 2-1-1-1).
+        # registrar_extracto() usaba cuentas madre y duplicaba con um_lote.
         return extracto
     except HTTPException:
         raise

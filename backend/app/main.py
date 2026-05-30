@@ -587,6 +587,52 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error seed users: %s", ex)
 
+    # 9a. Eliminar asientos duplicados legacy (extracto + planilla)
+    # Estos módulos usaban cuentas madre incorrectas y duplicaban con um_lote/um_reclass.
+    # Se eliminan una sola vez; las funciones que los creaban ya fueron desactivadas.
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(
+                "DELETE FROM asiento_detalle WHERE asiento_id IN "
+                "(SELECT id FROM asientos WHERE modulo IN ('extracto','planilla','planilla_comision'))"
+            ))
+            conn.execute(text(
+                "DELETE FROM asientos WHERE modulo IN ('extracto','planilla','planilla_comision')"
+            ))
+            conn.commit()
+        logger.info("Asientos legacy extracto/planilla eliminados")
+    except Exception as ex:
+        logger.warning("Error limpiando asientos legacy: %s", ex)
+
+    # 9. Fix numero_asiento NULL — asigna correlativo a asientos sin numerar
+    try:
+        from app.database import SessionLocal as SL
+        from app.models.contabilidad import Asiento
+        from sqlalchemy import func as _func
+        db = SL()
+        orgs_null = [r[0] for r in db.query(Asiento.organizacion_id).filter(
+            Asiento.numero_asiento.is_(None)
+        ).distinct().all()]
+        total_fixed = 0
+        for oid in orgs_null:
+            max_num = db.query(_func.max(Asiento.numero_asiento)).filter(
+                Asiento.organizacion_id == oid
+            ).scalar() or 0
+            sin_num = db.query(Asiento).filter(
+                Asiento.organizacion_id == oid,
+                Asiento.numero_asiento.is_(None),
+            ).order_by(Asiento.fecha, Asiento.id).all()
+            for a in sin_num:
+                max_num += 1
+                a.numero_asiento = max_num
+                total_fixed += 1
+        if total_fixed:
+            db.commit()
+            logger.info("numero_asiento asignado a %d asiento(s) sin numerar", total_fixed)
+        db.close()
+    except Exception as ex:
+        logger.warning("Error fix numero_asiento: %s", ex)
+
 
 
 
