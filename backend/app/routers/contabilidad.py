@@ -103,6 +103,7 @@ def get_asientos(
     desde: Optional[str] = Query(None),
     hasta: Optional[str] = Query(None),
     modulo: Optional[str] = Query(None),
+    cuenta_id: Optional[int] = Query(None),
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
@@ -116,13 +117,18 @@ def get_asientos(
         q = q.filter(Asiento.fecha <= hasta)
     if modulo:
         q = q.filter(Asiento.modulo == modulo)
+    if cuenta_id:
+        q = q.filter(Asiento.id.in_(
+            db.query(AsientoDetalle.asiento_id).filter(AsientoDetalle.cuenta_id == cuenta_id)
+        ))
     total = q.count()
-    items = q.order_by(Asiento.fecha.desc(), Asiento.id.desc()).offset(skip).limit(limit).all()
+    items = q.order_by(Asiento.fecha.asc(), Asiento.id.asc()).offset(skip).limit(limit).all()
     return {
         "total": total,
         "items": [
             {
                 "id": a.id,
+                "numero_asiento": a.numero_asiento or a.id,
                 "fecha": a.fecha,
                 "descripcion": a.descripcion,
                 "modulo": a.modulo,
@@ -958,3 +964,176 @@ def get_cuentas_corrientes(
         "total_deudor": round(sum(i["saldo"] for i in items if i["saldo"] > 0), 2),
         "total_acreedor": round(sum(-i["saldo"] for i in items if i["saldo"] < 0), 2),
     }
+
+
+@router.post("/reset-y-rebuild")
+def reset_y_rebuild_asientos(
+    dry_run: bool = Query(True, description="True = solo muestra qué haría; False = ejecuta"),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Borra TODOS los asientos de la org y los reconstruye desde los datos reales:
+    - um_lote: un asiento por cada lote de UM importado en el extracto
+    - cc_inicial: un asiento por cada fila de planilla conciliada con cliente vinculado
+    Sólo superadmin puede ejecutarlo (dry_run=false).
+    """
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    from decimal import Decimal as _D
+    from datetime import date as _date
+    from app.models.extracto import MovimientoBanco, ExtractoBancario
+    from app.models.planilla import Planilla, PlanillaRow
+    from app.services.motor_contable import (
+        _get_cuenta_por_codigo, _get_o_crear_cuenta_cliente, _monto,
+    )
+
+    oid = _org_id(current_user, org_id)
+
+    # ── Conteos actuales ──────────────────────────────────────────
+    n_asientos = db.query(Asiento).filter(Asiento.organizacion_id == oid).count()
+    n_detalles = (
+        db.query(AsientoDetalle)
+        .join(Asiento, AsientoDetalle.asiento_id == Asiento.id)
+        .filter(Asiento.organizacion_id == oid)
+        .count()
+    )
+
+    # ── Movimientos UM agrupados por lote ─────────────────────────
+    um_movs = (
+        db.query(MovimientoBanco)
+        .join(ExtractoBancario, MovimientoBanco.extracto_id == ExtractoBancario.id)
+        .filter(
+            ExtractoBancario.organizacion_id == oid,
+            MovimientoBanco.source == "um",
+        )
+        .order_by(MovimientoBanco.um_lote, MovimientoBanco.id)
+        .all()
+    )
+    from itertools import groupby
+    lotes = {}
+    for m in um_movs:
+        lote_key = m.um_lote or 0
+        lotes.setdefault(lote_key, []).append(m)
+    n_um_lotes = len(lotes)
+
+    # ── Filas conciliadas con cuenta contable ────────────────────
+    filas_ok = (
+        db.query(PlanillaRow, Planilla, Cliente)
+        .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
+        .join(Cliente, Planilla.cliente_id == Cliente.id)
+        .filter(
+            Planilla.organizacion_id == oid,
+            Planilla.deleted_at.is_(None),
+            PlanillaRow.status.in_(["ok", "OK", "PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA"]),
+            Cliente.cuenta_contable_id.isnot(None),
+        )
+        .all()
+    )
+    n_filas_ok = len(filas_ok)
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "a_borrar": {"asientos": n_asientos, "detalles": n_detalles},
+            "a_crear": {
+                "um_lotes": n_um_lotes,
+                "cc_iniciales": n_filas_ok,
+                "total_asientos_nuevos": n_um_lotes + n_filas_ok,
+            },
+            "msg": "Ejecutá con dry_run=false para aplicar los cambios.",
+        }
+
+    # ── EJECUTAR: borrar todo ─────────────────────────────────────
+    try:
+        ids_asientos = [
+            a.id for a in db.query(Asiento.id).filter(Asiento.organizacion_id == oid).all()
+        ]
+        if ids_asientos:
+            db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id.in_(ids_asientos)).delete(synchronize_session=False)
+            db.query(Asiento).filter(Asiento.id.in_(ids_asientos)).delete(synchronize_session=False)
+        db.flush()
+
+        banco_macro = _get_cuenta_por_codigo(db, "1-1-1-3-1", oid)
+        no_id       = _get_cuenta_por_codigo(db, "2-1-1-1", oid)
+        if not banco_macro or not no_id:
+            db.rollback()
+            raise HTTPException(status_code=500, detail="Plan de cuentas incompleto: faltan cuentas base (Banco Macro o No Identificado)")
+
+        contador = 0
+
+        # ── Reconstruir um_lote ───────────────────────────────────
+        for lote_key, movs in sorted(lotes.items()):
+            total = sum(abs(_monto(m.monto)) for m in movs)
+            if total <= 0:
+                continue
+            primer = movs[0]
+            fecha_ref = primer.fecha if isinstance(primer.fecha, _date) else _date.today()
+            a = Asiento(
+                fecha=fecha_ref,
+                descripcion=f"UM lote {lote_key} — {len(movs)} movimientos (extracto #{primer.extracto_id})",
+                modulo="um_lote",
+                referencia_id=primer.id,
+                organizacion_id=oid,
+                usuario_id=current_user.id,
+            )
+            db.add(a)
+            db.flush()
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=total, haber=_D("0")))
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=_D("0"), haber=total))
+            contador += 1
+
+        # ── Reconstruir cc_inicial ────────────────────────────────
+        for row, planilla, cliente in filas_ok:
+            cuenta_cli = _get_o_crear_cuenta_cliente(db, cliente.id, oid)
+            if not cuenta_cli:
+                continue
+            monto = abs(_monto(row.monto))
+            if monto <= 0:
+                continue
+            fecha = (row.fecha_acred or planilla.fecha_carga or _date.today())
+            if not isinstance(fecha, _date):
+                try:
+                    from datetime import datetime as _dt
+                    fecha = _dt.strptime(str(fecha)[:10], "%Y-%m-%d").date()
+                except Exception:
+                    fecha = _date.today()
+            a = Asiento(
+                fecha=fecha,
+                descripcion=f"Acreditación {cliente.nombre} — {planilla.nombre_archivo}",
+                modulo="cc_inicial",
+                referencia_id=row.id,
+                organizacion_id=oid,
+                usuario_id=current_user.id,
+            )
+            db.add(a)
+            db.flush()
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=monto, haber=_D("0")))
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cli.id, debe=_D("0"), haber=monto))
+            contador += 1
+
+        # ── Renumerar correlativamente ────────────────────────────
+        nuevos = (
+            db.query(Asiento)
+            .filter(Asiento.organizacion_id == oid)
+            .order_by(Asiento.fecha, Asiento.id)
+            .all()
+        )
+        for i, a in enumerate(nuevos, start=1):
+            a.numero_asiento = i
+
+        db.commit()
+        return {
+            "dry_run": False,
+            "borrados": {"asientos": n_asientos, "detalles": n_detalles},
+            "creados": contador,
+            "msg": f"Libro Diario reconstruido: {contador} asientos numerados del 1 al {contador}.",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as ex:
+        db.rollback()
+        logger.error("reset-y-rebuild error: %s", ex)
+        raise HTTPException(status_code=500, detail=str(ex))

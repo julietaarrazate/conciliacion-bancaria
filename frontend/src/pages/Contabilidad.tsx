@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
@@ -137,6 +137,29 @@ const MODULO_LABEL: Record<string, string> = {
   extracto: '🏦 Extracto', planilla: '📋 Planilla', caja: '💵 Caja', cheque: '🗒️ Cheque',
 }
 
+// ── Filtro desplegable tipo Excel ────────────────────────────
+const ExcelFilterCtb: React.FC<{ label: string; active: boolean; align?: 'left'|'right'; children: React.ReactNode }> = ({ label, active, align = 'left', children }) => {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [])
+  return (
+    <div ref={ref} className="relative flex items-center gap-1 cursor-pointer select-none" onClick={() => setOpen(o => !o)}>
+      <span>{label}</span>
+      <span className={`text-[10px] ${active ? 'text-yellow-400' : 'text-blue-200'}`}>{active ? '▼●' : '▼'}</span>
+      {open && (
+        <div className={`absolute top-full mt-1 z-50 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-xl p-3 min-w-[210px] ${align === 'right' ? 'right-0' : 'left-0'}`}
+          onClick={e => e.stopPropagation()}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 type Tab = 'plan' | 'reglas' | 'diario' | 'sumas' | 'balance' | 'mayor' | 'clientes' | 'ctacte'
 
 const CAT_LABEL: Record<string, string> = { banco: 'Banco (UM)', tt: 'TT', cheques: 'Cheques', ajustes: 'Ajustes' }
@@ -171,13 +194,18 @@ const TAB_PERM: Record<Tab, string> = {
 
 export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'full' }) => {
   const { activeOrgId } = useOrgStore()
-  const { hasPermission } = useAuthStore()
+  const { hasPermission, user } = useAuthStore()
   const canAdminAccounting = hasPermission('admin_accounting')
   const canManageFinance   = hasPermission('manage_finance')
   const [cuentas, setCuentas]         = useState<CuentaItem[]>([])
   const [reglas, setReglas]           = useState<ReglaItem[]>([])
   const [asientos, setAsientos]       = useState<AsientoItem[]>([])
   const [totalAsientos, setTotalAsientos] = useState(0)
+  const [diarioDesde, setDiarioDesde]   = useState('')
+  const [diarioHasta, setDiarioHasta]   = useState('')
+  const [diarioModulo, setDiarioModulo] = useState('')
+  const [diarioCuentaId, setDiarioCuentaId] = useState<number | ''>('')
+  const [diarioCuentaBusq, setDiarioCuentaBusq] = useState('')
   const [sumasSaldo, setSumasSaldo]   = useState<SumaRow[]>([])
   const [balance, setBalance]         = useState<BalanceData | null>(null)
   const [libroMayor, setLibroMayor]   = useState<LibroMayorData | null>(null)
@@ -218,7 +246,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       canAdminAccounting
         ? apiClient.client.get(`/contabilidad/reglas${q}`).then(r => r.data)
         : Promise.resolve([]),
-      apiClient.client.get(`/contabilidad/asientos?limit=100${activeOrgId ? `&org_id=${activeOrgId}` : ''}`).then(r => r.data),
+      apiClient.client.get(`/contabilidad/asientos?limit=500${activeOrgId ? `&org_id=${activeOrgId}` : ''}`).then(r => r.data),
       apiClient.client.get(`/contabilidad/sumas-saldo${q}`).then(r => r.data),
       apiClient.client.get(`/contabilidad/balance${q}`).then(r => r.data),
     ]).then(([c, r, a, ss, b]) => {
@@ -228,6 +256,24 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [activeOrgId])
+
+  const cargarAsientos = () => {
+    const params = new URLSearchParams()
+    params.set('limit', '500')
+    if (activeOrgId) params.set('org_id', String(activeOrgId))
+    if (diarioDesde)    params.set('desde', diarioDesde)
+    if (diarioHasta)    params.set('hasta', diarioHasta)
+    if (diarioModulo)   params.set('modulo', diarioModulo)
+    if (diarioCuentaId) params.set('cuenta_id', String(diarioCuentaId))
+    apiClient.client.get(`/contabilidad/asientos?${params}`).then(r => {
+      setAsientos(r.data.items)
+      setTotalAsientos(r.data.total)
+    })
+  }
+
+  useEffect(() => {
+    cargarAsientos()
+  }, [diarioDesde, diarioHasta, diarioModulo, diarioCuentaId, activeOrgId])
 
   const cargarLibroMayor = (id: number) => {
     setLoadingMayor(true)
@@ -364,6 +410,28 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       toast.error(e.response?.data?.detail || 'No se pudieron crear las cuentas')
     } finally {
       setCreandoFaltantes(false)
+    }
+  }
+
+  const resetYRebuild = async () => {
+    const orgQ = activeOrgId ? `?org_id=${activeOrgId}` : ''
+    try {
+      // dry_run primero — muestra qué haría
+      const prev = await apiClient.client.post(`/contabilidad/reset-y-rebuild?dry_run=true${orgQ ? '&' + orgQ.slice(1) : ''}`, {})
+      const { a_borrar, a_crear } = prev.data
+      const confirmar = window.confirm(
+        `⚠️ RESET LIBRO DIARIO\n\n` +
+        `Se van a BORRAR: ${a_borrar.asientos} asientos (${a_borrar.detalles} líneas)\n` +
+        `Se van a CREAR: ${a_crear.total_asientos_nuevos} asientos nuevos\n` +
+        `  · ${a_crear.um_lotes} lote(s) UM\n` +
+        `  · ${a_crear.cc_iniciales} acreditaciones de clientes\n\n` +
+        `¿Confirmar el reset?`
+      )
+      if (!confirmar) return
+      const r = await apiClient.client.post(`/contabilidad/reset-y-rebuild?dry_run=false${orgQ ? '&' + orgQ.slice(1) : ''}`, {})
+      toast.success(r.data.msg)
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'Error en el reset')
     }
   }
 
@@ -544,21 +612,85 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
 
       ) : tab === 'diario' ? (
         <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
-          {asientos.length === 0 ? (
+          {asientos.length === 0 && !diarioDesde && !diarioHasta && !diarioModulo && !diarioCuentaId ? (
             <div className="py-16 text-center text-gray-400">
               <p className="text-3xl mb-2">📒</p>
               <p className="text-sm">Sin asientos todavía.</p>
               <p className="text-xs mt-1">Se generan automáticamente al subir extractos y conciliar planillas.</p>
             </div>
           ) : (
+            <>
+            {/* Barra de chips de filtros activos */}
+            {(diarioDesde || diarioHasta || diarioModulo || diarioCuentaId) && (
+              <div className="flex flex-wrap gap-2 px-3 py-2 bg-yellow-50 dark:bg-yellow-900/10 border-b border-yellow-200 dark:border-yellow-800 text-xs">
+                <span className="text-gray-500">Filtros:</span>
+                {diarioDesde && <span className="px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">Desde {diarioDesde}</span>}
+                {diarioHasta && <span className="px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">Hasta {diarioHasta}</span>}
+                {diarioModulo && <span className="px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">{(MODULO_LABEL[diarioModulo] || diarioModulo)}</span>}
+                {diarioCuentaId && <span className="px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">
+                  {cuentas.find(c => c.id === diarioCuentaId)?.nombre || `Cuenta #${diarioCuentaId}`}
+                </span>}
+                <button onClick={() => { setDiarioDesde(''); setDiarioHasta(''); setDiarioModulo(''); setDiarioCuentaId(''); setDiarioCuentaBusq('') }}
+                  className="ml-auto text-gray-400 hover:text-red-500">✕ Limpiar</button>
+              </div>
+            )}
             <div className="overflow-x-auto"><table className="w-full text-xs min-w-[420px]">
-              <thead className="bg-gray-50 dark:bg-slate-800">
+              <thead className="bg-gray-50 dark:bg-slate-800 text-gray-500">
                 <tr>
                   <th className="w-6 px-2 py-2"></th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-500 w-8">#</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-500">Fecha</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-500">Módulo</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-500">Descripción</th>
+                  <th className="px-3 py-2 font-medium w-14 text-left">
+                    <ExcelFilterCtb label="Nro" active={false}>
+                      <p className="text-xs text-gray-400 mb-1">Los números se asignan al hacer el reset del Libro Diario.</p>
+                    </ExcelFilterCtb>
+                  </th>
+                  <th className="px-3 py-2 font-medium text-left">
+                    <ExcelFilterCtb label="Fecha" active={!!(diarioDesde || diarioHasta)}>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs text-gray-500">Desde</label>
+                        <input type="date" value={diarioDesde} onChange={e => setDiarioDesde(e.target.value)}
+                          className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+                        <label className="text-xs text-gray-500">Hasta</label>
+                        <input type="date" value={diarioHasta} onChange={e => setDiarioHasta(e.target.value)}
+                          className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+                        {(diarioDesde || diarioHasta) && (
+                          <button onClick={() => { setDiarioDesde(''); setDiarioHasta('') }} className="text-xs text-red-400 hover:text-red-600 text-left">✕ Limpiar</button>
+                        )}
+                      </div>
+                    </ExcelFilterCtb>
+                  </th>
+                  <th className="px-3 py-2 font-medium text-left">
+                    <ExcelFilterCtb label="Módulo" active={!!diarioModulo}>
+                      <div className="flex flex-col gap-1">
+                        {['', 'um_lote', 'um_mov', 'um_reclass', 'cc_inicial', 'planilla', 'planilla_comision', 'cheque_carga', 'cheque_rechazo', 'pago', 'caja_op', 'caja_efectivo'].map(m => (
+                          <button key={m} onClick={() => setDiarioModulo(m)}
+                            className={`text-left px-2 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-slate-700 ${diarioModulo === m ? 'bg-ml-blue text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                            {m === '' ? '(Todos)' : (MODULO_LABEL[m] || m)}
+                          </button>
+                        ))}
+                      </div>
+                    </ExcelFilterCtb>
+                  </th>
+                  <th className="px-3 py-2 font-medium text-left">
+                    <ExcelFilterCtb label="Cuenta" active={!!diarioCuentaId} align="right">
+                      <div className="flex flex-col gap-2">
+                        <input placeholder="Buscar cuenta..." value={diarioCuentaBusq} onChange={e => setDiarioCuentaBusq(e.target.value)}
+                          className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+                        <div className="max-h-48 overflow-y-auto flex flex-col gap-0.5">
+                          <button onClick={() => { setDiarioCuentaId(''); setDiarioCuentaBusq('') }}
+                            className={`text-left px-2 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-slate-700 ${!diarioCuentaId ? 'bg-ml-blue text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                            (Todas)
+                          </button>
+                          {cuentas.filter(c => !diarioCuentaBusq || `${c.codigo} ${c.nombre}`.toLowerCase().includes(diarioCuentaBusq.toLowerCase())).map(c => (
+                            <button key={c.id} onClick={() => setDiarioCuentaId(c.id)}
+                              className={`text-left px-2 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-slate-700 ${diarioCuentaId === c.id ? 'bg-ml-blue text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                              <span className="font-mono">{c.codigo}</span> {c.nombre}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </ExcelFilterCtb>
+                  </th>
+                  <th className="px-3 py-2 font-medium text-left">Descripción</th>
                 </tr>
               </thead>
               <tbody>
@@ -573,18 +705,19 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                         onClick={() => toggleAsiento(a.id)}
                       >
                         <td className="px-2 py-2 text-gray-400 text-center">{isOpen ? '▾' : '▸'}</td>
-                        <td className="px-3 py-2 text-gray-400 font-mono">{a.id}</td>
+                        <td className="px-3 py-2 text-gray-400 font-mono">{(a as any).numero_asiento ?? a.id}</td>
                         <td className="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">{fmtDate(a.fecha)}</td>
                         <td className="px-3 py-2">
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500">
                             {(a.modulo && MODULO_LABEL[a.modulo]) || a.modulo || '—'}
                           </span>
                         </td>
+                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300"></td>
                         <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{a.descripcion || '—'}</td>
                       </tr>
                       {isOpen && (
                         <tr className="border-b border-gray-100 dark:border-slate-700/50 bg-gray-50/60 dark:bg-slate-800/30">
-                          <td colSpan={5} className="px-6 py-2">
+                          <td colSpan={6} className="px-6 py-2">
                             {isLoading ? (
                               <p className="text-gray-400 py-1">Cargando...</p>
                             ) : !lineas || lineas.length === 0 ? (
@@ -621,8 +754,12 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                     </React.Fragment>
                   )
                 })}
+                {asientos.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-xs">Sin asientos para los filtros aplicados.</td></tr>
+                )}
               </tbody>
             </table></div>
+            </>
           )}
         </div>
 
@@ -868,6 +1005,16 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                 >
                   {backfilling ? 'Reconstruyendo…' : '↻ Reconstruir desde conciliaciones'}
                 </button>
+                {user?.is_superadmin && (
+                  <button
+                    onClick={resetYRebuild}
+                    disabled={backfilling}
+                    className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-medium hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                    title="Borra TODOS los asientos y los reconstruye limpio desde los datos reales"
+                  >
+                    ⚠️ Reset Libro Diario
+                  </button>
+                )}
               </div>
             )}
           </div>

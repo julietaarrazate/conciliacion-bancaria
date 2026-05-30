@@ -11,8 +11,12 @@ import '@/styles/index.css'
 
 // Lazy-loaded routes: cada pagina baja sola al navegar, no en el bundle inicial.
 // Login y password reset quedan eager para que el primer paint sea instantaneo.
-const lazyPage = (loader: () => Promise<any>, name: string) =>
-  lazy(() => loader().then((m) => ({ default: m[name] })))
+function lazyPage<M, K extends keyof M>(
+  loader: () => Promise<M>,
+  name: K,
+): React.LazyExoticComponent<M[K] extends React.ComponentType<any> ? M[K] : never> {
+  return lazy(() => loader().then((m) => ({ default: m[name] as any }))) as any
+}
 
 const Resumen           = lazyPage(() => import('@/pages/Resumen'),           'Resumen')
 const EstadoCuenta      = lazyPage(() => import('@/pages/EstadoCuenta'),      'EstadoCuenta')
