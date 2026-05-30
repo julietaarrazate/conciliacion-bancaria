@@ -238,7 +238,13 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
 
   useEffect(() => {
     if (modo === 'ctacte') { setLoading(false); return }
+    recargarTodo()
+  }, [activeOrgId])
+
+  const recargarTodo = () => {
+    if (modo === 'ctacte') return
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
+    setLoading(true)
     Promise.all([
       canAdminAccounting
         ? apiClient.client.get(`/contabilidad/plan-cuentas${q}`).then(r => r.data)
@@ -255,7 +261,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       setSumasSaldo(ss); setBalance(b)
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [activeOrgId])
+  }
 
   const cargarAsientos = () => {
     const params = new URLSearchParams()
@@ -430,6 +436,8 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       if (!confirmar) return
       const r = await apiClient.client.post(`/contabilidad/reset-y-rebuild?dry_run=false${orgQ ? '&' + orgQ.slice(1) : ''}`, {})
       toast.success(r.data.msg)
+      recargarTodo()
+      cargarCartera()
     } catch (e: any) {
       toast.error(e.response?.data?.detail || 'Error en el reset')
     }
