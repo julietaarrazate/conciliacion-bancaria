@@ -103,6 +103,7 @@ def get_asientos(
     desde: Optional[str] = Query(None),
     hasta: Optional[str] = Query(None),
     modulo: Optional[str] = Query(None),
+    cuenta_id: Optional[int] = Query(None),
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
@@ -116,13 +117,18 @@ def get_asientos(
         q = q.filter(Asiento.fecha <= hasta)
     if modulo:
         q = q.filter(Asiento.modulo == modulo)
+    if cuenta_id:
+        q = q.filter(Asiento.id.in_(
+            db.query(AsientoDetalle.asiento_id).filter(AsientoDetalle.cuenta_id == cuenta_id)
+        ))
     total = q.count()
-    items = q.order_by(Asiento.fecha.desc(), Asiento.id.desc()).offset(skip).limit(limit).all()
+    items = q.order_by(Asiento.fecha.asc(), Asiento.id.asc()).offset(skip).limit(limit).all()
     return {
         "total": total,
         "items": [
             {
                 "id": a.id,
+                "numero_asiento": a.numero_asiento or a.id,
                 "fecha": a.fecha,
                 "descripcion": a.descripcion,
                 "modulo": a.modulo,
