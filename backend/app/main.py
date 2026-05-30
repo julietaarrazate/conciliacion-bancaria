@@ -21,7 +21,7 @@ from app.routers import liquidaciones
 from app.routers import caja
 from app.routers import contabilidad
 from app.routers import cheques
-from app.routers import pagos_gastos
+from app.routers import pagos
 from app.routers import papelera
 from app.routers import backup_admin
 from app.routers import analisis
@@ -29,6 +29,8 @@ from app.routers import search as search_router
 from app.routers import public_router
 from app.routers import push_router
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
+from app.models.egreso import Egreso, CategoriaEgreso  # noqa: F401
+from app.models.caja import ArqueoDiario  # noqa: F401
 from app.models.push_subscription import PushSubscription  # noqa: F401
 from app.models.revoked_token import RevokedToken  # noqa: F401
 from app.models.login_approval import LoginApproval  # noqa: F401
@@ -380,6 +382,21 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error seed contabilidad: %s", ex)
 
+    # 6b. Seed categorías de egreso por defecto (idempotente, solo org 1)
+    try:
+        from app.database import SessionLocal as SL
+        from app.models.egreso import CategoriaEgreso
+
+        db = SL()
+        if db.query(CategoriaEgreso).filter(CategoriaEgreso.organizacion_id == 1).count() == 0:
+            for nombre in ["Impuestos", "Bancarios", "Proveedores", "Alquiler", "Sueldos", "Otros"]:
+                db.add(CategoriaEgreso(organizacion_id=1, nombre=nombre, activo=True))
+            db.commit()
+            logger.info("Categorías de egreso sembradas")
+        db.close()
+    except Exception as ex:
+        logger.warning("Error seed categorías egreso: %s", ex)
+
     # 7. Backfill contabilidad — genera asientos para extractos/planillas existentes
     try:
         from app.database import SessionLocal as SL
@@ -480,7 +497,7 @@ def _init_db():
         from app.models.planilla import Planilla as Pl, PlanillaRow as PR
         from app.models.cliente import Cliente as Cli
         from app.models.cheque import Cheque as Ch
-        from app.models.pago import Pago as Pg
+        from app.models.egreso import Egreso as Eg
         from app.models.liquidacion import LiquidacionDetalle as LI
         db = SL()
         pl_auto = db.query(Pl).filter(Pl.nombre_archivo.like("Extracto auto-recuperado%")).all()
@@ -496,7 +513,7 @@ def _init_db():
                     continue
                 tiene_otros = (
                     db.query(Ch).filter(Ch.cliente_id == cid).count() > 0
-                    or db.query(Pg).filter(Pg.cliente_id == cid).count() > 0
+                    or db.query(Eg).filter(Eg.cliente_id == cid).count() > 0
                     or db.query(LI).filter(LI.cliente_id == cid).count() > 0
                 )
                 if tiene_otros:
@@ -657,7 +674,7 @@ app.include_router(liquidaciones.router)
 app.include_router(caja.router)
 app.include_router(contabilidad.router)
 app.include_router(cheques.router)
-app.include_router(pagos_gastos.router)
+app.include_router(pagos.router)
 app.include_router(papelera.router)
 app.include_router(backup_admin.router)
 app.include_router(analisis.router)

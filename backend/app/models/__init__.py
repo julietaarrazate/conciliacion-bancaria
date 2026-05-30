@@ -6,10 +6,10 @@ from .planilla import Planilla, PlanillaRow
 from .auditoria import AuditoriaLog
 from .patron_aprendido import PatronAprendido
 from .liquidacion import Liquidacion, LiquidacionDetalle, CierrePeriodo
-from .caja import ArqueoDiario, OrdenDePago
+from .caja import ArqueoDiario
+from .egreso import Egreso, CategoriaEgreso
 from .contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
 from .cheque import Cheque
-from .pago import Pago, Gasto
 from .password_reset import PasswordResetToken
 
 __all__ = [
@@ -18,8 +18,9 @@ __all__ = [
     "Planilla", "PlanillaRow",
     "AuditoriaLog", "PatronAprendido",
     "Liquidacion", "LiquidacionDetalle", "CierrePeriodo",
-    "ArqueoDiario", "OrdenDePago",
+    "ArqueoDiario",
+    "Egreso", "CategoriaEgreso",
     "PlanCuenta", "ReglaContable", "Asiento", "AsientoDetalle",
-    "Cheque", "Pago", "Gasto",
+    "Cheque",
     "PasswordResetToken",
 ]

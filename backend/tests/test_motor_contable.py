@@ -40,7 +40,7 @@ REGLAS_TEST = [
 ]
 
 CUENTAS_TEST = [
-    "1-1-1-2", "1-1-1-3", "1-1-2-0", "2-1-0-0",
+    "1-1-1-2", "1-1-1-3", "1-1-1-3-1", "1-1-2-0", "2-1-0-0",
     "2-1-2-0", "3-1-1-0", "3-2-0-0",
 ]
 
@@ -199,17 +199,44 @@ def test_cheque_rechazo_crea_asiento_distinto_al_acred(db):
     assert len(_asientos_de(db, "cheque_acred", 1)) == 0
 
 
-# ─── Pagos y gastos ──────────────────────────────────────────────────────────
+# ─── Egresos (módulo unificado Pagos) ────────────────────────────────────────
 
-def test_op_pago_idempotente(db):
+def test_egreso_idempotente(db):
     fecha = date(2026, 5, 23)
-    mc.registrar_op_pago(db, op_id=1, org_id=ORG_ID, usuario_id=1,
-                         beneficiario="Proveedor", cliente_nombre="Green",
-                         monto=500, fecha=fecha)
-    mc.registrar_op_pago(db, op_id=1, org_id=ORG_ID, usuario_id=1,
-                         beneficiario="Proveedor", cliente_nombre="Green",
-                         monto=500, fecha=fecha)
-    assert len(_asientos_de(db, "caja_op", 1)) == 1
+    mc.registrar_egreso(db, egreso_id=1, org_id=ORG_ID, usuario_id=1,
+                        tipo="proveedor", forma_pago="efectivo",
+                        monto=500, fecha=fecha, beneficiario="Proveedor")
+    mc.registrar_egreso(db, egreso_id=1, org_id=ORG_ID, usuario_id=1,
+                        tipo="proveedor", forma_pago="efectivo",
+                        monto=500, fecha=fecha, beneficiario="Proveedor")
+    assert len(_asientos_de(db, "egreso", 1)) == 1
+
+
+def test_egreso_banco_usa_cuenta_hoja_banco_macro(db):
+    """Un egreso por banco debe acreditar Banco Macro (1-1-1-3-1, hoja), NO la madre 1-1-1-3."""
+    fecha = date(2026, 5, 23)
+    mc.registrar_egreso(db, egreso_id=2, org_id=ORG_ID, usuario_id=1,
+                        tipo="gasto", forma_pago="banco",
+                        monto=800, fecha=fecha, concepto="Impuestos")
+    asientos = _asientos_de(db, "egreso", 2)
+    assert len(asientos) == 1
+    banco_macro = db.query(PlanCuenta).filter(
+        PlanCuenta.codigo == "1-1-1-3-1", PlanCuenta.organizacion_id == ORG_ID).first()
+    haber_lineas = [l for l in asientos[0].lineas if l.haber > 0]
+    assert len(haber_lineas) == 1
+    assert haber_lineas[0].cuenta_id == banco_macro.id
+
+
+def test_egreso_efectivo_usa_cuenta_efectivo(db):
+    fecha = date(2026, 5, 23)
+    mc.registrar_egreso(db, egreso_id=3, org_id=ORG_ID, usuario_id=1,
+                        tipo="gasto", forma_pago="efectivo",
+                        monto=300, fecha=fecha, concepto="Varios")
+    asientos = _asientos_de(db, "egreso", 3)
+    efectivo = db.query(PlanCuenta).filter(
+        PlanCuenta.codigo == "1-1-1-2", PlanCuenta.organizacion_id == ORG_ID).first()
+    haber_lineas = [l for l in asientos[0].lineas if l.haber > 0]
+    assert haber_lineas[0].cuenta_id == efectivo.id
 
 
 def test_ingreso_efectivo_upsert(db):
@@ -248,7 +275,8 @@ def test_partida_doble_siempre_balanceada(db):
     mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", [_mov(1234.56)])
     mc.registrar_planilla(db, 1, ORG_ID, 1, "X", "x.xlsx", [_row(789.12)], fecha)
     mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=999, comision=50, fecha=fecha)
-    mc.registrar_op_pago(db, 1, ORG_ID, 1, "Prov", "Green", 100, fecha)
+    mc.registrar_egreso(db, 1, ORG_ID, 1, tipo="proveedor", forma_pago="efectivo",
+                        monto=100, fecha=fecha, beneficiario="Prov")
 
     for a in db.query(Asiento).filter(Asiento.organizacion_id == ORG_ID).all():
         debe  = sum(l.debe  for l in a.lineas)

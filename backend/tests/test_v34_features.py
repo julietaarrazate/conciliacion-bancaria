@@ -21,7 +21,7 @@ import app.models.extracto
 import app.models.planilla
 import app.models.cliente
 import app.models.cheque
-import app.models.pago
+import app.models.egreso
 import app.models.caja
 import app.models.liquidacion
 import app.models.contabilidad

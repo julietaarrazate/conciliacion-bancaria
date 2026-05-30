@@ -762,7 +762,7 @@ _MODULO_TIPO = {
     "planilla_comision": ("tt",      "Comisión TT"),
     "cheque_carga":      ("cheques", "Cheque"),
     "cheque_rechazo":    ("cheques", "Cheque rechazado"),
-    "pago":              ("ajustes", "Cobranza / Pago"),
+    "egreso":            ("ajustes", "Pago / Egreso"),
 }
 
 

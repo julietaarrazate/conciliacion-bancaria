@@ -18,7 +18,7 @@ from app.models.cliente import Cliente
 from app.models.extracto import ExtractoBancario, MovimientoBanco
 from app.models.planilla import Planilla, PlanillaRow
 from app.models.cheque import Cheque
-from app.models.pago import Pago, Gasto
+from app.models.egreso import Egreso
 from app.models.contabilidad import PlanCuenta, ReglaContable
 from app.services.backup_service import export_org_backup, BACKUP_VERSION
 
@@ -63,8 +63,8 @@ def db():
 
     session.add(Cheque(organizacion_id=ORG_ID, monto=5000.0, estado="pendiente",
                        foto_comprobante="base64-fake-foto"))
-    session.add(Pago(organizacion_id=ORG_ID, monto=1000.0, medio="banco"))
-    session.add(Gasto(organizacion_id=ORG_ID, concepto="luz", monto=500.0, medio="banco"))
+    session.add(Egreso(organizacion_id=ORG_ID, tipo="pago_cliente", forma_pago="banco", monto=1000.0))
+    session.add(Egreso(organizacion_id=ORG_ID, tipo="gasto", concepto="luz", forma_pago="banco", monto=500.0))
 
     session.add(PlanCuenta(codigo="1-0-0-0", nombre="Activo", tipo="activo",
                            nivel=1, organizacion_id=ORG_ID))
@@ -86,7 +86,7 @@ def test_backup_contiene_todas_las_tablas_criticas(db):
     backup = export_org_backup(db, ORG_ID)
     tablas_esperadas = [
         "usuarios", "clientes", "extractos", "planillas",
-        "cheques", "pagos", "gastos",
+        "cheques", "egresos", "categorias_egreso",
         "arqueos_diarios", "liquidaciones", "cierres_periodo",
         "plan_cuentas", "reglas_contables", "asientos",
         "patrones_aprendidos", "auditoria",
@@ -147,8 +147,7 @@ def test_backup_resumen_cuenta_correctamente(db):
     assert r["planillas"] == 1
     assert r["filas_planilla_total"] == 1
     assert r["cheques"] == 1
-    assert r["pagos"] == 1
-    assert r["gastos"] == 1
+    assert r["egresos"] == 2
     assert r["plan_cuentas"] == 1
 
 

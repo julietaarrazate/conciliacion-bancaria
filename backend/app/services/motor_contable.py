@@ -225,37 +225,103 @@ def rechazar_cheque(
         logger.warning("Error asiento cheque rechazo %s: %s", cheque_id, ex)
 
 
-def registrar_op_pago(
+def _crear_asiento_directo(
     db: Session,
-    op_id: int,
+    fecha: date,
+    descripcion: str,
+    modulo: str,
+    referencia_id: int,
     org_id: int,
     usuario_id: Optional[int],
-    beneficiario: str,
-    cliente_nombre: str,
+    cuenta_debe_id: int,
+    cuenta_haber_id: int,
+    monto: Decimal,
+) -> None:
+    """Crea un asiento con cuentas explícitas (no por ReglaContable).
+    Lo usa el módulo de egresos, que resuelve la cuenta del cliente dinámicamente."""
+    a = Asiento(
+        fecha=fecha,
+        descripcion=descripcion,
+        modulo=modulo,
+        referencia_id=referencia_id,
+        organizacion_id=org_id,
+        usuario_id=usuario_id,
+    )
+    db.add(a)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        return
+    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_debe_id,  debe=monto,          haber=Decimal("0")))
+    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_haber_id, debe=Decimal("0"),   haber=monto))
+
+
+def registrar_egreso(
+    db: Session,
+    egreso_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    tipo: str,
+    forma_pago: str,
     monto: Decimal,
     fecha: date,
+    beneficiario: str = "",
+    concepto: str = "",
+    cliente_id: Optional[int] = None,
+    cliente_nombre: str = "",
 ) -> None:
-    """OP de caja: Gastos (D) / Efectivo (H)."""
+    """Asiento del módulo unificado de Pagos (egresos). Una sola función para
+    proveedor / gasto / pago_cliente, en banco o efectivo.
+
+    Matriz de cuentas:
+      tipo=pago_cliente → Debe: cuenta del cliente (2-1-2-X)
+      tipo=proveedor/gasto → Debe: Gastos (3-2-0-0)
+      forma_pago=banco    → Haber: Banco Macro (1-1-1-3-1, cuenta hoja)
+      forma_pago=efectivo → Haber: Efectivo (1-1-1-2)
+    """
+    monto = round(_monto(monto), 2)
     try:
-        if _ya_existe(db, "caja_op", op_id, org_id):
+        if _ya_existe(db, "egreso", egreso_id, org_id):
             return
-        regla = _get_regla(db, "asig_gasto_efectivo", org_id)
-        if not regla or monto <= 0:
+        if monto <= 0:
             return
-        _crear_asiento(
-            db=db, regla=regla,
+
+        # Cuenta del Haber según forma de pago (siempre cuenta hoja)
+        if forma_pago == "efectivo":
+            cuenta_haber = _get_cuenta_por_codigo(db, "1-1-1-2", org_id)   # Efectivo
+        else:
+            cuenta_haber = _get_cuenta_por_codigo(db, "1-1-1-3-1", org_id) # Banco Macro (hoja)
+        if not cuenta_haber:
+            logger.warning("registrar_egreso: falta cuenta Haber (forma=%s, org=%s)", forma_pago, org_id)
+            return
+
+        # Cuenta del Debe según tipo
+        if tipo == "pago_cliente" and cliente_id:
+            cuenta_debe = _get_o_crear_cuenta_cliente(db, cliente_id, org_id)
+        else:
+            cuenta_debe = _get_cuenta_por_codigo(db, "3-2-0-0", org_id)    # Gastos
+        if not cuenta_debe:
+            logger.warning("registrar_egreso: falta cuenta Debe (tipo=%s, org=%s)", tipo, org_id)
+            return
+
+        etiqueta = beneficiario or cliente_nombre or concepto or "Egreso"
+        _crear_asiento_directo(
+            db=db,
             fecha=fecha,
-            descripcion=f"OP: {beneficiario} ({cliente_nombre})",
-            modulo="caja_op",
-            referencia_id=op_id,
+            descripcion=f"Pago: {etiqueta} — {forma_pago}",
+            modulo="egreso",
+            referencia_id=egreso_id,
             org_id=org_id,
             usuario_id=usuario_id,
-            monto=round(monto, 2),
+            cuenta_debe_id=cuenta_debe.id,
+            cuenta_haber_id=cuenta_haber.id,
+            monto=monto,
         )
         db.commit()
     except Exception as ex:
         db.rollback()
-        logger.warning("Error asiento op_pago %s: %s", op_id, ex)
+        logger.warning("Error asiento egreso %s: %s", egreso_id, ex)
 
 
 def registrar_ingreso_efectivo(
@@ -308,75 +374,6 @@ def registrar_ingreso_efectivo(
     except Exception as ex:
         db.rollback()
         logger.warning("Error asiento ingreso_efectivo %s: %s", arqueo_id, ex)
-
-
-def registrar_pago(
-    db: Session,
-    pago_id: int,
-    org_id: int,
-    usuario_id: Optional[int],
-    concepto: str,
-    cliente_nombre: str,
-    monto: Decimal,
-    medio: str,
-    fecha: date,
-) -> None:
-    """Pago a cliente: Pasivo cliente (D) / Banco o Efectivo (H)."""
-    try:
-        if _ya_existe(db, "pago", pago_id, org_id):
-            return
-        evento = "pago_cliente_banco" if medio == "banco" else "pago_cliente_efectivo"
-        regla = _get_regla(db, evento, org_id)
-        if not regla or monto <= 0:
-            return
-        _crear_asiento(
-            db=db, regla=regla,
-            fecha=fecha,
-            descripcion=f"Pago {cliente_nombre or concepto or ''} — {medio}",
-            modulo="pago",
-            referencia_id=pago_id,
-            org_id=org_id,
-            usuario_id=usuario_id,
-            monto=round(monto, 2),
-        )
-        db.commit()
-    except Exception as ex:
-        db.rollback()
-        logger.warning("Error asiento pago %s: %s", pago_id, ex)
-
-
-def registrar_gasto(
-    db: Session,
-    gasto_id: int,
-    org_id: int,
-    usuario_id: Optional[int],
-    concepto: str,
-    monto: Decimal,
-    medio: str,
-    fecha: date,
-) -> None:
-    """Gasto operativo: Gastos (D) / Banco o Efectivo (H)."""
-    try:
-        if _ya_existe(db, "gasto", gasto_id, org_id):
-            return
-        evento = "asig_gasto_banco" if medio == "banco" else "asig_gasto_efectivo"
-        regla = _get_regla(db, evento, org_id)
-        if not regla or monto <= 0:
-            return
-        _crear_asiento(
-            db=db, regla=regla,
-            fecha=fecha,
-            descripcion=f"Gasto: {concepto or ''}",
-            modulo="gasto",
-            referencia_id=gasto_id,
-            org_id=org_id,
-            usuario_id=usuario_id,
-            monto=round(monto, 2),
-        )
-        db.commit()
-    except Exception as ex:
-        db.rollback()
-        logger.warning("Error asiento gasto %s: %s", gasto_id, ex)
 
 
 def registrar_planilla(

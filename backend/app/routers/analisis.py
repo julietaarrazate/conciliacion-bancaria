@@ -27,7 +27,7 @@ from app.middleware.auth import get_current_user
 from app.models.cheque import Cheque
 from app.models.cliente import Cliente
 from app.models.extracto import MovimientoBanco
-from app.models.pago import Pago, Gasto
+from app.models.egreso import Egreso
 from app.models.planilla import Planilla, PlanillaRow
 from app.models.user import User
 
@@ -136,12 +136,14 @@ def _kpis_periodo(db: Session, org_id: int, desde: date, hasta: date) -> dict:
     ).one()
     cheques_mes = {"total": cheq_q[0] or 0, "cantidad": int(cheq_q[1] or 0)}
 
-    # Pagos y gastos del mes
-    pag_q = db.query(func.coalesce(func.sum(Pago.monto), 0.0), func.count(Pago.id)).filter(
-        Pago.organizacion_id == org_id, Pago.fecha >= desde, Pago.fecha <= hasta,
+    # Pagos a clientes y gastos del mes (módulo unificado Egreso)
+    pag_q = db.query(func.coalesce(func.sum(Egreso.monto), 0.0), func.count(Egreso.id)).filter(
+        Egreso.organizacion_id == org_id, Egreso.fecha >= desde, Egreso.fecha <= hasta,
+        Egreso.tipo == "pago_cliente",
     ).one()
-    gas_q = db.query(func.coalesce(func.sum(Gasto.monto), 0.0), func.count(Gasto.id)).filter(
-        Gasto.organizacion_id == org_id, Gasto.fecha >= desde, Gasto.fecha <= hasta,
+    gas_q = db.query(func.coalesce(func.sum(Egreso.monto), 0.0), func.count(Egreso.id)).filter(
+        Egreso.organizacion_id == org_id, Egreso.fecha >= desde, Egreso.fecha <= hasta,
+        Egreso.tipo.in_(["gasto", "proveedor"]),
     ).one()
 
     # Tasa de conciliacion (% acreditado sobre el total reportado)
@@ -679,14 +681,15 @@ def estado_cuenta_cliente(
 
     # Pagos hechos al cliente en el periodo (egresos hacia el cliente)
     pagos = (
-        db.query(Pago)
+        db.query(Egreso)
         .filter(
-            Pago.cliente_id == cliente_id,
-            Pago.organizacion_id == organizacion_id,
-            Pago.fecha >= d,
-            Pago.fecha <= h,
+            Egreso.cliente_id == cliente_id,
+            Egreso.organizacion_id == organizacion_id,
+            Egreso.tipo == "pago_cliente",
+            Egreso.fecha >= d,
+            Egreso.fecha <= h,
         )
-        .order_by(Pago.fecha.desc())
+        .order_by(Egreso.fecha.desc())
         .all()
     )
     pagos_data = [
@@ -694,7 +697,7 @@ def estado_cuenta_cliente(
             "id": p.id,
             "concepto": p.concepto,
             "monto": p.monto or 0,
-            "medio": p.medio,
+            "medio": p.forma_pago,
             "fecha": p.fecha.isoformat() if p.fecha else None,
         }
         for p in pagos
@@ -816,22 +819,16 @@ def flujo_caja(
             MovimientoBanco.fecha >= desde,
             MovimientoBanco.fecha <= hasta,
         ).scalar() or 0.0
-        gastos_q = db.query(
-            func.coalesce(func.sum(Gasto.monto), 0.0)
+        # Egresos del mes: todos los pagos/gastos del módulo unificado
+        egresos_q = db.query(
+            func.coalesce(func.sum(Egreso.monto), 0.0)
         ).filter(
-            Gasto.organizacion_id == organizacion_id,
-            Gasto.fecha >= desde,
-            Gasto.fecha <= hasta,
-        ).scalar() or 0.0
-        pagos_q = db.query(
-            func.coalesce(func.sum(Pago.monto), 0.0)
-        ).filter(
-            Pago.organizacion_id == organizacion_id,
-            Pago.fecha >= desde,
-            Pago.fecha <= hasta,
+            Egreso.organizacion_id == organizacion_id,
+            Egreso.fecha >= desde,
+            Egreso.fecha <= hasta,
         ).scalar() or 0.0
         ingresos = ingresos_q or 0
-        egresos = (gastos_q or 0) + (pagos_q or 0)
+        egresos = egresos_q or 0
         resultado.append({
             "label": f"{m:02d}/{str(a)[-2:]}",
             "anio": a,
