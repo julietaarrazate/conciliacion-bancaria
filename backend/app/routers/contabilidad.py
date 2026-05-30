@@ -1075,8 +1075,9 @@ def reset_y_rebuild_asientos(
 
         # ── Reconstruir um_lote ───────────────────────────────────
         for lote_key, movs in sorted(lotes.items()):
-            total = sum(abs(_monto(m.monto)) for m in movs)
-            if total <= 0:
+            total_pos = sum(max(_monto(m.monto), _D("0")) for m in movs)
+            total_neg = sum(abs(min(_monto(m.monto), _D("0"))) for m in movs)
+            if total_pos <= 0 and total_neg <= 0:
                 continue
             primer = movs[0]
             fecha_ref = primer.fecha if isinstance(primer.fecha, _date) else _date.today()
@@ -1090,8 +1091,12 @@ def reset_y_rebuild_asientos(
             )
             db.add(a)
             db.flush()
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=total, haber=_D("0")))
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=_D("0"), haber=total))
+            if total_pos > 0:
+                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=total_pos, haber=_D("0")))
+                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=_D("0"), haber=total_pos))
+            if total_neg > 0:
+                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=total_neg, haber=_D("0")))
+                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=_D("0"), haber=total_neg))
             contador += 1
 
         # ── Reconstruir cc_inicial ────────────────────────────────
@@ -1099,7 +1104,7 @@ def reset_y_rebuild_asientos(
             cuenta_cli = _get_o_crear_cuenta_cliente(db, cliente.id, oid)
             if not cuenta_cli:
                 continue
-            monto = abs(_monto(row.monto))
+            monto = abs(_monto(row.monto))  # planilla rows son siempre ingresos (positivos)
             if monto <= 0:
                 continue
             fecha = (row.fecha_acred or planilla.fecha_carga or _date.today())
