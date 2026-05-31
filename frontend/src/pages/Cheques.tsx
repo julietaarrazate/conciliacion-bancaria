@@ -217,6 +217,29 @@ export const Cheques: React.FC = () => {
     finally { setLoadingFoto(false) }
   }
 
+  const handleCompartir = async (c: Cheque) => {
+    const nombre = c.cliente_nombre || c.titular || 'Cheque'
+    const texto = `Cheque registrado%0A• Cliente: ${nombre}%0A• Importe: ${fmt(c.monto)}%0A• Banco: ${c.banco_origen || '—'}%0A• Nro: ${c.numero || '—'}%0A• Vencimiento: ${fmtDate(c.fecha_deposito)}`
+    if (c.tiene_foto) {
+      try {
+        const res = await apiClient.client.get(`/cheques/${c.id}/foto`)
+        const fotoB64 = res.data.foto_base64
+        if (fotoB64 && navigator.share && navigator.canShare) {
+          const blob = await fetch(fotoB64).then(r => r.blob())
+          const file = new File([blob], `Cheque_${nombre}.jpg`, { type: 'image/jpeg' })
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ title: `Cheque - ${nombre} - ${fmt(c.monto)}`, files: [file] })
+            return
+          }
+        }
+      } catch {}
+    }
+    if (navigator.share) {
+      try { await navigator.share({ title: `Cheque - ${nombre}`, text: decodeURIComponent(texto) }); return } catch {}
+    }
+    window.open(`whatsapp://send?text=${texto}`, '_blank')
+  }
+
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -357,6 +380,9 @@ export const Cheques: React.FC = () => {
                           className="px-2 py-0.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 rounded text-xs transition-colors"
                           title="Ver foto">📷</button>
                       )}
+                      <button onClick={() => handleCompartir(c)}
+                        className="px-2 py-0.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded text-xs transition-colors"
+                        title="Compartir por WhatsApp">📤</button>
                       {c.estado === 'pendiente' && (
                         <>
                           <button onClick={() => { setAcreditarId(c.id); setActionDate('') }}
@@ -530,7 +556,14 @@ export const Cheques: React.FC = () => {
             {loadingFoto ? (
               <div className="text-center py-8 text-gray-400 text-sm">Cargando imagen…</div>
             ) : fotoData ? (
-              <img src={fotoData} alt="comprobante" className="w-full rounded-lg object-contain max-h-[60vh]" />
+              <>
+                <img src={fotoData} alt="comprobante" className="w-full rounded-lg object-contain max-h-[60vh]" />
+                <button
+                  onClick={() => { const c = cheques.find(x => x.id === verFotoId); if (c) handleCompartir(c) }}
+                  className="mt-3 w-full py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg text-sm transition-colors">
+                  📤 Compartir por WhatsApp
+                </button>
+              </>
             ) : (
               <div className="text-center py-8 text-gray-500 text-sm">No se pudo cargar la imagen</div>
             )}
