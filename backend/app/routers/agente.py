@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agente", tags=["agente"])
 
 # ── OCR daily rate limiting ──────────────────────────────────────────────────
-_OCR_DAILY_LIMIT = int(os.environ.get("OCR_DAILY_LIMIT", "300"))
+_OCR_DAILY_LIMIT = int(os.environ.get("OCR_DAILY_LIMIT", "1200"))
 _ocr_state: dict = {"date": None, "count": 0}
 _ocr_lock = Lock()
 
