@@ -101,6 +101,16 @@ def _run_alembic():
         "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cuenta_contable_id INTEGER REFERENCES plan_cuentas(id)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_org_ids JSONB DEFAULT '[]'",
         "ALTER TABLE asientos ADD COLUMN IF NOT EXISTS numero_asiento INTEGER",
+        # v3.9.2 — portadores + campos cheque
+        "CREATE TABLE IF NOT EXISTS portadores (id SERIAL PRIMARY KEY, organizacion_id INTEGER NOT NULL DEFAULT 1, nombre VARCHAR NOT NULL)",
+        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS portador_id INTEGER REFERENCES portadores(id)",
+        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS librador VARCHAR",
+        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS codigo_postal VARCHAR",
+        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS local_interior VARCHAR",
+        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS fecha_rechazo DATE",
+        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS fisico BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS fecha_devolucion DATE",
+        "UPDATE cheques SET librador = titular WHERE librador IS NULL AND titular IS NOT NULL",
     ]
     try:
         from sqlalchemy import text as _text

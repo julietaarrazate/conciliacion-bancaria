@@ -2,15 +2,18 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List
 import base64, io
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
 
 from app.database import get_db
 from app.middleware.auth import get_current_user, require_permission, can_switch_org
 from app.models.user import User
 from app.models.cheque import Cheque
+from app.models.portador import Portador
 from app.models.cliente import Cliente
 from app.services.motor_contable import registrar_cheque, acreditar_cheque, rechazar_cheque
 from app.services.auditoria import registrar_log
@@ -19,22 +22,39 @@ from app.services.storage import upload_comprobante
 router = APIRouter(prefix="/cheques", tags=["cheques"])
 
 
+# ── Schemas ───────────────────────────────────────────────────────
+
 class ChequeIn(BaseModel):
-    cliente_id:          Optional[int] = None
-    numero:              Optional[str] = None
-    banco_origen:        Optional[str] = None
-    titular:             Optional[str] = None
-    monto:               float = Field(..., gt=0)
-    comision:            float = Field(0.0, ge=0)
-    porcentaje_comision: Optional[float] = None  # % comisión para liquidaciones
-    fecha_emision:       Optional[date] = None
-    fecha_deposito:      Optional[date] = None
-    notas:               Optional[str] = None
+    cliente_id:          Optional[int]   = None
+    portador_id:         Optional[int]   = None
+    numero:              Optional[str]   = None
+    banco_origen:        Optional[str]   = None
+    librador:            Optional[str]   = None
+    monto:               float           = Field(..., gt=0)
+    comision:            float           = Field(0.0, ge=0)
+    porcentaje_comision: Optional[float] = None
+    codigo_postal:       Optional[str]   = None
+    local_interior:      Optional[str]   = None
+    fecha_emision:       Optional[date]  = None
+    fecha_deposito:      Optional[date]  = None
+    notas:               Optional[str]   = None
 
 
 class AcreditarIn(BaseModel):
     fecha_acred: Optional[date] = None
 
+
+class RechazarIn(BaseModel):
+    fecha_rechazo:    Optional[date] = None
+    fisico:           bool           = False
+    fecha_devolucion: Optional[date] = None
+
+
+class PortadorIn(BaseModel):
+    nombre: str
+
+
+# ── Helpers ───────────────────────────────────────────────────────
 
 def _org_id(current_user: User, org_id: Optional[int]) -> int:
     if can_switch_org(current_user, org_id) and org_id:
@@ -42,27 +62,230 @@ def _org_id(current_user: User, org_id: Optional[int]) -> int:
     return current_user.organizacion_id or 1
 
 
+def _local_interior(codigo_postal: Optional[str]) -> Optional[str]:
+    if not codigo_postal:
+        return None
+    try:
+        return "local" if int(codigo_postal) < 2000 else "interior"
+    except (ValueError, TypeError):
+        return None
+
+
 def _cheque_dict(c: Cheque) -> dict:
+    librador = c.librador or c.titular  # fallback para registros anteriores
     return {
-        "id":             c.id,
-        "organizacion_id": c.organizacion_id,
-        "cliente_id":     c.cliente_id,
-        "cliente_nombre": c.cliente.nombre if c.cliente else None,
-        "numero":         c.numero,
-        "banco_origen":   c.banco_origen,
-        "titular":        c.titular,
-        "monto":          c.monto,
+        "id":                  c.id,
+        "organizacion_id":     c.organizacion_id,
+        "cliente_id":          c.cliente_id,
+        "cliente_nombre":      c.cliente.nombre if c.cliente else None,
+        "portador_id":         c.portador_id,
+        "portador_nombre":     c.portador.nombre if c.portador else None,
+        "numero":              c.numero,
+        "banco_origen":        c.banco_origen,
+        "librador":            librador,
+        "monto":               c.monto,
         "comision":            c.comision,
         "porcentaje_comision": float(c.porcentaje_comision) if c.porcentaje_comision is not None else None,
-        "fecha_emision":  c.fecha_emision,
-        "fecha_deposito": c.fecha_deposito,
-        "fecha_acred":    c.fecha_acred,
-        "estado":         c.estado,
-        "notas":          c.notas,
-        "tiene_foto":     bool(c.foto_comprobante),
-        "created_at":     c.created_at,
+        "codigo_postal":       c.codigo_postal,
+        "local_interior":      c.local_interior,
+        "fecha_emision":       c.fecha_emision,
+        "fecha_deposito":      c.fecha_deposito,
+        "fecha_acred":         c.fecha_acred,
+        "estado":              c.estado,
+        "fecha_rechazo":       c.fecha_rechazo,
+        "fisico":              c.fisico,
+        "fecha_devolucion":    c.fecha_devolucion,
+        "notas":               c.notas,
+        "tiene_foto":          bool(c.foto_comprobante),
+        "created_at":          c.created_at,
     }
 
+
+# ── Portadores ────────────────────────────────────────────────────
+
+@router.get("/portadores")
+def list_portadores(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    oid = _org_id(current_user, org_id)
+    items = db.query(Portador).filter(Portador.organizacion_id == oid).order_by(Portador.nombre).all()
+    return [{"id": p.id, "nombre": p.nombre} for p in items]
+
+
+@router.post("/portadores")
+def crear_portador(
+    body: PortadorIn,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    oid = _org_id(current_user, org_id)
+    nombre = body.nombre.strip()
+    if not nombre:
+        raise HTTPException(400, "Nombre requerido")
+    p = Portador(organizacion_id=oid, nombre=nombre)
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return {"id": p.id, "nombre": p.nombre}
+
+
+# ── Vista por depósito ────────────────────────────────────────────
+
+@router.get("/deposito/exportar")
+def exportar_deposito_excel(
+    fecha: str = Query(...),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    oid = _org_id(current_user, org_id)
+    cheques = (
+        db.query(Cheque)
+        .filter(Cheque.organizacion_id == oid, Cheque.fecha_deposito == fecha)
+        .order_by(Cheque.cliente_id, Cheque.id)
+        .all()
+    )
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Dep {fecha}"
+
+    HEADER_FILL = PatternFill("solid", fgColor="1E1E2E")
+    HEADER_FONT = Font(bold=True, color="A0A0C0", size=9)
+    TOTAL_FONT  = Font(bold=True, color="FFFFFF")
+    GRAY_FONT   = Font(color="888888", size=8)
+
+    headers = [
+        "Fecha Depósito", "Cliente", "Fecha Cheque", "Banco N",
+        "Banco", "Librador", "Número", "Código P", "L/I", "Importe",
+    ]
+    ws.append(headers)
+    for col_idx, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.font = HEADER_FONT
+        cell.fill = HEADER_FILL
+        cell.alignment = Alignment(horizontal="center")
+
+    col_widths = [14, 18, 14, 16, 16, 22, 14, 10, 8, 16]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    por_cliente: dict[str, float] = {}
+    por_tipo: dict[str, float] = {"local": 0.0, "interior": 0.0, "sin CP": 0.0}
+    total = 0.0
+
+    for c in cheques:
+        nombre   = c.cliente.nombre if c.cliente else "Sin cliente"
+        portador = c.portador.nombre if c.portador else ""
+        librador = c.librador or c.titular or ""
+        li       = (c.local_interior or "").lower()
+        monto    = float(c.monto)
+
+        ws.append([
+            str(c.fecha_deposito) if c.fecha_deposito else "",
+            nombre,
+            str(c.fecha_emision) if c.fecha_emision else "",
+            portador,
+            c.banco_origen or "",
+            librador,
+            c.numero or "",
+            c.codigo_postal or "",
+            (c.local_interior or "").capitalize(),
+            monto,
+        ])
+        ws.cell(row=ws.max_row, column=10).number_format = '#,##0.00'
+
+        por_cliente[nombre] = por_cliente.get(nombre, 0.0) + monto
+        key = li if li in ("local", "interior") else "sin CP"
+        por_tipo[key] = por_tipo.get(key, 0.0) + monto
+        total += monto
+
+    ws.append([])
+    ws.append(["RESUMEN POR CLIENTE", "", "", "", "", "", "", "", "", "TOTAL"])
+    for cell in ws[ws.max_row]:
+        cell.font = TOTAL_FONT
+    for cliente_nombre, subtotal in sorted(por_cliente.items()):
+        ws.append(["", cliente_nombre, "", "", "", "", "", "", "", subtotal])
+        ws.cell(row=ws.max_row, column=10).number_format = '#,##0.00'
+        ws.cell(row=ws.max_row, column=2).font = GRAY_FONT
+
+    ws.append([])
+    ws.append(["RESUMEN LOCAL / INTERIOR", "", "", "", "", "", "", "", "", "TOTAL"])
+    for cell in ws[ws.max_row]:
+        cell.font = TOTAL_FONT
+    for tipo, subtotal in por_tipo.items():
+        if subtotal:
+            ws.append(["", tipo.capitalize(), "", "", "", "", "", "", "", subtotal])
+            ws.cell(row=ws.max_row, column=10).number_format = '#,##0.00'
+            ws.cell(row=ws.max_row, column=2).font = GRAY_FONT
+
+    ws.append([])
+    ws.append(["TOTAL GENERAL", "", "", "", "", "", "", "", "", total])
+    total_row = ws.max_row
+    for cell in ws[total_row]:
+        cell.font = TOTAL_FONT
+    ws.cell(row=total_row, column=10).number_format = '#,##0.00'
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"cheques_deposito_{fecha}.xlsx"
+    return Response(
+        content=buf.read(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/deposito")
+def resumen_deposito(
+    fecha: Optional[str] = Query(None),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    oid = _org_id(current_user, org_id)
+
+    if not fecha:
+        fechas = (
+            db.query(Cheque.fecha_deposito)
+            .filter(Cheque.organizacion_id == oid, Cheque.fecha_deposito.isnot(None))
+            .distinct()
+            .order_by(Cheque.fecha_deposito.desc())
+            .all()
+        )
+        return {"fechas": [str(f[0]) for f in fechas]}
+
+    cheques = (
+        db.query(Cheque)
+        .filter(Cheque.organizacion_id == oid, Cheque.fecha_deposito == fecha)
+        .order_by(Cheque.cliente_id, Cheque.id)
+        .all()
+    )
+    items = [_cheque_dict(c) for c in cheques]
+
+    por_cliente: dict[str, float] = {}
+    por_tipo: dict[str, float] = {}
+    total = 0.0
+    for c in cheques:
+        nombre = c.cliente.nombre if c.cliente else "Sin cliente"
+        li     = (c.local_interior or "sin CP").lower()
+        monto  = float(c.monto)
+        por_cliente[nombre] = por_cliente.get(nombre, 0.0) + monto
+        por_tipo[li]        = por_tipo.get(li, 0.0) + monto
+        total += monto
+
+    return {
+        "fecha":   fecha,
+        "items":   items,
+        "resumen": {"por_cliente": por_cliente, "por_tipo": por_tipo, "total": total, "cantidad": len(cheques)},
+    }
+
+
+# ── CRUD principal ────────────────────────────────────────────────
 
 @router.get("")
 def list_cheques(
@@ -103,16 +326,23 @@ def crear_cheque(
         cli = db.query(Cliente).filter(Cliente.id == body.cliente_id, Cliente.organizacion_id == oid).first()
         if not cli:
             raise HTTPException(404, "Cliente no encontrado")
+    if body.portador_id:
+        if not db.query(Portador).filter(Portador.id == body.portador_id, Portador.organizacion_id == oid).first():
+            raise HTTPException(404, "Portador no encontrado")
 
+    li = body.local_interior or _local_interior(body.codigo_postal)
     c = Cheque(
         organizacion_id=oid,
         cliente_id=body.cliente_id,
+        portador_id=body.portador_id,
         numero=body.numero,
         banco_origen=body.banco_origen,
-        titular=body.titular,
+        librador=body.librador,
         monto=body.monto,
         comision=body.comision,
         porcentaje_comision=Decimal(str(body.porcentaje_comision)) if body.porcentaje_comision is not None else None,
+        codigo_postal=body.codigo_postal,
+        local_interior=li,
         fecha_emision=body.fecha_emision,
         fecha_deposito=body.fecha_deposito or date.today(),
         estado="pendiente",
@@ -123,17 +353,12 @@ def crear_cheque(
     db.flush()
 
     registrar_cheque(
-        db=db,
-        cheque_id=c.id,
-        org_id=oid,
-        usuario_id=current_user.id,
-        titular=c.titular or "",
-        monto=c.monto,
-        comision=c.comision,
+        db=db, cheque_id=c.id, org_id=oid, usuario_id=current_user.id,
+        titular=c.librador or "", monto=c.monto, comision=c.comision,
         fecha=c.fecha_deposito or date.today(),
     )
     registrar_log(db, current_user.id, "cheques", c.id, "INSERT",
-                  {"monto": c.monto, "titular": c.titular, "cliente_id": c.cliente_id,
+                  {"monto": c.monto, "librador": c.librador, "cliente_id": c.cliente_id,
                    "fecha_deposito": str(c.fecha_deposito) if c.fecha_deposito else None})
     db.commit()
     db.refresh(c)
@@ -170,13 +395,16 @@ def editar_cheque(
         raise HTTPException(403, "Sin acceso")
     if c.estado != "pendiente":
         raise HTTPException(400, "Solo se pueden editar cheques pendientes")
+
     cambios = {}
-    for field in ("cliente_id", "numero", "banco_origen", "titular", "monto",
-                  "comision", "fecha_emision", "fecha_deposito", "notas"):
+    for field in ("cliente_id", "portador_id", "numero", "banco_origen", "librador",
+                  "monto", "comision", "codigo_postal", "fecha_emision", "fecha_deposito", "notas"):
         val = getattr(body, field, None)
         if val is not None:
             cambios[field] = {"de": str(getattr(c, field)), "a": str(val)}
             setattr(c, field, val)
+    if body.codigo_postal:
+        c.local_interior = body.local_interior or _local_interior(body.codigo_postal)
     if body.porcentaje_comision is not None:
         c.porcentaje_comision = Decimal(str(body.porcentaje_comision))
     if cambios:
@@ -202,18 +430,13 @@ def acreditar(
     if c.estado != "pendiente":
         raise HTTPException(400, f"Cheque ya está {c.estado}")
 
-    c.estado = "acreditado"
+    c.estado    = "acreditado"
     c.fecha_acred = body.fecha_acred or date.today()
     db.flush()
 
     acreditar_cheque(
-        db=db,
-        cheque_id=c.id,
-        org_id=c.organizacion_id,
-        usuario_id=current_user.id,
-        titular=c.titular or "",
-        monto=c.monto,
-        fecha=c.fecha_acred,
+        db=db, cheque_id=c.id, org_id=c.organizacion_id, usuario_id=current_user.id,
+        titular=c.librador or c.titular or "", monto=c.monto, fecha=c.fecha_acred,
     )
     registrar_log(db, current_user.id, "cheques", c.id, "ACREDITAR",
                   {"monto": c.monto, "fecha_acred": str(c.fecha_acred)})
@@ -225,7 +448,7 @@ def acreditar(
 @router.post("/{cheque_id}/rechazar")
 def rechazar(
     cheque_id: int,
-    body: AcreditarIn,
+    body: RechazarIn,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -238,21 +461,19 @@ def rechazar(
     if c.estado != "pendiente":
         raise HTTPException(400, f"Cheque ya está {c.estado}")
 
-    c.estado = "rechazado"
-    c.fecha_acred = body.fecha_acred or date.today()
+    c.estado          = "rechazado"
+    c.fecha_rechazo   = body.fecha_rechazo or date.today()
+    c.fisico          = body.fisico
+    c.fecha_devolucion = body.fecha_devolucion
+    c.fecha_acred     = c.fecha_rechazo  # compat con motor contable
     db.flush()
 
     rechazar_cheque(
-        db=db,
-        cheque_id=c.id,
-        org_id=c.organizacion_id,
-        usuario_id=current_user.id,
-        titular=c.titular or "",
-        monto=c.monto,
-        fecha=c.fecha_acred,
+        db=db, cheque_id=c.id, org_id=c.organizacion_id, usuario_id=current_user.id,
+        titular=c.librador or c.titular or "", monto=c.monto, fecha=c.fecha_rechazo,
     )
     registrar_log(db, current_user.id, "cheques", c.id, "RECHAZAR",
-                  {"monto": c.monto, "fecha_acred": str(c.fecha_acred)})
+                  {"monto": c.monto, "fecha_rechazo": str(c.fecha_rechazo), "fisico": c.fisico})
     db.commit()
     db.refresh(c)
     return _cheque_dict(c)
@@ -273,7 +494,6 @@ def eliminar_cheque(
     if c.estado != "pendiente":
         raise HTTPException(400, "Solo se pueden eliminar cheques pendientes")
 
-    # Reverso contable ANTES de borrar (preserva trazabilidad de la carga)
     from app.services.motor_contable import reversar_asientos
     reversar_asientos(db, modulo="cheque_carga", referencia_id=cheque_id,
                       org_id=c.organizacion_id, usuario_id=current_user.id,
@@ -283,13 +503,13 @@ def eliminar_cheque(
                       motivo=f"Cheque #{cheque_id} eliminado por {current_user.email}")
 
     registrar_log(db, current_user.id, "cheques", cheque_id, "DELETE",
-                  {"monto": c.monto, "titular": c.titular, "estado": c.estado})
+                  {"monto": c.monto, "librador": c.librador, "estado": c.estado})
     db.delete(c)
     db.commit()
     return {"ok": True}
 
 
-# ── Foto comprobante ─────────────────────────────────────────────
+# ── Foto comprobante ──────────────────────────────────────────────
 
 class FotoIn(BaseModel):
     foto_base64: str
@@ -347,9 +567,7 @@ def eliminar_foto(
     return {"ok": True}
 
 
-# ── Importación masiva por Excel ─────────────────────────────────
-# Columnas esperadas (case-insensitive, cualquier orden):
-# titular | banco_origen | numero | monto | comision | fecha_emision | fecha_deposito | cliente | notas
+# ── Importación masiva por Excel ──────────────────────────────────
 
 def _parse_date(v) -> Optional[date]:
     if v is None:
@@ -369,9 +587,6 @@ async def importar_excel(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Importa cheques desde un Excel. Columnas: titular, banco_origen, numero,
-    monto, comision (opcional), fecha_emision (opcional), fecha_deposito (opcional),
-    cliente (nombre o id, opcional), notas (opcional)."""
     oid = _org_id(current_user, org_id)
     ext = (file.filename or '').lower().split('.')[-1]
     if ext not in ('xlsx', 'xls'):
@@ -388,23 +603,22 @@ async def importar_excel(
     if not rows:
         raise HTTPException(400, "El archivo está vacío")
 
-    # Mapear encabezados
     headers = [str(h).strip().lower() if h is not None else '' for h in rows[0]]
     COL = {
-        'titular':        next((i for i, h in enumerate(headers) if 'titular' in h), None),
-        'banco_origen':   next((i for i, h in enumerate(headers) if 'banco' in h), None),
+        'librador':       next((i for i, h in enumerate(headers) if 'librador' in h or 'titular' in h), None),
+        'banco_origen':   next((i for i, h in enumerate(headers) if 'banco' in h and 'nuestro' not in h), None),
         'numero':         next((i for i, h in enumerate(headers) if 'numer' in h or 'cheque' in h), None),
         'monto':          next((i for i, h in enumerate(headers) if 'monto' in h or 'importe' in h), None),
         'comision':       next((i for i, h in enumerate(headers) if 'comis' in h), None),
         'fecha_emision':  next((i for i, h in enumerate(headers) if 'emisi' in h), None),
-        'fecha_deposito': next((i for i, h in enumerate(headers) if 'deposito' in h or 'depósito' in h or 'dep' in h), None),
+        'fecha_deposito': next((i for i, h in enumerate(headers) if 'deposito' in h or 'depósito' in h), None),
         'cliente':        next((i for i, h in enumerate(headers) if 'cliente' in h), None),
+        'codigo_postal':  next((i for i, h in enumerate(headers) if 'codigo' in h or 'postal' in h), None),
         'notas':          next((i for i, h in enumerate(headers) if 'nota' in h or 'observ' in h), None),
     }
     if COL['monto'] is None:
         raise HTTPException(400, "Columna 'monto' requerida no encontrada")
 
-    # Cache de clientes
     clientes_cache: dict[str, int] = {
         c.nombre.lower(): c.id
         for c in db.query(Cliente).filter(Cliente.organizacion_id == oid).all()
@@ -423,10 +637,7 @@ async def importar_excel(
             cliente_id = None
             if COL['cliente'] is not None and row[COL['cliente']]:
                 cv = str(row[COL['cliente']]).strip()
-                if cv.isdigit():
-                    cliente_id = int(cv)
-                else:
-                    cliente_id = clientes_cache.get(cv.lower())
+                cliente_id = int(cv) if cv.isdigit() else clientes_cache.get(cv.lower())
 
             comision = Decimal("0")
             if COL['comision'] is not None and row[COL['comision']]:
@@ -435,27 +646,25 @@ async def importar_excel(
                 except Exception:
                     pass
 
+            cp = str(row[COL['codigo_postal']]).strip() if COL['codigo_postal'] is not None and row[COL['codigo_postal']] else None
             c = Cheque(
                 organizacion_id=oid,
                 cliente_id=cliente_id,
-                titular=str(row[COL['titular']]).strip() if COL['titular'] is not None and row[COL['titular']] else None,
+                librador=str(row[COL['librador']]).strip() if COL['librador'] is not None and row[COL['librador']] else None,
                 banco_origen=str(row[COL['banco_origen']]).strip() if COL['banco_origen'] is not None and row[COL['banco_origen']] else None,
                 numero=str(row[COL['numero']]).strip() if COL['numero'] is not None and row[COL['numero']] else None,
-                monto=monto,
-                comision=comision,
+                monto=monto, comision=comision,
+                codigo_postal=cp, local_interior=_local_interior(cp),
                 fecha_emision=_parse_date(row[COL['fecha_emision']]) if COL['fecha_emision'] is not None else None,
                 fecha_deposito=_parse_date(row[COL['fecha_deposito']]) if COL['fecha_deposito'] is not None else date.today(),
                 notas=str(row[COL['notas']]).strip() if COL['notas'] is not None and row[COL['notas']] else None,
-                estado="pendiente",
-                usuario_id=current_user.id,
+                estado="pendiente", usuario_id=current_user.id,
             )
             db.add(c)
             db.flush()
             registrar_cheque(
-                db=db, cheque_id=c.id, org_id=oid,
-                usuario_id=current_user.id,
-                titular=c.titular or "",
-                monto=c.monto, comision=c.comision,
+                db=db, cheque_id=c.id, org_id=oid, usuario_id=current_user.id,
+                titular=c.librador or "", monto=c.monto, comision=c.comision,
                 fecha=c.fecha_deposito or date.today(),
             )
             importados += 1

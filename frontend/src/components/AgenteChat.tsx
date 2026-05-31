@@ -18,9 +18,18 @@ const SendIcon = () => (
   </svg>
 )
 
-const SparkIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+/* Loco de Cuadra — personaje del barrio con pelo revuelto */
+const LocoIcon = () => (
+  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+    <line x1="8"  y1="5.5" x2="7"    y2="2"  />
+    <line x1="10" y1="4.5" x2="9.5"  y2="1.5"/>
+    <line x1="12" y1="4"   x2="12"   y2="1"  />
+    <line x1="14" y1="4.5" x2="14.5" y2="1.5"/>
+    <line x1="16" y1="5.5" x2="17"   y2="2"  />
+    <circle cx="12" cy="11" r="5.5"/>
+    <circle cx="10" cy="10" r="0.9" fill="currentColor" stroke="none"/>
+    <circle cx="14" cy="10" r="0.9" fill="currentColor" stroke="none"/>
+    <path d="M9.5 13 Q12 15.5 14.5 13" strokeWidth={1.6}/>
   </svg>
 )
 
@@ -113,7 +122,7 @@ export function AgenteChat() {
       >
         {abierto
           ? <CloseIcon />
-          : <SparkIcon />
+          : <LocoIcon />
         }
       </button>
 
@@ -124,10 +133,10 @@ export function AgenteChat() {
 
           {/* Header */}
           <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-[#5E6AD2]/10">
-            <SparkIcon />
+            <LocoIcon />
             <div className="flex-1">
               <p className="text-sm font-semibold text-gray-100">Asistente Cuadra</p>
-              <p className="text-xs text-gray-500">Gemini · datos en tiempo real</p>
+              <p className="text-xs text-gray-500">IA Cuadra · datos en tiempo real</p>
             </div>
             {mensajes.length > 0 && (
               <button onClick={() => setMensajes([])} className="text-xs text-gray-500 hover:text-gray-300">

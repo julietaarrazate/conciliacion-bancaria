@@ -383,7 +383,7 @@ def ocr_cheque(
             "Extraé los datos de este cheque bancario argentino. "
             "Respondé SOLO con un JSON válido (sin texto extra, sin markdown), con estos campos "
             "(usá null si no está visible o no podés leerlo): "
-            '{"numero": "string o null", "banco_origen": "string o null", "titular": "string o null", '
+            '{"numero": "string o null", "banco_origen": "string o null", "librador": "string o null", '
             '"monto": número_sin_formato_o_null, "fecha_emision": "YYYY-MM-DD o null", '
             '"fecha_deposito": "YYYY-MM-DD o null"}'
         )
