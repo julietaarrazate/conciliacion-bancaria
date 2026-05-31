@@ -374,6 +374,33 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - Ambos usan el mismo `GEMINI_API_KEY` (capa gratuita AI Studio, sin costo extra). El fallback
   silencioso ante error permite al usuario cargar datos manualmente sin interrupciones.
 
+### v3.9.2 — Módulo cheques mejorado + Loco de Cuadra (mayo 2026)
+
+- **Portadores**: nueva tabla `portadores` (id, organizacion_id, nombre). Selector con botón "+"
+  inline para agregar desde el form sin salir. GET/POST `/cheques/portadores`.
+- **librador reemplaza titular**: campo `librador` en `Cheque`; `titular` se mantiene para compat.
+  `_cheque_dict()` hace fallback `c.librador or c.titular`. Safety net backfill en startup.
+- **Campos nuevos en Cheque**: `portador_id`, `librador`, `codigo_postal`, `local_interior`,
+  `fecha_rechazo`, `fisico` (bool), `fecha_devolucion`. Todos con `ADD COLUMN IF NOT EXISTS`.
+- **Auto-clasificación Local/Interior**: CP < 2000 → "local", CP ≥ 2000 → "interior".
+  Calculado al tipear el CP en el form (frontend: `computeLI(cp)`) y también al importar Excel.
+- **3 tabs en `/cheques`**: Todos | Por depósito | Rechazados.
+- **Tab "Por depósito"**: selector de fechas disponibles (`GET /cheques/deposito` sin param devuelve
+  `{fechas: [...]}`; con `?fecha=` devuelve `{fecha, items, resumen}`). Tabla con detalle, cards de
+  resumen por L/I. Botón "↓ Excel" → `GET /cheques/deposito/exportar?fecha=` devuelve xlsx (openpyxl)
+  con detalle + resumen por cliente + resumen L/I + total en una sola hoja.
+- **Tab "Rechazados"**: carga independiente `GET /cheques?estado=rechazado&limit=500` al activar la
+  tab. Columnas: F.Depósito, F.Rechazo, Cliente, F.Cheque, N°Banco, Banco, Librador, N°Cheque,
+  CP, L/I, Importe, Físico, F.Devolución.
+- **Modal "Rechazar" mejorado**: `RechazarIn` con `fecha_rechazo`, `fisico` (checkbox), `fecha_devolucion`
+  (aparece solo si físico=true). Endpoint actualizado para setear los 3 campos.
+- **Ícono "Loco de Cuadra"**: reemplaza el ícono Gemini en el asistente IA flotante. SVG custom con
+  5 líneas de pelo revuelto, cabeza circular, ojos puntito, sonrisa curva. Subtítulo → "IA Cuadra".
+- **OCR actualizado**: prompt retorna `librador` (no `titular`).
+- Safety nets en `main.py`: `CREATE TABLE IF NOT EXISTS portadores` + 7x `ALTER TABLE cheques ADD
+  COLUMN IF NOT EXISTS` + `UPDATE cheques SET librador = titular WHERE librador IS NULL`.
+- Route ordering: `/portadores`, `/deposito`, `/deposito/exportar` definidos ANTES de `/{cheque_id}`.
+
 ### Pendiente para próximas sesiones
 
 - **Ajuste manual del Libro Diario** (Fase 2): `POST /contabilidad/asiento-manual` — elegís cuenta
@@ -456,6 +483,9 @@ Checkpoints disponibles:
 - `v3.9.1` — OCR de fotos con Gemini Flash: cheques (número, banco, titular, monto, fechas) y
   comprobantes de transferencia (monto, fecha, beneficiario, referencia). Mismo GEMINI_API_KEY.
   Endpoints: POST /agente/ocr-cheque, POST /agente/ocr-transferencia (mayo 2026)
+- `v3.9.2` — Cheques mejorado: portadores (selector + inline add), librador reemplaza titular,
+  CP + local/interior auto, 3 tabs (Todos/Por depósito/Rechazados), Excel por fecha de depósito,
+  modal rechazo con físico + fecha devolución, ícono Loco de Cuadra en asistente IA (mayo 2026)
 
 ---
 
