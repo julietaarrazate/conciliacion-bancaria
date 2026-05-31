@@ -364,10 +364,18 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   Backend: `routers/agente.py` + `google-generativeai==0.8.3`. Activado con `GEMINI_API_KEY` en
   Render (AI Studio — capa gratuita: 15 req/min, 1M tokens/día). Modelo: `gemini-2.0-flash`.
 
+### v3.9.1 — OCR de fotos con Gemini Flash (mayo 2026)
+
+- **OCR cheques**: al adjuntar foto en el formulario de cheque, `POST /agente/ocr-cheque` llama a
+  Gemini con la imagen (inline_data) y extrae número, banco, titular, monto, fecha_emision y
+  fecha_deposito. Pre-completa solo campos vacíos. Endpoint en `routers/agente.py`.
+- **OCR transferencias**: al adjuntar foto en `/pagos`, `POST /agente/ocr-transferencia` extrae
+  monto, fecha, beneficiario y referencia del comprobante. Solo pre-completa campos vacíos.
+- Ambos usan el mismo `GEMINI_API_KEY` (capa gratuita AI Studio, sin costo extra). El fallback
+  silencioso ante error permite al usuario cargar datos manualmente sin interrupciones.
+
 ### Pendiente para próximas sesiones
 
-- **OCR de fotos** (cheques y comprobantes de transferencia): foto → Gemini extrae número, banco,
-  titular, CUIT, monto, fecha → pre-completa el formulario. Mismo `GEMINI_API_KEY`, sin costo extra.
 - **Ajuste manual del Libro Diario** (Fase 2): `POST /contabilidad/asiento-manual` — elegís cuenta
   Debe, cuenta Haber, monto, fecha, descripción. Solo cuentas hoja, valida partida doble, módulo
   `ajuste_manual`. Borrable con reverso. Modal en `/contabilidad`.
@@ -403,8 +411,7 @@ Setup R2:
 
 ## Roadmap (por valor / esfuerzo)
 
-1. **OCR de fotos** — Gemini Flash lee cheques y comprobantes → pre-completa formularios (mismo GEMINI_API_KEY, sin costo extra)
-2. **Ajuste manual del Libro Diario** — asiento-manual con validación partida doble + modal en /contabilidad
+1. **Ajuste manual del Libro Diario** — asiento-manual con validación partida doble + modal en /contabilidad
 3. **Liquidaciones con asientos** — consultar contador si deben generar entradas contables
 4. **2FA para superadmin** — código por email al login (medio esfuerzo, alta seguridad)
 5. **Google OAuth** — login con Google (medio esfuerzo, mejor UX)
@@ -446,7 +453,10 @@ Checkpoints disponibles:
   correctos con cuentas hoja, drop tablas viejas, numeración correlativa automática), compartir
   cheques por WhatsApp, asistente IA Gemini Flash con function calling + dictado por voz
   (mayo 2026 — PRs #74-#77 mergeados a main)
+- `v3.9.1` — OCR de fotos con Gemini Flash: cheques (número, banco, titular, monto, fechas) y
+  comprobantes de transferencia (monto, fecha, beneficiario, referencia). Mismo GEMINI_API_KEY.
+  Endpoints: POST /agente/ocr-cheque, POST /agente/ocr-transferencia (mayo 2026)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.9
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.9.1

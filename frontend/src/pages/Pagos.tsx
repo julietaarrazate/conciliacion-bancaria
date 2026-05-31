@@ -34,6 +34,53 @@ const TIPO_LABEL: Record<string, string> = {
 type Vista = 'lista' | 'nuevo'
 type Step = 'foto' | 'datos' | 'exito'
 
+// Share payment as PDF document (jsPDF loaded on-demand)
+const sharePagoPdf = async (
+  nombre: string, tipo: string, montoNum: number, fecha: string,
+  formaPago: string, referencia: string, fotoB64: string
+): Promise<boolean> => {
+  try {
+    const { jsPDF } = await import('jspdf')
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+
+    const tipoLabel: Record<string, string> = { proveedor: 'PROVEEDOR', gasto: 'GASTO OPERATIVO', pago_cliente: 'PAGO A CLIENTE' }
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(13)
+    pdf.text(`COMPROBANTE DE ${tipoLabel[tipo] || 'PAGO'}`, 105, 16, { align: 'center' })
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(9)
+    pdf.text(nombre, 105, 23, { align: 'center' })
+
+    pdf.addImage(fotoB64, 'JPEG', 10, 28, 190, 135)
+
+    pdf.setDrawColor(180, 180, 180)
+    pdf.line(10, 169, 200, 169)
+
+    pdf.setFontSize(10)
+    const fmtN = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n)
+    const rows = [
+      ['Importe:', fmtN(montoNum)],
+      ['Forma de pago:', formaPago === 'banco' ? 'Banco' : 'Efectivo'],
+      ['Fecha:', new Date(fecha + 'T00:00:00').toLocaleDateString('es-AR')],
+      ['Referencia:', referencia || '—'],
+      ['Generado:', new Date().toLocaleDateString('es-AR')],
+    ]
+    rows.forEach(([label, value], i) => {
+      const y = 177 + i * 8
+      pdf.setFont('helvetica', 'bold'); pdf.text(label, 12, y)
+      pdf.setFont('helvetica', 'normal'); pdf.text(value, 52, y)
+    })
+
+    const blob = pdf.output('blob')
+    const file = new File([blob], `Pago_${nombre.replace(/\s+/g, '_')}.pdf`, { type: 'application/pdf' })
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ title: `Pago - ${nombre}`, files: [file] })
+      return true
+    }
+  } catch { /* no soportado */ }
+  return false
+}
+
 export const Pagos: React.FC = () => {
   const { activeOrgId } = useOrgStore()
   const { hasPermission } = useAuthStore()
@@ -158,8 +205,34 @@ export const Pagos: React.FC = () => {
         if (w > MAX) { h = h * MAX / w; w = MAX }
         if (h > MAX) { w = w * MAX / h; h = MAX }
         canvas.width = w; canvas.height = h
-        canvas.getContext('2d')?.drawImage(img, 0, 0, w, h)
-        setFoto(canvas.toDataURL('image/jpeg', 0.7))
+        const ctx = canvas.getContext('2d')!
+        ctx.filter = 'grayscale(1) contrast(1.4) brightness(1.1)'
+        ctx.drawImage(img, 0, 0, w, h)
+        const compressed = canvas.toDataURL('image/jpeg', 0.7)
+        setFoto(compressed)
+        // Compress further to 768px for OCR (1 Gemini tile = 258 tokens)
+        const OCR_MAX = 768
+        let ow = w, oh = h
+        if (ow > OCR_MAX) { oh = Math.round(oh * OCR_MAX / ow); ow = OCR_MAX }
+        if (oh > OCR_MAX) { ow = Math.round(ow * OCR_MAX / oh); oh = OCR_MAX }
+        const ocrCanvas = document.createElement('canvas')
+        ocrCanvas.width = ow; ocrCanvas.height = oh
+        const ocrCtx = ocrCanvas.getContext('2d')!
+        ocrCtx.filter = 'grayscale(1) contrast(1.4) brightness(1.1)'
+        ocrCtx.drawImage(img, 0, 0, ow, oh)
+        const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.7)
+        apiClient.client.post('/agente/ocr-transferencia', { imagen_base64: ocrCompressed })
+          .then(res => {
+            const d = res.data
+            setForm(prev => ({
+              ...prev,
+              monto:        prev.monto        || (d.monto != null ? String(d.monto) : prev.monto),
+              fecha:        prev.fecha        || d.fecha        || prev.fecha,
+              beneficiario: prev.beneficiario || d.beneficiario || prev.beneficiario,
+              referencia:   prev.referencia   || d.referencia   || prev.referencia,
+            }))
+          })
+          .catch(() => { /* OCR no disponible — el usuario carga manualmente */ })
       }
       img.src = base64
     }
@@ -214,19 +287,21 @@ export const Pagos: React.FC = () => {
     const nombre = form.beneficiario || form.cliente_nombre || form.concepto || 'Pago'
     const texto = `Pago registrado%0A• ${TIPO_LABEL[form.tipo]}: ${nombre}%0A• Importe: ${fmt(montoNum)}%0A• ${form.forma_pago === 'banco' ? 'Banco' : 'Efectivo'}%0A• Fecha: ${new Date(form.fecha).toLocaleDateString('es-AR')}`
     await apiClient.client.post(`/pagos/${resultado.id}/compartir`).catch(() => {})
-    if (foto && navigator.share && navigator.canShare) {
-      try {
-        const blob = await fetch(foto).then(r => r.blob())
-        const file = new File([blob], `Pago_${nombre}.jpg`, { type: 'image/jpeg' })
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title: `Pago - ${nombre} - ${fmt(montoNum)}`,
-            text: `Pago - ${nombre} - ${fmt(montoNum)} - ${new Date(form.fecha).toLocaleDateString('es-AR')}`,
-            files: [file],
-          })
-          return
-        }
-      } catch {}
+    if (foto) {
+      // 1️⃣ Intentar compartir como PDF con foto escaneada
+      const sharedPdf = await sharePagoPdf(nombre, form.tipo, montoNum, form.fecha, form.forma_pago, form.referencia, foto)
+      if (sharedPdf) return
+      // 2️⃣ Fallback: compartir como imagen
+      if (navigator.share && navigator.canShare) {
+        try {
+          const blob = await fetch(foto).then(r => r.blob())
+          const file = new File([blob], `Pago_${nombre}.jpg`, { type: 'image/jpeg' })
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ title: `Pago - ${nombre} - ${fmt(montoNum)}`, files: [file] })
+            return
+          }
+        } catch {}
+      }
     }
     window.open(`whatsapp://send?text=${texto}`, '_blank')
   }

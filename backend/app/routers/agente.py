@@ -1,6 +1,9 @@
 import os
+import base64
+import json
 import logging
 from datetime import date
+from threading import Lock
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -11,6 +14,36 @@ from app.middleware.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agente", tags=["agente"])
+
+# ── Daily rate limiting (OCR + Chat) ─────────────────────────────────────────
+_OCR_DAILY_LIMIT  = int(os.environ.get("OCR_DAILY_LIMIT",  "150"))
+_CHAT_DAILY_LIMIT = int(os.environ.get("CHAT_DAILY_LIMIT", "200"))
+
+def _make_counter() -> dict:
+    return {"date": None, "count": 0, "lock": Lock()}
+
+_ocr_ctr  = _make_counter()
+_chat_ctr = _make_counter()
+
+def _check_limit(ctr: dict, limit: int) -> bool:
+    today = date.today()
+    with ctr["lock"]:
+        if ctr["date"] != today:
+            ctr["date"] = today
+            ctr["count"] = 0
+        if ctr["count"] >= limit:
+            return False
+        ctr["count"] += 1
+        return True
+
+def _usage(ctr: dict, limit: int) -> dict:
+    today = date.today()
+    with ctr["lock"]:
+        used = ctr["count"] if ctr["date"] == today else 0
+    return {"used": used, "limit": limit, "remaining": max(0, limit - used), "date": str(today)}
+
+def _ocr_allowed()  -> bool: return _check_limit(_ocr_ctr,  _OCR_DAILY_LIMIT)
+def _chat_allowed() -> bool: return _check_limit(_chat_ctr, _CHAT_DAILY_LIMIT)
 
 # ── Funciones que Gemini puede llamar ─────────────────────────────────────────
 
@@ -167,6 +200,9 @@ def chat(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if not _chat_allowed():
+        raise HTTPException(429, "Límite diario del asistente IA alcanzado. Volvé mañana 🙂")
+
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         raise HTTPException(503, "Agente no configurado (falta GEMINI_API_KEY en Render)")
@@ -289,3 +325,114 @@ def chat(
     except Exception as ex:
         logger.warning("Agente error: %s", ex)
         raise HTTPException(500, f"Error del agente: {ex}")
+
+
+# ── OCR helpers ───────────────────────────────────────────────────────────────
+
+def _parse_b64_image(imagen_b64: str) -> tuple[str, bytes]:
+    """Returns (mime_type, raw_bytes) from a data-URL or raw base64 string."""
+    if "," in imagen_b64:
+        header, data = imagen_b64.split(",", 1)
+        mime_type = header.split(":")[1].split(";")[0] if ":" in header else "image/jpeg"
+    else:
+        data = imagen_b64
+        mime_type = "image/jpeg"
+    return mime_type, base64.b64decode(data)
+
+
+def _call_gemini_ocr(api_key: str, mime_type: str, raw_bytes: bytes, prompt: str) -> dict:
+    import google.generativeai as genai
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    image_part = genai.protos.Part(
+        inline_data=genai.protos.Blob(mime_type=mime_type, data=raw_bytes)
+    )
+    response = model.generate_content([image_part, prompt])
+    try:
+        texto = response.text.strip()
+    except Exception:
+        return {}  # safety block o respuesta sin texto
+    if not texto:
+        return {}
+    # Strip markdown code fences if present
+    if texto.startswith("```"):
+        lines = texto.split("\n")
+        lines = [l for l in lines if not l.startswith("```")]
+        texto = "\n".join(lines).strip()
+    return json.loads(texto)
+
+
+@router.post("/ocr-cheque")
+def ocr_cheque(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+):
+    if not _ocr_allowed():
+        raise HTTPException(429, "Límite diario de OCR alcanzado")
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(503, "OCR no configurado (falta GEMINI_API_KEY)")
+
+    imagen_b64 = str(payload.get("imagen_base64", "")).strip()
+    if not imagen_b64:
+        raise HTTPException(400, "Imagen vacía")
+
+    try:
+        mime_type, raw_bytes = _parse_b64_image(imagen_b64)
+        prompt = (
+            "Extraé los datos de este cheque bancario argentino. "
+            "Respondé SOLO con un JSON válido (sin texto extra, sin markdown), con estos campos "
+            "(usá null si no está visible o no podés leerlo): "
+            '{"numero": "string o null", "banco_origen": "string o null", "titular": "string o null", '
+            '"monto": número_sin_formato_o_null, "fecha_emision": "YYYY-MM-DD o null", '
+            '"fecha_deposito": "YYYY-MM-DD o null"}'
+        )
+        datos = _call_gemini_ocr(api_key, mime_type, raw_bytes, prompt)
+        return datos
+    except json.JSONDecodeError:
+        return {}
+    except Exception as ex:
+        logger.warning("OCR cheque error: %s", ex)
+        raise HTTPException(500, f"Error OCR: {ex}")
+
+
+@router.post("/ocr-transferencia")
+def ocr_transferencia(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+):
+    if not _ocr_allowed():
+        raise HTTPException(429, "Límite diario de OCR alcanzado")
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(503, "OCR no configurado (falta GEMINI_API_KEY)")
+
+    imagen_b64 = str(payload.get("imagen_base64", "")).strip()
+    if not imagen_b64:
+        raise HTTPException(400, "Imagen vacía")
+
+    try:
+        mime_type, raw_bytes = _parse_b64_image(imagen_b64)
+        prompt = (
+            "Extraé los datos de este comprobante de transferencia bancaria argentina. "
+            "Respondé SOLO con un JSON válido (sin texto extra, sin markdown), con estos campos "
+            "(usá null si no está visible o no podés leerlo): "
+            '{"monto": número_sin_formato_o_null, "fecha": "YYYY-MM-DD o null", '
+            '"beneficiario": "nombre del destinatario o null", '
+            '"referencia": "número de operación o null"}'
+        )
+        datos = _call_gemini_ocr(api_key, mime_type, raw_bytes, prompt)
+        return datos
+    except json.JSONDecodeError:
+        return {}
+    except Exception as ex:
+        logger.warning("OCR transferencia error: %s", ex)
+        raise HTTPException(500, f"Error OCR: {ex}")
+
+
+@router.get("/ocr-usage")
+def get_ocr_usage(current_user: User = Depends(get_current_user)):
+    return {
+        "ocr":  _usage(_ocr_ctr,  _OCR_DAILY_LIMIT),
+        "chat": _usage(_chat_ctr, _CHAT_DAILY_LIMIT),
+    }

@@ -53,6 +53,73 @@ const toBase64 = (file: File): Promise<string> =>
     reader.readAsDataURL(file)
   })
 
+// Compress with scanner filter (grayscale + high contrast). maxPx=1200 para guardar, 768 para OCR.
+const compressScanner = (src: string, maxPx: number, quality: number): Promise<string> =>
+  new Promise(resolve => {
+    const img = new Image()
+    img.onload = () => {
+      let w = img.width, h = img.height
+      if (w > maxPx) { h = Math.round(h * maxPx / w); w = maxPx }
+      if (h > maxPx) { w = Math.round(w * maxPx / h); h = maxPx }
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      const ctx = canvas.getContext('2d')!
+      ctx.filter = 'grayscale(1) contrast(1.4) brightness(1.1)'
+      ctx.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', quality))
+    }
+    img.onerror = () => resolve(src)
+    img.src = src
+  })
+
+// Share cheque as PDF document (jsPDF loaded on-demand)
+const shareChequePdf = async (c: Cheque, fotoB64: string): Promise<boolean> => {
+  try {
+    const { jsPDF } = await import('jspdf')
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    const nombre = c.cliente_nombre || c.titular || 'Sin nombre'
+
+    // Header
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(13)
+    pdf.text('COMPROBANTE DE CHEQUE', 105, 16, { align: 'center' })
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(9)
+    pdf.text(`N° ${c.numero || '—'} · ${c.banco_origen || '—'}`, 105, 23, { align: 'center' })
+
+    // Photo (scanner, already grayscale)
+    pdf.addImage(fotoB64, 'JPEG', 10, 28, 190, 128)
+
+    // Divider
+    pdf.setDrawColor(180, 180, 180)
+    pdf.line(10, 162, 200, 162)
+
+    // Metadata
+    pdf.setFontSize(10)
+    const rows = [
+      ['Cliente:', nombre],
+      ['Importe:', fmt(c.monto)],
+      ['Emisión:', fmtDate(c.fecha_emision)],
+      ['Vencimiento:', fmtDate(c.fecha_deposito)],
+      ['Estado:', c.estado],
+      ['Generado:', new Date().toLocaleDateString('es-AR')],
+    ]
+    rows.forEach(([label, value], i) => {
+      const y = 170 + i * 8
+      pdf.setFont('helvetica', 'bold'); pdf.text(label, 12, y)
+      pdf.setFont('helvetica', 'normal'); pdf.text(value, 52, y)
+    })
+
+    const blob = pdf.output('blob')
+    const file = new File([blob], `Cheque_${c.numero || c.id}.pdf`, { type: 'application/pdf' })
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ title: `Cheque ${c.numero || ''}`, files: [file] })
+      return true
+    }
+  } catch { /* no soportado */ }
+  return false
+}
+
 export const Cheques: React.FC = () => {
   const { activeOrgId } = useOrgStore()
   const [cheques, setCheques]     = useState<Cheque[]>([])
@@ -154,7 +221,22 @@ export const Cheques: React.FC = () => {
     const file = e.target.files?.[0]
     if (!file) return
     const b64 = await toBase64(file)
-    setFormFoto(b64)
+    const compressed = await compressScanner(b64, 1200, 0.82)
+    setFormFoto(compressed)
+    try {
+      const small = await compressScanner(b64, 768, 0.7)
+      const res = await apiClient.client.post('/agente/ocr-cheque', { imagen_base64: small })
+      const d = res.data
+      setFormData(prev => ({
+        ...prev,
+        numero:         prev.numero        || (d.numero        != null ? String(d.numero)       : prev.numero),
+        banco_origen:   prev.banco_origen  || (d.banco_origen  != null ? String(d.banco_origen) : prev.banco_origen),
+        titular:        prev.titular       || (d.titular       != null ? String(d.titular)      : prev.titular),
+        monto:          (prev.monto ?? 0) > 0 ? prev.monto : (d.monto ?? prev.monto),
+        fecha_emision:  prev.fecha_emision  || (d.fecha_emision  != null ? String(d.fecha_emision)  : prev.fecha_emision),
+        fecha_deposito: prev.fecha_deposito || (d.fecha_deposito != null ? String(d.fecha_deposito) : prev.fecha_deposito),
+      }))
+    } catch { /* OCR no disponible — el usuario carga manualmente */ }
   }
 
   const handleCreate = async () => {
@@ -224,12 +306,18 @@ export const Cheques: React.FC = () => {
       try {
         const res = await apiClient.client.get(`/cheques/${c.id}/foto`)
         const fotoB64 = res.data.foto_base64
-        if (fotoB64 && navigator.share && navigator.canShare) {
-          const blob = await fetch(fotoB64).then(r => r.blob())
-          const file = new File([blob], `Cheque_${nombre}.jpg`, { type: 'image/jpeg' })
-          if (navigator.canShare({ files: [file] })) {
-            await navigator.share({ title: `Cheque - ${nombre} - ${fmt(c.monto)}`, files: [file] })
-            return
+        if (fotoB64) {
+          // 1️⃣ Intentar compartir como PDF con foto escaneada
+          const sharedPdf = await shareChequePdf(c, fotoB64)
+          if (sharedPdf) return
+          // 2️⃣ Fallback: compartir como imagen
+          if (navigator.share && navigator.canShare) {
+            const blob = await fetch(fotoB64).then(r => r.blob())
+            const file = new File([blob], `Cheque_${nombre}.jpg`, { type: 'image/jpeg' })
+            if (navigator.canShare({ files: [file] })) {
+              await navigator.share({ title: `Cheque - ${nombre} - ${fmt(c.monto)}`, files: [file] })
+              return
+            }
           }
         }
       } catch {}
