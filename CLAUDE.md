@@ -362,7 +362,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   `consultar_pagos_cliente`, `consultar_cheques`, `consultar_saldo_caja`, `buscar_cliente`,
   `resumen_financiero`. Dictado por voz (SpeechRecognition API nativa, Chrome/Android, gratis).
   Backend: `routers/agente.py` + `google-generativeai==0.8.3`. Activado con `GEMINI_API_KEY` en
-  Render (AI Studio — capa gratuita: 15 req/min, 1M tokens/día). Modelo: `gemini-2.0-flash`.
+  Render (AI Studio — capa gratuita). Modelo: `gemini-2.5-flash` (configurable via `GEMINI_MODEL`).
 
 ### v3.9.1 — OCR de fotos con Gemini Flash (mayo 2026)
 
@@ -400,6 +400,28 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - Safety nets en `main.py`: `CREATE TABLE IF NOT EXISTS portadores` + 7x `ALTER TABLE cheques ADD
   COLUMN IF NOT EXISTS` + `UPDATE cheques SET librador = titular WHERE librador IS NULL`.
 - Route ordering: `/portadores`, `/deposito`, `/deposito/exportar` definidos ANTES de `/{cheque_id}`.
+
+### v3.9.3 — Asistente IA: modelo 2.5 + manejo de errores + botón flotante (mayo 2026 — PRs #82-#84)
+
+- **Logo Cuadra en el asistente** (PR #82): el botón flotante usa el componente `CuadraLogo`
+  (mismo logo que el header/sidebar), NO un ícono custom. `w-10 h-10 rounded-full overflow-hidden`
+  → círculo perfecto, levemente más chico. Auto-hide al scrollear hacia abajo (fade + slide),
+  reaparece al subir o tras 1.2s parado; siempre visible si el chat está abierto. Burbujas con
+  `break-words` para no desbordar horizontalmente.
+- **Manejo de errores Gemini** (PR #83): `_classify_gemini_error(ex)` mapea la excepción a
+  (status, mensaje amigable): API key inválida/sin permisos (503), modelo no disponible (503),
+  cuota diaria agotada vs límite por minuto (429 con mensaje distinto). `_gemini_send()` reintenta
+  1 vez con `time.sleep(5)` ante 429 transitorio (límite por minuto). `api_key.strip()` en los 3
+  endpoints (chat + 2 OCR) para tolerar espacios/comillas en la env var de Render. Los OCR también
+  usan `_classify_gemini_error` (antes devolvían el error crudo de Python).
+- **Modelo configurable + actualizado** (PR #84): `_GEMINI_MODEL = os.environ.get("GEMINI_MODEL",
+  "gemini-2.5-flash")`. Default pasó de `gemini-2.0-flash` (se depreca 1/6/2026, free tier ya en
+  `limit: 0`) a **`gemini-2.5-flash`** (free tier vigente: 250 req/día, mejor precisión OCR).
+  Override-able en Render con `GEMINI_MODEL` (ej: `gemini-2.5-flash-lite` = 1.000 req/día, menos
+  preciso). El mismo `_GEMINI_MODEL` se usa para chat, OCR de cheques y OCR de transferencias.
+- **IMPORTANTE Gemini free tier (mayo 2026)**: la familia 2.0 (`gemini-2.0-flash`/`flash-lite`) se
+  depreca el 1/6/2026; los modelos Pro pasaron a pago en abril 2026. Solo Flash y Flash-Lite de la
+  versión 2.5 mantienen capa gratuita. NUNCA volver a `gemini-2.0-flash`.
 
 ### Pendiente para próximas sesiones
 
@@ -483,10 +505,13 @@ Checkpoints disponibles:
 - `v3.9.1` — OCR de fotos con Gemini Flash: cheques (número, banco, titular, monto, fechas) y
   comprobantes de transferencia (monto, fecha, beneficiario, referencia). Mismo GEMINI_API_KEY.
   Endpoints: POST /agente/ocr-cheque, POST /agente/ocr-transferencia (mayo 2026)
+- `v3.9.3` — Asistente IA: logo Cuadra + botón circular con auto-hide, manejo de errores Gemini
+  (retry 429, clasificación API key/cuota/modelo, key strip), modelo default `gemini-2.5-flash`
+  (2.0-flash deprecado 1/6/2026), `GEMINI_MODEL` configurable (mayo 2026 — PRs #82-#84)
 - `v3.9.2` — Cheques mejorado: portadores (selector + inline add), librador reemplaza titular,
   CP + local/interior auto, 3 tabs (Todos/Por depósito/Rechazados), Excel por fecha de depósito,
   modal rechazo con físico + fecha devolución, ícono Loco de Cuadra en asistente IA (mayo 2026)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.9.1
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.9.3
