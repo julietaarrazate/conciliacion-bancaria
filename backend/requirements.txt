@@ -43,3 +43,6 @@ pywebpush>=1.14.0
 
 # Storage S3/R2 (opcional, activado via env vars S3_*)
 boto3==1.35.49
+
+# Agente IA (Gemini Flash — activado via env var GEMINI_API_KEY)
+google-generativeai==0.8.3
