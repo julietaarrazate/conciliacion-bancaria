@@ -324,7 +324,10 @@ def chat(
 
     except Exception as ex:
         logger.warning("Agente error: %s", ex)
-        raise HTTPException(500, f"Error del agente: {ex}")
+        msg = str(ex)
+        if "429" in msg or "quota" in msg.lower() or "ResourceExhausted" in msg:
+            raise HTTPException(429, "Cuota de Gemini excedida. Volvé en unos minutos ☕")
+        raise HTTPException(500, "El asistente no está disponible en este momento. Intentá de nuevo.")
 
 
 # ── OCR helpers ───────────────────────────────────────────────────────────────

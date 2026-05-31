@@ -33,14 +33,17 @@ const SUGERENCIAS = [
 ]
 
 export function AgenteChat() {
-  const [abierto, setAbierto]     = useState(false)
-  const [mensajes, setMensajes]   = useState<Mensaje[]>([])
-  const [input, setInput]         = useState('')
-  const [cargando, setCargando]   = useState(false)
+  const [abierto, setAbierto]       = useState(false)
+  const [mensajes, setMensajes]     = useState<Mensaje[]>([])
+  const [input, setInput]           = useState('')
+  const [cargando, setCargando]     = useState(false)
   const [escuchando, setEscuchando] = useState(false)
-  const bottomRef                 = useRef<HTMLDivElement>(null)
-  const inputRef                  = useRef<HTMLInputElement>(null)
-  const recognitionRef            = useRef<any>(null)
+  const [visible, setVisible]       = useState(true)
+  const bottomRef                   = useRef<HTMLDivElement>(null)
+  const inputRef                    = useRef<HTMLInputElement>(null)
+  const recognitionRef              = useRef<any>(null)
+  const lastScrollY                 = useRef(0)
+  const hideTimer                   = useRef<number | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -48,6 +51,28 @@ export function AgenteChat() {
 
   useEffect(() => {
     if (abierto) setTimeout(() => inputRef.current?.focus(), 100)
+  }, [abierto])
+
+  // Auto-hide FAB while scrolling down; re-show when scrolling up or stopped
+  useEffect(() => {
+    if (abierto) return  // keep visible when chat is open
+    const handleScroll = () => {
+      const currentY = window.scrollY
+      if (currentY > lastScrollY.current + 8) {
+        setVisible(false)
+      } else if (currentY < lastScrollY.current - 4) {
+        setVisible(true)
+      }
+      lastScrollY.current = currentY
+
+      if (hideTimer.current) window.clearTimeout(hideTimer.current)
+      hideTimer.current = window.setTimeout(() => setVisible(true), 1200)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      if (hideTimer.current) window.clearTimeout(hideTimer.current)
+    }
   }, [abierto])
 
   const enviar = async (texto: string) => {
@@ -102,13 +127,13 @@ export function AgenteChat() {
     <>
       {/* Botón flotante */}
       <button
-        onClick={() => setAbierto(o => !o)}
-        className="fixed bottom-20 right-4 z-40 md:bottom-6 w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105"
+        onClick={() => { setAbierto(o => !o); setVisible(true) }}
+        className={`fixed bottom-20 right-4 z-40 md:bottom-6 w-10 h-10 rounded-full shadow-lg overflow-hidden flex items-center justify-center transition-all duration-300 hover:scale-105 ${visible || abierto ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
         title="Asistente IA"
       >
         {abierto
-          ? <div className="w-12 h-12 rounded-full bg-[#5E6AD2] hover:bg-[#4f5bbf] flex items-center justify-center"><CloseIcon /></div>
-          : <CuadraLogo size={48} animate={false} />
+          ? <div className="w-10 h-10 rounded-full bg-[#5E6AD2] flex items-center justify-center text-white"><CloseIcon /></div>
+          : <CuadraLogo size={40} animate={false} />
         }
       </button>
 
@@ -147,7 +172,7 @@ export function AgenteChat() {
 
             {mensajes.map((m, i) => (
               <div key={i} className={`flex ${m.rol === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm whitespace-pre-wrap ${
+                <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm break-words ${
                   m.rol === 'user'
                     ? 'bg-[#5E6AD2] text-white rounded-br-sm'
                     : 'bg-white/8 text-gray-200 rounded-bl-sm'
