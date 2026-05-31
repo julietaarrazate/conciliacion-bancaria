@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 from datetime import date
+from threading import Lock
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -13,6 +14,28 @@ from app.middleware.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agente", tags=["agente"])
+
+# ── OCR daily rate limiting ──────────────────────────────────────────────────
+_OCR_DAILY_LIMIT = int(os.environ.get("OCR_DAILY_LIMIT", "300"))
+_ocr_state: dict = {"date": None, "count": 0}
+_ocr_lock = Lock()
+
+def _ocr_allowed() -> bool:
+    today = date.today()
+    with _ocr_lock:
+        if _ocr_state["date"] != today:
+            _ocr_state["date"] = today
+            _ocr_state["count"] = 0
+        if _ocr_state["count"] >= _OCR_DAILY_LIMIT:
+            return False
+        _ocr_state["count"] += 1
+        return True
+
+def _ocr_current_usage() -> dict:
+    today = date.today()
+    with _ocr_lock:
+        used = _ocr_state["count"] if _ocr_state["date"] == today else 0
+    return {"used": used, "limit": _OCR_DAILY_LIMIT, "remaining": max(0, _OCR_DAILY_LIMIT - used), "date": str(today)}
 
 # ── Funciones que Gemini puede llamar ─────────────────────────────────────────
 
@@ -333,6 +356,8 @@ def ocr_cheque(
     payload: dict,
     current_user: User = Depends(get_current_user),
 ):
+    if not _ocr_allowed():
+        raise HTTPException(429, "Límite diario de OCR alcanzado")
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         raise HTTPException(503, "OCR no configurado (falta GEMINI_API_KEY)")
@@ -365,6 +390,8 @@ def ocr_transferencia(
     payload: dict,
     current_user: User = Depends(get_current_user),
 ):
+    if not _ocr_allowed():
+        raise HTTPException(429, "Límite diario de OCR alcanzado")
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         raise HTTPException(503, "OCR no configurado (falta GEMINI_API_KEY)")
@@ -390,3 +417,8 @@ def ocr_transferencia(
     except Exception as ex:
         logger.warning("OCR transferencia error: %s", ex)
         raise HTTPException(500, f"Error OCR: {ex}")
+
+
+@router.get("/ocr-usage")
+def get_ocr_usage(current_user: User = Depends(get_current_user)):
+    return _ocr_current_usage()

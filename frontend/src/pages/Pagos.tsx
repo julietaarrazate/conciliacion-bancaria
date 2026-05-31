@@ -168,8 +168,10 @@ export const Pagos: React.FC = () => {
         if (oh > OCR_MAX) { ow = Math.round(ow * OCR_MAX / oh); oh = OCR_MAX }
         const ocrCanvas = document.createElement('canvas')
         ocrCanvas.width = ow; ocrCanvas.height = oh
-        ocrCanvas.getContext('2d')?.drawImage(img, 0, 0, ow, oh)
-        const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.65)
+        const ocrCtx = ocrCanvas.getContext('2d')!
+        ocrCtx.filter = 'grayscale(1) contrast(1.4) brightness(1.1)'
+        ocrCtx.drawImage(img, 0, 0, ow, oh)
+        const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.7)
         apiClient.client.post('/agente/ocr-transferencia', { imagen_base64: ocrCompressed })
           .then(res => {
             const d = res.data

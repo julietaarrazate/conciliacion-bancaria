@@ -53,7 +53,24 @@ const toBase64 = (file: File): Promise<string> =>
     reader.readAsDataURL(file)
   })
 
-// Compress image to max 768px for OCR (1 Gemini tile = 258 tokens)
+// Compress image to max 1200px for storage/display
+const compressImage = (src: string, maxPx: number, quality: number): Promise<string> =>
+  new Promise(resolve => {
+    const img = new Image()
+    img.onload = () => {
+      let w = img.width, h = img.height
+      if (w > maxPx) { h = Math.round(h * maxPx / w); w = maxPx }
+      if (h > maxPx) { w = Math.round(w * maxPx / h); h = maxPx }
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      canvas.getContext('2d')?.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', quality))
+    }
+    img.onerror = () => resolve(src)
+    img.src = src
+  })
+
+// Compress to 768px with scanner filter (grayscale + high contrast) for OCR
 const compressForOcr = (src: string): Promise<string> =>
   new Promise(resolve => {
     const img = new Image()
@@ -64,8 +81,10 @@ const compressForOcr = (src: string): Promise<string> =>
       if (h > MAX) { w = Math.round(w * MAX / h); h = MAX }
       const canvas = document.createElement('canvas')
       canvas.width = w; canvas.height = h
-      canvas.getContext('2d')?.drawImage(img, 0, 0, w, h)
-      resolve(canvas.toDataURL('image/jpeg', 0.65))
+      const ctx = canvas.getContext('2d')!
+      ctx.filter = 'grayscale(1) contrast(1.4) brightness(1.1)'
+      ctx.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', 0.7))
     }
     img.onerror = () => resolve(src)
     img.src = src
@@ -172,7 +191,8 @@ export const Cheques: React.FC = () => {
     const file = e.target.files?.[0]
     if (!file) return
     const b64 = await toBase64(file)
-    setFormFoto(b64)
+    const compressed = await compressImage(b64, 1200, 0.82)
+    setFormFoto(compressed)
     try {
       const small = await compressForOcr(b64)
       const res = await apiClient.client.post('/agente/ocr-cheque', { imagen_base64: small })
