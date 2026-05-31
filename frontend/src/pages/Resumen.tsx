@@ -149,11 +149,14 @@ export const Resumen: React.FC = () => {
     )
   }
 
-  if (error) {
-    return <div className="p-6 text-red-600 dark:text-red-400">{error}</div>
+  if (!data) {
+    if (error) return (
+      <div className="p-6">
+        <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">{error}</div>
+      </div>
+    )
+    return null
   }
-
-  if (!data) return null
 
   const k = data.periodo_actual
   const v = data.variaciones

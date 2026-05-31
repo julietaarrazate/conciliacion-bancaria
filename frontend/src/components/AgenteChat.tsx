@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { apiClient } from '@/services/api'
+import { CuadraLogo } from '@/components/CuadraLogo'
 
 interface Mensaje {
   rol: 'user' | 'agente'
@@ -15,21 +16,6 @@ const MicIcon = () => (
 const SendIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
-  </svg>
-)
-
-/* Loco de Cuadra — personaje del barrio con pelo revuelto */
-const LocoIcon = () => (
-  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
-    <line x1="8"  y1="5.5" x2="7"    y2="2"  />
-    <line x1="10" y1="4.5" x2="9.5"  y2="1.5"/>
-    <line x1="12" y1="4"   x2="12"   y2="1"  />
-    <line x1="14" y1="4.5" x2="14.5" y2="1.5"/>
-    <line x1="16" y1="5.5" x2="17"   y2="2"  />
-    <circle cx="12" cy="11" r="5.5"/>
-    <circle cx="10" cy="10" r="0.9" fill="currentColor" stroke="none"/>
-    <circle cx="14" cy="10" r="0.9" fill="currentColor" stroke="none"/>
-    <path d="M9.5 13 Q12 15.5 14.5 13" strokeWidth={1.6}/>
   </svg>
 )
 
@@ -117,12 +103,12 @@ export function AgenteChat() {
       {/* Botón flotante */}
       <button
         onClick={() => setAbierto(o => !o)}
-        className="fixed bottom-20 right-4 z-40 md:bottom-6 w-12 h-12 rounded-full bg-[#5E6AD2] hover:bg-[#4f5bbf] shadow-lg flex items-center justify-center transition-all"
+        className="fixed bottom-20 right-4 z-40 md:bottom-6 w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105"
         title="Asistente IA"
       >
         {abierto
-          ? <CloseIcon />
-          : <LocoIcon />
+          ? <div className="w-12 h-12 rounded-full bg-[#5E6AD2] hover:bg-[#4f5bbf] flex items-center justify-center"><CloseIcon /></div>
+          : <CuadraLogo size={48} animate={false} />
         }
       </button>
 
@@ -133,7 +119,7 @@ export function AgenteChat() {
 
           {/* Header */}
           <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-[#5E6AD2]/10">
-            <LocoIcon />
+            <CuadraLogo size={28} animate={false} />
             <div className="flex-1">
               <p className="text-sm font-semibold text-gray-100">Asistente Cuadra</p>
               <p className="text-xs text-gray-500">IA Cuadra · datos en tiempo real</p>
