@@ -334,6 +334,48 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   2) "⚠️ Reset Libro Diario" (limpia y reconstruye numerado desde 1). El reset NO borra plan de
   cuentas, reglas, sumas ni balance — solo asientos+detalles.
 
+### v3.9 — Módulo unificado Pagos + Libro Diario limpio + Asistente IA (mayo 2026 — PRs #74-#77)
+
+- **Módulo unificado Pagos** (PR #74): reemplaza OrdenDePago + Pago + Gasto con un único módulo
+  `Egreso`. Nuevo modelo `Egreso` (tabla `egresos`) + `CategoriaEgreso` (tabla `categorias_egreso`).
+  Campos: `tipo` (proveedor|gasto|pago_cliente), `forma_pago` (banco|efectivo), `foto_comprobante`,
+  `denominaciones_usadas`, `arqueo_id`. Router `/pagos` con CRUD completo, foto, compartir WhatsApp.
+  Motor contable: `registrar_egreso()` usa cuenta hoja `1-1-1-3-1` (banco) o `1-1-1-2` (efectivo),
+  cuenta cliente dinámica `2-1-2-X` para `pago_cliente`, `3-2-0-0` para gasto/proveedor.
+  Categorías editables por usuario. UI en `/pagos` con filtros, foto, compartir. Nav unificada.
+  Redirects `/op` → `/pagos` y `/pagos-gastos` → `/pagos`. Archivos viejos eliminados:
+  `pago.py`, `pagos_gastos.py`, `OrdenDePago.tsx`, `PagosGastos.tsx`.
+- **Libro Diario limpio** (PR #75): eliminados asientos `extracto` y `planilla` que usaban cuentas
+  madre incorrectas y duplicaban con `um_lote`/`um_reclass`. `registrar_extracto()` y
+  `registrar_planilla()` desactivados. Startup limpia esos módulos legacy automáticamente.
+  `numero_asiento` se auto-asigna correlativamente en `_crear_asiento()`, `_crear_asiento_directo()`
+  y `reversar_asientos()`. Startup también corrige NULLs existentes sin reset manual.
+  Migración 009: drop tablas huérfanas `ordenes_de_pago`, `pagos`, `gastos`.
+- **Flujo contable correcto** (post v3.9): solo 4 módulos generan asientos automáticos:
+  `um_lote` (Banco Macro D / No identificado H al importar UM) · `um_reclass` (No identificado D /
+  Cliente X H al conciliar) · `egreso` (gasto o pago con cuenta hoja correcta) · `cc_inicial`
+  (backfill histórico). Los módulos `extracto` y `planilla` ya NO se crean.
+- **Compartir cheque por WhatsApp** (PR #76): botón 📤 en tabla y modal de foto. Si el cheque
+  tiene foto la adjunta vía Web Share API nativa (gratis). Fallback a `whatsapp://send?text=`.
+- **Asistente IA Gemini Flash** (PR #77): botón ✨ flotante en todas las páginas. Consultas en
+  lenguaje natural sobre datos reales de la DB vía function calling. Funciones disponibles:
+  `consultar_pagos_cliente`, `consultar_cheques`, `consultar_saldo_caja`, `buscar_cliente`,
+  `resumen_financiero`. Dictado por voz (SpeechRecognition API nativa, Chrome/Android, gratis).
+  Backend: `routers/agente.py` + `google-generativeai==0.8.3`. Activado con `GEMINI_API_KEY` en
+  Render (AI Studio — capa gratuita: 15 req/min, 1M tokens/día). Modelo: `gemini-2.0-flash`.
+
+### Pendiente para próximas sesiones
+
+- **OCR de fotos** (cheques y comprobantes de transferencia): foto → Gemini extrae número, banco,
+  titular, CUIT, monto, fecha → pre-completa el formulario. Mismo `GEMINI_API_KEY`, sin costo extra.
+- **Ajuste manual del Libro Diario** (Fase 2): `POST /contabilidad/asiento-manual` — elegís cuenta
+  Debe, cuenta Haber, monto, fecha, descripción. Solo cuentas hoja, valida partida doble, módulo
+  `ajuste_manual`. Borrable con reverso. Modal en `/contabilidad`.
+- **Liquidaciones con asientos** — consultar con contador si las liquidaciones deben generar
+  entradas contables al aprobar/pagar.
+- **Botones de borrar ocultos** — mostrar/ocultar según permiso `delete_records` en el frontend
+  (hoy el backend bloquea con 403 pero el botón sigue visible).
+
 ---
 
 ## Storage de fotos (S3/R2 opcional)
@@ -361,12 +403,13 @@ Setup R2:
 
 ## Roadmap (por valor / esfuerzo)
 
-1. **2FA para superadmin** — código por email al login (medio esfuerzo, alta seguridad)
-2. **Google OAuth** — login con Google (medio esfuerzo, mejor UX)
-3. **Rate limiting global** — slowapi en todos los endpoints, no solo auth
-4. **Activar R2 en producción** — código ya está listo, solo crear bucket y pegar env vars
-5. **IA Nivel 3** — predicción automática (requiere 3-6 meses de datos reales)
-6. **App móvil nativa** React Native (alto esfuerzo, cuando la PWA se quede corta)
+1. **OCR de fotos** — Gemini Flash lee cheques y comprobantes → pre-completa formularios (mismo GEMINI_API_KEY, sin costo extra)
+2. **Ajuste manual del Libro Diario** — asiento-manual con validación partida doble + modal en /contabilidad
+3. **Liquidaciones con asientos** — consultar contador si deben generar entradas contables
+4. **2FA para superadmin** — código por email al login (medio esfuerzo, alta seguridad)
+5. **Google OAuth** — login con Google (medio esfuerzo, mejor UX)
+6. **Activar R2 en producción** — código ya está listo, solo crear bucket y pegar env vars en Render
+7. **IA Nivel 3** — predicción automática (requiere 3-6 meses de datos reales)
 
 ---
 
@@ -399,7 +442,11 @@ Checkpoints disponibles:
 - `v3.8` — reset Libro Diario (reconstruye asientos limpio + numero_asiento), filtros Excel en el
   diario (fecha/concepto/cuenta), orden de fechas más reciente arriba, columna "Concepto", fix tipos
   TS (lazyPage, Login) (mayo 2026 — PRs #63-#68 mergeados a main)
+- `v3.9` — módulo unificado Pagos (reemplaza OP+Pagos+Gastos), libro diario limpio (asientos
+  correctos con cuentas hoja, drop tablas viejas, numeración correlativa automática), compartir
+  cheques por WhatsApp, asistente IA Gemini Flash con function calling + dictado por voz
+  (mayo 2026 — PRs #74-#77 mergeados a main)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.8
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.9
