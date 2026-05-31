@@ -1,4 +1,6 @@
 import os
+import base64
+import json
 import logging
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
@@ -289,3 +291,97 @@ def chat(
     except Exception as ex:
         logger.warning("Agente error: %s", ex)
         raise HTTPException(500, f"Error del agente: {ex}")
+
+
+# ── OCR helpers ───────────────────────────────────────────────────────────────
+
+def _parse_b64_image(imagen_b64: str) -> tuple[str, bytes]:
+    """Returns (mime_type, raw_bytes) from a data-URL or raw base64 string."""
+    if "," in imagen_b64:
+        header, data = imagen_b64.split(",", 1)
+        mime_type = header.split(":")[1].split(";")[0] if ":" in header else "image/jpeg"
+    else:
+        data = imagen_b64
+        mime_type = "image/jpeg"
+    return mime_type, base64.b64decode(data)
+
+
+def _call_gemini_ocr(api_key: str, mime_type: str, raw_bytes: bytes, prompt: str) -> dict:
+    import google.generativeai as genai
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    image_part = genai.protos.Part(
+        inline_data=genai.protos.Blob(mime_type=mime_type, data=raw_bytes)
+    )
+    response = model.generate_content([image_part, prompt])
+    texto = response.text.strip()
+    # Strip markdown code fences if present
+    if texto.startswith("```"):
+        lines = texto.split("\n")
+        lines = [l for l in lines if not l.startswith("```")]
+        texto = "\n".join(lines).strip()
+    return json.loads(texto)
+
+
+@router.post("/ocr-cheque")
+def ocr_cheque(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+):
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(503, "OCR no configurado (falta GEMINI_API_KEY)")
+
+    imagen_b64 = str(payload.get("imagen_base64", "")).strip()
+    if not imagen_b64:
+        raise HTTPException(400, "Imagen vacía")
+
+    try:
+        mime_type, raw_bytes = _parse_b64_image(imagen_b64)
+        prompt = (
+            "Extraé los datos de este cheque bancario argentino. "
+            "Respondé SOLO con un JSON válido (sin texto extra, sin markdown), con estos campos "
+            "(usá null si no está visible o no podés leerlo): "
+            '{"numero": "string o null", "banco_origen": "string o null", "titular": "string o null", '
+            '"monto": número_sin_formato_o_null, "fecha_emision": "YYYY-MM-DD o null", '
+            '"fecha_deposito": "YYYY-MM-DD o null"}'
+        )
+        datos = _call_gemini_ocr(api_key, mime_type, raw_bytes, prompt)
+        return datos
+    except json.JSONDecodeError:
+        return {}
+    except Exception as ex:
+        logger.warning("OCR cheque error: %s", ex)
+        raise HTTPException(500, f"Error OCR: {ex}")
+
+
+@router.post("/ocr-transferencia")
+def ocr_transferencia(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+):
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(503, "OCR no configurado (falta GEMINI_API_KEY)")
+
+    imagen_b64 = str(payload.get("imagen_base64", "")).strip()
+    if not imagen_b64:
+        raise HTTPException(400, "Imagen vacía")
+
+    try:
+        mime_type, raw_bytes = _parse_b64_image(imagen_b64)
+        prompt = (
+            "Extraé los datos de este comprobante de transferencia bancaria argentina. "
+            "Respondé SOLO con un JSON válido (sin texto extra, sin markdown), con estos campos "
+            "(usá null si no está visible o no podés leerlo): "
+            '{"monto": número_sin_formato_o_null, "fecha": "YYYY-MM-DD o null", '
+            '"beneficiario": "nombre del destinatario o null", '
+            '"referencia": "número de operación o null"}'
+        )
+        datos = _call_gemini_ocr(api_key, mime_type, raw_bytes, prompt)
+        return datos
+    except json.JSONDecodeError:
+        return {}
+    except Exception as ex:
+        logger.warning("OCR transferencia error: %s", ex)
+        raise HTTPException(500, f"Error OCR: {ex}")

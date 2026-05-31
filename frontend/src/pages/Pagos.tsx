@@ -159,7 +159,20 @@ export const Pagos: React.FC = () => {
         if (h > MAX) { w = w * MAX / h; h = MAX }
         canvas.width = w; canvas.height = h
         canvas.getContext('2d')?.drawImage(img, 0, 0, w, h)
-        setFoto(canvas.toDataURL('image/jpeg', 0.7))
+        const compressed = canvas.toDataURL('image/jpeg', 0.7)
+        setFoto(compressed)
+        apiClient.client.post('/agente/ocr-transferencia', { imagen_base64: compressed })
+          .then(res => {
+            const d = res.data
+            setForm(prev => ({
+              ...prev,
+              monto:        prev.monto        || (d.monto != null ? String(d.monto) : prev.monto),
+              fecha:        prev.fecha        || d.fecha        || prev.fecha,
+              beneficiario: prev.beneficiario || d.beneficiario || prev.beneficiario,
+              referencia:   prev.referencia   || d.referencia   || prev.referencia,
+            }))
+          })
+          .catch(() => { /* OCR no disponible — el usuario carga manualmente */ })
       }
       img.src = base64
     }

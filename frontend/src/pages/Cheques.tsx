@@ -155,6 +155,19 @@ export const Cheques: React.FC = () => {
     if (!file) return
     const b64 = await toBase64(file)
     setFormFoto(b64)
+    try {
+      const res = await apiClient.client.post('/agente/ocr-cheque', { imagen_base64: b64 })
+      const d = res.data
+      setFormData(prev => ({
+        ...prev,
+        numero:         prev.numero        || d.numero        || prev.numero,
+        banco_origen:   prev.banco_origen  || d.banco_origen  || prev.banco_origen,
+        titular:        prev.titular       || d.titular       || prev.titular,
+        monto:          (prev.monto ?? 0) > 0 ? prev.monto : (d.monto ?? prev.monto),
+        fecha_emision:  prev.fecha_emision  || d.fecha_emision  || prev.fecha_emision,
+        fecha_deposito: prev.fecha_deposito || d.fecha_deposito || prev.fecha_deposito,
+      }))
+    } catch { /* OCR no disponible — el usuario carga manualmente */ }
   }
 
   const handleCreate = async () => {
