@@ -11,6 +11,7 @@ import { AppLockGuard } from './AppLockGuard'
 import { ConfirmDialog } from './ConfirmDialog'
 import { confirmDialog } from '@/store/confirm'
 import { SearchModal } from './SearchModal'
+import { AgenteChat } from './AgenteChat'
 
 // ── SVG Icons (Heroicons outline style) ──────────────────────
 const Icon = {
@@ -408,6 +409,7 @@ export const Layout: React.FC = () => {
       </nav>
 
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <AgenteChat />
     </div>
   )
 }
