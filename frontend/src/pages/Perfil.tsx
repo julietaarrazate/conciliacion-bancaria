@@ -40,7 +40,9 @@ export const Perfil: React.FC = () => {
   const [pushLoading, setPushLoading] = useState(false)
 
   // OCR usage (sólo admin+)
-  const [ocrUsage, setOcrUsage] = useState<{ used: number; limit: number; remaining: number } | null>(null)
+  type UsageStat = { used: number; limit: number; remaining: number }
+  const [ocrUsage, setOcrUsage]   = useState<UsageStat | null>(null)
+  const [chatUsage, setChatUsage] = useState<UsageStat | null>(null)
 
   // VAPID setup (sólo superadmin)
   const [vapidLoading, setVapidLoading] = useState(false)
@@ -53,7 +55,10 @@ export const Perfil: React.FC = () => {
 
   useEffect(() => {
     if (!user?.is_superadmin && user?.role !== 'admin') return
-    apiClient.client.get('/agente/ocr-usage').then(r => setOcrUsage(r.data)).catch(() => {})
+    apiClient.client.get('/agente/ocr-usage').then(r => {
+      setOcrUsage(r.data.ocr)
+      setChatUsage(r.data.chat)
+    }).catch(() => {})
   }, [user?.role])
 
   useEffect(() => {
@@ -336,23 +341,31 @@ export const Perfil: React.FC = () => {
         )}
       </div>
 
-      {/* OCR usage — admin+ */}
-      {ocrUsage && (
+      {/* IA usage — admin+ */}
+      {(ocrUsage || chatUsage) && (
         <div className="card mt-4 border-violet-200 dark:border-violet-900/40">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <h2 className="text-base font-semibold dark:text-white">✨ OCR de fotos — uso diario</h2>
-            <span className={`badge ${ocrUsage.remaining <= ocrUsage.limit * 0.1 ? 'badge-error' : ocrUsage.remaining <= ocrUsage.limit * 0.3 ? 'badge-warn' : 'badge-ok'}`}>
-              {ocrUsage.remaining} restantes
-            </span>
-          </div>
-          <div className="w-full bg-gray-200 dark:bg-white/10 rounded-full h-2 mb-2">
-            <div
-              className={`h-2 rounded-full transition-all ${ocrUsage.used / ocrUsage.limit > 0.7 ? 'bg-red-500' : ocrUsage.used / ocrUsage.limit > 0.4 ? 'bg-yellow-400' : 'bg-indigo-500'}`}
-              style={{ width: `${Math.min(100, (ocrUsage.used / ocrUsage.limit) * 100)}%` }}
-            />
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {ocrUsage.used} de {ocrUsage.limit} OCR usados hoy · Se resetea a medianoche · Límite configurable con <code className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">OCR_DAILY_LIMIT</code> en Render
+          <h2 className="text-base font-semibold dark:text-white mb-3">✨ Gemini IA — uso diario</h2>
+          {[
+            { label: 'OCR fotos', stat: ocrUsage, envVar: 'OCR_DAILY_LIMIT' },
+            { label: 'Chat IA', stat: chatUsage, envVar: 'CHAT_DAILY_LIMIT' },
+          ].map(({ label, stat, envVar }) => stat && (
+            <div key={label} className="mb-3 last:mb-0">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm text-gray-600 dark:text-gray-300">{label}</span>
+                <span className={`badge text-xs ${stat.remaining <= stat.limit * 0.1 ? 'badge-error' : stat.remaining <= stat.limit * 0.3 ? 'badge-warn' : 'badge-ok'}`}>
+                  {stat.used}/{stat.limit}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-white/10 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full transition-all ${stat.used / stat.limit > 0.7 ? 'bg-red-500' : stat.used / stat.limit > 0.4 ? 'bg-yellow-400' : 'bg-indigo-500'}`}
+                  style={{ width: `${Math.min(100, (stat.used / stat.limit) * 100)}%` }}
+                />
+              </div>
+            </div>
+          ))}
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+            Se resetea a medianoche · Configurar con <code className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">OCR_DAILY_LIMIT</code> / <code className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">CHAT_DAILY_LIMIT</code> en Render
           </p>
         </div>
       )}

@@ -15,27 +15,35 @@ from app.middleware.auth import get_current_user
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agente", tags=["agente"])
 
-# ── OCR daily rate limiting ──────────────────────────────────────────────────
-_OCR_DAILY_LIMIT = int(os.environ.get("OCR_DAILY_LIMIT", "1200"))
-_ocr_state: dict = {"date": None, "count": 0}
-_ocr_lock = Lock()
+# ── Daily rate limiting (OCR + Chat) ─────────────────────────────────────────
+_OCR_DAILY_LIMIT  = int(os.environ.get("OCR_DAILY_LIMIT",  "150"))
+_CHAT_DAILY_LIMIT = int(os.environ.get("CHAT_DAILY_LIMIT", "200"))
 
-def _ocr_allowed() -> bool:
+def _make_counter() -> dict:
+    return {"date": None, "count": 0, "lock": Lock()}
+
+_ocr_ctr  = _make_counter()
+_chat_ctr = _make_counter()
+
+def _check_limit(ctr: dict, limit: int) -> bool:
     today = date.today()
-    with _ocr_lock:
-        if _ocr_state["date"] != today:
-            _ocr_state["date"] = today
-            _ocr_state["count"] = 0
-        if _ocr_state["count"] >= _OCR_DAILY_LIMIT:
+    with ctr["lock"]:
+        if ctr["date"] != today:
+            ctr["date"] = today
+            ctr["count"] = 0
+        if ctr["count"] >= limit:
             return False
-        _ocr_state["count"] += 1
+        ctr["count"] += 1
         return True
 
-def _ocr_current_usage() -> dict:
+def _usage(ctr: dict, limit: int) -> dict:
     today = date.today()
-    with _ocr_lock:
-        used = _ocr_state["count"] if _ocr_state["date"] == today else 0
-    return {"used": used, "limit": _OCR_DAILY_LIMIT, "remaining": max(0, _OCR_DAILY_LIMIT - used), "date": str(today)}
+    with ctr["lock"]:
+        used = ctr["count"] if ctr["date"] == today else 0
+    return {"used": used, "limit": limit, "remaining": max(0, limit - used), "date": str(today)}
+
+def _ocr_allowed()  -> bool: return _check_limit(_ocr_ctr,  _OCR_DAILY_LIMIT)
+def _chat_allowed() -> bool: return _check_limit(_chat_ctr, _CHAT_DAILY_LIMIT)
 
 # ── Funciones que Gemini puede llamar ─────────────────────────────────────────
 
@@ -192,6 +200,9 @@ def chat(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if not _chat_allowed():
+        raise HTTPException(429, "Límite diario del asistente IA alcanzado. Volvé mañana 🙂")
+
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         raise HTTPException(503, "Agente no configurado (falta GEMINI_API_KEY en Render)")
@@ -421,4 +432,7 @@ def ocr_transferencia(
 
 @router.get("/ocr-usage")
 def get_ocr_usage(current_user: User = Depends(get_current_user)):
-    return _ocr_current_usage()
+    return {
+        "ocr":  _usage(_ocr_ctr,  _OCR_DAILY_LIMIT),
+        "chat": _usage(_chat_ctr, _CHAT_DAILY_LIMIT),
+    }
