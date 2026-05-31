@@ -161,7 +161,16 @@ export const Pagos: React.FC = () => {
         canvas.getContext('2d')?.drawImage(img, 0, 0, w, h)
         const compressed = canvas.toDataURL('image/jpeg', 0.7)
         setFoto(compressed)
-        apiClient.client.post('/agente/ocr-transferencia', { imagen_base64: compressed })
+        // Compress further to 768px for OCR (1 Gemini tile = 258 tokens)
+        const OCR_MAX = 768
+        let ow = w, oh = h
+        if (ow > OCR_MAX) { oh = Math.round(oh * OCR_MAX / ow); ow = OCR_MAX }
+        if (oh > OCR_MAX) { ow = Math.round(ow * OCR_MAX / oh); oh = OCR_MAX }
+        const ocrCanvas = document.createElement('canvas')
+        ocrCanvas.width = ow; ocrCanvas.height = oh
+        ocrCanvas.getContext('2d')?.drawImage(img, 0, 0, ow, oh)
+        const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.65)
+        apiClient.client.post('/agente/ocr-transferencia', { imagen_base64: ocrCompressed })
           .then(res => {
             const d = res.data
             setForm(prev => ({

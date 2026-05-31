@@ -314,7 +314,12 @@ def _call_gemini_ocr(api_key: str, mime_type: str, raw_bytes: bytes, prompt: str
         inline_data=genai.protos.Blob(mime_type=mime_type, data=raw_bytes)
     )
     response = model.generate_content([image_part, prompt])
-    texto = response.text.strip()
+    try:
+        texto = response.text.strip()
+    except Exception:
+        return {}  # safety block o respuesta sin texto
+    if not texto:
+        return {}
     # Strip markdown code fences if present
     if texto.startswith("```"):
         lines = texto.split("\n")

@@ -53,6 +53,24 @@ const toBase64 = (file: File): Promise<string> =>
     reader.readAsDataURL(file)
   })
 
+// Compress image to max 768px for OCR (1 Gemini tile = 258 tokens)
+const compressForOcr = (src: string): Promise<string> =>
+  new Promise(resolve => {
+    const img = new Image()
+    img.onload = () => {
+      const MAX = 768
+      let w = img.width, h = img.height
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX }
+      if (h > MAX) { w = Math.round(w * MAX / h); h = MAX }
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      canvas.getContext('2d')?.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', 0.65))
+    }
+    img.onerror = () => resolve(src)
+    img.src = src
+  })
+
 export const Cheques: React.FC = () => {
   const { activeOrgId } = useOrgStore()
   const [cheques, setCheques]     = useState<Cheque[]>([])
@@ -156,16 +174,17 @@ export const Cheques: React.FC = () => {
     const b64 = await toBase64(file)
     setFormFoto(b64)
     try {
-      const res = await apiClient.client.post('/agente/ocr-cheque', { imagen_base64: b64 })
+      const small = await compressForOcr(b64)
+      const res = await apiClient.client.post('/agente/ocr-cheque', { imagen_base64: small })
       const d = res.data
       setFormData(prev => ({
         ...prev,
-        numero:         prev.numero        || d.numero        || prev.numero,
-        banco_origen:   prev.banco_origen  || d.banco_origen  || prev.banco_origen,
-        titular:        prev.titular       || d.titular       || prev.titular,
+        numero:         prev.numero        || (d.numero        != null ? String(d.numero)       : prev.numero),
+        banco_origen:   prev.banco_origen  || (d.banco_origen  != null ? String(d.banco_origen) : prev.banco_origen),
+        titular:        prev.titular       || (d.titular       != null ? String(d.titular)      : prev.titular),
         monto:          (prev.monto ?? 0) > 0 ? prev.monto : (d.monto ?? prev.monto),
-        fecha_emision:  prev.fecha_emision  || d.fecha_emision  || prev.fecha_emision,
-        fecha_deposito: prev.fecha_deposito || d.fecha_deposito || prev.fecha_deposito,
+        fecha_emision:  prev.fecha_emision  || (d.fecha_emision  != null ? String(d.fecha_emision)  : prev.fecha_emision),
+        fecha_deposito: prev.fecha_deposito || (d.fecha_deposito != null ? String(d.fecha_deposito) : prev.fecha_deposito),
       }))
     } catch { /* OCR no disponible — el usuario carga manualmente */ }
   }
