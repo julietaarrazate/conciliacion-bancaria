@@ -2,6 +2,7 @@ import os
 import base64
 import json
 import logging
+import time
 from datetime import date
 from threading import Lock
 from fastapi import APIRouter, Depends, HTTPException
@@ -44,6 +45,36 @@ def _usage(ctr: dict, limit: int) -> dict:
 
 def _ocr_allowed()  -> bool: return _check_limit(_ocr_ctr,  _OCR_DAILY_LIMIT)
 def _chat_allowed() -> bool: return _check_limit(_chat_ctr, _CHAT_DAILY_LIMIT)
+
+_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+
+
+def _classify_gemini_error(ex: Exception) -> tuple[int, str]:
+    """Returns (http_status, user_message) for Gemini API exceptions."""
+    msg = str(ex).upper()
+    if "401" in msg or "403" in msg or "API_KEY_INVALID" in msg or "PERMISSION_DENIED" in msg:
+        return 503, "API key de Gemini inválida o sin permisos. Revisá la config en Render."
+    if "404" in msg or "NOT_FOUND" in msg:
+        return 503, f"Modelo {_GEMINI_MODEL} no disponible. Cambiá GEMINI_MODEL en Render."
+    if "RESOURCE_EXHAUSTED" in msg or "429" in str(ex) or "QUOTA" in msg:
+        if "PER_DAY" in msg or "DAILY" in msg or "DAY" in msg:
+            return 429, "Cuota diaria de Gemini agotada. Disponible mañana a las 21hs 🌙"
+        return 429, "Gemini está ocupado. Esperá 1 minuto y volvé a intentar ⏱️"
+    return 500, "El asistente no está disponible en este momento. Intentá de nuevo."
+
+
+def _gemini_send(session, message, retries: int = 1) -> object:
+    """Send a message with one retry on transient 429 (per-minute limit)."""
+    for attempt in range(retries + 1):
+        try:
+            return session.send_message(message)
+        except Exception as ex:
+            msg = str(ex).upper()
+            is_transient = "RESOURCE_EXHAUSTED" in msg or "429" in str(ex)
+            if is_transient and attempt < retries:
+                time.sleep(5)
+                continue
+            raise
 
 # ── Funciones que Gemini puede llamar ─────────────────────────────────────────
 
@@ -203,7 +234,7 @@ def chat(
     if not _chat_allowed():
         raise HTTPException(429, "Límite diario del asistente IA alcanzado. Volvé mañana 🙂")
 
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(503, "Agente no configurado (falta GEMINI_API_KEY en Render)")
 
@@ -284,13 +315,13 @@ def chat(
         )
 
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
+            model_name=_GEMINI_MODEL,
             tools=[{"function_declarations": DECLARACIONES}],
             system_instruction=system,
         )
 
         chat_session = model.start_chat()
-        response = chat_session.send_message(mensaje)
+        response = _gemini_send(chat_session, mensaje)
 
         # Function calling loop — máximo 3 rondas
         for _ in range(3):
@@ -313,7 +344,7 @@ def chat(
                         )
                     )
                 )
-            response = chat_session.send_message(fn_responses)
+            response = _gemini_send(chat_session, fn_responses)
 
         texto = "".join(
             p.text for p in response.candidates[0].content.parts
@@ -323,11 +354,9 @@ def chat(
         return {"respuesta": texto or "No pude generar una respuesta."}
 
     except Exception as ex:
-        logger.warning("Agente error: %s", ex)
-        msg = str(ex)
-        if "429" in msg or "quota" in msg.lower() or "ResourceExhausted" in msg:
-            raise HTTPException(429, "Cuota de Gemini excedida. Volvé en unos minutos ☕")
-        raise HTTPException(500, "El asistente no está disponible en este momento. Intentá de nuevo.")
+        logger.warning("Agente chat error: %s", ex)
+        status, msg = _classify_gemini_error(ex)
+        raise HTTPException(status, msg)
 
 
 # ── OCR helpers ───────────────────────────────────────────────────────────────
@@ -346,7 +375,7 @@ def _parse_b64_image(imagen_b64: str) -> tuple[str, bytes]:
 def _call_gemini_ocr(api_key: str, mime_type: str, raw_bytes: bytes, prompt: str) -> dict:
     import google.generativeai as genai
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel(_GEMINI_MODEL)
     image_part = genai.protos.Part(
         inline_data=genai.protos.Blob(mime_type=mime_type, data=raw_bytes)
     )
@@ -372,7 +401,7 @@ def ocr_cheque(
 ):
     if not _ocr_allowed():
         raise HTTPException(429, "Límite diario de OCR alcanzado")
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(503, "OCR no configurado (falta GEMINI_API_KEY)")
 
@@ -396,7 +425,8 @@ def ocr_cheque(
         return {}
     except Exception as ex:
         logger.warning("OCR cheque error: %s", ex)
-        raise HTTPException(500, f"Error OCR: {ex}")
+        _, msg = _classify_gemini_error(ex)
+        raise HTTPException(500, msg)
 
 
 @router.post("/ocr-transferencia")
@@ -406,7 +436,7 @@ def ocr_transferencia(
 ):
     if not _ocr_allowed():
         raise HTTPException(429, "Límite diario de OCR alcanzado")
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(503, "OCR no configurado (falta GEMINI_API_KEY)")
 
@@ -430,7 +460,8 @@ def ocr_transferencia(
         return {}
     except Exception as ex:
         logger.warning("OCR transferencia error: %s", ex)
-        raise HTTPException(500, f"Error OCR: {ex}")
+        _, msg = _classify_gemini_error(ex)
+        raise HTTPException(500, msg)
 
 
 @router.get("/ocr-usage")
