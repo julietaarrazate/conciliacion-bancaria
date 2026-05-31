@@ -46,7 +46,7 @@ def _usage(ctr: dict, limit: int) -> dict:
 def _ocr_allowed()  -> bool: return _check_limit(_ocr_ctr,  _OCR_DAILY_LIMIT)
 def _chat_allowed() -> bool: return _check_limit(_chat_ctr, _CHAT_DAILY_LIMIT)
 
-_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 
 def _classify_gemini_error(ex: Exception) -> tuple[int, str]:
