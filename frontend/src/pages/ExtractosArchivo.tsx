@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { ExtractoHistorialItem } from '@/types'
@@ -52,6 +52,10 @@ export const ExtractosArchivo: React.FC = () => {
   const [openMeses, setOpenMeses] = useState<Set<string>>(new Set())   // `${banco}-${anio}-${mes}`
   const [dlError, setDlError]     = useState('')
   const [dlLoading, setDlLoading] = useState<number | null>(null)
+  const [renamingId, setRenamingId]     = useState<number | null>(null)
+  const [renameVal, setRenameVal]       = useState('')
+  const [renameSaving, setRenameSaving] = useState(false)
+  const renameRef                       = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     apiClient.getHistorialExtractos({ limit: 200, org_id: activeOrgId }).then(d => {
@@ -85,6 +89,26 @@ export const ExtractosArchivo: React.FC = () => {
       setDlError(`Error al descargar "${e.nombre_archivo}": ${err.response?.data?.detail || err.message}`)
     }
     setDlLoading(null)
+  }
+
+  const startRename = (e: ExtractoHistorialItem) => {
+    setRenamingId(e.id)
+    setRenameVal(e.nombre_archivo)
+    setTimeout(() => { renameRef.current?.focus(); renameRef.current?.select() }, 50)
+  }
+
+  const cancelRename = () => { setRenamingId(null); setRenameVal('') }
+
+  const saveRename = async (id: number) => {
+    const nombre = renameVal.trim()
+    if (!nombre) return
+    setRenameSaving(true)
+    try {
+      await apiClient.client.patch(`/extractos/${id}/renombrar`, { nombre })
+      setItems(prev => prev.map(x => x.id === id ? { ...x, nombre_archivo: nombre } : x))
+      setRenamingId(null)
+    } catch { /* silencioso — el nombre queda como estaba */ }
+    setRenameSaving(false)
   }
 
   const grupos = agrupar(items)
@@ -198,9 +222,33 @@ export const ExtractosArchivo: React.FC = () => {
                                             >
                                               <span className="text-lg select-none">📄</span>
                                               <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-medium text-ml-text dark:text-gray-200 truncate" title={e.nombre_archivo}>
-                                                  {e.nombre_archivo}
-                                                </p>
+                                                {renamingId === e.id ? (
+                                                  <div className="flex items-center gap-1.5">
+                                                    <input
+                                                      ref={renameRef}
+                                                      value={renameVal}
+                                                      onChange={ev => setRenameVal(ev.target.value)}
+                                                      onKeyDown={ev => {
+                                                        if (ev.key === 'Enter') saveRename(e.id)
+                                                        if (ev.key === 'Escape') cancelRename()
+                                                      }}
+                                                      className="flex-1 text-xs px-2 py-1 rounded border border-ml-blue/40 bg-white dark:bg-slate-800 text-ml-text dark:text-gray-200 outline-none focus:border-ml-blue min-w-0"
+                                                    />
+                                                    <button onClick={() => saveRename(e.id)} disabled={renameSaving || !renameVal.trim()}
+                                                      className="px-1.5 py-1 text-xs bg-ml-blue text-white rounded disabled:opacity-50">✓</button>
+                                                    <button onClick={cancelRename}
+                                                      className="px-1.5 py-1 text-xs text-gray-400 hover:text-gray-600 rounded">✕</button>
+                                                  </div>
+                                                ) : (
+                                                  <div className="flex items-center gap-1 group">
+                                                    <p className="text-xs font-medium text-ml-text dark:text-gray-200 truncate" title={e.nombre_archivo}>
+                                                      {e.nombre_archivo}
+                                                    </p>
+                                                    <button onClick={() => startRename(e)}
+                                                      className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-ml-blue transition-opacity text-[11px] shrink-0"
+                                                      title="Renombrar">✏️</button>
+                                                  </div>
+                                                )}
                                                 <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
                                                   Subido {fmtDatetime(e.fecha_creacion)} · {e.usuario_nombre}
                                                 </p>
