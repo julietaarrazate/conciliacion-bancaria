@@ -99,10 +99,9 @@ export const Clientes: React.FC = () => {
   const [nuevoCuit, setNuevoCuit] = useState('')
   const [creandoLoading, setCreandoLoading] = useState(false)
 
-  // Editor comision por cliente (local + interior)
+  // Editor comision por cliente (% general / TT)
   const [editComisionId, setEditComisionId] = useState<number | null>(null)
-  const [editComisionLocal, setEditComisionLocal] = useState('')
-  const [editComisionInterior, setEditComisionInterior] = useState('')
+  const [editComisionVal, setEditComisionVal] = useState('')
   const [savingComision, setSavingComision] = useState(false)
 
   // Renombrar cliente
@@ -324,11 +323,8 @@ export const Clientes: React.FC = () => {
   const handleGuardarComision = async (clienteId: number) => {
     setSavingComision(true)
     try {
-      const parse = (v: string) => v.trim() === '' ? null : parseFloat(v.replace(',', '.'))
-      await apiClient.client.put(`/clientes/${clienteId}/comision`, {
-        porcentaje_comision_local: parse(editComisionLocal),
-        porcentaje_comision_interior: parse(editComisionInterior),
-      })
+      const pct = editComisionVal.trim() === '' ? null : parseFloat(editComisionVal.replace(',', '.'))
+      await apiClient.client.put(`/clientes/${clienteId}/comision`, { porcentaje_comision: pct })
       apiClient.invalidateCache(activeOrgId ? `/clientes/archivos?org_id=${activeOrgId}` : '/clientes/archivos')
       cargar()
       setEditComisionId(null)
@@ -505,25 +501,17 @@ export const Clientes: React.FC = () => {
                                 </p>
                               </div>
                             </button>
-                            {/* Chips comisión local / interior */}
+                            {/* Chip comisión (% general / TT) */}
                             {editComisionId === cliente.id ? (
                               <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                                <span className="text-[10px] text-gray-400">L</span>
                                 <input
-                                  type="number" step="0.1" min="0" max="100" placeholder="%"
-                                  className="input-field text-xs w-14 py-0.5 px-1.5"
-                                  value={editComisionLocal}
-                                  onChange={e => setEditComisionLocal(e.target.value)}
+                                  type="number" step="0.1" min="0" max="100"
+                                  placeholder="%"
+                                  className="input-field text-xs w-16 py-0.5 px-1.5"
+                                  value={editComisionVal}
+                                  onChange={e => setEditComisionVal(e.target.value)}
                                   onKeyDown={e => { if (e.key === 'Enter') handleGuardarComision(cliente.id); if (e.key === 'Escape') setEditComisionId(null) }}
                                   autoFocus
-                                />
-                                <span className="text-[10px] text-gray-400">I</span>
-                                <input
-                                  type="number" step="0.1" min="0" max="100" placeholder="%"
-                                  className="input-field text-xs w-14 py-0.5 px-1.5"
-                                  value={editComisionInterior}
-                                  onChange={e => setEditComisionInterior(e.target.value)}
-                                  onKeyDown={e => { if (e.key === 'Enter') handleGuardarComision(cliente.id); if (e.key === 'Escape') setEditComisionId(null) }}
                                 />
                                 <button onClick={() => handleGuardarComision(cliente.id)} disabled={savingComision}
                                   className="px-1.5 py-0.5 text-[10px] bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-30">
@@ -534,16 +522,11 @@ export const Clientes: React.FC = () => {
                               </div>
                             ) : (
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setEditComisionId(cliente.id)
-                                  setEditComisionLocal(cliente.porcentaje_comision_local != null ? String(cliente.porcentaje_comision_local) : '')
-                                  setEditComisionInterior(cliente.porcentaje_comision_interior != null ? String(cliente.porcentaje_comision_interior) : '')
-                                }}
-                                className={`px-2 py-1 text-[11px] rounded font-medium flex-shrink-0 transition-colors ${(cliente.porcentaje_comision_local != null || cliente.porcentaje_comision_interior != null) ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60' : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-600'}`}
-                                title="% comisión cheques — Local / Interior — click para editar"
+                                onClick={(e) => { e.stopPropagation(); setEditComisionId(cliente.id); setEditComisionVal(cliente.porcentaje_comision != null ? String(cliente.porcentaje_comision) : '') }}
+                                className={`px-2 py-1 text-[11px] rounded font-medium flex-shrink-0 transition-colors ${cliente.porcentaje_comision != null ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60' : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-600'}`}
+                                title="% comisión — click para editar"
                               >
-                                L {cliente.porcentaje_comision_local != null ? `${cliente.porcentaje_comision_local}%` : '—'} · I {cliente.porcentaje_comision_interior != null ? `${cliente.porcentaje_comision_interior}%` : '—'}
+                                {cliente.porcentaje_comision != null ? `${cliente.porcentaje_comision}%` : '% —'}
                               </button>
                             )}
                             <a
