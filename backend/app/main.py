@@ -187,6 +187,8 @@ def _init_db():
         "ALTER TABLE planilla_rows ADD COLUMN fecha_acred DATE",
         "ALTER TABLE extractos_bancarios ADD COLUMN banco VARCHAR DEFAULT 'Banco Macro'",
         "ALTER TABLE cheques ADD COLUMN foto_comprobante TEXT",
+        # Cheques v2 — nueva columna banco_cuenta_id (banco usado al acreditar)
+        "ALTER TABLE cheques ADD COLUMN banco_cuenta_id INTEGER REFERENCES plan_cuentas(id)",
         # Permitir borrar usuarios sin violar FK (columnas owner/creador se ponen en NULL)
         "ALTER TABLE auditoria_logs ALTER COLUMN usuario_id DROP NOT NULL",
         "ALTER TABLE planillas ALTER COLUMN usuario_id DROP NOT NULL",
@@ -232,6 +234,8 @@ def _init_db():
         "UPDATE plan_cuentas SET tipo='activo'    WHERE codigo LIKE '1%' AND tipo IS NULL",
         "UPDATE plan_cuentas SET tipo='pasivo'    WHERE codigo LIKE '2%' AND tipo IS NULL",
         "UPDATE plan_cuentas SET tipo='resultado' WHERE codigo LIKE '3%' AND tipo IS NULL",
+        # Cheques v2: migrar estado 'pendiente' → 'registrado'
+        "UPDATE cheques SET estado='registrado' WHERE estado='pendiente'",
     ]
     for sql in backfills:
         try:
@@ -369,6 +373,7 @@ def _init_db():
             ("2-1-3-1",   "Cheques depositados",  "pasivo",    "2-1-3-0",  4),
             ("2-1-3-2",   "Cheques a depositar",  "pasivo",    "2-1-3-0",  4),
             ("3-1-3-0",   "Comisiones cheques",   "resultado", "3-1-0-0",  3),
+            ("3-2-2-1",   "Gastos de rechazos",   "resultado", "3-2-2-0",  4),
         ]
         patch_added = 0
         for codigo, nombre, tipo, parent_codigo, nivel in PLAN_PATCH:

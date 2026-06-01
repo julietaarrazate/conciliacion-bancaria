@@ -31,14 +31,16 @@ interface Cheque {
   fecha_rechazo: string | null
   fisico: boolean | null
   fecha_devolucion: string | null
-  estado: 'pendiente' | 'acreditado' | 'rechazado'
+  estado: 'pendiente' | 'registrado' | 'depositado' | 'acreditado' | 'rechazado' | 'anulado'
   notas: string | null
   tiene_foto: boolean
+  banco_cuenta_id: number | null
   created_at: string
 }
 
-interface ClienteOpt { id: number; nombre: string; porcentaje_comision: number | null }
+interface ClienteOpt { id: number; nombre: string; porcentaje_comision: number | null; cuenta_contable_id: number | null }
 interface PortadorOpt { id: number; nombre: string }
+interface BancoCuenta { id: number; codigo: string; nombre: string }
 
 interface DepositoResumen {
   total: number
@@ -54,9 +56,17 @@ interface DepositoData {
 
 const ESTADO_BADGE: Record<string, string> = {
   pendiente:  'bg-yellow-500/15 text-yellow-400',
+  registrado: 'bg-yellow-500/15 text-yellow-400',
+  depositado: 'bg-orange-500/15 text-orange-400',
   acreditado: 'bg-green-500/15 text-green-400',
   rechazado:  'bg-red-500/15 text-red-400',
+  anulado:    'bg-gray-500/15 text-gray-400',
 }
+const ESTADO_LABEL: Record<string, string> = {
+  pendiente: 'Registrado', registrado: 'Registrado', depositado: 'Depositado',
+  acreditado: 'Acreditado', rechazado: 'Rechazado', anulado: 'Anulado',
+}
+const esRegistrado = (estado: string) => estado === 'registrado' || estado === 'pendiente'
 
 const emptyForm = () => ({
   cliente_id:          null as number | null,
@@ -300,12 +310,22 @@ export const Cheques: React.FC = () => {
   const [saving, setSaving]     = useState(false)
   const fotoInputRef            = useRef<HTMLInputElement>(null)
 
-  // Action modals
-  const [acreditarId, setAcreditarId]   = useState<number | null>(null)
+  // Banco accounts for acreditación
+  const [bancoCuentas, setBancoCuentas] = useState<BancoCuenta[]>([])
+
+  // Action modals — individual
+  const [acreditarId, setAcreditarId]     = useState<number | null>(null)
   const [acreditarFecha, setAcreditarFecha] = useState('')
-  const [rechazarId, setRechazarId]     = useState<number | null>(null)
-  const [rechazarData, setRechazarData] = useState({ fecha_rechazo: '', fisico: false, fecha_devolucion: '' })
-  const [actioning, setActioning]       = useState(false)
+  const [acreditarBancoId, setAcreditarBancoId] = useState<number | ''>('')
+  const [rechazarId, setRechazarId]       = useState<number | null>(null)
+  const [rechazarData, setRechazarData]   = useState({ fecha_rechazo: '', gastos_bancarios: '', fisico: false, fecha_devolucion: '' })
+  const [actioning, setActioning]         = useState(false)
+
+  // Acreditación masiva (tab Por depósito)
+  const [selectedCheques, setSelectedCheques] = useState<Set<number>>(new Set())
+  const [acredMasivoBanco, setAcredMasivoBanco] = useState<number | ''>('')
+  const [acredMasivoFecha, setAcredMasivoFecha] = useState('')
+  const [acreditandoMasivo, setAcreditandoMasivo] = useState(false)
 
   // Photo viewer
   const [verFotoId, setVerFotoId]     = useState<number | null>(null)
@@ -400,6 +420,19 @@ export const Cheques: React.FC = () => {
     setSearchParams(sp, { replace: true })
   }, [searchParams, setSearchParams, navigate])
 
+  // Cuentas de banco (para selector en acreditación)
+  useEffect(() => {
+    apiClient.client.get('/contabilidad/plan')
+      .then(r => {
+        const all: any[] = r.data?.cuentas || r.data || []
+        const bancos = all.filter((c: any) =>
+          typeof c.codigo === 'string' && c.codigo.startsWith('1-1-1-') && c.nivel >= 4
+        )
+        setBancoCuentas(bancos.map((c: any) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre })))
+      })
+      .catch(() => {})
+  }, [])
+
   // Clientes
   useEffect(() => {
     const params: Record<string, number> = {}
@@ -408,7 +441,7 @@ export const Cheques: React.FC = () => {
       const orgs: any[] = r.data?.organizaciones || []
       const list: ClienteOpt[] = []
       orgs.forEach(org => (org.clientes || []).forEach((c: any) =>
-        list.push({ id: c.id, nombre: c.nombre, porcentaje_comision: c.porcentaje_comision ?? null })))
+        list.push({ id: c.id, nombre: c.nombre, porcentaje_comision: c.porcentaje_comision ?? null, cuenta_contable_id: c.cuenta_contable_id ?? null })))
       setClientes(list)
     }).catch(() => {})
   }, [activeOrgId])
@@ -483,12 +516,42 @@ export const Cheques: React.FC = () => {
   }
 
   const handleAcreditar = async () => {
-    if (!acreditarId) return; setActioning(true)
+    if (!acreditarId || !acreditarBancoId) return
+    setActioning(true)
     try {
-      await apiClient.client.post(`/cheques/${acreditarId}/acreditar`, { fecha_acred: acreditarFecha || null })
-      setAcreditarId(null); setAcreditarFecha(''); load()
+      await apiClient.client.post(`/cheques/${acreditarId}/acreditar`, {
+        fecha_acred:     acreditarFecha || null,
+        banco_cuenta_id: acreditarBancoId,
+      })
+      setAcreditarId(null); setAcreditarFecha(''); setAcreditarBancoId('')
+      load()
     } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error') }
     finally { setActioning(false) }
+  }
+
+  const handleAcreditarMasivo = async () => {
+    if (!acredMasivoBanco || selectedCheques.size === 0) return
+    setAcreditandoMasivo(true); setMsg('')
+    try {
+      const params: Record<string, string | number> = {}
+      if (activeOrgId) params.org_id = activeOrgId
+      const res = await apiClient.client.post('/cheques/acreditar', {
+        cheque_ids:      Array.from(selectedCheques),
+        banco_cuenta_id: acredMasivoBanco,
+        fecha_acred:     acredMasivoFecha || null,
+      }, { params })
+      const { acreditados, total, detalle } = res.data
+      const errores = detalle.filter((d: any) => !d.ok)
+      setMsg(`✓ ${acreditados}/${total} acreditados${errores.length ? ` · ${errores.length} error(es)` : ''}`)
+      setSelectedCheques(new Set()); setAcredMasivoBanco(''); setAcredMasivoFecha('')
+      // reload deposito data
+      if (depositoFecha) {
+        const p: Record<string, string | number> = { fecha: depositoFecha }
+        if (activeOrgId) p.org_id = activeOrgId
+        apiClient.client.get('/cheques/deposito', { params: p }).then(r => setDepositoData(r.data)).catch(() => {})
+      }
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al acreditar') }
+    finally { setAcreditandoMasivo(false) }
   }
 
   const handleRechazar = async () => {
@@ -496,11 +559,13 @@ export const Cheques: React.FC = () => {
     try {
       await apiClient.client.post(`/cheques/${rechazarId}/rechazar`, {
         fecha_rechazo:    rechazarData.fecha_rechazo || null,
+        gastos_bancarios: parseFloat(rechazarData.gastos_bancarios) || 0,
         fisico:           rechazarData.fisico,
         fecha_devolucion: rechazarData.fecha_devolucion || null,
       })
-      setRechazarId(null); setRechazarData({ fecha_rechazo: '', fisico: false, fecha_devolucion: '' }); load()
-      // reload rechazados if on that tab
+      setRechazarId(null)
+      setRechazarData({ fecha_rechazo: '', gastos_bancarios: '', fisico: false, fecha_devolucion: '' })
+      load()
       if (tab === 'rechazados') {
         const params: Record<string, string | number> = { estado: 'rechazado', limit: '500' }
         if (activeOrgId) params.org_id = activeOrgId
@@ -574,7 +639,7 @@ export const Cheques: React.FC = () => {
     finally { setExportandoDeposito(false) }
   }
 
-  const pendientes = cheques.filter(c => c.estado === 'pendiente')
+  const pendientes = cheques.filter(c => esRegistrado(c.estado) || c.estado === 'depositado')
   const totalPend  = pendientes.reduce((s, c) => s + c.monto, 0)
   const totalAcred = cheques.filter(c => c.estado === 'acreditado').reduce((s, c) => s + c.monto, 0)
   const totalRech  = cheques.filter(c => c.estado === 'rechazado').reduce((s, c) => s + c.monto, 0)
@@ -640,7 +705,8 @@ export const Cheques: React.FC = () => {
             <select value={filtroEstado} onChange={e => { setFiltroEstado(e.target.value); setSkip(0) }}
               className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none">
               <option value="">Todos los estados</option>
-              <option value="pendiente">Pendiente</option>
+              <option value="registrado">Registrado</option>
+              <option value="depositado">Depositado</option>
               <option value="acreditado">Acreditado</option>
               <option value="rechazado">Rechazado</option>
             </select>
@@ -697,7 +763,9 @@ export const Cheques: React.FC = () => {
                       <td className="px-3 py-2 text-right font-mono text-gray-100">{fmt(c.monto)}</td>
                       <td className="px-3 py-2 text-right font-mono text-gray-400">{c.comision > 0 ? fmt(c.comision) : '—'}</td>
                       <td className="px-3 py-2">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[c.estado]}`}>{c.estado}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[c.estado] || ''}`}>
+                          {ESTADO_LABEL[c.estado] || c.estado}
+                        </span>
                       </td>
                       <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{fmtDate(c.fecha_acred)}</td>
                       <td className="px-3 py-2">
@@ -710,15 +778,17 @@ export const Cheques: React.FC = () => {
                           <button onClick={() => handleCompartir(c)}
                             className="px-2 py-0.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded text-xs transition-colors"
                             title="Compartir">📤</button>
-                          {c.estado === 'pendiente' && (
+                          {esRegistrado(c.estado) && (
                             <>
-                              <button onClick={() => { setAcreditarId(c.id); setAcreditarFecha('') }}
+                              <button onClick={() => { setAcreditarId(c.id); setAcreditarFecha(''); setAcreditarBancoId('') }}
                                 className="px-2 py-0.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded text-xs transition-colors">Acreditar</button>
-                              <button onClick={() => { setRechazarId(c.id); setRechazarData({ fecha_rechazo: '', fisico: false, fecha_devolucion: '' }) }}
-                                className="px-2 py-0.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-xs transition-colors">Rechazar</button>
                               <button onClick={() => handleDelete(c.id)}
                                 className="px-2 py-0.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded text-xs transition-colors">✕</button>
                             </>
+                          )}
+                          {c.estado === 'acreditado' && (
+                            <button onClick={() => { setRechazarId(c.id); setRechazarData({ fecha_rechazo: '', gastos_bancarios: '', fisico: false, fecha_devolucion: '' }) }}
+                              className="px-2 py-0.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-xs transition-colors">Rechazar</button>
                           )}
                         </div>
                       </td>
@@ -749,7 +819,7 @@ export const Cheques: React.FC = () => {
           <div className="flex flex-wrap items-end gap-3">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Fecha de depósito</label>
-              <select value={depositoFecha} onChange={e => setDepositoFecha(e.target.value)}
+              <select value={depositoFecha} onChange={e => { setDepositoFecha(e.target.value); setSelectedCheques(new Set()) }}
                 className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none min-w-[170px]">
                 <option value="">Seleccioná una fecha</option>
                 {depositoFechas.map(f => <option key={f} value={f}>{fmtDate(f)}</option>)}
@@ -762,6 +832,36 @@ export const Cheques: React.FC = () => {
               </button>
             )}
           </div>
+
+          {/* Acreditación masiva */}
+          {depositoData && depositoData.items.some(c => esRegistrado(c.estado)) && (
+            <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-xl p-3 flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[160px]">
+                <label className="block text-xs text-gray-400 mb-1">Banco de acreditación</label>
+                <select value={acredMasivoBanco} onChange={e => setAcredMasivoBanco(e.target.value ? parseInt(e.target.value) : '')}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none">
+                  <option value="">Seleccioná banco</option>
+                  {bancoCuentas.map(b => <option key={b.id} value={b.id}>{b.nombre} ({b.codigo})</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Fecha de acreditación</label>
+                <input type="date" value={acredMasivoFecha} onChange={e => setAcredMasivoFecha(e.target.value)}
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none" />
+              </div>
+              <button
+                onClick={handleAcreditarMasivo}
+                disabled={acreditandoMasivo || !acredMasivoBanco || selectedCheques.size === 0}
+                className="px-4 py-1.5 bg-green-600 hover:bg-green-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap">
+                {acreditandoMasivo ? 'Procesando…' : `✓ Acreditar ${selectedCheques.size > 0 ? `(${selectedCheques.size})` : 'seleccionados'}`}
+              </button>
+              {selectedCheques.size > 0 && (
+                <button onClick={() => setSelectedCheques(new Set())} className="text-xs text-gray-500 hover:text-gray-300 px-2">
+                  Limpiar selección
+                </button>
+              )}
+            </div>
+          )}
 
           {depositoLoading ? (
             <p className="text-sm text-gray-500 text-center py-8">Cargando…</p>
@@ -792,6 +892,15 @@ export const Cheques: React.FC = () => {
                   <table className="w-full text-xs min-w-[680px]">
                     <thead>
                       <tr className="bg-white/4 text-left text-gray-400">
+                        <th className="px-2 py-2">
+                          <input type="checkbox" className="w-3.5 h-3.5 accent-indigo-500"
+                            checked={depositoData.items.filter(c => esRegistrado(c.estado)).length > 0 &&
+                              depositoData.items.filter(c => esRegistrado(c.estado)).every(c => selectedCheques.has(c.id))}
+                            onChange={e => {
+                              const ids = depositoData.items.filter(c => esRegistrado(c.estado)).map(c => c.id)
+                              setSelectedCheques(e.target.checked ? new Set(ids) : new Set())
+                            }} />
+                        </th>
                         <th className="px-3 py-2 font-medium">Cliente</th>
                         <th className="px-3 py-2 font-medium">Librador</th>
                         <th className="px-3 py-2 font-medium">Portador</th>
@@ -805,7 +914,18 @@ export const Cheques: React.FC = () => {
                     </thead>
                     <tbody>
                       {depositoData.items.map((c, i) => (
-                        <tr key={c.id} className={`border-t border-white/5 hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-white/1'}`}>
+                        <tr key={c.id} className={`border-t border-white/5 hover:bg-white/2 ${selectedCheques.has(c.id) ? 'bg-indigo-500/5' : i % 2 === 0 ? '' : 'bg-white/1'}`}>
+                          <td className="px-2 py-2">
+                            {esRegistrado(c.estado) ? (
+                              <input type="checkbox" className="w-3.5 h-3.5 accent-indigo-500"
+                                checked={selectedCheques.has(c.id)}
+                                onChange={e => {
+                                  const s = new Set(selectedCheques)
+                                  e.target.checked ? s.add(c.id) : s.delete(c.id)
+                                  setSelectedCheques(s)
+                                }} />
+                            ) : <span className="w-3.5 h-3.5 block" />}
+                          </td>
                           <td className="px-3 py-2 text-gray-200">{c.cliente_nombre || '—'}</td>
                           <td className="px-3 py-2 text-gray-300 max-w-[110px] truncate">{c.librador || c.titular || '—'}</td>
                           <td className="px-3 py-2 text-gray-400">{c.portador_nombre || '—'}</td>
@@ -815,14 +935,16 @@ export const Cheques: React.FC = () => {
                           <td className="px-3 py-2"><LiBadge value={c.local_interior} /></td>
                           <td className="px-3 py-2 text-right font-mono text-gray-100">{fmt(c.monto)}</td>
                           <td className="px-3 py-2">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[c.estado]}`}>{c.estado}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[c.estado] || ''}`}>
+                              {ESTADO_LABEL[c.estado] || c.estado}
+                            </span>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-white/10 bg-white/4">
-                        <td colSpan={7} className="px-3 py-2 text-xs text-gray-400 font-medium">Total</td>
+                        <td colSpan={8} className="px-3 py-2 text-xs text-gray-400 font-medium">Total</td>
                         <td className="px-3 py-2 text-right font-mono text-gray-100 font-semibold">{fmt(depositoData.resumen.total)}</td>
                         <td />
                       </tr>
@@ -1037,7 +1159,15 @@ export const Cheques: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-[#16161A] border border-white/10 rounded-xl p-5 w-full max-w-sm space-y-4">
             <h2 className="text-base font-semibold text-gray-100">Acreditar cheque</h2>
-            <p className="text-sm text-gray-400">Asiento: Banco (D) / Créditos (H).</p>
+            <p className="text-xs text-gray-500">A1: Banco D / Cheques en cartera H — A2: Cheques depositados D / Cliente H</p>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Banco *</label>
+              <select value={acreditarBancoId} onChange={e => setAcreditarBancoId(e.target.value ? parseInt(e.target.value) : '')}
+                className={inputClass}>
+                <option value="">Seleccioná banco</option>
+                {bancoCuentas.map(b => <option key={b.id} value={b.id}>{b.nombre} ({b.codigo})</option>)}
+              </select>
+            </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Fecha de acreditación</label>
               <input type="date" value={acreditarFecha} onChange={e => setAcreditarFecha(e.target.value)} className={inputClass} />
@@ -1045,7 +1175,7 @@ export const Cheques: React.FC = () => {
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => setAcreditarId(null)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200">Cancelar</button>
-              <button onClick={handleAcreditar} disabled={actioning}
+              <button onClick={handleAcreditar} disabled={actioning || !acreditarBancoId}
                 className="px-4 py-1.5 bg-green-600 hover:bg-green-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors">
                 {actioning ? 'Procesando…' : 'Confirmar'}
               </button>
@@ -1059,13 +1189,21 @@ export const Cheques: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-[#16161A] border border-white/10 rounded-xl p-5 w-full max-w-sm space-y-4">
             <h2 className="text-base font-semibold text-gray-100">Registrar rechazo</h2>
-            <p className="text-sm text-gray-400">Asiento: Pasivo cliente (D) / Créditos (H).</p>
+            <p className="text-xs text-gray-500">A1: Cliente D / Banco H — A2: Cliente D / Gastos rechazos H — A3: Gastos rechazos D / Banco H</p>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Fecha de rechazo</label>
               <input type="date" value={rechazarData.fecha_rechazo}
                 onChange={e => setRechazarData(p => ({ ...p, fecha_rechazo: e.target.value }))}
                 className={inputClass} />
               <p className="text-xs text-gray-500 mt-1">Si no se indica, se usa hoy.</p>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Gastos bancarios del rechazo</label>
+              <input type="number" min="0" step="0.01" placeholder="0.00"
+                value={rechazarData.gastos_bancarios}
+                onChange={e => setRechazarData(p => ({ ...p, gastos_bancarios: e.target.value }))}
+                className={inputClass} />
+              <p className="text-xs text-gray-500 mt-1">Dejar en 0 si el banco no cobró gastos.</p>
             </div>
             <div className="flex items-center gap-3">
               <input type="checkbox" id="fisico-check" checked={rechazarData.fisico}
