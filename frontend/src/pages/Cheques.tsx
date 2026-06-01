@@ -38,7 +38,7 @@ interface Cheque {
   created_at: string
 }
 
-interface ClienteOpt { id: number; nombre: string; porcentaje_comision: number | null; cuenta_contable_id: number | null }
+interface ClienteOpt { id: number; nombre: string; porcentaje_comision: number | null; porcentaje_comision_local: number | null; porcentaje_comision_interior: number | null; cuenta_contable_id: number | null }
 interface PortadorOpt { id: number; nombre: string }
 interface BancoCuenta { id: number; codigo: string; nombre: string }
 
@@ -93,6 +93,15 @@ const computeLI = (cp: string): string => {
   const n = parseInt(cp.replace(/\D/g, ''), 10)
   if (isNaN(n)) return ''
   return n < 2000 ? 'local' : 'interior'
+}
+
+// % de comisión que corresponde a un cliente según local/interior, con
+// fallback al % general. Devuelve null si el cliente no tiene ninguno.
+const pctParaCliente = (cli: ClienteOpt | null | undefined, li: string): number | null => {
+  if (!cli) return null
+  if (li === 'local'    && cli.porcentaje_comision_local    != null) return cli.porcentaje_comision_local
+  if (li === 'interior' && cli.porcentaje_comision_interior != null) return cli.porcentaje_comision_interior
+  return cli.porcentaje_comision ?? null
 }
 
 const LiBadge: React.FC<{ value: string | null }> = ({ value }) => {
@@ -218,7 +227,7 @@ const PortadorSelector: React.FC<{
 const ClienteSelector: React.FC<{
   clientes: ClienteOpt[]
   value: number | null
-  onChangeCliente: (id: number | null, pct: number | null) => void
+  onChangeCliente: (id: number | null, cli: ClienteOpt | null) => void
   onAdd: (nombre: string) => Promise<void>
 }> = ({ clientes, value, onChangeCliente, onAdd }) => {
   const [adding, setAdding]     = useState(false)
@@ -241,8 +250,8 @@ const ClienteSelector: React.FC<{
           <select value={value ?? ''}
             onChange={e => {
               const id = e.target.value ? parseInt(e.target.value) : null
-              const cli = clientes.find(c => c.id === id)
-              onChangeCliente(id, cli?.porcentaje_comision ?? null)
+              const cli = clientes.find(c => c.id === id) ?? null
+              onChangeCliente(id, cli)
             }}
             className={`${inputClass} flex-1`}>
             <option value="">Sin cliente</option>
@@ -447,7 +456,7 @@ export const Cheques: React.FC = () => {
       const orgs: any[] = r.data?.organizaciones || []
       const list: ClienteOpt[] = []
       orgs.forEach(org => (org.clientes || []).forEach((c: any) =>
-        list.push({ id: c.id, nombre: c.nombre, porcentaje_comision: c.porcentaje_comision ?? null, cuenta_contable_id: c.cuenta_contable_id ?? null })))
+        list.push({ id: c.id, nombre: c.nombre, porcentaje_comision: c.porcentaje_comision ?? null, porcentaje_comision_local: c.porcentaje_comision_local ?? null, porcentaje_comision_interior: c.porcentaje_comision_interior ?? null, cuenta_contable_id: c.cuenta_contable_id ?? null })))
       setClientes(list)
     }).catch(() => {})
   }, [activeOrgId])
@@ -465,11 +474,11 @@ export const Cheques: React.FC = () => {
     const payload: Record<string, string | number> = { nombre }
     if (activeOrgId) payload.organizacion_id = activeOrgId
     const res = await apiClient.client.post('/clientes', payload)
-    const nuevo: ClienteOpt = { id: res.data.id, nombre: res.data.nombre, porcentaje_comision: res.data.porcentaje_comision ?? null }
+    const nuevo: ClienteOpt = { id: res.data.id, nombre: res.data.nombre, porcentaje_comision: res.data.porcentaje_comision ?? null, porcentaje_comision_local: res.data.porcentaje_comision_local ?? null, porcentaje_comision_interior: res.data.porcentaje_comision_interior ?? null, cuenta_contable_id: res.data.cuenta_contable_id ?? null }
     setClientes(prev => [...prev, nuevo])
     setFormData(p => ({
       ...p, cliente_id: nuevo.id,
-      porcentaje_comision: p.porcentaje_comision != null ? p.porcentaje_comision : (nuevo.porcentaje_comision ?? null),
+      porcentaje_comision: p.porcentaje_comision != null ? p.porcentaje_comision : pctParaCliente(nuevo, p.local_interior || computeLI(p.codigo_postal)),
     }))
   }
 
@@ -1054,9 +1063,10 @@ export const Cheques: React.FC = () => {
                 <ClienteSelector
                   clientes={clientes}
                   value={formData.cliente_id}
-                  onChangeCliente={(id, pct) => setFormData(p => ({
+                  onChangeCliente={(id, cli) => setFormData(p => ({
                     ...p, cliente_id: id,
-                    porcentaje_comision: p.porcentaje_comision != null ? p.porcentaje_comision : pct,
+                    // al elegir cliente, pre-llena el % según local/interior del cheque
+                    porcentaje_comision: pctParaCliente(cli, p.local_interior || computeLI(p.codigo_postal)),
                   }))}
                   onAdd={handleAddCliente}
                 />
@@ -1095,9 +1105,10 @@ export const Cheques: React.FC = () => {
                   value={formData.porcentaje_comision ?? ''} className={inputClass}
                   onChange={e => setFormData(p => ({ ...p, porcentaje_comision: e.target.value === '' ? null : parseFloat(e.target.value) }))} />
                 {formData.porcentaje_comision != null && (() => {
-                  const cli = clientes.find(c => c.id === formData.cliente_id)
-                  return cli?.porcentaje_comision === formData.porcentaje_comision
-                    ? <p className="text-xs text-gray-500 mt-0.5">↑ del cliente (podés cambiarlo)</p> : null
+                  const cli = clientes.find(c => c.id === formData.cliente_id) ?? null
+                  const li = formData.local_interior || computeLI(formData.codigo_postal)
+                  return pctParaCliente(cli, li) === formData.porcentaje_comision
+                    ? <p className="text-xs text-gray-500 mt-0.5">↑ del cliente{li ? ` (${li})` : ''} — podés cambiarlo</p> : null
                 })()}
               </div>
               <div>
@@ -1105,7 +1116,15 @@ export const Cheques: React.FC = () => {
                 <input type="text" value={formData.codigo_postal} placeholder="ej: 1425"
                   onChange={e => {
                     const cp = e.target.value
-                    setFormData(p => ({ ...p, codigo_postal: cp, local_interior: computeLI(cp) }))
+                    setFormData(p => {
+                      const li = computeLI(cp)
+                      // si hay cliente, re-deriva el % según el nuevo local/interior
+                      const cli = clientes.find(c => c.id === p.cliente_id) ?? null
+                      return {
+                        ...p, codigo_postal: cp, local_interior: li,
+                        porcentaje_comision: cli ? pctParaCliente(cli, li) : p.porcentaje_comision,
+                      }
+                    })
                   }}
                   className={inputClass} />
               </div>
