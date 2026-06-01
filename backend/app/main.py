@@ -187,6 +187,13 @@ def _init_db():
         "ALTER TABLE planilla_rows ADD COLUMN fecha_acred DATE",
         "ALTER TABLE extractos_bancarios ADD COLUMN banco VARCHAR DEFAULT 'Banco Macro'",
         "ALTER TABLE cheques ADD COLUMN foto_comprobante TEXT",
+        # Permitir borrar usuarios sin violar FK (columnas owner/creador se ponen en NULL)
+        "ALTER TABLE auditoria_logs ALTER COLUMN usuario_id DROP NOT NULL",
+        "ALTER TABLE planillas ALTER COLUMN usuario_id DROP NOT NULL",
+        "ALTER TABLE extractos_bancarios ALTER COLUMN creado_por DROP NOT NULL",
+        "ALTER TABLE liquidaciones ALTER COLUMN created_by DROP NOT NULL",
+        "ALTER TABLE liquidaciones ALTER COLUMN cerrado_by DROP NOT NULL",
+        "ALTER TABLE arqueos_diarios ALTER COLUMN creado_por DROP NOT NULL",
     ]
     for sql in migrations:
         try:

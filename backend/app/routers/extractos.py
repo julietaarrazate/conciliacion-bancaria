@@ -497,7 +497,9 @@ def export_para_contador(
 
     xlsx = export_extracto_contador(extracto.nombre_archivo, data)
     fecha_str = datetime.now(_ARG).strftime('%Y%m%d')
-    nombre_base = extracto.nombre_archivo.replace('.xlsx', '').replace('.XLSX', '')
+    nombre_base = extracto.nombre_archivo.replace('.xlsx', '').replace('.XLSX', '').replace('.xls', '').replace('.XLS', '').strip()
+    if not nombre_base:
+        nombre_base = f"extracto_{extracto_id}"
     filename = f"{nombre_base}_conciliado_{fecha_str}.xlsx"
 
     return StreamingResponse(

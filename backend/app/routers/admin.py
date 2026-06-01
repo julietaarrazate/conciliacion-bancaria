@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -116,6 +117,32 @@ def delete_user(
 
     email = user.email
     nombre = user.full_name
+
+    # NULL out FK references so the DELETE doesn't hit constraint violations.
+    # Each statement runs in its own savepoint so a failure (missing table/column
+    # in old installations) doesn't abort the whole PostgreSQL transaction.
+    nullify = [
+        "UPDATE auditoria_logs       SET usuario_id  = NULL WHERE usuario_id  = :uid",
+        "UPDATE planillas             SET usuario_id  = NULL WHERE usuario_id  = :uid",
+        "UPDATE extractos_bancarios   SET creado_por  = NULL WHERE creado_por  = :uid",
+        "UPDATE liquidaciones         SET created_by  = NULL WHERE created_by  = :uid",
+        "UPDATE liquidaciones         SET aprobado_by = NULL WHERE aprobado_by = :uid",
+        "UPDATE liquidaciones         SET cerrado_by  = NULL WHERE cerrado_by  = :uid",
+        "UPDATE arqueos_diarios       SET creado_por  = NULL WHERE creado_por  = :uid",
+        "UPDATE cheques               SET usuario_id  = NULL WHERE usuario_id  = :uid",
+        "UPDATE egresos               SET usuario_id  = NULL WHERE usuario_id  = :uid",
+        "UPDATE asientos              SET usuario_id  = NULL WHERE usuario_id  = :uid",
+        "DELETE FROM login_approvals                          WHERE user_id    = :uid",
+        "DELETE FROM revoked_tokens                           WHERE user_id    = :uid",
+    ]
+    for sql in nullify:
+        sp = db.begin_nested()  # SAVEPOINT — un fallo no aborta la transacción padre
+        try:
+            db.execute(text(sql), {"uid": user_id})
+            sp.commit()
+        except Exception:
+            sp.rollback()  # libera el savepoint sin afectar el resto
+
     db.delete(user)
     db.commit()
 
