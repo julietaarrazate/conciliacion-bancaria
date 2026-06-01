@@ -42,6 +42,8 @@ REGLAS_TEST = [
 CUENTAS_TEST = [
     "1-1-1-2", "1-1-1-3", "1-1-1-3-1", "1-1-2-0", "2-1-0-0",
     "2-1-2-0", "3-1-1-0", "3-2-0-0",
+    # Cuentas cheques v2 (regla contador junio 2026)
+    "1-1-2-1", "2-1-3-1", "3-1-3-0", "3-2-2-1",
 ]
 
 
@@ -175,28 +177,110 @@ def test_planilla_sin_filas_ok_no_crea_asiento(db):
 
 # ─── Cheque ──────────────────────────────────────────────────────────────────
 
-def test_cheque_carga_y_acreditacion(db):
+def _cuenta_id(db, codigo):
+    return db.query(PlanCuenta).filter(
+        PlanCuenta.codigo == codigo, PlanCuenta.organizacion_id == ORG_ID).first().id
+
+
+def test_cheque_registro_genera_asiento_3_lineas(db):
+    """Registro cheque: Cartera(D) / Depositados(H neto) / Comisiones(H)."""
     fecha = date(2026, 5, 23)
     mc.registrar_cheque(db, cheque_id=1, org_id=ORG_ID, usuario_id=1,
-                        titular="Cliente X", monto=5000, comision=0, fecha=fecha)
-    mc.acreditar_cheque(db, cheque_id=1, org_id=ORG_ID, usuario_id=1,
-                        titular="Cliente X", monto=5000, fecha=fecha)
-
-    assert len(_asientos_de(db, "cheque_carga", 1)) == 1
-    assert len(_asientos_de(db, "cheque_acred", 1)) == 1
-
-
-def test_cheque_con_comision_crea_dos_asientos(db):
-    mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=5000, comision=100, fecha=date(2026, 5, 23))
-    assert len(_asientos_de(db, "cheque_carga", 1)) == 1
-    assert len(_asientos_de(db, "cheque_comision", 1)) == 1
+                        titular="Cliente X", monto=5000, comision=100, fecha=fecha)
+    asientos = _asientos_de(db, "cheque_registro", 1)
+    assert len(asientos) == 1
+    lineas = asientos[0].lineas
+    assert len(lineas) == 3  # cartera + depositados + comisiones
+    # Debe total = monto, Haber = neto + comisión
+    assert abs(sum(l.debe for l in lineas) - 5000) < 0.01
+    assert abs(sum(l.haber for l in lineas) - 5000) < 0.01
+    cartera = _cuenta_id(db, "1-1-2-1")
+    assert any(l.cuenta_id == cartera and l.debe == 5000 for l in lineas)
 
 
-def test_cheque_rechazo_crea_asiento_distinto_al_acred(db):
+def test_cheque_registro_sin_comision_dos_lineas(db):
+    mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=5000, comision=0, fecha=date(2026, 5, 23))
+    asientos = _asientos_de(db, "cheque_registro", 1)
+    assert len(asientos) == 1
+    assert len(asientos[0].lineas) == 2  # cartera(D) / depositados(H), sin comisión
+
+
+def test_cheque_registro_idempotente(db):
     fecha = date(2026, 5, 23)
-    mc.rechazar_cheque(db, 1, ORG_ID, 1, "X", monto=5000, fecha=fecha)
-    assert len(_asientos_de(db, "cheque_rechazo", 1)) == 1
-    assert len(_asientos_de(db, "cheque_acred", 1)) == 0
+    mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=5000, comision=100, fecha=fecha)
+    mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=5000, comision=100, fecha=fecha)
+    assert len(_asientos_de(db, "cheque_registro", 1)) == 1
+
+
+def test_cheque_acreditacion_dos_asientos(db):
+    """Acreditación: A1 Banco(D)/Cartera(H) + A2 Depositados(D)/Cliente(H)."""
+    fecha = date(2026, 5, 23)
+    banco_id   = _cuenta_id(db, "1-1-1-3-1")
+    cliente_id = _cuenta_id(db, "2-1-2-0")
+    mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=5000, comision=100, fecha=fecha)
+    mc.acreditar_cheque(db, cheque_id=1, org_id=ORG_ID, usuario_id=1,
+                        titular="X", monto=5000, neto=4900,
+                        banco_cuenta_id=banco_id, cliente_cuenta_id=cliente_id, fecha=fecha)
+    assert len(_asientos_de(db, "cheque_acred_banco", 1)) == 1
+    assert len(_asientos_de(db, "cheque_acred_cliente", 1)) == 1
+    # A1 banco por monto total, A2 cliente por neto
+    a1 = _asientos_de(db, "cheque_acred_banco", 1)[0]
+    assert abs(sum(l.debe for l in a1.lineas) - 5000) < 0.01
+    a2 = _asientos_de(db, "cheque_acred_cliente", 1)[0]
+    assert abs(sum(l.debe for l in a2.lineas) - 4900) < 0.01
+
+
+def test_cheque_rechazo_tres_asientos(db):
+    """Rechazo con gastos: A1 reversión + A2 traslado gastos + A3 débito banco."""
+    fecha = date(2026, 5, 23)
+    banco_id   = _cuenta_id(db, "1-1-1-3-1")
+    cliente_id = _cuenta_id(db, "2-1-2-0")
+    mc.rechazar_cheque(db, cheque_id=1, org_id=ORG_ID, usuario_id=1, titular="X",
+                       monto=100000, gastos=5000,
+                       banco_cuenta_id=banco_id, cliente_cuenta_id=cliente_id, fecha=fecha)
+    assert len(_asientos_de(db, "cheque_rechazo_banco", 1)) == 1
+    assert len(_asientos_de(db, "cheque_rechazo_cliente", 1)) == 1
+    assert len(_asientos_de(db, "cheque_rechazo_gasto", 1)) == 1
+
+
+def test_cheque_rechazo_sin_gastos_solo_reversion(db):
+    fecha = date(2026, 5, 23)
+    banco_id   = _cuenta_id(db, "1-1-1-3-1")
+    cliente_id = _cuenta_id(db, "2-1-2-0")
+    mc.rechazar_cheque(db, cheque_id=1, org_id=ORG_ID, usuario_id=1, titular="X",
+                       monto=100000, gastos=0,
+                       banco_cuenta_id=banco_id, cliente_cuenta_id=cliente_id, fecha=fecha)
+    assert len(_asientos_de(db, "cheque_rechazo_banco", 1)) == 1
+    assert len(_asientos_de(db, "cheque_rechazo_cliente", 1)) == 0
+    assert len(_asientos_de(db, "cheque_rechazo_gasto", 1)) == 0
+
+
+def test_cheque_ciclo_completo_transitorias_netean_cero(db):
+    """Ciclo registro→acreditación: Cartera y Depositados deben quedar en 0.
+    Saldos finales esperados: Banco +monto (D), Cliente +neto (H), Comisión (H)."""
+    fecha = date(2026, 5, 23)
+    banco_id   = _cuenta_id(db, "1-1-1-3-1")
+    cliente_id = _cuenta_id(db, "2-1-2-0")
+    cartera_id = _cuenta_id(db, "1-1-2-1")
+    deposit_id = _cuenta_id(db, "2-1-3-1")
+
+    mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=100000, comision=2000, fecha=fecha)
+    mc.acreditar_cheque(db, cheque_id=1, org_id=ORG_ID, usuario_id=1, titular="X",
+                        monto=100000, neto=98000,
+                        banco_cuenta_id=banco_id, cliente_cuenta_id=cliente_id, fecha=fecha)
+
+    saldos: dict = {}
+    for a in db.query(Asiento).filter(Asiento.organizacion_id == ORG_ID).all():
+        for l in a.lineas:
+            saldos.setdefault(l.cuenta_id, Decimal("0"))
+            saldos[l.cuenta_id] += (l.debe - l.haber)
+
+    # Transitorias en cero
+    assert abs(saldos.get(cartera_id, 0)) < 0.01, "Cheques en cartera debería netear 0"
+    assert abs(saldos.get(deposit_id, 0)) < 0.01, "Cheques depositados debería netear 0"
+    # Banco +100000 (D), Cliente +98000 (H, saldo negativo en debe-haber)
+    assert abs(saldos.get(banco_id, 0) - 100000) < 0.01
+    assert abs(saldos.get(cliente_id, 0) + 98000) < 0.01
 
 
 # ─── Egresos (módulo unificado Pagos) ────────────────────────────────────────
@@ -340,11 +424,10 @@ def test_reverso_mantiene_invariante_partida_doble(db):
     """El asiento de reverso también debe tener debe == haber."""
     fecha = date(2026, 5, 23)
     mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=2500, comision=100, fecha=fecha)
-    mc.reversar_asientos(db, "cheque_carga", 1, ORG_ID, usuario_id=1)
-    mc.reversar_asientos(db, "cheque_comision", 1, ORG_ID, usuario_id=1)
+    mc.reversar_asientos(db, "cheque_registro", 1, ORG_ID, usuario_id=1)
 
     reversos = db.query(Asiento).filter(Asiento.modulo.like("%_reverso")).all()
-    assert len(reversos) == 2
+    assert len(reversos) == 1
     for r in reversos:
         debe = sum(l.debe for l in r.lineas)
         haber = sum(l.haber for l in r.lineas)

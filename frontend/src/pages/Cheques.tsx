@@ -422,16 +422,22 @@ export const Cheques: React.FC = () => {
 
   // Cuentas de banco (para selector en acreditación)
   useEffect(() => {
-    apiClient.client.get('/contabilidad/plan')
+    const params: Record<string, string | number> = {}
+    if (activeOrgId) params.org_id = activeOrgId
+    apiClient.client.get('/contabilidad/plan-cuentas', { params })
       .then(r => {
-        const all: any[] = r.data?.cuentas || r.data || []
+        const all: any[] = Array.isArray(r.data) ? r.data : (r.data?.cuentas || [])
+        // IDs que son cuenta madre (tienen hijos) → no se imputan
+        const parentIds = new Set(all.map((c: any) => c.parent_id).filter(Boolean))
         const bancos = all.filter((c: any) =>
-          typeof c.codigo === 'string' && c.codigo.startsWith('1-1-1-') && c.nivel >= 4
+          typeof c.nombre === 'string' &&
+          c.nombre.toLowerCase().startsWith('banco') &&
+          !parentIds.has(c.id)  // solo cuentas hoja
         )
         setBancoCuentas(bancos.map((c: any) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre })))
       })
       .catch(() => {})
-  }, [])
+  }, [activeOrgId])
 
   // Clientes
   useEffect(() => {

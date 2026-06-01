@@ -760,8 +760,14 @@ _MODULO_TIPO = {
     "cc_inicial":        ("banco",   "Acreditación (histórico)"),
     "planilla":          ("tt",      "Transferencia (TT)"),
     "planilla_comision": ("tt",      "Comisión TT"),
-    "cheque_carga":      ("cheques", "Cheque"),
-    "cheque_rechazo":    ("cheques", "Cheque rechazado"),
+    "cheque_carga":          ("cheques", "Cheque"),           # legacy
+    "cheque_rechazo":        ("cheques", "Cheque rechazado"),  # legacy
+    "cheque_registro":       ("cheques", "Cheque registrado"),
+    "cheque_acred_banco":    ("cheques", "Cheque acreditado (banco)"),
+    "cheque_acred_cliente":  ("cheques", "Cheque acreditado"),
+    "cheque_rechazo_banco":  ("cheques", "Cheque rechazado (reversión)"),
+    "cheque_rechazo_cliente":("cheques", "Gastos rechazo cheque"),
+    "cheque_rechazo_gasto":  ("cheques", "Débito bancario rechazo"),
     "egreso":            ("ajustes", "Pago / Egreso"),
 }
 
