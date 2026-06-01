@@ -198,6 +198,23 @@ async def upload_extracto(file: UploadFile = File(...),
             os.remove(tmp_path)
 
 
+@router.patch("/{extracto_id}/renombrar")
+def renombrar_extracto(extracto_id: int, payload: dict,
+                       db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)):
+    """Cambia el nombre visible del extracto."""
+    extracto = _extracto_for_user(db, extracto_id, current_user)
+    nuevo_nombre = (payload.get("nombre") or "").strip()
+    if not nuevo_nombre:
+        raise HTTPException(400, "El nombre no puede estar vacío")
+    antes = extracto.nombre_archivo
+    extracto.nombre_archivo = nuevo_nombre
+    db.commit()
+    registrar_log(db, current_user.id, "extractos_bancarios", extracto_id,
+                  "UPDATE", {"antes": antes, "despues": nuevo_nombre})
+    return {"ok": True, "nombre_archivo": extracto.nombre_archivo}
+
+
 @router.delete("/{extracto_id}")
 def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
                     current_user: User = Depends(require_permission("delete_records"))):

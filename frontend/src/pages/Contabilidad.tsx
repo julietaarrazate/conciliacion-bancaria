@@ -182,13 +182,13 @@ const GEN_BADGE: Record<string, { label: string; cls: string }> = {
 type CcFiltro = 'todos' | 'deudores' | 'acreedores' | 'cero' | 'recientes' | 'sin_actividad'
 
 const TAB_PERM: Record<Tab, string> = {
-  plan:     'admin_accounting',
-  reglas:   'admin_accounting',
+  plan:     'view_accounting',
+  reglas:   'view_accounting',
   diario:   'view_accounting',
   sumas:    'view_accounting',
   balance:  'view_accounting',
   mayor:    'view_accounting',
-  clientes: 'admin_accounting',
+  clientes: 'view_accounting',
   ctacte:   'manage_finance',
 }
 
@@ -196,6 +196,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   const { activeOrgId } = useOrgStore()
   const { hasPermission, user } = useAuthStore()
   const canAdminAccounting = hasPermission('admin_accounting')
+  const canViewAccounting  = hasPermission('view_accounting')
   const canManageFinance   = hasPermission('manage_finance')
   const [cuentas, setCuentas]         = useState<CuentaItem[]>([])
   const [reglas, setReglas]           = useState<ReglaItem[]>([])
@@ -246,10 +247,10 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
     setLoading(true)
     Promise.all([
-      canAdminAccounting
+      canViewAccounting
         ? apiClient.client.get(`/contabilidad/plan-cuentas${q}`).then(r => r.data)
         : Promise.resolve([]),
-      canAdminAccounting
+      canViewAccounting
         ? apiClient.client.get(`/contabilidad/reglas${q}`).then(r => r.data)
         : Promise.resolve([]),
       apiClient.client.get(`/contabilidad/asientos?limit=500${activeOrgId ? `&org_id=${activeOrgId}` : ''}`).then(r => r.data),
@@ -298,7 +299,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   }
 
   useEffect(() => {
-    if (tab === 'clientes' && canAdminAccounting) cargarClientesCuentas()
+    if (tab === 'clientes' && canViewAccounting) cargarClientesCuentas()
     if (tab === 'ctacte' && canManageFinance) { cargarClientesCuentas(); cargarCartera() }
   }, [tab, activeOrgId])
 
@@ -559,7 +560,12 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           {modo === 'ctacte'
             ? 'Cartera de clientes · saldo, movimientos y estado por cuenta'
-            : `${canAdminAccounting ? 'Plan de cuentas · Reglas · ' : ''}Libro diario · Sumas y saldo · Balance · Libro mayor`}
+            : 'Plan de cuentas · Reglas · Libro diario · Sumas y saldo · Balance · Libro mayor'}
+          {modo !== 'ctacte' && !canAdminAccounting && (
+            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400">
+              solo lectura
+            </span>
+          )}
         </p>
       </div>
 
@@ -916,24 +922,26 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
               Vinculá cada cliente a su cuenta corriente contable (subcuenta de <span className="font-mono">2-1-2-0</span>).
               Cada cuenta pertenece a un solo cliente. Los sin vincular se resuelven asignando una cuenta existente o creando una nueva.
             </p>
-            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-              <button
-                onClick={recuperarClientesBorrados}
-                disabled={recuperandoCli || creandoFaltantes}
-                className="text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
-                title="Recrea clientes que están acreditados en el extracto pero ya no existen, con su cuenta contable"
-              >
-                {recuperandoCli ? 'Recuperando…' : '↺ Recuperar clientes borrados'}
-              </button>
-              <button
-                onClick={crearCuentasFaltantes}
-                disabled={creandoFaltantes || recuperandoCli}
-                className="text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
-                title="Crea y vincula la cuenta contable de todos los clientes que aún no tienen una"
-              >
-                {creandoFaltantes ? 'Creando…' : '+ Crear cuentas faltantes'}
-              </button>
-            </div>
+            {canAdminAccounting && (
+              <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                <button
+                  onClick={recuperarClientesBorrados}
+                  disabled={recuperandoCli || creandoFaltantes}
+                  className="text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+                  title="Recrea clientes que están acreditados en el extracto pero ya no existen, con su cuenta contable"
+                >
+                  {recuperandoCli ? 'Recuperando…' : '↺ Recuperar clientes borrados'}
+                </button>
+                <button
+                  onClick={crearCuentasFaltantes}
+                  disabled={creandoFaltantes || recuperandoCli}
+                  className="text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
+                  title="Crea y vincula la cuenta contable de todos los clientes que aún no tienen una"
+                >
+                  {creandoFaltantes ? 'Creando…' : '+ Crear cuentas faltantes'}
+                </button>
+              </div>
+            )}
           </div>
           {loadingCli ? (
             <div className="py-12 text-center text-gray-400">Cargando...</div>
@@ -946,7 +954,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   <tr>
                     <th className="text-left px-4 py-2 font-medium text-gray-500">Cliente</th>
                     <th className="text-left px-4 py-2 font-medium text-gray-500">Cuenta contable</th>
-                    <th className="text-right px-4 py-2 font-medium text-gray-500">Acciones</th>
+                    {canAdminAccounting && <th className="text-right px-4 py-2 font-medium text-gray-500">Acciones</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
@@ -965,30 +973,32 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-gray-300 dark:border-slate-600 text-gray-400">sin vincular</span>
                           )}
                         </td>
-                        <td className="px-4 py-2">
-                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            <select
-                              value={row.cuenta?.id ?? ''}
-                              disabled={saving}
-                              onChange={e => asignarCuenta(row.cliente_id, e.target.value ? Number(e.target.value) : null)}
-                              className="text-[11px] px-1.5 py-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 max-w-[180px]"
-                            >
-                              <option value="">— sin vincular —</option>
-                              {cuentasDisp.map(c => (
-                                <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>
-                              ))}
-                            </select>
-                            {!row.cuenta && (
-                              <button
-                                onClick={() => crearCuenta(row.cliente_id)}
+                        {canAdminAccounting && (
+                          <td className="px-4 py-2">
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                              <select
+                                value={row.cuenta?.id ?? ''}
                                 disabled={saving}
-                                className="text-[11px] px-2 py-1 rounded-md bg-ml-blue text-white hover:bg-ml-blue-dark disabled:opacity-50"
+                                onChange={e => asignarCuenta(row.cliente_id, e.target.value ? Number(e.target.value) : null)}
+                                className="text-[11px] px-1.5 py-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 max-w-[180px]"
                               >
-                                + Crear cuenta
-                              </button>
-                            )}
-                          </div>
-                        </td>
+                                <option value="">— sin vincular —</option>
+                                {cuentasDisp.map(c => (
+                                  <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>
+                                ))}
+                              </select>
+                              {!row.cuenta && (
+                                <button
+                                  onClick={() => crearCuenta(row.cliente_id)}
+                                  disabled={saving}
+                                  className="text-[11px] px-2 py-1 rounded-md bg-ml-blue text-white hover:bg-ml-blue-dark disabled:opacity-50"
+                                >
+                                  + Crear cuenta
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     )
                   })}

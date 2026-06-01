@@ -477,6 +477,16 @@ export const Pagos: React.FC = () => {
               </div>
             )}
 
+            {/* A favor de: siempre visible para pago_cliente (proveedor del cliente) */}
+            {form.tipo === 'pago_cliente' && (
+              <div>
+                <label className="label">A favor de (proveedor del cliente)</label>
+                <input className="input-field" placeholder="Nombre del proveedor"
+                  value={form.beneficiario}
+                  onChange={e => setForm(p => ({ ...p, beneficiario: e.target.value }))} />
+              </div>
+            )}
+
             {/* Categoría (gasto/proveedor) */}
             {form.tipo !== 'pago_cliente' && (
               <div>
@@ -509,7 +519,7 @@ export const Pagos: React.FC = () => {
                   onChange={e => setForm(p => ({ ...p, fecha: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Referencia</label>
+                <label className="label">Nro. OP</label>
                 <input className="input-field" placeholder="opcional"
                   value={form.referencia}
                   onChange={e => setForm(p => ({ ...p, referencia: e.target.value }))} />

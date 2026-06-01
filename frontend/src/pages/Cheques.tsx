@@ -205,6 +205,62 @@ const PortadorSelector: React.FC<{
   )
 }
 
+const ClienteSelector: React.FC<{
+  clientes: ClienteOpt[]
+  value: number | null
+  onChangeCliente: (id: number | null, pct: number | null) => void
+  onAdd: (nombre: string) => Promise<void>
+}> = ({ clientes, value, onChangeCliente, onAdd }) => {
+  const [adding, setAdding]     = useState(false)
+  const [newNombre, setNewNombre] = useState('')
+  const [saving, setSaving]     = useState(false)
+  const inputRef                = useRef<HTMLInputElement>(null)
+
+  const handleAdd = async () => {
+    const n = newNombre.trim(); if (!n) return
+    setSaving(true)
+    await onAdd(n)
+    setNewNombre(''); setAdding(false); setSaving(false)
+  }
+
+  return (
+    <div>
+      <label className="block text-xs text-gray-400 mb-1">Cliente</label>
+      {!adding ? (
+        <div className="flex gap-1.5">
+          <select value={value ?? ''}
+            onChange={e => {
+              const id = e.target.value ? parseInt(e.target.value) : null
+              const cli = clientes.find(c => c.id === id)
+              onChangeCliente(id, cli?.porcentaje_comision ?? null)
+            }}
+            className={`${inputClass} flex-1`}>
+            <option value="">Sin cliente</option>
+            {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+          <button type="button"
+            onClick={() => { setAdding(true); setTimeout(() => inputRef.current?.focus(), 50) }}
+            className="px-2.5 py-1.5 bg-white/8 hover:bg-white/12 text-gray-300 text-sm rounded border border-white/10 transition-colors"
+            title="Agregar cliente">+</button>
+        </div>
+      ) : (
+        <div className="flex gap-1.5">
+          <input ref={inputRef} value={newNombre} onChange={e => setNewNombre(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleAdd()
+              if (e.key === 'Escape') { setAdding(false); setNewNombre('') }
+            }}
+            placeholder="Nombre del cliente" className={`${inputClass} flex-1`} />
+          <button type="button" onClick={handleAdd} disabled={saving || !newNombre.trim()}
+            className="px-2 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded disabled:opacity-50 transition-colors">✓</button>
+          <button type="button" onClick={() => { setAdding(false); setNewNombre('') }}
+            className="px-2 py-1.5 bg-white/8 hover:bg-white/12 text-gray-400 text-sm rounded transition-colors">✕</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export const Cheques: React.FC = () => {
   const { activeOrgId } = useOrgStore()
 
@@ -346,14 +402,16 @@ export const Cheques: React.FC = () => {
 
   // Clientes
   useEffect(() => {
-    apiClient.client.get('/clientes/archivos').then(r => {
+    const params: Record<string, number> = {}
+    if (activeOrgId) params.org_id = activeOrgId
+    apiClient.client.get('/clientes/archivos', { params }).then(r => {
       const orgs: any[] = r.data?.organizaciones || []
       const list: ClienteOpt[] = []
       orgs.forEach(org => (org.clientes || []).forEach((c: any) =>
         list.push({ id: c.id, nombre: c.nombre, porcentaje_comision: c.porcentaje_comision ?? null })))
       setClientes(list)
     }).catch(() => {})
-  }, [])
+  }, [activeOrgId])
 
   const handleAddPortador = async (nombre: string) => {
     const params: Record<string, string | number> = {}
@@ -362,6 +420,18 @@ export const Cheques: React.FC = () => {
     const nuevo = res.data as PortadorOpt
     setPortadores(prev => [...prev, nuevo])
     setFormData(p => ({ ...p, portador_id: nuevo.id }))
+  }
+
+  const handleAddCliente = async (nombre: string) => {
+    const payload: Record<string, string | number> = { nombre }
+    if (activeOrgId) payload.organizacion_id = activeOrgId
+    const res = await apiClient.client.post('/clientes', payload)
+    const nuevo: ClienteOpt = { id: res.data.id, nombre: res.data.nombre, porcentaje_comision: res.data.porcentaje_comision ?? null }
+    setClientes(prev => [...prev, nuevo])
+    setFormData(p => ({
+      ...p, cliente_id: nuevo.id,
+      porcentaje_comision: p.porcentaje_comision != null ? p.porcentaje_comision : (nuevo.porcentaje_comision ?? null),
+    }))
   }
 
   const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -853,20 +923,15 @@ export const Cheques: React.FC = () => {
             {msg && <p className="text-xs text-red-400">{msg}</p>}
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <label className="block text-xs text-gray-400 mb-1">Cliente</label>
-                <select value={formData.cliente_id ?? ''}
-                  onChange={e => {
-                    const id = e.target.value ? parseInt(e.target.value) : null
-                    const cli = clientes.find(c => c.id === id)
-                    setFormData(p => ({
-                      ...p, cliente_id: id,
-                      porcentaje_comision: p.porcentaje_comision != null ? p.porcentaje_comision : (cli?.porcentaje_comision ?? null),
-                    }))
-                  }}
-                  className={inputClass}>
-                  <option value="">Sin cliente</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                </select>
+                <ClienteSelector
+                  clientes={clientes}
+                  value={formData.cliente_id}
+                  onChangeCliente={(id, pct) => setFormData(p => ({
+                    ...p, cliente_id: id,
+                    porcentaje_comision: p.porcentaje_comision != null ? p.porcentaje_comision : pct,
+                  }))}
+                  onAdd={handleAddCliente}
+                />
               </div>
               <div className="col-span-2">
                 <PortadorSelector
