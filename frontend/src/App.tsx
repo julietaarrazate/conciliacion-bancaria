@@ -92,8 +92,19 @@ export function App() {
         try {
           const user = await apiClient.getCurrentUser()
           setUser(user)
-        } catch {
-          useAuthStore.setState({ token: null, isAuthenticated: false })
+        } catch (err: any) {
+          // Solo cerrar sesión si el token es realmente inválido (401). Ante un
+          // error transitorio (Render despertando, red intermitente) el interceptor
+          // ya reintentó; no hay que desloguear — recargar la app no debe sacar al
+          // usuario por un cold-start. En ese caso conservamos el token y reintentamos.
+          if (err?.response?.status === 401) {
+            useAuthStore.setState({ token: null, isAuthenticated: false })
+          } else {
+            try {
+              const user = await apiClient.getCurrentUser()
+              setUser(user)
+            } catch { /* el servidor sigue sin responder — conservar sesión, no desloguear */ }
+          }
         }
       }
       setLoading(false)
