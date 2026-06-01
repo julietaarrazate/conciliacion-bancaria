@@ -9,7 +9,9 @@ class Cliente(Base):
     nombre = Column(String, nullable=False, index=True)
     cuit = Column(String, nullable=True)
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
-    porcentaje_comision = Column(Numeric(5, 4), nullable=True)  # % comision propio; NULL = usa default org
+    porcentaje_comision = Column(Numeric(5, 4), nullable=True)  # % comision propio (general / TT); NULL = usa default org
+    porcentaje_comision_local    = Column(Numeric(5, 4), nullable=True)  # % cheques local (CP < 2000)
+    porcentaje_comision_interior = Column(Numeric(5, 4), nullable=True)  # % cheques interior (CP >= 2000)
     cuenta_contable_id = Column(Integer, ForeignKey("plan_cuentas.id"), nullable=True)  # cuenta corriente 2-1-2-X
 
     # Relationships

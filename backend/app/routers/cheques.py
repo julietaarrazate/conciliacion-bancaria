@@ -347,6 +347,21 @@ def crear_cheque(
             raise HTTPException(404, "Portador no encontrado")
 
     li = body.local_interior or _local_interior(body.codigo_postal)
+
+    # % comisión: usa el del body si vino; si no, lo hereda del cliente según
+    # local/interior (con fallback al % general del cliente).
+    if body.porcentaje_comision is not None:
+        pct_comision = Decimal(str(body.porcentaje_comision))
+    elif body.cliente_id and cli:
+        if li == "local" and cli.porcentaje_comision_local is not None:
+            pct_comision = cli.porcentaje_comision_local
+        elif li == "interior" and cli.porcentaje_comision_interior is not None:
+            pct_comision = cli.porcentaje_comision_interior
+        else:
+            pct_comision = cli.porcentaje_comision
+    else:
+        pct_comision = None
+
     c = Cheque(
         organizacion_id=oid,
         cliente_id=body.cliente_id,
@@ -356,7 +371,7 @@ def crear_cheque(
         librador=body.librador,
         monto=body.monto,
         comision=body.comision,
-        porcentaje_comision=Decimal(str(body.porcentaje_comision)) if body.porcentaje_comision is not None else None,
+        porcentaje_comision=pct_comision,
         codigo_postal=body.codigo_postal,
         local_interior=li,
         fecha_emision=body.fecha_emision,

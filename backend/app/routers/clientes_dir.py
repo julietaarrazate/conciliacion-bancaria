@@ -253,6 +253,8 @@ def get_archivos_por_cliente(
                 "nombre": c.nombre,
                 "cuit": c.cuit,
                 "porcentaje_comision": float(c.porcentaje_comision) if c.porcentaje_comision is not None else None,
+                "porcentaje_comision_local": float(c.porcentaje_comision_local) if c.porcentaje_comision_local is not None else None,
+                "porcentaje_comision_interior": float(c.porcentaje_comision_interior) if c.porcentaje_comision_interior is not None else None,
                 "total_archivos": total_archivos,
                 "meses": meses,
             })
@@ -828,7 +830,10 @@ def actualizar_comision_cliente(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Setea o borra el % de comision propio del cliente. NULL = usa default de la org."""
+    """Setea o borra los % de comision del cliente. NULL = usa default de la org.
+    Acepta: porcentaje_comision (general/TT), porcentaje_comision_local y
+    porcentaje_comision_interior (cheques según CP). Solo actualiza los campos
+    presentes en el payload."""
     from app.models.cliente import Cliente as Cli
     from app.services.auditoria import registrar_log
     from decimal import Decimal
@@ -841,23 +846,32 @@ def actualizar_comision_cliente(
     if not cliente:
         raise HTTPException(404, "Cliente no encontrado")
 
-    pct_raw = payload.get("porcentaje_comision")
-    if pct_raw is None or pct_raw == "":
-        cliente.porcentaje_comision = None
-    else:
+    def _parse(raw):
+        if raw is None or raw == "":
+            return None
         try:
-            pct = Decimal(str(pct_raw))
-            if pct < 0 or pct > 100:
-                raise HTTPException(400, "El porcentaje debe estar entre 0 y 100")
-            cliente.porcentaje_comision = pct
+            pct = Decimal(str(raw))
         except Exception:
             raise HTTPException(400, "Porcentaje inválido")
+        if pct < 0 or pct > 100:
+            raise HTTPException(400, "El porcentaje debe estar entre 0 y 100")
+        return pct
+
+    # Solo tocar los campos que vengan en el payload (update parcial)
+    for campo in ("porcentaje_comision", "porcentaje_comision_local", "porcentaje_comision_interior"):
+        if campo in payload:
+            setattr(cliente, campo, _parse(payload.get(campo)))
 
     db.commit()
-    registrar_log(db, current_user.id, "clientes", cliente.id, "UPDATE",
-                  {"porcentaje_comision": str(cliente.porcentaje_comision)})
+    registrar_log(db, current_user.id, "clientes", cliente.id, "UPDATE", {
+        "porcentaje_comision": str(cliente.porcentaje_comision),
+        "porcentaje_comision_local": str(cliente.porcentaje_comision_local),
+        "porcentaje_comision_interior": str(cliente.porcentaje_comision_interior),
+    })
     return {
         "id": cliente.id,
         "nombre": cliente.nombre,
         "porcentaje_comision": float(cliente.porcentaje_comision) if cliente.porcentaje_comision is not None else None,
+        "porcentaje_comision_local": float(cliente.porcentaje_comision_local) if cliente.porcentaje_comision_local is not None else None,
+        "porcentaje_comision_interior": float(cliente.porcentaje_comision_interior) if cliente.porcentaje_comision_interior is not None else None,
     }
