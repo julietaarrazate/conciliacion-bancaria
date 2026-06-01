@@ -23,7 +23,8 @@ class Cheque(Base):
     fecha_emision   = Column(Date, nullable=True)
     fecha_deposito  = Column(Date, nullable=True)
     fecha_acred     = Column(Date, nullable=True)
-    estado          = Column(String, nullable=False, default="pendiente")  # pendiente | acreditado | rechazado
+    banco_cuenta_id = Column(Integer, ForeignKey("plan_cuentas.id"), nullable=True)  # banco usado al acreditar
+    estado          = Column(String, nullable=False, default="registrado")  # registrado | depositado | acreditado | rechazado | anulado
     fecha_rechazo   = Column(Date, nullable=True)
     fisico          = Column(Boolean, nullable=True, default=False)
     fecha_devolucion = Column(Date, nullable=True)

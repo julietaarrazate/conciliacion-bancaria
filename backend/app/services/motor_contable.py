@@ -125,6 +125,36 @@ def registrar_extracto(
         logger.warning("Error asiento extracto %s: %s", extracto_id, ex)
 
 
+def _crear_asiento_multilinea(
+    db: Session,
+    fecha: date,
+    descripcion: str,
+    modulo: str,
+    referencia_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    lineas: list,  # [(cuenta_id, debe, haber), ...]
+) -> None:
+    """Crea un asiento con N líneas de detalle. lineas = [(cuenta_id, debe, haber)]."""
+    a = Asiento(
+        fecha=fecha,
+        descripcion=descripcion,
+        modulo=modulo,
+        referencia_id=referencia_id,
+        organizacion_id=org_id,
+        usuario_id=usuario_id,
+        numero_asiento=_next_numero_asiento(db, org_id),
+    )
+    db.add(a)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        return
+    for cuenta_id, debe, haber in lineas:
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_id, debe=debe, haber=haber))
+
+
 def registrar_cheque(
     db: Session,
     cheque_id: int,
@@ -135,40 +165,49 @@ def registrar_cheque(
     comision: Decimal,
     fecha: date,
 ) -> None:
-    """Carga cheque: Créditos (D) / Pasivo cliente (H). Comisión opcional."""
+    """Registro cheque (nueva regla contador):
+       Cheques en cartera (1-1-2-1) D  /  Cheques depositados (2-1-3-1) H (neto)
+                                        /  Comisiones cheques (3-1-3-0) H (comisión)
+    Reemplaza el esquema anterior (cheque_carga / cheque_comision)."""
     try:
-        if _ya_existe(db, "cheque_carga", cheque_id, org_id):
+        if _ya_existe(db, "cheque_registro", cheque_id, org_id):
             return
-        regla = _get_regla(db, "carga_cheque", org_id)
-        if not regla or monto <= 0:
+        monto    = round(_monto(monto), 2)
+        comision = round(_monto(comision), 2)
+        if monto <= 0:
             return
-        _crear_asiento(
-            db=db, regla=regla,
-            fecha=fecha,
-            descripcion=f"Cheque {titular or ''} — carga",
-            modulo="cheque_carga",
+        neto = monto - comision
+        if neto <= 0:
+            logger.warning("Cheque %s: valor neto <= 0, se omite asiento", cheque_id)
+            return
+
+        cartera    = _get_cuenta_por_codigo(db, "1-1-2-1", org_id)
+        depositados = _get_cuenta_por_codigo(db, "2-1-3-1", org_id)
+        comisiones = _get_cuenta_por_codigo(db, "3-1-3-0", org_id)
+        if not cartera or not depositados or not comisiones:
+            logger.warning("Cuentas cheque no encontradas org %s (1-1-2-1/2-1-3-1/3-1-3-0)", org_id)
+            return
+
+        lineas = [
+            (cartera.id,    monto,    Decimal("0")),
+            (depositados.id, Decimal("0"), neto),
+        ]
+        if comision > 0:
+            lineas.append((comisiones.id, Decimal("0"), comision))
+
+        _crear_asiento_multilinea(
+            db=db, fecha=fecha,
+            descripcion=f"Cheque {titular or ''} — registro",
+            modulo="cheque_registro",
             referencia_id=cheque_id,
             org_id=org_id,
             usuario_id=usuario_id,
-            monto=round(monto, 2),
+            lineas=lineas,
         )
-        if comision > 0:
-            regla_com = _get_regla(db, "carga_cheque_comision", org_id)
-            if regla_com:
-                _crear_asiento(
-                    db=db, regla=regla_com,
-                    fecha=fecha,
-                    descripcion=f"Cheque {titular or ''} — comisión",
-                    modulo="cheque_comision",
-                    referencia_id=cheque_id,
-                    org_id=org_id,
-                    usuario_id=usuario_id,
-                    monto=round(comision, 2),
-                )
         db.commit()
     except Exception as ex:
         db.rollback()
-        logger.warning("Error asiento cheque carga %s: %s", cheque_id, ex)
+        logger.warning("Error asiento cheque registro %s: %s", cheque_id, ex)
 
 
 def acreditar_cheque(
@@ -178,25 +217,57 @@ def acreditar_cheque(
     usuario_id: Optional[int],
     titular: str,
     monto: Decimal,
+    neto: Decimal,
+    banco_cuenta_id: int,
+    cliente_cuenta_id: int,
     fecha: date,
 ) -> None:
-    """Acreditación cheque: Banco (D) / Créditos (H)."""
+    """Acreditación cheque — 2 asientos (nueva regla contador):
+    A1: Banco (D) / Cheques en cartera (H)  →  el dinero entra al banco
+    A2: Cheques depositados (D) / Cliente (H) →  cancela pasivo tránsito y acredita al cliente"""
     try:
-        if _ya_existe(db, "cheque_acred", cheque_id, org_id):
+        monto = round(_monto(monto), 2)
+        neto  = round(_monto(neto),  2)
+        if monto <= 0:
             return
-        regla = _get_regla(db, "acred_rechazo_banco", org_id)
-        if not regla or monto <= 0:
+
+        cartera    = _get_cuenta_por_codigo(db, "1-1-2-1", org_id)
+        depositados = _get_cuenta_por_codigo(db, "2-1-3-1", org_id)
+        banco = db.query(PlanCuenta).filter(PlanCuenta.id == banco_cuenta_id).first()
+        cliente_cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == cliente_cuenta_id).first()
+
+        if not cartera or not depositados or not banco or not cliente_cuenta:
+            logger.warning("Cuentas acreditación cheque no encontradas org %s cheque %s", org_id, cheque_id)
             return
-        _crear_asiento(
-            db=db, regla=regla,
-            fecha=fecha,
-            descripcion=f"Cheque {titular or ''} — acreditado",
-            modulo="cheque_acred",
-            referencia_id=cheque_id,
-            org_id=org_id,
-            usuario_id=usuario_id,
-            monto=round(monto, 2),
-        )
+
+        # A1: Banco D / Cheques en cartera H
+        if not _ya_existe(db, "cheque_acred_banco", cheque_id, org_id):
+            _crear_asiento_directo(
+                db=db, fecha=fecha,
+                descripcion=f"Cheque {titular or ''} — acreditado banco",
+                modulo="cheque_acred_banco",
+                referencia_id=cheque_id,
+                org_id=org_id,
+                usuario_id=usuario_id,
+                cuenta_debe_id=banco.id,
+                cuenta_haber_id=cartera.id,
+                monto=monto,
+            )
+
+        # A2: Cheques depositados D / Cliente H
+        if not _ya_existe(db, "cheque_acred_cliente", cheque_id, org_id):
+            _crear_asiento_directo(
+                db=db, fecha=fecha,
+                descripcion=f"Cheque {titular or ''} — acreditado cliente",
+                modulo="cheque_acred_cliente",
+                referencia_id=cheque_id,
+                org_id=org_id,
+                usuario_id=usuario_id,
+                cuenta_debe_id=depositados.id,
+                cuenta_haber_id=cliente_cuenta.id,
+                monto=neto,
+            )
+
         db.commit()
     except Exception as ex:
         db.rollback()
@@ -210,25 +281,69 @@ def rechazar_cheque(
     usuario_id: Optional[int],
     titular: str,
     monto: Decimal,
+    gastos: Decimal,
+    banco_cuenta_id: int,
+    cliente_cuenta_id: int,
     fecha: date,
 ) -> None:
-    """Rechazo cheque: Pasivo cliente (D) / Créditos (H)."""
+    """Rechazo cheque — 3 asientos (regla contador junio 2026):
+    A1: Cliente (D) / Banco (H)                     →  reversión del cheque acreditado
+    A2: Cliente (D) / Gastos de rechazos 3-2-2-1 (H) →  traslado de gastos al cliente
+    A3: Gastos de rechazos 3-2-2-1 (D) / Banco (H)  →  débito bancario real"""
     try:
-        if _ya_existe(db, "cheque_rechazo", cheque_id, org_id):
+        monto  = round(_monto(monto),  2)
+        gastos = round(_monto(gastos), 2)
+        if monto <= 0:
             return
-        regla = _get_regla(db, "acred_rechazo_pasivo", org_id)
-        if not regla or monto <= 0:
+
+        banco          = db.query(PlanCuenta).filter(PlanCuenta.id == banco_cuenta_id).first()
+        cliente_cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == cliente_cuenta_id).first()
+        gtos_rechazos  = _get_cuenta_por_codigo(db, "3-2-2-1", org_id)
+
+        if not banco or not cliente_cuenta or not gtos_rechazos:
+            logger.warning("Cuentas rechazo cheque no encontradas org %s cheque %s", org_id, cheque_id)
             return
-        _crear_asiento(
-            db=db, regla=regla,
-            fecha=fecha,
-            descripcion=f"Cheque {titular or ''} — rechazado",
-            modulo="cheque_rechazo",
-            referencia_id=cheque_id,
-            org_id=org_id,
-            usuario_id=usuario_id,
-            monto=round(monto, 2),
-        )
+
+        # A1: Cliente D / Banco H — reversión
+        if not _ya_existe(db, "cheque_rechazo_banco", cheque_id, org_id):
+            _crear_asiento_directo(
+                db=db, fecha=fecha,
+                descripcion=f"Cheque {titular or ''} — rechazo reversión",
+                modulo="cheque_rechazo_banco",
+                referencia_id=cheque_id,
+                org_id=org_id, usuario_id=usuario_id,
+                cuenta_debe_id=cliente_cuenta.id,
+                cuenta_haber_id=banco.id,
+                monto=monto,
+            )
+
+        # A2 y A3 solo si hay gastos
+        if gastos > 0:
+            # A2: Cliente D / Gastos de rechazos H — traslado al cliente
+            if not _ya_existe(db, "cheque_rechazo_cliente", cheque_id, org_id):
+                _crear_asiento_directo(
+                    db=db, fecha=fecha,
+                    descripcion=f"Cheque {titular or ''} — gastos rechazo a cliente",
+                    modulo="cheque_rechazo_cliente",
+                    referencia_id=cheque_id,
+                    org_id=org_id, usuario_id=usuario_id,
+                    cuenta_debe_id=cliente_cuenta.id,
+                    cuenta_haber_id=gtos_rechazos.id,
+                    monto=gastos,
+                )
+            # A3: Gastos de rechazos D / Banco H — débito bancario real
+            if not _ya_existe(db, "cheque_rechazo_gasto", cheque_id, org_id):
+                _crear_asiento_directo(
+                    db=db, fecha=fecha,
+                    descripcion=f"Cheque {titular or ''} — débito bancario rechazo",
+                    modulo="cheque_rechazo_gasto",
+                    referencia_id=cheque_id,
+                    org_id=org_id, usuario_id=usuario_id,
+                    cuenta_debe_id=gtos_rechazos.id,
+                    cuenta_haber_id=banco.id,
+                    monto=gastos,
+                )
+
         db.commit()
     except Exception as ex:
         db.rollback()

@@ -15,6 +15,7 @@ from app.models.user import User
 from app.models.cheque import Cheque
 from app.models.portador import Portador
 from app.models.cliente import Cliente
+from app.models.contabilidad import PlanCuenta
 from app.services.motor_contable import registrar_cheque, acreditar_cheque, rechazar_cheque
 from app.services.auditoria import registrar_log
 from app.services.storage import upload_comprobante
@@ -41,11 +42,19 @@ class ChequeIn(BaseModel):
 
 
 class AcreditarIn(BaseModel):
-    fecha_acred: Optional[date] = None
+    fecha_acred:    Optional[date] = None
+    banco_cuenta_id: int           = Field(..., description="ID de la cuenta de banco (plan_cuentas)")
+
+
+class AcreditarMasivoIn(BaseModel):
+    cheque_ids:     List[int]
+    banco_cuenta_id: int
+    fecha_acred:    Optional[date] = None
 
 
 class RechazarIn(BaseModel):
     fecha_rechazo:    Optional[date] = None
+    gastos_bancarios: float          = Field(0.0, ge=0)
     fisico:           bool           = False
     fecha_devolucion: Optional[date] = None
 
@@ -97,6 +106,7 @@ def _cheque_dict(c: Cheque) -> dict:
         "fecha_devolucion":    c.fecha_devolucion,
         "notas":               c.notas,
         "tiene_foto":          bool(c.foto_comprobante),
+        "banco_cuenta_id":     c.banco_cuenta_id,
         "created_at":          c.created_at,
     }
 
@@ -326,6 +336,12 @@ def crear_cheque(
         cli = db.query(Cliente).filter(Cliente.id == body.cliente_id, Cliente.organizacion_id == oid).first()
         if not cli:
             raise HTTPException(404, "Cliente no encontrado")
+        if not cli.cuenta_contable_id:
+            raise HTTPException(
+                400,
+                f"El cliente '{cli.nombre}' no tiene cuenta contable configurada. "
+                "Creala en Contabilidad → Clientes antes de registrar cheques."
+            )
     if body.portador_id:
         if not db.query(Portador).filter(Portador.id == body.portador_id, Portador.organizacion_id == oid).first():
             raise HTTPException(404, "Portador no encontrado")
@@ -345,7 +361,7 @@ def crear_cheque(
         local_interior=li,
         fecha_emision=body.fecha_emision,
         fecha_deposito=body.fecha_deposito or date.today(),
-        estado="pendiente",
+        estado="registrado",
         notas=body.notas,
         usuario_id=current_user.id,
     )
@@ -393,8 +409,8 @@ def editar_cheque(
         raise HTTPException(404, "Cheque no encontrado")
     if not current_user.is_superadmin and c.organizacion_id != oid:
         raise HTTPException(403, "Sin acceso")
-    if c.estado != "pendiente":
-        raise HTTPException(400, "Solo se pueden editar cheques pendientes")
+    if c.estado not in ("registrado", "pendiente"):
+        raise HTTPException(400, "Solo se pueden editar cheques en estado registrado")
 
     cambios = {}
     for field in ("cliente_id", "portador_id", "numero", "banco_origen", "librador",
@@ -427,22 +443,92 @@ def acreditar(
         raise HTTPException(404, "Cheque no encontrado")
     if not current_user.is_superadmin and c.organizacion_id != oid:
         raise HTTPException(403, "Sin acceso")
-    if c.estado != "pendiente":
+    if c.estado not in ("registrado", "depositado", "pendiente"):
         raise HTTPException(400, f"Cheque ya está {c.estado}")
 
-    c.estado    = "acreditado"
-    c.fecha_acred = body.fecha_acred or date.today()
+    # Verificar que el banco elegido existe
+    banco_cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == body.banco_cuenta_id).first()
+    if not banco_cuenta:
+        raise HTTPException(404, "Cuenta de banco no encontrada")
+
+    # Verificar que el cliente tiene cuenta contable
+    cli = db.query(Cliente).filter(Cliente.id == c.cliente_id).first() if c.cliente_id else None
+    if not cli or not cli.cuenta_contable_id:
+        raise HTTPException(400, "El cliente no tiene cuenta contable configurada")
+
+    c.estado          = "acreditado"
+    c.fecha_acred     = body.fecha_acred or date.today()
+    c.banco_cuenta_id = body.banco_cuenta_id
     db.flush()
 
+    neto = Decimal(str(c.monto)) - Decimal(str(c.comision or 0))
     acreditar_cheque(
         db=db, cheque_id=c.id, org_id=c.organizacion_id, usuario_id=current_user.id,
-        titular=c.librador or c.titular or "", monto=c.monto, fecha=c.fecha_acred,
+        titular=c.librador or c.titular or "",
+        monto=Decimal(str(c.monto)), neto=neto,
+        banco_cuenta_id=body.banco_cuenta_id,
+        cliente_cuenta_id=cli.cuenta_contable_id,
+        fecha=c.fecha_acred,
     )
     registrar_log(db, current_user.id, "cheques", c.id, "ACREDITAR",
-                  {"monto": c.monto, "fecha_acred": str(c.fecha_acred)})
+                  {"monto": float(c.monto), "fecha_acred": str(c.fecha_acred),
+                   "banco": banco_cuenta.nombre})
     db.commit()
     db.refresh(c)
     return _cheque_dict(c)
+
+
+@router.post("/acreditar")
+def acreditar_masivo(
+    body: AcreditarMasivoIn,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Acredita uno o varios cheques de una sola vez (flujo Por depósito)."""
+    oid = _org_id(current_user, org_id)
+
+    banco_cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == body.banco_cuenta_id).first()
+    if not banco_cuenta:
+        raise HTTPException(404, "Cuenta de banco no encontrada")
+
+    fecha = body.fecha_acred or date.today()
+    resultados = []
+    for cheque_id in body.cheque_ids:
+        c = db.query(Cheque).filter(Cheque.id == cheque_id, Cheque.organizacion_id == oid).first()
+        if not c:
+            resultados.append({"id": cheque_id, "ok": False, "error": "No encontrado"})
+            continue
+        if c.estado not in ("registrado", "depositado", "pendiente"):
+            resultados.append({"id": cheque_id, "ok": False, "error": f"Estado {c.estado}"})
+            continue
+        cli = db.query(Cliente).filter(Cliente.id == c.cliente_id).first() if c.cliente_id else None
+        if not cli or not cli.cuenta_contable_id:
+            resultados.append({"id": cheque_id, "ok": False,
+                               "error": f"Cliente sin cuenta contable"})
+            continue
+
+        c.estado          = "acreditado"
+        c.fecha_acred     = fecha
+        c.banco_cuenta_id = body.banco_cuenta_id
+        db.flush()
+
+        neto = Decimal(str(c.monto)) - Decimal(str(c.comision or 0))
+        acreditar_cheque(
+            db=db, cheque_id=c.id, org_id=c.organizacion_id, usuario_id=current_user.id,
+            titular=c.librador or c.titular or "",
+            monto=Decimal(str(c.monto)), neto=neto,
+            banco_cuenta_id=body.banco_cuenta_id,
+            cliente_cuenta_id=cli.cuenta_contable_id,
+            fecha=fecha,
+        )
+        registrar_log(db, current_user.id, "cheques", c.id, "ACREDITAR",
+                      {"monto": float(c.monto), "banco": banco_cuenta.nombre})
+        resultados.append({"id": cheque_id, "ok": True})
+
+    db.commit()
+    ok_count = sum(1 for r in resultados if r["ok"])
+    return {"acreditados": ok_count, "total": len(body.cheque_ids), "detalle": resultados}
 
 
 @router.post("/{cheque_id}/rechazar")
@@ -458,22 +544,33 @@ def rechazar(
         raise HTTPException(404, "Cheque no encontrado")
     if not current_user.is_superadmin and c.organizacion_id != oid:
         raise HTTPException(403, "Sin acceso")
-    if c.estado != "pendiente":
-        raise HTTPException(400, f"Cheque ya está {c.estado}")
+    if c.estado != "acreditado":
+        raise HTTPException(400, "Solo se pueden rechazar cheques acreditados")
 
-    c.estado          = "rechazado"
-    c.fecha_rechazo   = body.fecha_rechazo or date.today()
-    c.fisico          = body.fisico
+    cli = db.query(Cliente).filter(Cliente.id == c.cliente_id).first() if c.cliente_id else None
+    if not cli or not cli.cuenta_contable_id:
+        raise HTTPException(400, "El cliente no tiene cuenta contable configurada")
+    if not c.banco_cuenta_id:
+        raise HTTPException(400, "El cheque no tiene banco registrado de la acreditación")
+
+    c.estado           = "rechazado"
+    c.fecha_rechazo    = body.fecha_rechazo or date.today()
+    c.fisico           = body.fisico
     c.fecha_devolucion = body.fecha_devolucion
-    c.fecha_acred     = c.fecha_rechazo  # compat con motor contable
     db.flush()
 
     rechazar_cheque(
         db=db, cheque_id=c.id, org_id=c.organizacion_id, usuario_id=current_user.id,
-        titular=c.librador or c.titular or "", monto=c.monto, fecha=c.fecha_rechazo,
+        titular=c.librador or c.titular or "",
+        monto=Decimal(str(c.monto)),
+        gastos=Decimal(str(body.gastos_bancarios)),
+        banco_cuenta_id=c.banco_cuenta_id,
+        cliente_cuenta_id=cli.cuenta_contable_id,
+        fecha=c.fecha_rechazo,
     )
     registrar_log(db, current_user.id, "cheques", c.id, "RECHAZAR",
-                  {"monto": c.monto, "fecha_rechazo": str(c.fecha_rechazo), "fisico": c.fisico})
+                  {"monto": float(c.monto), "gastos": body.gastos_bancarios,
+                   "fecha_rechazo": str(c.fecha_rechazo), "fisico": c.fisico})
     db.commit()
     db.refresh(c)
     return _cheque_dict(c)
@@ -491,16 +588,15 @@ def eliminar_cheque(
         raise HTTPException(404, "Cheque no encontrado")
     if not current_user.is_superadmin and c.organizacion_id != oid:
         raise HTTPException(403, "Sin acceso")
-    if c.estado != "pendiente":
-        raise HTTPException(400, "Solo se pueden eliminar cheques pendientes")
+    if c.estado not in ("registrado", "pendiente"):
+        raise HTTPException(400, "Solo se pueden eliminar cheques en estado registrado")
 
     from app.services.motor_contable import reversar_asientos
-    reversar_asientos(db, modulo="cheque_carga", referencia_id=cheque_id,
-                      org_id=c.organizacion_id, usuario_id=current_user.id,
-                      motivo=f"Cheque #{cheque_id} eliminado por {current_user.email}")
-    reversar_asientos(db, modulo="cheque_comision", referencia_id=cheque_id,
-                      org_id=c.organizacion_id, usuario_id=current_user.id,
-                      motivo=f"Cheque #{cheque_id} eliminado por {current_user.email}")
+    motivo = f"Cheque #{cheque_id} eliminado por {current_user.email}"
+    # Revertir asiento nuevo (cheque_registro) y también los legacy por si existieran
+    for mod in ("cheque_registro", "cheque_carga", "cheque_comision"):
+        reversar_asientos(db, modulo=mod, referencia_id=cheque_id,
+                          org_id=c.organizacion_id, usuario_id=current_user.id, motivo=motivo)
 
     registrar_log(db, current_user.id, "cheques", cheque_id, "DELETE",
                   {"monto": c.monto, "librador": c.librador, "estado": c.estado})
@@ -658,7 +754,7 @@ async def importar_excel(
                 fecha_emision=_parse_date(row[COL['fecha_emision']]) if COL['fecha_emision'] is not None else None,
                 fecha_deposito=_parse_date(row[COL['fecha_deposito']]) if COL['fecha_deposito'] is not None else date.today(),
                 notas=str(row[COL['notas']]).strip() if COL['notas'] is not None and row[COL['notas']] else None,
-                estado="pendiente", usuario_id=current_user.id,
+                estado="registrado", usuario_id=current_user.id,
             )
             db.add(c)
             db.flush()
