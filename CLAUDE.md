@@ -423,6 +423,51 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   depreca el 1/6/2026; los modelos Pro pasaron a pago en abril 2026. Solo Flash y Flash-Lite de la
   versión 2.5 mantienen capa gratuita. NUNCA volver a `gemini-2.0-flash`.
 
+### v3.9.4 — Usuarios por org + CONTADOR en contabilidad + mejoras varias (mayo 2026)
+
+- **Gestión de usuarios filtrada por org activa** del sidebar + columna **Org** en la tabla de `/usuarios`.
+- **CONTADOR ve todas las tabs de Contabilidad en solo lectura** (Plan, Reglas, Clientes) — antes algunas
+  quedaban ocultas.
+- **Cheques — agregar cliente inline**: botón **+** en el formulario de cheque crea el cliente sin salir.
+- **Extractos — renombrar inline**: ✏️ al hacer hover sobre el nombre del archivo en `/extractos`.
+- **Pagos**: campo **"A favor de"** en el pago a cliente + label **"Nro. OP"** (antes "Referencia").
+- **Fix borrar usuario sin error FK**: `DELETE /admin/users` nulifica referencias FK con savepoints antes
+  de borrar; `historial.py` usa `usuario_nombre` con fallback "—" si el dueño fue borrado; export de
+  extractos tolera nombres sin extensión `.xlsx`.
+
+### v3.10 — Ciclo contable completo de cheques (junio 2026 — PR #88)
+
+- **Plan de cuentas — cuentas nuevas** (PLAN_PATCH idempotente en `main.py`):
+  `1-1-1-4 Banco 2` (para pruebas de cheques) · `1-1-2-1 Cheques en cartera` (tránsito activo) ·
+  `2-1-3-0 Cheques` / `2-1-3-1 Cheques depositados` / `2-1-3-2 Cheques a depositar` (tránsito pasivo) ·
+  `3-1-3-0 Comisiones cheques` · `3-2-2-1 Gastos de rechazos`.
+- **Regla de negocio**: el cliente DEBE tener `cuenta_contable_id` vinculada **antes** de registrar un
+  cheque. Si no la tiene, `POST /cheques` devuelve **HTTP 400**. Orden de uso: crear cliente en
+  `/clientes` → Contabilidad → tab Clientes → **"+ Crear cuentas faltantes"** → recién ahí cargar el cheque.
+- **3 fases contables** (en `services/motor_contable.py`, helper `_crear_asiento_multilinea` para N líneas):
+  1. **Registro** (`registrar_cheque`, modulo `cheque_registro`): Cheques en cartera (1-1-2-1) **D** /
+     Cliente X (2-1-2-X) **H** por el neto / Comisiones cheques (3-1-3-0) **H** (si hay comisión).
+  2. **Acreditación** (`acreditar_cheque`, 2 asientos): `cheque_acred_banco` = Banco elegido (1-1-1-3-1 o
+     1-1-1-4) **D** / Cheques depositados (2-1-3-1) **H**; `cheque_acred_cliente` = reversa el tránsito.
+     Se elige el banco al acreditar y se guarda en `Cheque.banco_cuenta_id` (se necesita para el rechazo).
+  3. **Rechazo** (`rechazar_cheque`, 3 asientos): `cheque_rechazo_banco` revierte la acreditación bancaria;
+     `cheque_rechazo_cliente` reabre la deuda del cliente; `cheque_rechazo_gasto` = Gastos de rechazos
+     (3-2-2-1) **D** / Banco **H** por los gastos bancarios. Solo desde estado `acreditado`.
+- **Las cuentas de tránsito netean a cero** tras el ciclo completo (cartera 1-1-2-1 y depositados 2-1-3-1).
+  Test de integración `test_cheque_ciclo_completo_transitorias_netean_cero` lo verifica.
+- **Estados del cheque**: `registrado | depositado | acreditado | rechazado | anulado`. Safety-net migra
+  los viejos `pendiente → registrado` en startup (`UPDATE cheques SET estado='registrado' WHERE
+  estado='pendiente'`). `Cheque.banco_cuenta_id` (FK plan_cuentas) con `ADD COLUMN IF NOT EXISTS`.
+- **Acreditación masiva**: `POST /cheques/acreditar` recibe lista de IDs + `banco_cuenta_id`; valida banco
+  y cuenta de cliente por cada cheque. UI en tab **"Por depósito"**: checkboxes + selector de banco +
+  botón **"✓ Acreditar (N)"**.
+- **Frontend** (`Cheques.tsx`): selector de banco (cuentas hoja cuyo nombre empieza con "Banco", resueltas
+  vía `GET /contabilidad/plan-cuentas` + Set de `parentIds`), modal Acreditar con banco requerido, modal
+  Rechazar con campo `gastos_bancarios`. Botón Acreditar para registrado/pendiente; Rechazar solo para
+  acreditado.
+- **Eliminar cheque**: reversa `cheque_registro` (con fallback a los legacy `cheque_carga`/`cheque_comision`).
+- **Tests**: 152 pasando — 7 tests nuevos del ciclo de cheques reemplazan los 3 viejos.
+
 ### Pendiente para próximas sesiones
 
 - **Ajuste manual del Libro Diario** (Fase 2): `POST /contabilidad/asiento-manual` — elegís cuenta
@@ -511,7 +556,14 @@ Checkpoints disponibles:
 - `v3.9.2` — Cheques mejorado: portadores (selector + inline add), librador reemplaza titular,
   CP + local/interior auto, 3 tabs (Todos/Por depósito/Rechazados), Excel por fecha de depósito,
   modal rechazo con físico + fecha devolución, ícono Loco de Cuadra en asistente IA (mayo 2026)
+- `v3.9.4` — usuarios filtrados por org activa + columna Org, CONTADOR ve contabilidad completa en
+  solo lectura, cliente inline en cheques, renombrar extractos inline, "A favor de"/"Nro. OP" en pagos,
+  fix borrar usuario sin error FK (mayo 2026)
+- `v3.10` — ciclo contable completo de cheques (registro 3 líneas / acreditación 2 asientos con selector
+  de banco / rechazo 3 asientos con gastos bancarios), cuentas tránsito que netean a cero, acreditación
+  masiva, cuentas nuevas del plan (Banco 2, Cheques en cartera, Cheques depositados, Comisiones cheques,
+  Gastos de rechazos), cliente requiere cuenta antes de cargar cheque, 152 tests (junio 2026 — PR #88)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.9.3
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.10
