@@ -52,6 +52,25 @@ function detectApiUrl(): string {
 
 const API_BASE_URL = detectApiUrl()
 
+// Decide si una request fallida se debe reintentar (Render despertando / red).
+// - 502/503/504: el proxy responde ANTES de ejecutar el handler → seguro reintentar
+//   cualquier método (la operación no llegó a correr en el backend).
+// - Sin respuesta (error de red / timeout): solo reintentar GET, para no arriesgar
+//   duplicar una escritura (POST/PUT/DELETE) que sí pudo haber llegado al servidor.
+const _MAX_RETRIES = 3
+function _shouldRetry(err: any, cfg: any): boolean {
+  if ((cfg.__retryCount || 0) >= _MAX_RETRIES) return false
+  const status = err?.response?.status
+  if (status === 502 || status === 503 || status === 504) return true
+  const noResponse = !err?.response
+  const transientCode =
+    err?.code === 'ERR_NETWORK' ||
+    err?.code === 'ECONNABORTED' ||
+    /network error|timeout/i.test(err?.message || '')
+  const method = (cfg.method || 'get').toLowerCase()
+  return noResponse && transientCode && method === 'get'
+}
+
 // Cache entry shape
 interface CacheEntry { data: any; at: number }
 
@@ -125,10 +144,21 @@ class ApiClient {
 
     this.client.interceptors.response.use(
       (res) => res,
-      (err) => {
+      async (err) => {
         if (err.response?.status === 401 && this.token) {
           this.clearToken()
           window.location.href = '/login'
+          return Promise.reject(err)
+        }
+        // Reintento automático ante errores transitorios (Render despertando tras
+        // dormir, o red intermitente). Evita los errores "flash" al entrar por
+        // primera vez o al cambiar de módulo: la request reintenta sola con backoff
+        // en vez de propagar el error al componente.
+        const cfg = err.config
+        if (cfg && _shouldRetry(err, cfg)) {
+          cfg.__retryCount = (cfg.__retryCount || 0) + 1
+          await new Promise((r) => setTimeout(r, 1500 * cfg.__retryCount))  // 1.5s, 3s, 4.5s
+          return this.client(cfg)
         }
         // Normalizar el detail de errores de validación de Pydantic (array de
         // objetos {type, loc, msg, ...}) a un string legible. Sin esto, los
