@@ -20,6 +20,7 @@ def list_users(
     skip: int = 0,
     limit: int = 50,
     role: Optional[RoleEnum] = Query(None),
+    org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
@@ -27,6 +28,8 @@ def list_users(
     q = db.query(User)
     if role is not None:
         q = q.filter(User.role == role)
+    if org_id is not None:
+        q = q.filter(User.organizacion_id == org_id)
     total = q.count()
     items = q.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
     return {"total": total, "items": items}

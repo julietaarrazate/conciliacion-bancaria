@@ -405,6 +405,7 @@ class ApiClient {
     skip?: number
     limit?: number
     role?: UserRole
+    org_id?: number
   }): Promise<PaginatedResponse<User>> {
     const res = await this.client.get('/admin/users', { params })
     return res.data

@@ -4,9 +4,11 @@ import { User, UserRole } from '@/types'
 import { toast } from '@/store/toast'
 import { confirmDialog } from '@/store/confirm'
 import { useAuthStore } from '@/store/auth'
+import { useOrgStore } from '@/store/org'
 
 export const Usuarios: React.FC = () => {
   const me = useAuthStore(s => s.user)
+  const { activeOrgId } = useOrgStore()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<number | null>(null)
@@ -21,13 +23,15 @@ export const Usuarios: React.FC = () => {
   const load = async () => {
     setLoading(true)
     try {
-      const res = await apiClient.getUsers({ limit: 200 })
+      const params: { limit: number; org_id?: number } = { limit: 200 }
+      if (activeOrgId) params.org_id = activeOrgId
+      const res = await apiClient.getUsers(params)
       setUsers(res.items)
     } catch { setUsers([]) }
     finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [activeOrgId])
   useEffect(() => {
     if (me?.is_superadmin) {
       apiClient.listOrganizaciones().then(setOrgs).catch(() => setOrgs([]))
@@ -107,7 +111,14 @@ export const Usuarios: React.FC = () => {
       <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div>
           <h1 className="text-xl md:text-2xl font-bold dark:text-white">Gestión de usuarios</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Administradora: Julieta Arrazate</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Administradora: Julieta Arrazate
+            {activeOrgId && orgs.length > 0 && (
+              <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-ml-blue/10 text-ml-blue border border-ml-blue/20">
+                {orgs.find(o => o.id === activeOrgId)?.nombre ?? `Org #${activeOrgId}`}
+              </span>
+            )}
+          </p>
         </div>
         <button onClick={() => setShowForm(s => !s)} className="btn-yellow">
           {showForm ? '✕ Cancelar' : '+ Nuevo usuario'}
@@ -213,7 +224,7 @@ export const Usuarios: React.FC = () => {
             <table className="w-full text-sm min-w-[500px]">
               <thead className="bg-gray-50 dark:bg-slate-900 border-b dark:border-slate-700">
                 <tr>
-                  {['Nombre', 'Email', 'Rol', 'Estado', 'Creado', ''].map(h => (
+                  {['Nombre', 'Email', 'Org', 'Rol', 'Estado', 'Creado', ''].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{h}</th>
                   ))}
                 </tr>
@@ -230,6 +241,11 @@ export const Usuarios: React.FC = () => {
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 text-xs">{u.email}</td>
+                    <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-gray-500">
+                      {u.organizacion_id
+                        ? (orgs.find(o => o.id === u.organizacion_id)?.nombre ?? `#${u.organizacion_id}`)
+                        : <span className="italic">—</span>}
+                    </td>
                     <td className="px-4 py-2.5">
                       {u.is_superadmin ? (
                         <span className="text-xs text-gray-400 dark:text-gray-500 italic">—</span>
