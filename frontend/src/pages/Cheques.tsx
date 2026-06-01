@@ -3,6 +3,12 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
+import { useLockStore } from '@/store/lock'
+
+// Evita que abrir el menú nativo de compartir dispare el bloqueo por PIN/huella.
+function suppressLockForShare() {
+  try { useLockStore.getState().suppressLock(20000) } catch { /* noop */ }
+}
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n)
@@ -133,6 +139,7 @@ const compressScanner = (src: string, maxPx: number, quality: number): Promise<s
       const canvas = document.createElement('canvas')
       canvas.width = w; canvas.height = h
       const ctx = canvas.getContext('2d')!
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h)  // fondo blanco → evita negro en JPEG
       ctx.filter = 'grayscale(1) contrast(1.4) brightness(1.1)'
       ctx.drawImage(img, 0, 0, w, h)
       resolve(canvas.toDataURL('image/jpeg', quality))
@@ -166,10 +173,13 @@ const shareChequePdf = async (c: Cheque, fotoB64: string): Promise<boolean> => {
     const blob = pdf.output('blob')
     const file = new File([blob], `Cheque_${c.numero || c.id}.pdf`, { type: 'application/pdf' })
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      suppressLockForShare()
       await navigator.share({ title: `Cheque ${c.numero || ''}`, files: [file] })
       return true
     }
-  } catch { /* no soportado */ }
+  } catch (e: any) {
+    if (e?.name === 'AbortError') return true  // el usuario cerró el menú de compartir
+  }
   return false
 }
 
@@ -616,14 +626,17 @@ export const Cheques: React.FC = () => {
             const blob = await fetch(fotoB64).then(r => r.blob())
             const file = new File([blob], `Cheque_${nombre}.jpg`, { type: 'image/jpeg' })
             if (navigator.canShare({ files: [file] })) {
+              suppressLockForShare()
               await navigator.share({ title: `Cheque - ${nombre} - ${fmt(c.monto)}`, files: [file] }); return
             }
           }
         }
-      } catch {}
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return  // el usuario cerró el menú de compartir
+      }
     }
     if (navigator.share) {
-      try { await navigator.share({ title: `Cheque - ${nombre}`, text: decodeURIComponent(texto) }); return } catch {}
+      try { suppressLockForShare(); await navigator.share({ title: `Cheque - ${nombre}`, text: decodeURIComponent(texto) }); return } catch {}
     }
     window.open(`whatsapp://send?text=${texto}`, '_blank')
   }

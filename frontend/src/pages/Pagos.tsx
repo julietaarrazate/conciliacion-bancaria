@@ -4,6 +4,13 @@ import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
 import { confirmDialog } from '@/store/confirm'
+import { useLockStore } from '@/store/lock'
+
+// Evita que abrir el menú nativo de compartir dispare el bloqueo por PIN/huella:
+// al abrir el share sheet el navegador pierde foco un instante (igual que las descargas).
+function suppressLockForShare() {
+  try { useLockStore.getState().suppressLock(20000) } catch { /* noop */ }
+}
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
@@ -51,7 +58,33 @@ const sharePagoPdf = async (
     pdf.setFontSize(9)
     pdf.text(nombre, 105, 23, { align: 'center' })
 
-    pdf.addImage(fotoB64, 'JPEG', 10, 28, 190, 135)
+    // Re-renderizar la foto sobre fondo blanco para evitar que salga negra
+    // (transparencia → negro en JPEG) y respetar el aspect ratio real.
+    const { jpeg, w, h } = await new Promise<{ jpeg: string; w: number; h: number }>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => {
+        const iw = img.naturalWidth || 1000
+        const ih = img.naturalHeight || 700
+        const canvas = document.createElement('canvas')
+        canvas.width = iw; canvas.height = ih
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { reject(new Error('no ctx')); return }
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, iw, ih)
+        ctx.drawImage(img, 0, 0)
+        resolve({ jpeg: canvas.toDataURL('image/jpeg', 0.85), w: iw, h: ih })
+      }
+      img.onerror = () => reject(new Error('img load'))
+      img.src = fotoB64
+    })
+
+    // Encajar la imagen dentro del área disponible conservando proporción
+    const maxW = 190, maxH = 135, x0 = 10, y0 = 28
+    const ratio = Math.min(maxW / w, maxH / h)
+    const drawW = w * ratio
+    const drawH = h * ratio
+    const dx = x0 + (maxW - drawW) / 2
+    pdf.addImage(jpeg, 'JPEG', dx, y0, drawW, drawH)
 
     pdf.setDrawColor(180, 180, 180)
     pdf.line(10, 169, 200, 169)
@@ -74,10 +107,15 @@ const sharePagoPdf = async (
     const blob = pdf.output('blob')
     const file = new File([blob], `Pago_${nombre.replace(/\s+/g, '_')}.pdf`, { type: 'application/pdf' })
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      suppressLockForShare()
       await navigator.share({ title: `Pago - ${nombre}`, files: [file] })
       return true
     }
-  } catch { /* no soportado */ }
+  } catch (e: any) {
+    // Si el usuario cancela el share sheet (AbortError), considerarlo "compartido"
+    // para NO caer al fallback de WhatsApp solo-texto.
+    if (e?.name === 'AbortError') return true
+  }
   return false
 }
 
@@ -206,6 +244,7 @@ export const Pagos: React.FC = () => {
         if (h > MAX) { w = w * MAX / h; h = MAX }
         canvas.width = w; canvas.height = h
         const ctx = canvas.getContext('2d')!
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h)  // fondo blanco → evita negro en JPEG
         ctx.filter = 'grayscale(1) contrast(1.4) brightness(1.1)'
         ctx.drawImage(img, 0, 0, w, h)
         const compressed = canvas.toDataURL('image/jpeg', 0.7)
@@ -218,6 +257,7 @@ export const Pagos: React.FC = () => {
         const ocrCanvas = document.createElement('canvas')
         ocrCanvas.width = ow; ocrCanvas.height = oh
         const ocrCtx = ocrCanvas.getContext('2d')!
+        ocrCtx.fillStyle = '#ffffff'; ocrCtx.fillRect(0, 0, ow, oh)  // fondo blanco → evita negro en JPEG
         ocrCtx.filter = 'grayscale(1) contrast(1.4) brightness(1.1)'
         ocrCtx.drawImage(img, 0, 0, ow, oh)
         const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.7)
@@ -297,10 +337,13 @@ export const Pagos: React.FC = () => {
           const blob = await fetch(foto).then(r => r.blob())
           const file = new File([blob], `Pago_${nombre}.jpg`, { type: 'image/jpeg' })
           if (navigator.canShare({ files: [file] })) {
+            suppressLockForShare()
             await navigator.share({ title: `Pago - ${nombre} - ${fmt(montoNum)}`, files: [file] })
             return
           }
-        } catch {}
+        } catch (e: any) {
+          if (e?.name === 'AbortError') return  // el usuario cerró el menú de compartir
+        }
       }
     }
     window.open(`whatsapp://send?text=${texto}`, '_blank')
