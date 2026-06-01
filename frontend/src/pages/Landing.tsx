@@ -44,7 +44,7 @@ const R: React.FC<{ children: React.ReactNode; delay?: number; className?: strin
 
 const FEATURES = [
   { icon: '⚡', title: 'Conciliación automática', desc: 'Cruza extractos bancarios con planillas de clientes por CUIT, CBU y referencia. Lo que cuadra, cuadra solo — sin tocar nada.' },
-  { icon: '📸', title: 'OPs desde el celular', desc: 'Registrá órdenes de pago firmadas con foto del comprobante. Tres pasos, desde el celular, en movimiento.' },
+  { icon: '📸', title: 'Pagos con comprobante', desc: 'Registrá pagos con foto del comprobante firmado. Desde el celular, en tres pasos, sin ir a la oficina.' },
   { icon: '🏦', title: 'Cheques y pagos', desc: 'Seguimiento de cheques propios y de terceros con alertas automáticas antes del vencimiento.' },
   { icon: '💰', title: 'Caja diaria', desc: 'Arqueo físico de billetes, saldo inicial e ingresos. El cruce contra la caja en tiempo real.' },
   { icon: '🏢', title: 'Multi-empresa', desc: 'Todos tus clientes desde un solo lugar. Cada empresa ve solo sus propios datos, sin mezclas.' },
@@ -58,10 +58,10 @@ const STEPS = [
 ]
 
 const STATS = [
-  { value: '124', label: 'tests automatizados' },
-  { value: '99%', label: 'uptime en producción' },
-  { value: '< 1s', label: 'tiempo de conciliación' },
-  { value: '0', label: 'instalaciones necesarias' },
+  { value: '< 2 min', label: 'para conciliar 100 movimientos' },
+  { value: '5',       label: 'bancos argentinos soportados' },
+  { value: '0',       label: 'instalaciones necesarias' },
+  { value: '24hs',    label: 'para estar operativo' },
 ]
 
 const MOCKUP_ROWS = [
@@ -73,19 +73,19 @@ const MOCKUP_ROWS = [
 ]
 
 const SECURITY = [
-  { icon: '🔐', title: 'Autenticación JWT', desc: 'Tokens firmados con expiración de 8 horas. Logout invalida el token en el servidor.' },
-  { icon: '🏢', title: 'Aislamiento multi-tenant', desc: 'Cada organización ve solo sus datos. Imposible que un usuario acceda a otra empresa.' },
-  { icon: '🔑', title: 'Contraseñas hasheadas', desc: 'pbkdf2_sha256 con salt único por usuario. Nunca se almacenan en texto plano.' },
-  { icon: '💾', title: 'Backups diarios', desc: 'Backup completo de la base cada noche a las 03:00, encriptado y enviado por email.' },
-  { icon: '📋', title: 'Auditoría completa', desc: 'Cada acción queda registrada con usuario, fecha, IP y diff de los cambios.' },
-  { icon: '🇦🇷', title: 'Ley 25.326 (PDPA)', desc: 'Política de privacidad y términos publicados. Respetamos la ley de protección de datos personales argentina.' },
+  { icon: '🔐', title: 'Sesión con cierre automático', desc: 'Tu sesión se cierra sola después de 8 horas. Si alguien toma tu dispositivo, no puede entrar sin tu clave.' },
+  { icon: '🏢', title: 'Datos separados por empresa', desc: 'Cada empresa ve solo sus propios datos. Imposible que un usuario de una empresa vea información de otra.' },
+  { icon: '🔑', title: 'Contraseñas cifradas', desc: 'Las contraseñas se guardan cifradas. Aunque alguien accediera a la base de datos, no podría leerlas.' },
+  { icon: '💾', title: 'Backup diario automático', desc: 'Copia completa de todos los datos cada noche. Si algo falla, recuperamos todo sin perder información.' },
+  { icon: '📋', title: 'Registro de actividad completo', desc: 'Cada acción queda registrada: quién hizo qué, cuándo y desde dónde. Ideal para auditorías internas.' },
+  { icon: '🇦🇷', title: 'Ley de protección de datos', desc: 'Cumplimos la Ley 25.326 argentina. Tus datos y los de tus clientes son tuyos — no se usan para nada más.' },
 ]
 
 const FAQ = [
   { q: '¿Cuánto cuesta usar Cuadra?', a: 'El precio se ajusta según la cantidad de empresas y usuarios. Coordiná un contacto por WhatsApp y te paso la propuesta con condiciones para tu caso.' },
   { q: '¿Qué bancos soporta el sistema?', a: 'Banco Macro, BBVA, Santander, Galicia, ICBC y un parser genérico para extractos en formato Excel. Si tu banco no está, lo agregamos en el onboarding.' },
   { q: '¿Cómo se instala?', a: 'No se instala. Abrís el link en el navegador y listo. Si querés tenerla como app en el celular, desde Chrome o Safari: menú → "Agregar a pantalla de inicio". Funciona como app nativa sin pasar por Play Store ni App Store.' },
-  { q: '¿Mis datos están seguros?', a: 'Sí. Datos aislados por empresa, contraseñas hasheadas, autenticación JWT, backup diario encriptado y auditoría completa de cada acción. Conexiones por HTTPS en toda la app.' },
+  { q: '¿Mis datos están seguros?', a: 'Sí. Los datos de cada empresa están aislados, las contraseñas se guardan cifradas, hay backup automático cada noche y un registro completo de quién hizo qué y cuándo. Todo por HTTPS.' },
   { q: '¿Funciona sin conexión?', a: 'Las consultas básicas sí (lectura de cache). Para cargar planillas, registrar OPs o conciliar necesitás conexión.' },
   { q: '¿Se conecta con ARCA?', a: 'Por ahora no directamente. Exporta Excel en formato Banco Macro y PDF de cierre mensual, todo listo para entregar al contador.' },
   { q: '¿Cuántos usuarios puedo tener?', a: 'Sin límite. Cada empresa puede tener todos los empleados que necesite, con roles diferenciados (admin, operador, solo lectura).' },
@@ -208,7 +208,7 @@ export const Landing: React.FC = () => {
         .em-serif {
           font-family: 'Fraunces', Georgia, serif;
           font-style: italic;
-          font-weight: 900;
+          font-weight: 700;
         }
 
         /* ── Animations ─────────────────────────────────────────────────── */
@@ -454,7 +454,7 @@ export const Landing: React.FC = () => {
         }
         .hero-title {
           font-size: clamp(38px, 10vw, 84px);
-          font-weight: 800; line-height: 1.06; letter-spacing: -2px;
+          font-weight: 700; line-height: 1.06; letter-spacing: -2px;
           max-width: 820px; margin-bottom: 22px;
         }
         .hero-sub {
@@ -473,7 +473,7 @@ export const Landing: React.FC = () => {
 
         .section-title {
           font-size: clamp(26px, 6vw, 46px);
-          font-weight: 800; letter-spacing: -1.5px; margin-bottom: 14px; line-height: 1.1;
+          font-weight: 700; letter-spacing: -1.5px; margin-bottom: 14px; line-height: 1.1;
         }
       `}</style>
 
@@ -535,7 +535,7 @@ export const Landing: React.FC = () => {
           color: 'var(--accent)', fontSize: 12, fontWeight: 600, marginBottom: 24,
         }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
-          Sistema de gestión bancaria · en producción
+          Gestión bancaria para empresas argentinas
         </div>
 
         <h1 className="hero-title">
@@ -549,11 +549,11 @@ export const Landing: React.FC = () => {
         </p>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 56 }}>
-          <Link to="/login" className="btn-green large">
-            Ingresar al sistema →
-          </Link>
-          <a href="#contacto" className="btn-ghost" style={{ padding: '14px 24px', fontSize: 15, borderRadius: 12 }}>
-            Conocer más
+          <a href="#contacto" className="btn-green large">
+            Solicitar demo →
+          </a>
+          <a href="#features" className="btn-ghost" style={{ padding: '14px 24px', fontSize: 15, borderRadius: 12 }}>
+            Ver cómo funciona
           </a>
         </div>
 
@@ -776,7 +776,7 @@ export const Landing: React.FC = () => {
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 48, alignItems: 'center' }}>
           <R>
             <div>
-              <div className="pill" style={{ marginBottom: 18 }}>PWA instalable</div>
+              <div className="pill" style={{ marginBottom: 18 }}>App sin descargar</div>
               <h2 style={{ fontSize: 'clamp(24px, 5vw, 38px)', fontWeight: 800, letterSpacing: '-1.5px', marginBottom: 14, lineHeight: 1.12 }}>
                 Desde el <em className="em-serif">celular</em><br />o la web
               </h2>
@@ -893,8 +893,24 @@ export const Landing: React.FC = () => {
               <div className="pill" style={{ marginBottom: 18 }}>Contacto</div>
               <h2 className="section-title">¿Querés implementar <em className="em-serif">Cuadra?</em></h2>
               <p style={{ color: 'var(--muted)', fontSize: 15, lineHeight: 1.6 }}>
-                Escribime por WhatsApp o completá el formulario.
+                Escribime y en menos de una semana tu empresa está operativa.
               </p>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 0, marginTop: 24, flexWrap: 'wrap' }}>
+                {([
+                  { n: '1', label: 'Me escribís', sub: 'por WhatsApp o formulario' },
+                  { n: '2', label: 'Demo de 20 min', sub: 'te muestro el sistema en vivo' },
+                  { n: '3', label: 'Tu empresa lista', sub: 'operativo en 24 horas' },
+                ] as const).map((step, i) => (
+                  <React.Fragment key={step.n}>
+                    <div style={{ textAlign: 'center', padding: '0 12px', minWidth: 100 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', color: 'var(--accent)', fontWeight: 700, fontSize: 13, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>{step.n}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{step.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted-2)', marginTop: 2 }}>{step.sub}</div>
+                    </div>
+                    {i < 2 && <div style={{ display: 'flex', alignItems: 'center', color: 'var(--muted-2)', fontSize: 16, paddingBottom: 22, paddingTop: 6 }}>→</div>}
+                  </React.Fragment>
+                ))}
+              </div>
             </div>
           </R>
 
