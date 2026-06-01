@@ -361,7 +361,13 @@ def _init_db():
 
         # Patch: add new accounts to existing seeds (runs every boot, idempotent)
         PLAN_PATCH = [
-            ("1-1-1-3-1", "Banco Macro", "activo", "1-1-1-3", 5),
+            ("1-1-1-3-1", "Banco Macro",          "activo",    "1-1-1-3",  5),
+            # Cuentas cheques (pedido contador junio 2026)
+            ("1-1-2-1",   "Cheques en cartera",   "activo",    "1-1-2-0",  4),
+            ("2-1-3-0",   "Cheques",              "pasivo",    "2-1-0-0",  3),
+            ("2-1-3-1",   "Cheques depositados",  "pasivo",    "2-1-3-0",  4),
+            ("2-1-3-2",   "Cheques a depositar",  "pasivo",    "2-1-3-0",  4),
+            ("3-1-3-0",   "Comisiones cheques",   "resultado", "3-1-0-0",  3),
         ]
         patch_added = 0
         for codigo, nombre, tipo, parent_codigo, nivel in PLAN_PATCH:
