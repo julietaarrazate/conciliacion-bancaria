@@ -468,6 +468,32 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - **Eliminar cheque**: reversa `cheque_registro` (con fallback a los legacy `cheque_carga`/`cheque_comision`).
 - **Tests**: 152 pasando — 7 tests nuevos del ciclo de cheques reemplazan los 3 viejos.
 
+### v3.10.1 — Cold-start fix + comisión L/I cheques + fix WhatsApp share (junio 2026 — PRs #90-#92)
+
+- **Fix cold-start Render** (PR #90): reintento automático en el interceptor de axios (`api.ts`).
+  `_shouldRetry()` + `_MAX_RETRIES = 3`: 502/503/504 → retries en cualquier método (Render proxy
+  responde antes que el handler, es seguro); errores de red/timeout → solo GET (POST/DELETE pueden
+  haber ejecutado). Backoff lineal 1.5s / 3s / 4.5s. `App.tsx` bootstrap: solo cierra sesión en 401
+  real, en errores transitorios hace un segundo intento silencioso y conserva la sesión. Elimina los
+  "errores flash" al ingresar con el backend dormido (free tier Render).
+- **Comisión de cheque por local/interior** (PR #91): campos `porcentaje_comision_local` y
+  `porcentaje_comision_interior` (Numeric 5,4) en el modelo `Cliente`. Safety nets en `main.py`.
+  `PUT /clientes/{id}/comision` hace update parcial de los 3 campos (general, local, interior).
+  Al crear un cheque, el backend auto-deriva el % según el campo `local_interior` del cheque:
+  interior→`porcentaje_comision_interior`, local→`porcentaje_comision_local`, fallback al general.
+  Si el form envía `porcentaje_comision` explícito, ese tiene prioridad (override manual).
+  **UI en `/clientes`**: chip simple con % general (opción C) — el L/I se configura en DB directamente
+  o se editará en el form de cheque. Los campos existen en la API y el frontend los leerá al elegir
+  cliente en el form de cheque (`pctParaCliente()` en `Cheques.tsx`).
+- **Fix compartir por WhatsApp** (PR #92):
+  - `suppressLockForShare()` llamado antes de cada `navigator.share()` en `Pagos.tsx` y `Cheques.tsx`
+    — evita que el bloqueo PIN interrumpa la hoja de compartir del sistema.
+  - Canvas JPEG sin fondo negro: `ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h)` antes de
+    `drawImage()` en `compressScanner` (Cheques) y en la captura de foto (Pagos). Soluciona foto negra.
+  - `sharePagoPdf` en Pagos: re-renderiza la foto sobre fondo blanco; usa `naturalWidth/naturalHeight`
+    desde `img.onload` para respetar el aspect ratio correcto en el PDF compartido.
+  - `AbortError` (usuario cancela el share sheet) tratado como éxito — no muestra fallback de texto.
+
 ### Pendiente para próximas sesiones
 
 - **Ajuste manual del Libro Diario** (Fase 2): `POST /contabilidad/asiento-manual` — elegís cuenta
@@ -477,6 +503,8 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   entradas contables al aprobar/pagar.
 - **Botones de borrar ocultos** — mostrar/ocultar según permiso `delete_records` en el frontend
   (hoy el backend bloquea con 403 pero el botón sigue visible).
+- **UI comisión L/I por cliente** — chip expandible en `/clientes` para editar `porcentaje_comision_local`
+  e `porcentaje_comision_interior` directamente desde la lista (hoy solo edita el % general).
 
 ---
 
@@ -563,7 +591,12 @@ Checkpoints disponibles:
   de banco / rechazo 3 asientos con gastos bancarios), cuentas tránsito que netean a cero, acreditación
   masiva, cuentas nuevas del plan (Banco 2, Cheques en cartera, Cheques depositados, Comisiones cheques,
   Gastos de rechazos), cliente requiere cuenta antes de cargar cheque, 152 tests (junio 2026 — PR #88)
+- `v3.10.1` — cold-start fix (retry interceptor axios 3 intentos, backoff 1.5s/3s/4.5s, bootstrap
+  conserva sesión en errores transitorios), comisión L/I de cheque por cliente (`porcentaje_comision_local`
+  + `porcentaje_comision_interior`, auto-deriva al crear cheque, UI chip simple % general),
+  fix WhatsApp share (suppressLockForShare, fondo blanco canvas, AbortError como éxito)
+  (junio 2026 — PRs #90-#92)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.10
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.10.1
