@@ -118,7 +118,9 @@ def delete_user(
     email = user.email
     nombre = user.full_name
 
-    # NULL out FK references so the DELETE doesn't hit constraint violations
+    # NULL out FK references so the DELETE doesn't hit constraint violations.
+    # Each statement runs in its own savepoint so a failure (missing table/column
+    # in old installations) doesn't abort the whole PostgreSQL transaction.
     nullify = [
         "UPDATE auditoria_logs       SET usuario_id  = NULL WHERE usuario_id  = :uid",
         "UPDATE planillas             SET usuario_id  = NULL WHERE usuario_id  = :uid",
@@ -134,10 +136,12 @@ def delete_user(
         "DELETE FROM revoked_tokens                           WHERE user_id    = :uid",
     ]
     for sql in nullify:
+        sp = db.begin_nested()  # SAVEPOINT — un fallo no aborta la transacción padre
         try:
             db.execute(text(sql), {"uid": user_id})
+            sp.commit()
         except Exception:
-            pass  # tabla puede no existir en instalaciones viejas
+            sp.rollback()  # libera el savepoint sin afectar el resto
 
     db.delete(user)
     db.commit()
