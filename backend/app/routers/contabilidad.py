@@ -1278,42 +1278,41 @@ def delete_asiento_manual(
 def fix_fechas_utc(
     dry_run: bool = Query(True),
     org_id: Optional[int] = Query(None),
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    modulo: Optional[str] = Query(None),
+    direccion: str = Query("atrasar"),  # "atrasar" (−1 día) o "adelantar" (+1 día)
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("admin_accounting")),
 ):
     """
-    Identifica asientos y egresos cuya fecha de negocio puede ser incorrecta
-    porque se crearon entre 21:00–24:00 ART (= 00:00–03:00 UTC del día siguiente).
-    En ese rango, date.today() en UTC devolvía un día ADELANTE respecto a ART.
-
-    La heurística: si created_at (UTC) cae entre 00:00 y 03:00 UTC, la fecha
-    de negocio pudo haberse guardado con el día de created_at (UTC) en vez del
-    día correcto ART (= created_at - 1 día). Solo aplica a registros anteriores
-    al fix (antes del 2026-06-02 aprox).
-
-    dry_run=true (default): solo cuenta los afectados sin tocar nada.
-    dry_run=false: retrocede la fecha de negocio 1 día en los afectados.
+    Corrige fechas de asientos y egresos en un rango de fechas dado.
+    direccion=atrasar  → resta 1 día (para registros UTC-creados 1 día adelantado)
+    direccion=adelantar → suma 1 día (para registros ingresados con fecha de ayer por error)
+    dry_run=true: solo muestra los afectados sin modificar nada.
     """
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timezone, timedelta, date as _date
     from app.models.egreso import Egreso
 
     oid = _org_id(current_user, org_id)
+    delta = timedelta(days=1) if direccion == "adelantar" else timedelta(days=-1)
 
-    # Límite temporal: el commit del fix hoy_art entró el 2026-06-02 mediodía UTC
-    fix_cutoff = datetime(2026, 6, 2, 12, 0, tzinfo=timezone.utc)
-
-    asientos_q = db.query(Asiento).filter(
-        Asiento.organizacion_id == oid,
-        Asiento.created_at < fix_cutoff,
-        func.extract('hour', Asiento.created_at) < 3,
-    ).all()
+    a_q = db.query(Asiento).filter(Asiento.organizacion_id == oid)
+    if desde:
+        a_q = a_q.filter(Asiento.fecha >= desde)
+    if hasta:
+        a_q = a_q.filter(Asiento.fecha <= hasta)
+    if modulo:
+        a_q = a_q.filter(Asiento.modulo == modulo)
+    asientos_q = a_q.all()
 
     try:
-        egresos_q = db.query(Egreso).filter(
-            Egreso.organizacion_id == oid,
-            Egreso.created_at < fix_cutoff,
-            func.extract('hour', Egreso.created_at) < 3,
-        ).all()
+        e_q = db.query(Egreso).filter(Egreso.organizacion_id == oid)
+        if desde:
+            e_q = e_q.filter(Egreso.fecha >= desde)
+        if hasta:
+            e_q = e_q.filter(Egreso.fecha <= hasta)
+        egresos_q = e_q.all()
     except Exception:
         egresos_q = []
 
@@ -1331,20 +1330,22 @@ def fix_fechas_utc(
     if not dry_run:
         for a in asientos_q:
             if a.fecha:
-                a.fecha = a.fecha - timedelta(days=1)
+                a.fecha = a.fecha + delta
         for e in egresos_q:
             if e.fecha:
-                e.fecha = e.fecha - timedelta(days=1)
+                e.fecha = e.fecha + delta
         db.commit()
 
+    accion = "+1 día (adelantado)" if direccion == "adelantar" else "−1 día (atrasado)"
     return {
         "dry_run": dry_run,
+        "direccion": direccion,
         "asientos_afectados": len(asientos_afectados),
         "egresos_afectados": len(egresos_afectados),
         "detalle_asientos": asientos_afectados,
         "detalle_egresos": egresos_afectados,
         "mensaje": (
-            "Solo conteo — no se modificó nada." if dry_run else
-            f"Fechas corregidas: {len(asientos_afectados)} asientos + {len(egresos_afectados)} egresos retrocedidos 1 día."
+            f"Solo conteo — no se modificó nada. ({len(asientos_afectados)} asientos + {len(egresos_afectados)} egresos en el rango)." if dry_run else
+            f"Fechas corregidas {accion}: {len(asientos_afectados)} asientos + {len(egresos_afectados)} egresos."
         ),
     }

@@ -84,7 +84,6 @@ const emptyForm = () => ({
   codigo_postal:       '',
   local_interior:      '',
   monto:               0,
-  comision:            0,
   porcentaje_comision: null as number | null,
   fecha_emision:       '',
   fecha_deposito:      '',
@@ -548,7 +547,6 @@ export const Cheques: React.FC = () => {
       codigo_postal:       c.codigo_postal || '',
       local_interior:      c.local_interior || '',
       monto:               c.monto,
-      comision:            c.comision,
       porcentaje_comision: c.porcentaje_comision,
       fecha_emision:       c.fecha_emision || '',
       fecha_deposito:      c.fecha_deposito || '',
@@ -564,6 +562,9 @@ export const Cheques: React.FC = () => {
     setSaving(true); setMsg('')
     try {
       const li = formData.local_interior || computeLI(formData.codigo_postal)
+      // Comisión calculada automáticamente desde el %, sin campo manual
+      const pct = formData.porcentaje_comision ?? 0
+      const comisionCalc = pct > 0 ? Math.round(formData.monto * pct) / 100 : 0
       const payload = {
         cliente_id:          formData.cliente_id || null,
         portador_id:         formData.portador_id || null,
@@ -573,7 +574,7 @@ export const Cheques: React.FC = () => {
         codigo_postal:       formData.codigo_postal || null,
         local_interior:      li || null,
         monto:               formData.monto,
-        comision:            formData.comision || 0,
+        comision:            comisionCalc,
         porcentaje_comision: formData.porcentaje_comision || null,
         fecha_emision:       formData.fecha_emision || null,
         fecha_deposito:      formData.fecha_deposito || null,
@@ -792,9 +793,9 @@ export const Cheques: React.FC = () => {
           { label: 'Acreditados', value: fmt(totalAcred), sub: 'en el listado',               color: 'text-green-600 dark:text-green-400'  },
           { label: 'Rechazados',  value: fmt(totalRech),  sub: 'en el listado',               color: 'text-red-600 dark:text-red-400'    },
         ].map(s => (
-          <div key={s.label} className="bg-white dark:bg-white/3 border border-gray-200 dark:border-white/8 rounded-xl p-3">
+          <div key={s.label} className="bg-white dark:bg-white/3 border border-gray-200 dark:border-white/8 rounded-xl p-3 overflow-hidden">
             <p className="text-xs text-gray-500">{s.label}</p>
-            <p className={`text-base font-semibold mt-1 ${s.color}`}>{s.value}</p>
+            <p className={`text-sm font-semibold mt-1 truncate ${s.color}`}>{s.value}</p>
             <p className="text-xs text-gray-600 mt-0.5">{s.sub}</p>
           </div>
         ))}
@@ -1197,15 +1198,18 @@ export const Cheques: React.FC = () => {
                 <label className="block text-xs text-gray-400 mb-1">Monto *</label>
                 <input type="number" value={formData.monto || ''} onChange={e => setFormData(p => ({ ...p, monto: parseFloat(e.target.value) || 0 }))} className={inputClass} />
               </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Comisión $</label>
-                <input type="number" value={formData.comision || ''} onChange={e => setFormData(p => ({ ...p, comision: parseFloat(e.target.value) || 0 }))} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">% Comisión</label>
-                <input type="number" step="0.1" min="0" max="100" placeholder="ej: 1.5"
-                  value={formData.porcentaje_comision ?? ''} className={inputClass}
-                  onChange={e => setFormData(p => ({ ...p, porcentaje_comision: e.target.value === '' ? null : parseFloat(e.target.value) }))} />
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">% Comisión (cuenta 3-1-3-0)</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" step="0.1" min="0" max="100" placeholder="ej: 1.5"
+                    value={formData.porcentaje_comision ?? ''} className={`${inputClass} flex-1`}
+                    onChange={e => setFormData(p => ({ ...p, porcentaje_comision: e.target.value === '' ? null : parseFloat(e.target.value) }))} />
+                  {formData.porcentaje_comision != null && formData.monto > 0 && (
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                      = {fmt(formData.monto * formData.porcentaje_comision / 100)}
+                    </span>
+                  )}
+                </div>
                 {formData.porcentaje_comision != null && (() => {
                   const cli = clientes.find(c => c.id === formData.cliente_id) ?? null
                   const li = formData.local_interior || computeLI(formData.codigo_postal)

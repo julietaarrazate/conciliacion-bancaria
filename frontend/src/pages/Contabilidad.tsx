@@ -452,27 +452,47 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   }
 
   const fixFechasUtc = async () => {
-    const orgQ = activeOrgId ? `org_id=${activeOrgId}` : ''
+    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+
+    // Pedir al usuario el rango y la dirección
+    const rango = window.prompt(
+      '🕐 CORRECCIÓN DE FECHAS EN LIBRO DIARIO\n\n' +
+      'Ingresá el rango de fechas a corregir (formato YYYY-MM-DD):\n' +
+      'desde,hasta,dirección\n\n' +
+      'Dirección:\n' +
+      '  • adelantar → suma 1 día (fechas muestran 1 día antes de lo correcto)\n' +
+      '  • atrasar   → resta 1 día (fechas muestran 1 día después de lo correcto)\n\n' +
+      'Ejemplo: 2026-05-31,2026-06-01,adelantar',
+      '2026-05-31,2026-06-02,adelantar'
+    )
+    if (!rango) return
+    const parts = rango.split(',').map(s => s.trim())
+    if (parts.length < 2) { alert('Formato incorrecto'); return }
+    const [desde, hasta, dir = 'adelantar'] = parts
+    if (!['adelantar', 'atrasar'].includes(dir)) { alert('Dirección debe ser "adelantar" o "atrasar"'); return }
+
     try {
-      const prev = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=true${orgQ ? '&' + orgQ : ''}`)
+      const q = `dry_run=true&desde=${desde}&hasta=${hasta}&direccion=${dir}${orgQ}`
+      const prev = await apiClient.client.post(`/contabilidad/fix-fechas-utc?${q}`)
       const { asientos_afectados, egresos_afectados, detalle_asientos, detalle_egresos } = prev.data
       if (asientos_afectados === 0 && egresos_afectados === 0) {
-        alert('✓ No se encontraron registros con posible fecha UTC incorrecta.\nTodo está bien.')
+        alert(`✓ No hay asientos ni egresos en el rango ${desde} – ${hasta}.\nNada que corregir.`)
         return
       }
-      const preview = detalle_asientos.slice(0, 5).map((a: any) =>
-        `  Asiento #${a.id} · ${a.fecha_actual} · ${a.modulo} — ${a.descripcion}`
+      const preview = [...detalle_asientos, ...detalle_egresos].slice(0, 6).map((a: any) =>
+        `  #${a.id} · ${a.fecha_actual} · ${a.modulo || 'egreso'} — ${a.descripcion}`
       ).join('\n')
+      const accionLabel = dir === 'adelantar' ? '+1 día (ej: 31/05 → 01/06)' : '−1 día (ej: 01/06 → 31/05)'
       const confirmar = window.confirm(
-        `🕐 FIX DE FECHAS UTC\n\n` +
-        `Registros creados entre 21:00 y 24:00 ART pueden tener fecha 1 día adelantada.\n\n` +
-        `Encontrados: ${asientos_afectados} asientos + ${egresos_afectados} egresos\n\n` +
-        `Muestra (hasta 5):\n${preview || '  (ninguno)'}` +
-        (detalle_asientos.length > 5 ? `\n  ...y ${detalle_asientos.length - 5} más` : '') +
-        `\n\n¿Corregir las fechas? (se retrocede 1 día a cada registro)`
+        `🕐 CORRECCIÓN DE FECHAS\n\n` +
+        `Rango: ${desde} – ${hasta} · Dirección: ${accionLabel}\n` +
+        `Afectados: ${asientos_afectados} asientos + ${egresos_afectados} egresos\n\n` +
+        `Muestra:\n${preview || '  (ninguno)'}` +
+        (asientos_afectados + egresos_afectados > 6 ? `\n  ...y más` : '') +
+        `\n\n¿Confirmar?`
       )
       if (!confirmar) return
-      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=false${orgQ ? '&' + orgQ : ''}`)
+      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=false&desde=${desde}&hasta=${hasta}&direccion=${dir}${orgQ}`)
       alert(`✓ ${r.data.mensaje}`)
       recargarTodo()
     } catch (e: any) {
