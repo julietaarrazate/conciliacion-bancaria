@@ -197,7 +197,7 @@ export const Perfil: React.FC = () => {
       <div className="card mb-4">
         <h2 className="text-base font-semibold dark:text-white mb-4">Datos de acceso</h2>
         {profileMsg && (
-          <div className={`mb-3 px-3 py-2 rounded text-sm ${profileMsg.startsWith('✓') ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'bg-red-50 text-red-700'}`}>
+          <div className={`mb-3 px-3 py-2 rounded text-sm ${profileMsg.startsWith('✓') ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'}`}>
             {profileMsg}
           </div>
         )}
@@ -223,7 +223,7 @@ export const Perfil: React.FC = () => {
       <div className="card">
         <h2 className="text-base font-semibold dark:text-white mb-4">Cambiar contraseña</h2>
         {pwMsg && (
-          <div className={`mb-3 px-3 py-2 rounded text-sm ${pwMsg.startsWith('✓') ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'bg-red-50 text-red-700'}`}>
+          <div className={`mb-3 px-3 py-2 rounded text-sm ${pwMsg.startsWith('✓') ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'}`}>
             {pwMsg}
           </div>
         )}

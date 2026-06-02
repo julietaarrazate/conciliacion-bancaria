@@ -145,7 +145,7 @@ export const Historial: React.FC = () => {
 
       {/* ── Mensaje ──────────────────────────────────────── */}
       {msg && (
-        <div className={`mx-4 mt-2 px-3 py-2 rounded text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-600'}`}>
+        <div className={`mx-4 mt-2 px-3 py-2 rounded text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
           {msg}
         </div>
       )}

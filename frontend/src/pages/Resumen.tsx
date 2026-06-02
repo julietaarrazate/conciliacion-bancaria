@@ -152,7 +152,7 @@ export const Resumen: React.FC = () => {
   if (!data) {
     if (error) return (
       <div className="p-6">
-        <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">{error}</div>
+        <div className="text-sm text-red-700 bg-red-50 border border-red-200 dark:text-red-400 dark:bg-red-500/10 dark:border-red-500/20 rounded-lg px-4 py-3">{error}</div>
       </div>
     )
     return null

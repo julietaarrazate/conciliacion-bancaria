@@ -552,6 +552,24 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   El checklist solo renderiza después de que los datos cargaron (evita flash de 1-2 s). Auto-dismiss
   inmediato cuando los 3 pasos ya están completos al cargar (orgs con datos existentes nunca ven el widget).
 
+### v3.11.1 — Fix compartir WhatsApp + contraste de mensajes en dark/light (junio 2026)
+
+- **Fix imagen negra al compartir por WhatsApp** (`Pagos.tsx`): el fallback de compartir como imagen
+  re-renderiza la foto sobre un canvas con fondo blanco (`ctx.fillStyle = '#ffffff'; fillRect`) antes de
+  exportar a JPEG. Antes pasaba el blob original (PNG con alpha) etiquetado como `image/jpeg` → WhatsApp
+  mostraba los píxeles transparentes en negro. Mismo patrón que ya usaba `sharePagoPdf`.
+- **Fix mensajes con mal contraste en dark/light**: cuadros de estado (`setMsg`/`error`/`success`) que
+  tenían solo variante de un modo quedaban ilegibles en el otro. Estandarizados con variantes light **y**
+  dark:
+  - Faltaba variante dark (fondo claro en dark mode): `Dashboard.tsx` (error+success), `Caja.tsx` (error),
+    `Perfil.tsx` (2 cuadros error), `Historial.tsx` (error).
+  - Faltaba variante light (texto claro invisible en light mode): `Cheques.tsx` (mensaje de form),
+    `Resumen.tsx` (error de carga).
+  - El resto de páginas (Organizaciones, Revision, Liquidaciones, Clientes, Login, Papelera, password reset)
+    ya tenían ambas variantes. El Toaster global ya estaba correcto.
+  - Nota: el CSS global (`index.css`) ya sobreescribe `text-gray-400/500/700/800/900` en dark mode, por eso
+    esos grises no requieren `dark:` por instancia.
+
 ### Pendiente para próximas sesiones
 
 - **Liquidaciones con asientos** — consultar con contador si las liquidaciones deben generar
@@ -664,4 +682,4 @@ Checkpoints disponibles:
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11.1

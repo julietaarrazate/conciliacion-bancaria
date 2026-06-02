@@ -536,12 +536,12 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm dark:bg-red-900/20 dark:border-red-800/50 dark:text-red-400">
           {error}
         </div>
       )}
       {success && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-green-700 text-sm">
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-green-700 text-sm dark:bg-green-900/20 dark:border-green-800/50 dark:text-green-400">
           {success}
         </div>
       )}
