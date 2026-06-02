@@ -99,38 +99,38 @@ export const Compartir: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       <div className="mb-4">
-        <h1 className="text-xl font-semibold text-gray-100">Compartido desde otra app</h1>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Compartido desde otra app</h1>
         <p className="text-sm text-gray-400 mt-1">
           Elegí qué hacer con {files.length === 1 ? 'este archivo' : `estos ${files.length} archivos`}.
         </p>
       </div>
 
       {error && (
-        <div className="bg-red-500/15 border border-red-500/30 text-red-300 rounded p-3 text-sm mb-4">
+        <div className="bg-red-50 border border-red-200 text-red-700 dark:bg-red-500/15 dark:border-red-500/30 dark:text-red-300 rounded p-3 text-sm mb-4">
           {error}
         </div>
       )}
 
       {(titulo || texto) && (
-        <div className="bg-white/5 border border-white/10 rounded p-3 mb-4 text-sm">
-          {titulo && <div className="text-gray-200 font-medium">{titulo}</div>}
-          {texto  && <div className="text-gray-400 whitespace-pre-wrap mt-1">{texto}</div>}
+        <div className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded p-3 mb-4 text-sm">
+          {titulo && <div className="text-gray-800 dark:text-gray-200 font-medium">{titulo}</div>}
+          {texto  && <div className="text-gray-500 dark:text-gray-400 whitespace-pre-wrap mt-1">{texto}</div>}
         </div>
       )}
 
       {files.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
           {files.map((f, idx) => (
-            <div key={idx} className="bg-white/5 border border-white/10 rounded overflow-hidden">
+            <div key={idx} className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded overflow-hidden">
               {f.type.startsWith('image/') ? (
                 <img src={f.dataUrl} alt={f.name} className="w-full h-32 object-cover" />
               ) : (
-                <div className="w-full h-32 flex items-center justify-center text-3xl bg-white/5">
+                <div className="w-full h-32 flex items-center justify-center text-3xl bg-gray-100 dark:bg-white/5">
                   {f.type === 'application/pdf' ? '📄' : '📎'}
                 </div>
               )}
               <div className="px-2 py-1.5 text-[11px] text-gray-400">
-                <div className="truncate text-gray-300">{f.name}</div>
+                <div className="truncate text-gray-700 dark:text-gray-300">{f.name}</div>
                 <div>{fmtSize(f.size)}</div>
               </div>
             </div>
@@ -144,16 +144,16 @@ export const Compartir: React.FC = () => {
         <button
           onClick={() => irA('cheque', '/cheques?compartido=1')}
           disabled={files.length === 0}
-          className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 rounded px-4 py-3 text-left transition"
+          className="w-full flex items-center justify-between bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 dark:border-white/10 rounded px-4 py-3 text-left transition"
         >
           <span className="flex items-center gap-3">
             <span className="text-2xl">🧾</span>
             <span>
-              <div className="text-gray-100 font-medium">Cheque</div>
-              <div className="text-xs text-gray-400">Cargar nuevo cheque con esta foto</div>
+              <div className="text-gray-900 dark:text-gray-100 font-medium">Cheque</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Cargar nuevo cheque con esta foto</div>
             </span>
           </span>
-          <span className="text-gray-500">→</span>
+          <span className="text-gray-400 dark:text-gray-500">→</span>
         </button>
 
         <button
@@ -174,16 +174,16 @@ export const Compartir: React.FC = () => {
         <button
           onClick={() => irA('op', '/pagos?compartido=1')}
           disabled={files.length === 0}
-          className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 rounded px-4 py-3 text-left transition"
+          className="w-full flex items-center justify-between bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 dark:border-white/10 rounded px-4 py-3 text-left transition"
         >
           <span className="flex items-center gap-3">
             <span className="text-2xl">💸</span>
             <span>
-              <div className="text-gray-100 font-medium">Pago</div>
-              <div className="text-xs text-gray-400">Registrar pago a proveedor, gasto o cliente</div>
+              <div className="text-gray-900 dark:text-gray-100 font-medium">Pago</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Registrar pago a proveedor, gasto o cliente</div>
             </span>
           </span>
-          <span className="text-gray-500">→</span>
+          <span className="text-gray-400 dark:text-gray-500">→</span>
         </button>
       </div>
 

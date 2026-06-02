@@ -9,7 +9,7 @@ const DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 200, 100]
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 
-const toISO = (d: Date) => d.toISOString().slice(0, 10)
+const toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const today = () => toISO(new Date())
 
 const fmtDayLabel = (iso: string) => {
@@ -236,20 +236,20 @@ export const Caja: React.FC = () => {
 
       {/* Historial panel */}
       {showHistorial && (
-        <div className="bg-white/3 border border-white/8 rounded-xl overflow-hidden">
-          <div className="px-4 py-2 border-b border-white/8 text-xs text-gray-400 font-medium">Historial de arqueos</div>
+        <div className="bg-gray-50 dark:bg-white/3 border border-gray-200 dark:border-white/8 rounded-xl overflow-hidden">
+          <div className="px-4 py-2 border-b border-gray-200 dark:border-white/8 text-xs text-gray-500 dark:text-gray-400 font-medium">Historial de arqueos</div>
           {loadingHist ? (
             <div className="text-center py-4 text-gray-500 text-xs">Cargando…</div>
           ) : historial.length === 0 ? (
             <div className="text-center py-4 text-gray-500 text-xs">Sin historial</div>
           ) : (
-            <div className="divide-y divide-white/5 max-h-64 overflow-y-auto">
+            <div className="divide-y divide-gray-100 dark:divide-white/5 max-h-64 overflow-y-auto">
               {historial.map(h => (
                 <button key={h.id} onClick={() => goToDate(h.fecha)}
-                  className={`w-full flex items-center justify-between px-4 py-2 text-xs hover:bg-white/5 transition-colors ${h.fecha === selectedDate ? 'bg-indigo-500/10' : ''}`}>
-                  <span className="text-gray-300">{fmtDayLabel(h.fecha)}</span>
+                  className={`w-full flex items-center justify-between px-4 py-2 text-xs hover:bg-gray-100 dark:hover:bg-white/5 transition-colors ${h.fecha === selectedDate ? 'bg-indigo-50 dark:bg-indigo-500/10' : ''}`}>
+                  <span className="text-gray-600 dark:text-gray-300">{fmtDayLabel(h.fecha)}</span>
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-mono text-gray-200">{fmt(h.caja_restante)}</span>
+                    <span className="font-mono text-gray-700 dark:text-gray-200">{fmt(h.caja_restante)}</span>
                     <span className={`w-2 h-2 rounded-full ${Math.abs(h.cruce) < 1 ? 'bg-green-500' : 'bg-red-500'}`} title={Math.abs(h.cruce) < 1 ? 'Cuadra' : 'Revisar'} />
                   </div>
                 </button>
@@ -409,9 +409,9 @@ export const Caja: React.FC = () => {
             <p className="font-semibold text-sm dark:text-white">Exportar historial EFT</p>
             <div className="flex flex-wrap gap-2">
               <input type="date" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)}
-                className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none" />
+                className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-xs text-gray-700 dark:text-gray-300 focus:outline-none" />
               <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)}
-                className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none" />
+                className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-xs text-gray-700 dark:text-gray-300 focus:outline-none" />
               <button onClick={exportarEFT} disabled={exportando}
                 className="btn-ghost text-sm">
                 {exportando ? 'Exportando...' : '↓ Exportar EFT'}

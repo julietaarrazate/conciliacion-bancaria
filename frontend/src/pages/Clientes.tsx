@@ -128,7 +128,7 @@ export const Clientes: React.FC = () => {
   const abrirAcreditar = (cliente: { id: number; nombre: string }) => {
     setAcreditarCli(cliente)
     setAcrMonto(''); setAcrFecha(''); setAcrRef(''); setAcrOrigen('')
-    setAcrFechaAcred(new Date().toISOString().slice(0, 10)) // hoy por default
+    const d = new Date(); setAcrFechaAcred(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`) // hoy local
     setAcrCandidatos([])
   }
   const cerrarAcreditar = () => {
@@ -158,7 +158,8 @@ export const Clientes: React.FC = () => {
     setAcrConfirming(movId)
     try {
       // Usar la fecha de acreditacion explicita; si no, la fecha de la transferencia; si no, hoy
-      const fechaAcred = acrFechaAcred || acrFecha || new Date().toISOString().slice(0, 10)
+      const _d = new Date(); const _hoy = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`
+      const fechaAcred = acrFechaAcred || acrFecha || _hoy
       await apiClient.client.post(`/clientes/movimientos/${movId}/acreditar`, {
         cliente_id: acreditarCli.id,
         fecha_acred: fechaAcred,

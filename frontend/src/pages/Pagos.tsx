@@ -15,6 +15,12 @@ function suppressLockForShare() {
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 
+// Returns local date as YYYY-MM-DD (not UTC). toISOString() gives UTC which is wrong for UTC-3.
+const localIsoDate = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 // Parse monto from OCR: handles number OR string (incl. Argentine "15.000,00" / US "15,000.00")
 const parseMonto = (raw: any): number | null => {
   if (raw == null) return null
@@ -194,7 +200,7 @@ export const Pagos: React.FC = () => {
     monto: '',
     concepto: '',
     referencia: '',
-    fecha: new Date().toISOString().slice(0, 10),
+    fecha: localIsoDate(),
   })
   const [saving, setSaving] = useState(false)
   const [resultado, setResultado] = useState<any>(null)
@@ -386,7 +392,7 @@ export const Pagos: React.FC = () => {
     setForm({
       tipo: 'proveedor', forma_pago: 'banco', beneficiario: '', cliente_nombre: '',
       categoria: '', monto: '', concepto: '', referencia: '',
-      fecha: new Date().toISOString().slice(0, 10),
+      fecha: localIsoDate(),
     })
     setResultado(null); setMsg('')
   }
