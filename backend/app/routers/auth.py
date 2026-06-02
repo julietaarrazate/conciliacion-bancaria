@@ -86,8 +86,8 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
             detail="Email o contraseña inválidos"
         )
 
-    # Superadmin con RESEND_API_KEY → 2FA por email
-    if user.is_superadmin and settings.resend_api_key:
+    # Superadmin y Admin con RESEND_API_KEY → 2FA por email
+    if (user.is_superadmin or user.role == RoleEnum.ADMIN.value) and settings.resend_api_key:
         from app.models.twofa_code import TwofaCode
         from app.services.email_sender import send_email
         import random
