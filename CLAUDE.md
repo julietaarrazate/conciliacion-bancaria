@@ -584,15 +584,24 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ### v3.11.2 — Fecha local (timezone UTC-3) + light mode Caja/Compartir/Cheques (junio 2026)
 
-- **Fix fecha local en formularios**: `new Date().toISOString().slice(0,10)` devuelve fecha UTC —
-  antes de las 3 AM en Argentina (UTC-3) generaba la fecha de ayer. Reemplazado por helper
-  `localIsoDate()` = `getFullYear()/getMonth()+1/getDate()` en:
-  - `Pagos.tsx` (fecha default del pago → afectaba Libro Diario)
-  - `Caja.tsx` (función `toISO`/`today` → afectaba selector de arqueo)
-  - `Clientes.tsx` (2 lugares: fecha acreditación default en modal "Acreditar")
-  - `EstadoCuenta.tsx` (`fechaHaceNDias` + `hasta` default)
-  - `Resumen.tsx` (`fmtIso` para rangos de fechas)
-  - `Historial.tsx` (fecha default del modal re-conciliar)
+- **Fix fecha local en formularios (FRONTEND)**: `new Date().toISOString().slice(0,10)` devuelve fecha
+  UTC — antes de las 3 AM en Argentina (UTC-3) generaba la fecha de ayer. Nuevo helper compartido
+  `src/utils/fecha.ts` (`localIsoDate()/hoyIso()/isoHaceNDias()`) = `getFullYear()/getMonth()+1/getDate()`,
+  usado en: `Pagos.tsx` (fecha default del pago → afectaba Libro Diario), `Caja.tsx` (`toISO`/`today` →
+  selector de arqueo), `Clientes.tsx` (modal Acreditar), `EstadoCuenta.tsx`, `Resumen.tsx`, `Historial.tsx`
+  (modal re-conciliar + botones Hoy/Ayer), `Dashboard.tsx` (fechaAcred/bulkFecha/hoyStr), `Bulk.tsx`,
+  `Movimientos.tsx` (acreditar), `Contabilidad.tsx` (ajuste manual).
+- **Fix hora de Argentina (BACKEND)**: el servidor Render corre en UTC; `date.today()` y `datetime.now()`
+  devolvían la fecha UTC → fechas de negocio quedaban 1 día adelantadas entre 21:00–00:00 ART. Nuevo
+  helper `app/services/tz.py` (`hoy_art()/now_art()` con `ZoneInfo("America/Argentina/Buenos_Aires")`).
+  Reemplazado en TODAS las fechas de negocio: `models/egreso.py` (default `Egreso.fecha`), `routers/pagos.py`,
+  `routers/cheques.py` (depósito/acreditación/rechazo/import — 7 casos), `routers/caja.py` (arqueo),
+  `routers/agente.py` (consultas IA caja/resumen — 5 casos), `routers/contabilidad.py` (asientos
+  cc_inicial/reset/ajuste — 5 casos), `routers/planillas.py` (ref liquidación), `routers/clientes_dir.py`
+  (acreditar mov), `services/motor_contable.py` (TODOS los asientos automáticos — 6 casos),
+  `services/backup_scheduler.py` (alertas cheques por vencer), `main.py` (backfill). Las marcas de
+  AUDITORÍA (`created_at`, expiración de tokens 2FA/reset/aprobación) siguen en UTC a propósito —
+  eso es correcto y consistente. Tests: `test_tz.py` (4 tests). Suite total: **156 passing**.
 - **Fix light mode Caja — historial de arqueos**: panel `bg-white/3 border-white/8` → `bg-gray-50
   dark:bg-white/3 border-gray-200 dark:border-white/8`. Texto `text-gray-300/200` → dual-mode.
   Dividers y hover también duales. Date pickers EFT: `bg-white/5 text-gray-300` → variantes light.
