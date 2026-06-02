@@ -569,6 +569,38 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
     ya tenían ambas variantes. El Toaster global ya estaba correcto.
   - Nota: el CSS global (`index.css`) ya sobreescribe `text-gray-400/500/700/800/900` en dark mode, por eso
     esos grises no requieren `dark:` por instancia.
+- **Fix Cheques light mode completo**: toda la página `Cheques.tsx` era dark-first (colores sin `dark:`
+  prefijo). Convertido a dual-mode: ESTADO_BADGE con pastel light, `inputClass` con hex fallback para
+  evitar replace_all collisions, LiBadge, acreditación masiva panel, botones de acción, modales,
+  alternación de filas, tab activa, stat cards de importe, fechas rechazadas.
+- **Fix PDF scanner en Cheques** (`shareChequePdf`): canvas con fondo blanco + aspect ratio preservado
+  (`ratio = Math.min(maxW/w, maxH/h)`), centrado horizontal. Mismo patrón que `sharePagoPdf` en Pagos.
+- **Fix OCR monto en Pagos**: helper `parseMonto()` para parsear formatos argentinos ("15.000,00"),
+  US y planos. OCR canvas sin filtros grayscale (Gemini lee mejor color). Error visible en lugar de
+  silencioso cuando OCR falla (`.catch(() => {})` → mensaje "OCR no disponible").
+- **Fix compartir imagen en Pagos y Cheques**: race condition `img.src` antes de `img.onload` → await
+  explícito con Promise + `canvas.toBlob()` null-safe.
+- **Lazy loading en Pagos**: clientes/categorías se cargan solo cuando `vista === 'nuevo'`.
+
+### v3.11.2 — Fecha local (timezone UTC-3) + light mode Caja/Compartir/Cheques (junio 2026)
+
+- **Fix fecha local en formularios**: `new Date().toISOString().slice(0,10)` devuelve fecha UTC —
+  antes de las 3 AM en Argentina (UTC-3) generaba la fecha de ayer. Reemplazado por helper
+  `localIsoDate()` = `getFullYear()/getMonth()+1/getDate()` en:
+  - `Pagos.tsx` (fecha default del pago → afectaba Libro Diario)
+  - `Caja.tsx` (función `toISO`/`today` → afectaba selector de arqueo)
+  - `Clientes.tsx` (2 lugares: fecha acreditación default en modal "Acreditar")
+  - `EstadoCuenta.tsx` (`fechaHaceNDias` + `hasta` default)
+  - `Resumen.tsx` (`fmtIso` para rangos de fechas)
+  - `Historial.tsx` (fecha default del modal re-conciliar)
+- **Fix light mode Caja — historial de arqueos**: panel `bg-white/3 border-white/8` → `bg-gray-50
+  dark:bg-white/3 border-gray-200 dark:border-white/8`. Texto `text-gray-300/200` → dual-mode.
+  Dividers y hover también duales. Date pickers EFT: `bg-white/5 text-gray-300` → variantes light.
+- **Fix light mode Compartir**: toda la página era dark-only. Error box, panel de titulo/texto,
+  tarjetas de archivos, botones Cheque/Pago — todos con variantes light/dark.
+- **Fix Cheques colores residuales**: stats (importe pendientes/acreditados/rechazados) usaban
+  `text-yellow/green/red-400` (tenues en light) → `*-600 dark:*-400`. Botón Excel depósito y
+  compartir WhatsApp: `bg-green-*/*` → `bg-green-100 dark:bg-green-*/...`. Quitar foto: dual-mode.
 
 ### Pendiente para próximas sesiones
 
@@ -679,7 +711,14 @@ Checkpoints disponibles:
   sin RESEND_API_KEY), delete_records quitado del Operador (principio de menor privilegio),
   fix onboarding checklist (dataLoaded + Promise.all, auto-dismiss inmediato en orgs con datos)
   (junio 2026 — PR #102)
+- `v3.11.1` — fix imagen negra WhatsApp (canvas fondo blanco), contraste mensajes dark/light en
+  Dashboard/Caja/Perfil/Historial/Cheques/Resumen, Cheques light mode completo (dual-mode),
+  PDF scanner Cheques (aspect ratio + canvas blanco), OCR monto Pagos (parseMonto + error visible),
+  lazy loading clientes/categorias en Pagos.
+- `v3.11.2` — fix fecha local UTC-3 en Pagos/Caja/Clientes/EstadoCuenta/Resumen/Historial
+  (localIsoDate vs toISOString que daba ayer antes de las 3 AM ART), light mode Caja historial +
+  EFT inputs, Compartir page dual-mode completo, Cheques stats colores light mode (junio 2026).
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11.1
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11.2
