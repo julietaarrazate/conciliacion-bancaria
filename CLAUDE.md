@@ -611,6 +611,32 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   `text-yellow/green/red-400` (tenues en light) → `*-600 dark:*-400`. Botón Excel depósito y
   compartir WhatsApp: `bg-green-*/*` → `bg-green-100 dark:bg-green-*/...`. Quitar foto: dual-mode.
 
+### v3.11.3 — Editar cheque + Export Excel + Comisión auto + Fix fechas bidireccional (junio 2026)
+
+- **Editar cheque** (`✏️` en tabla): botón inline en la columna de acciones de cheques en estado
+  `registrado`. `handleOpenEdit(c)` pre-llena el form (sin foto — ocultada en modo edición).
+  `PATCH /cheques/{id}` acepta todos los campos del cheque. `handleSave()` unificado (POST si nuevo,
+  PATCH si editId ≠ null). Modal muestra "Editar cheque" / "Nuevo cheque" según estado. Cancelar
+  limpia `editId`.
+- **Export Excel todos los cheques** (`↓ Excel` en toolbar): `GET /cheques/exportar` con filtros
+  opcionales `org_id, estado, cliente_id, desde, hasta`. Devuelve xlsx con columnas: Estado,
+  F.Depósito, F.Acred., Cliente, Portador, Librador, Banco, Número, CP, L/I, Monto, Comisión,
+  Notas + fila de total. Ruta registrada ANTES de `/deposito/exportar` para evitar conflictos.
+  `exportandoTodos` state para feedback del botón.
+- **Comisión auto-calculada en cheques**: se eliminó el campo "Comisión $" (monto plano) del form.
+  Queda solo `% Comisión (cuenta 3-1-3-0)` con preview `= $X.XX` calculado en tiempo real
+  (`monto × pct / 100`). Al guardar, `comisionCalc = Math.round(monto * pct) / 100` se envía
+  como `comision` en el payload (no viene del form). `emptyForm()` sin `comision`. Label claro
+  referencia la cuenta 3-1-3-0 para no confundir con gastos bancarios (3-2-2-1).
+- **Stats cards overflow**: `overflow-hidden` en card container + `text-sm` + `truncate` en el
+  valor monetario → montos grandes ($6,972,528.75) no desbordan en mobile de 3 columnas.
+- **Fix fechas bidireccional** (`🕐 Fix fechas UTC` en `/contabilidad` → tab Cuentas Corrientes,
+  solo superadmin): `POST /contabilidad/fix-fechas-utc` acepta `desde`, `hasta`, `modulo`,
+  `direccion` (adelantar = +1 día · atrasar = −1 día), `dry_run`. Corrige tanto `Asiento.fecha`
+  como `Egreso.fecha` en el rango dado. UI con `window.prompt` para ingresar rango+dirección,
+  `window.confirm` con preview (dry_run) antes de ejecutar. Uso: egresos cargados antes de las
+  3 AM ART quedaban con fecha UTC del día anterior → `adelantar` los corrige.
+
 ### Pendiente para próximas sesiones
 
 - **Liquidaciones con asientos** — consultar con contador si las liquidaciones deben generar
@@ -727,7 +753,12 @@ Checkpoints disponibles:
 - `v3.11.2` — fix fecha local UTC-3 en Pagos/Caja/Clientes/EstadoCuenta/Resumen/Historial
   (localIsoDate vs toISOString que daba ayer antes de las 3 AM ART), light mode Caja historial +
   EFT inputs, Compartir page dual-mode completo, Cheques stats colores light mode (junio 2026).
+- `v3.11.3` — editar cheque inline (✏️, PATCH /cheques/{id}, form reutilizado), export Excel
+  todos los cheques (GET /cheques/exportar con filtros), comisión auto-calculada desde % (sin campo
+  monto plano), stats cards overflow fixed (truncate), fix fechas bidireccional Libro Diario
+  (POST /contabilidad/fix-fechas-utc: adelantar/atrasar por rango, dry_run, afecta Asiento+Egreso)
+  (junio 2026 — PR #103).
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11.2
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11.3
