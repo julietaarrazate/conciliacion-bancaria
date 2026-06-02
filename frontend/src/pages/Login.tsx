@@ -72,6 +72,7 @@ export const Login: React.FC = () => {
         code: twofaCode.trim(),
       })
       const data = res.data
+      apiClient.setToken(data.access_token)
       setUser(data.user)
       setToken(data.access_token)
       forceUnlock()
