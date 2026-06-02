@@ -130,13 +130,13 @@ def start_alertas_push_job() -> None:
 
 def _run_alertas_push() -> None:
     """Revisa cheques por vencer y movimientos sin asignar. Manda push si hay urgentes."""
-    from datetime import date
+    from datetime import datetime
     from app.models.cheque import Cheque
     from app.models.extracto import MovimientoBanco
 
     db = SessionLocal()
     try:
-        hoy = date.today()
+        hoy = datetime.now(_ART).date()
         en_3_dias = hoy + timedelta(days=3)
         hace_7_dias = hoy - timedelta(days=7)
 

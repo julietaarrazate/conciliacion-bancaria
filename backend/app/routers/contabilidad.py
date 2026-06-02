@@ -10,6 +10,7 @@ from app.middleware.auth import get_current_user, require_permission, can_switch
 from app.models.user import User
 from app.models.cliente import Cliente
 from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
+from app.services.tz import hoy_art
 
 router = APIRouter(prefix="/contabilidad", tags=["contabilidad"])
 logger = logging.getLogger(__name__)
@@ -722,7 +723,7 @@ def backfill_cuentas_corrientes(
             continue
         fecha_acred = d["fecha_acred"]
         fecha_carga = d["fecha_carga"]
-        fecha_asiento = fecha_acred or (fecha_carga.date() if fecha_carga else _date.today())
+        fecha_asiento = fecha_acred or (fecha_carga.date() if fecha_carga else hoy_art())
         desc = f"Acreditación histórica — {d['cliente_nombre']}"
         if d["nombre_archivo"]:
             desc += f" ({d['nombre_archivo']})"
@@ -1088,7 +1089,7 @@ def reset_y_rebuild_asientos(
             if total_pos <= 0 and total_neg <= 0:
                 continue
             primer = movs[0]
-            fecha_ref = primer.fecha if isinstance(primer.fecha, _date) else _date.today()
+            fecha_ref = primer.fecha if isinstance(primer.fecha, _date) else hoy_art()
             a = Asiento(
                 fecha=fecha_ref,
                 descripcion=f"UM lote {lote_key} — {len(movs)} movimientos (extracto #{primer.extracto_id})",
@@ -1122,13 +1123,13 @@ def reset_y_rebuild_asientos(
             monto = abs(_monto(row.monto))  # planilla rows son siempre ingresos (positivos)
             if monto <= 0:
                 continue
-            fecha = (row.fecha_acred or planilla.fecha_carga or _date.today())
+            fecha = (row.fecha_acred or planilla.fecha_carga or hoy_art())
             if not isinstance(fecha, _date):
                 try:
                     from datetime import datetime as _dt
                     fecha = _dt.strptime(str(fecha)[:10], "%Y-%m-%d").date()
                 except Exception:
-                    fecha = _date.today()
+                    fecha = hoy_art()
             a = Asiento(
                 fecha=fecha,
                 descripcion=f"Acreditación {cliente.nombre} — {planilla.nombre_archivo}",
@@ -1252,7 +1253,7 @@ def delete_asiento_manual(
     lineas_orig = db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id == asiento_id).all()
     try:
         reverso = Asiento(
-            fecha=_date.today(),
+            fecha=hoy_art(),
             descripcion=f"REVERSO #{asiento_id}: {asiento.descripcion or ''} — Revertido manualmente",
             modulo="ajuste_manual_reverso",
             referencia_id=asiento_id,

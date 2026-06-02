@@ -3,14 +3,15 @@ import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
 import { confirmDialog } from '@/store/confirm'
+import { localIsoDate } from '@/utils/fecha'
 
 const DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 200, 100]
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 
-const toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-const today = () => toISO(new Date())
+const toISO = (d: Date) => localIsoDate(d)
+const today = () => localIsoDate()
 
 const fmtDayLabel = (iso: string) => {
   const d = new Date(iso + 'T12:00:00')

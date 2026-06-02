@@ -444,6 +444,7 @@ def _init_db():
         from app.models.contabilidad import Asiento as A
         from app.services.motor_contable import registrar_extracto, registrar_planilla
         from datetime import date as _date
+        from app.services.tz import hoy_art
 
         db = SL()
 
@@ -469,9 +470,9 @@ def _init_db():
         for p in db.query(Plan).filter(Plan.organizacion_id == 1).all():
             if p.id not in ids_plan:
                 try:
-                    fecha = p.fecha_carga.date() if p.fecha_carga else _date.today()
+                    fecha = p.fecha_carga.date() if p.fecha_carga else hoy_art()
                 except Exception:
-                    fecha = _date.today()
+                    fecha = hoy_art()
                 registrar_planilla(
                     db=db, planilla_id=p.id,
                     org_id=p.organizacion_id or 1,

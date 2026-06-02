@@ -5,6 +5,7 @@ import { Skeleton, SkeletonKpi } from '@/components/Skeleton'
 import { LineChart } from '@/components/charts/LineChart'
 import { useOrgStore } from '@/store/org'
 import { toast } from '@/store/toast'
+import { localIsoDate } from '@/utils/fecha'
 
 type Periodo = 'hoy' | 'semana' | 'mes' | 'rango'
 
@@ -61,7 +62,7 @@ export const Resumen: React.FC = () => {
   const [periodo, setPeriodo] = useState<Periodo>('hoy')
   const [anio, setAnio] = useState(hoy.getFullYear())
   const [mes, setMes] = useState(hoy.getMonth() + 1)
-  const fmtIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const fmtIso = (d: Date) => localIsoDate(d)
   const [rangoDesde, setRangoDesde] = useState(() => fmtIso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)))
   const [rangoHasta, setRangoHasta] = useState(() => fmtIso(hoy))
   const [data, setData] = useState<Dashboard | null>(null)

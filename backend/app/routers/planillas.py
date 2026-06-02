@@ -19,6 +19,7 @@ from app.services.excel_parser import parsear_planilla_cliente
 from app.services.conciliacion import conciliar_planilla
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_planilla_conciliada
+from app.services.tz import hoy_art
 from app.middleware.auth import get_current_user, require_permission
 
 router = APIRouter(prefix="/planillas", tags=["planillas"])
@@ -565,7 +566,7 @@ def download_planilla_conciliada(
     # Nombre: "{cliente} acreditado {d.m}.xlsx" — ej "alojando acreditado 8.5.xlsx"
     # Fecha = la mas reciente de las acreditaciones; si no hay, fecha de hoy
     fechas_acred = [mov.fecha_acred for mov in movs_map.values() if mov.fecha_acred]
-    fecha_ref = max(fechas_acred) if fechas_acred else datetime.now().date()
+    fecha_ref = max(fechas_acred) if fechas_acred else hoy_art()
     fecha_str = f"{fecha_ref.day}.{fecha_ref.month}"
     cliente_slug = (p.cliente.nombre or "cliente").strip().lower()
     fname = f"{cliente_slug} acreditado {fecha_str}.xlsx"

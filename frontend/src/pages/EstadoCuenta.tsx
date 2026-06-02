@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
+import { localIsoDate, isoHaceNDias } from '@/utils/fecha'
 
 type Resumen = {
   conciliado_periodo: number
@@ -64,12 +65,7 @@ function fmtMoney(n: number): string {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n)
 }
 
-const localIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-function fechaHaceNDias(n: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return localIso(d)
-}
+const fechaHaceNDias = isoHaceNDias
 
 const PERIODOS = [
   { label: '30 días', dias: 30 },
@@ -102,7 +98,7 @@ export const EstadoCuenta: React.FC = () => {
   }
 
   const desde = useMemo(() => fechaHaceNDias(periodoDias), [periodoDias])
-  const hasta = useMemo(() => localIso(new Date()), [])
+  const hasta = useMemo(() => localIsoDate(), [])
 
   useEffect(() => {
     if (!clienteId) return

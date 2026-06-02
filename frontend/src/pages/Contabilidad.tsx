@@ -5,6 +5,7 @@ import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
 import { toast } from '@/store/toast'
 import { confirmDialog } from '@/store/confirm'
+import { localIsoDate } from '@/utils/fecha'
 
 interface CarteraItem {
   cliente_id: number
@@ -457,7 +458,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   const [ajusteDebeId, setAjusteDebeId] = useState<number | ''>('')
   const [ajusteHaberId, setAjusteHaberId] = useState<number | ''>('')
   const [ajusteMonto, setAjusteMonto] = useState('')
-  const [ajusteFecha, setAjusteFecha] = useState(new Date().toISOString().split('T')[0])
+  const [ajusteFecha, setAjusteFecha] = useState(localIsoDate())
   const [ajusteDesc, setAjusteDesc] = useState('')
   const [ajusteDebeBusq, setAjusteDebeBusq] = useState('')
   const [ajusteHaberBusq, setAjusteHaberBusq] = useState('')

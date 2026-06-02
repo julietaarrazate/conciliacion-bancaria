@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { ExtractoListItem, ConciliacionResultado } from '@/types'
+import { localIsoDate } from '@/utils/fecha'
 
 interface BulkItem {
   id: string
@@ -16,9 +17,7 @@ export const Bulk: React.FC = () => {
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [items, setItems] = useState<BulkItem[]>([])
   const [running, setRunning] = useState(false)
-  const [fechaAcred, setFechaAcred] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  )
+  const [fechaAcred, setFechaAcred] = useState<string>(localIsoDate())
 
   useEffect(() => {
     apiClient.listExtractos().then(d => {

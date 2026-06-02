@@ -19,6 +19,7 @@ from app.models.contabilidad import PlanCuenta
 from app.services.motor_contable import registrar_cheque, acreditar_cheque, rechazar_cheque
 from app.services.auditoria import registrar_log
 from app.services.storage import upload_comprobante
+from app.services.tz import hoy_art
 
 router = APIRouter(prefix="/cheques", tags=["cheques"])
 
@@ -375,7 +376,7 @@ def crear_cheque(
         codigo_postal=body.codigo_postal,
         local_interior=li,
         fecha_emision=body.fecha_emision,
-        fecha_deposito=body.fecha_deposito or date.today(),
+        fecha_deposito=body.fecha_deposito or hoy_art(),
         estado="registrado",
         notas=body.notas,
         usuario_id=current_user.id,
@@ -386,7 +387,7 @@ def crear_cheque(
     registrar_cheque(
         db=db, cheque_id=c.id, org_id=oid, usuario_id=current_user.id,
         titular=c.librador or "", monto=c.monto, comision=c.comision,
-        fecha=c.fecha_deposito or date.today(),
+        fecha=c.fecha_deposito or hoy_art(),
     )
     registrar_log(db, current_user.id, "cheques", c.id, "INSERT",
                   {"monto": c.monto, "librador": c.librador, "cliente_id": c.cliente_id,
@@ -472,7 +473,7 @@ def acreditar(
         raise HTTPException(400, "El cliente no tiene cuenta contable configurada")
 
     c.estado          = "acreditado"
-    c.fecha_acred     = body.fecha_acred or date.today()
+    c.fecha_acred     = body.fecha_acred or hoy_art()
     c.banco_cuenta_id = body.banco_cuenta_id
     db.flush()
 
@@ -507,7 +508,7 @@ def acreditar_masivo(
     if not banco_cuenta:
         raise HTTPException(404, "Cuenta de banco no encontrada")
 
-    fecha = body.fecha_acred or date.today()
+    fecha = body.fecha_acred or hoy_art()
     resultados = []
     for cheque_id in body.cheque_ids:
         c = db.query(Cheque).filter(Cheque.id == cheque_id, Cheque.organizacion_id == oid).first()
@@ -569,7 +570,7 @@ def rechazar(
         raise HTTPException(400, "El cheque no tiene banco registrado de la acreditación")
 
     c.estado           = "rechazado"
-    c.fecha_rechazo    = body.fecha_rechazo or date.today()
+    c.fecha_rechazo    = body.fecha_rechazo or hoy_art()
     c.fisico           = body.fisico
     c.fecha_devolucion = body.fecha_devolucion
     db.flush()
@@ -767,7 +768,7 @@ async def importar_excel(
                 monto=monto, comision=comision,
                 codigo_postal=cp, local_interior=_local_interior(cp),
                 fecha_emision=_parse_date(row[COL['fecha_emision']]) if COL['fecha_emision'] is not None else None,
-                fecha_deposito=_parse_date(row[COL['fecha_deposito']]) if COL['fecha_deposito'] is not None else date.today(),
+                fecha_deposito=_parse_date(row[COL['fecha_deposito']]) if COL['fecha_deposito'] is not None else hoy_art(),
                 notas=str(row[COL['notas']]).strip() if COL['notas'] is not None and row[COL['notas']] else None,
                 estado="registrado", usuario_id=current_user.id,
             )
@@ -776,7 +777,7 @@ async def importar_excel(
             registrar_cheque(
                 db=db, cheque_id=c.id, org_id=oid, usuario_id=current_user.id,
                 titular=c.librador or "", monto=c.monto, comision=c.comision,
-                fecha=c.fecha_deposito or date.today(),
+                fecha=c.fecha_deposito or hoy_art(),
             )
             importados += 1
         except Exception as ex:

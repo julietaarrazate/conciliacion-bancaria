@@ -24,6 +24,7 @@ from app.models.extracto import MovimientoBanco
 from app.models.user import User
 from app.middleware.auth import get_current_user, require_permission, can_switch_org
 from app.services.excel_export import export_planilla_conciliada
+from app.services.tz import hoy_art
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 
@@ -463,7 +464,7 @@ def acreditar_movimiento_a_cliente(
         except ValueError:
             pass
     if not fecha_acred:
-        fecha_acred = mov.fecha or datetime.now().date()
+        fecha_acred = mov.fecha or hoy_art()
 
     anterior = mov.cliente_acreditado
     mov.cliente_acreditado = cli.nombre

@@ -5,6 +5,7 @@ import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
 import { confirmDialog } from '@/store/confirm'
 import { useLockStore } from '@/store/lock'
+import { localIsoDate } from '@/utils/fecha'
 
 // Evita que abrir el menú nativo de compartir dispare el bloqueo por PIN/huella:
 // al abrir el share sheet el navegador pierde foco un instante (igual que las descargas).
@@ -14,12 +15,6 @@ function suppressLockForShare() {
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
-
-// Returns local date as YYYY-MM-DD (not UTC). toISOString() gives UTC which is wrong for UTC-3.
-const localIsoDate = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 // Parse monto from OCR: handles number OR string (incl. Argentine "15.000,00" / US "15,000.00")
 const parseMonto = (raw: any): number | null => {

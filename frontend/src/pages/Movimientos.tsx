@@ -5,6 +5,7 @@ import { ExtractoListItem, MovimientoFiltrado, MovimientosFiltros } from '@/type
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
+import { localIsoDate } from '@/utils/fecha'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -197,7 +198,7 @@ export const Movimientos: React.FC = () => {
     setAcredModal({
       mov: m,
       cliente: m.cliente_acreditado || '',
-      fecha: m.fecha_acred || new Date().toISOString().split('T')[0],
+      fecha: m.fecha_acred || localIsoDate(),
     })
   }
 
