@@ -6,11 +6,57 @@ import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { confirmDialog } from '@/store/confirm'
 import { useAuthStore } from '@/store/auth'
+import { useThemeStore } from '@/store/theme'
 import {
   ConciliacionResultado,
   ExtractoListItem,
   PlanillaHistorialItem
 } from '@/types'
+
+// ── AlertasWidget ─────────────────────────────────────────────────────────────
+type Alerta = { tipo: string; cantidad: number; label: string; urgencia: string; link: string }
+const ALERTA_META: Record<string, { icon: string; color: string; bg: string; border: string }> = {
+  cheques_urgentes:        { icon: '⏰', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' },
+  cheques_vencidos:        { icon: '🔴', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' },
+  filas_atrasadas:         { icon: '📋', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
+  movimientos_sin_asignar: { icon: '🔍', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
+}
+const ALERTA_META_DARK: Record<string, { color: string; bg: string; border: string }> = {
+  cheques_urgentes:        { color: '#F87171', bg: 'rgba(239,68,68,.1)',  border: 'rgba(239,68,68,.25)' },
+  cheques_vencidos:        { color: '#F87171', bg: 'rgba(239,68,68,.1)',  border: 'rgba(239,68,68,.25)' },
+  filas_atrasadas:         { color: '#FCD34D', bg: 'rgba(245,158,11,.1)', border: 'rgba(245,158,11,.25)' },
+  movimientos_sin_asignar: { color: '#60A5FA', bg: 'rgba(37,99,235,.1)',  border: 'rgba(37,99,235,.25)' },
+}
+const AlertasWidget: React.FC<{ orgId: number | null; isDark: boolean }> = ({ orgId, isDark }) => {
+  const navigate = useNavigate()
+  const [alertas, setAlertas] = useState<Alerta[]>([])
+  useEffect(() => {
+    apiClient.getAlertas(orgId ?? undefined).then(r => setAlertas(r.alertas)).catch(() => {})
+  }, [orgId])
+  if (alertas.length === 0) return null
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+      {alertas.map(a => {
+        const m = isDark
+          ? (ALERTA_META_DARK[a.tipo] ?? { color: '#71717A', bg: 'rgba(100,100,100,.1)', border: 'rgba(100,100,100,.2)' })
+          : (ALERTA_META[a.tipo] ?? { color: '#71717A', bg: '#F4F4F5', border: '#E4E4E7' })
+        const icon = (ALERTA_META[a.tipo] ?? { icon: '⚠️' }).icon
+        return (
+          <button key={a.tipo} onClick={() => navigate(a.link)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 14px', borderRadius: 10, cursor: 'pointer', background: m.bg, border: `1px solid ${m.border}`, color: m.color, fontWeight: 600, fontSize: 13, transition: 'opacity .15s, transform .1s', whiteSpace: 'nowrap' }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = '' }}
+          >
+            <span style={{ fontSize: 14 }}>{icon}</span>
+            <span style={{ fontSize: 18, fontWeight: 800, lineHeight: 1, fontFamily: 'monospace' }}>{a.cantidad}</span>
+            <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.85 }}>{a.label}</span>
+            <span style={{ fontSize: 11, opacity: 0.6 }}>→</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 // ── OnboardingChecklist ────────────────────────────────────────────────────────
 const OnboardingChecklist: React.FC<{
@@ -146,6 +192,7 @@ export const Dashboard: React.FC = () => {
   const navigate = useNavigate()
   const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
   const { activeOrgId, activeOrgNombre } = useOrgStore()
+  const isDark = useThemeStore(s => s.theme === 'dark')
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [planillas, setPlanillas] = useState<PlanillaHistorialItem[]>([])
   const onboardingKey = `onboarding-dismissed-${activeOrgId ?? 'default'}`
@@ -416,6 +463,8 @@ export const Dashboard: React.FC = () => {
           </p>
         )}
       </div>
+
+      <AlertasWidget orgId={activeOrgId} isDark={isDark} />
 
       {onboardingVisible && (
         <OnboardingChecklist
