@@ -515,6 +515,20 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   - **Script tema síncrono** en `<head>` de `index.html` (previene flash blanco→gris antes de React).
   - Sin nombres de clientes reales, sin branding Gemini, FAQ con ARCA en vez de AFIP.
 
+### v3.10.3 — Dashboard: onboarding checklist + alertas (junio 2026 — PR #100)
+
+- **`OnboardingChecklist`** en el Dashboard: guía de 3 pasos para usuarios nuevos (subir extracto →
+  subir planilla → conciliar). Barra de progreso verde, botón "Omitir" que persiste la decisión en
+  `localStorage` por org (`onboarding-dismissed-<orgId>`). Desaparece automáticamente al completar
+  los 3 pasos. Scroll a `#upload-planilla-section` desde el botón del paso 2.
+- **`AlertasWidget`** en el Dashboard: chips clickeables por tipo de alerta encima del onboarding.
+  Llama a `GET /analisis/alertas` al montar. 4 tipos: `cheques_urgentes` (⏰ rojo), `cheques_vencidos`
+  (🔴 rojo), `filas_atrasadas` (📋 ámbar), `movimientos_sin_asignar` (🔍 azul). Variantes light/dark
+  mode. Retorna `null` si no hay alertas (sin ruido en orgs limpias). Cada chip navega al módulo.
+- `isDark` derivado de `useThemeStore` para pasar a `AlertasWidget`.
+- `useEffect` reactivo para el estado del onboarding (evita bug cuando `activeOrgId` carga después
+  del mount inicial y cambia el `localStorage` key).
+
 ### Pendiente para próximas sesiones
 
 - **Ajuste manual del Libro Diario** (Fase 2): `POST /contabilidad/asiento-manual` — elegís cuenta
@@ -620,7 +634,9 @@ Checkpoints disponibles:
 - `v3.10.2` — landing rediseñada: mockups animados (conciliación/OCR/asistente IA), calculadora
   interactiva, spotlights, comparativa, testimoniales; fondo blanco (#FFFFFF), sin sticky bar mobile,
   steps contacto en línea, WA en spotlight, script tema síncrono en head (junio 2026 — PRs #94-#95)
+- `v3.10.3` — dashboard onboarding checklist (3 pasos, barra progreso, dismiss por org) + alertas
+  widget (chips cheques/planillas/movimientos, light+dark mode, navega al módulo) (junio 2026 — PR #100)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.10.2
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.10.3
