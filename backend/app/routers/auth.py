@@ -90,6 +90,10 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
     if (user.is_superadmin or user.role == RoleEnum.ADMIN.value) and settings.resend_api_key:
         from app.models.twofa_code import TwofaCode
         from app.services.email_sender import send_email
+        # Limpiar códigos expirados del usuario antes de generar uno nuevo
+        db.query(TwofaCode).filter(
+            TwofaCode.user_id == user.id, TwofaCode.expires_at <= datetime.utcnow()
+        ).delete()
         code = f"{secrets.randbelow(1_000_000):06d}"
         code_hash = hashlib.sha256(code.encode()).hexdigest()
         expires_at = datetime.utcnow() + timedelta(minutes=TWOFA_CODE_TTL_MINUTES)
