@@ -15,6 +15,17 @@ function suppressLockForShare() {
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 
+// Parse monto from OCR: handles number OR string (incl. Argentine "15.000,00" / US "15,000.00")
+const parseMonto = (raw: any): number | null => {
+  if (raw == null) return null
+  if (typeof raw === 'number') return isNaN(raw) ? null : raw
+  const s = String(raw).trim().replace(/[^0-9.,-]/g, '')
+  if (!s) return null
+  if (/^\d{1,3}(\.\d{3})+(,\d*)?$/.test(s)) return parseFloat(s.replace(/\./g, '').replace(',', '.'))
+  if (/^\d{1,3}(,\d{3})+(\.\d*)?$/.test(s)) return parseFloat(s.replace(/,/g, ''))
+  return parseFloat(s.replace(',', '.')) || null
+}
+
 interface Cliente { id: number; nombre: string }
 interface Categoria { id: number; nombre: string }
 interface Egreso {
@@ -218,7 +229,9 @@ export const Pagos: React.FC = () => {
     setSearchParams(sp, { replace: true })
   }, [searchParams, setSearchParams])
 
+  // Lazy: cargar clientes/categorías solo al abrir el form (no bloquea la carga inicial del historial)
   useEffect(() => {
+    if (vista !== 'nuevo') return
     const params = activeOrgId ? { org_id: activeOrgId } : {}
     apiClient.client.get('/clientes/archivos', { params }).then(r => {
       setClientes(r.data.clientes?.map((c: any) => ({ id: c.id || 0, nombre: c.nombre })) || [])
@@ -226,7 +239,7 @@ export const Pagos: React.FC = () => {
     apiClient.client.get('/pagos/categorias', { params }).then(r => {
       setCategorias(r.data || [])
     }).catch(() => {})
-  }, [activeOrgId])
+  }, [activeOrgId, vista])
 
   const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -257,22 +270,25 @@ export const Pagos: React.FC = () => {
         const ocrCanvas = document.createElement('canvas')
         ocrCanvas.width = ow; ocrCanvas.height = oh
         const ocrCtx = ocrCanvas.getContext('2d')!
-        ocrCtx.fillStyle = '#ffffff'; ocrCtx.fillRect(0, 0, ow, oh)  // fondo blanco → evita negro en JPEG
-        ocrCtx.filter = 'grayscale(1) contrast(1.4) brightness(1.1)'
+        ocrCtx.fillStyle = '#ffffff'; ocrCtx.fillRect(0, 0, ow, oh)
+        // Sin filtro para OCR — Gemini lee mejor imágenes en color sin procesamiento
         ocrCtx.drawImage(img, 0, 0, ow, oh)
-        const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.7)
+        const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.8)
         apiClient.client.post('/agente/ocr-transferencia', { imagen_base64: ocrCompressed })
           .then(res => {
             const d = res.data
-            setForm(prev => ({
-              ...prev,
-              monto:        prev.monto        || (d.monto != null ? new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(d.monto) : prev.monto),
-              fecha:        prev.fecha        || d.fecha        || prev.fecha,
-              beneficiario: prev.beneficiario || d.beneficiario || prev.beneficiario,
-              referencia:   prev.referencia   || d.referencia   || prev.referencia,
-            }))
+            setForm(prev => {
+              const ocrMonto = parseMonto(d.monto)
+              return {
+                ...prev,
+                monto:        prev.monto        || (ocrMonto != null ? new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(ocrMonto) : prev.monto),
+                fecha:        prev.fecha        || d.fecha        || prev.fecha,
+                beneficiario: prev.beneficiario || d.beneficiario || prev.beneficiario,
+                referencia:   prev.referencia   || d.referencia   || prev.referencia,
+              }
+            })
           })
-          .catch(() => { /* OCR no disponible — el usuario carga manualmente */ })
+          .catch(() => { setMsg('OCR no disponible — completá el importe manualmente') })
       }
       img.src = base64
     }
@@ -335,15 +351,21 @@ export const Pagos: React.FC = () => {
       if (navigator.share && navigator.canShare) {
         try {
           const img = new Image()
-          img.src = foto
-          await new Promise<void>(r => { img.onload = () => r() })
+          // onload ANTES de src para evitar race condition con data URLs
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve()
+            img.onerror = () => reject(new Error('img'))
+            img.src = foto
+          })
           const canvas = document.createElement('canvas')
-          canvas.width = img.naturalWidth; canvas.height = img.naturalHeight
+          canvas.width = img.naturalWidth || 800; canvas.height = img.naturalHeight || 600
           const ctx = canvas.getContext('2d')!
           ctx.fillStyle = '#ffffff'
           ctx.fillRect(0, 0, canvas.width, canvas.height)
           ctx.drawImage(img, 0, 0)
-          const blob = await new Promise<Blob>(r => canvas.toBlob(b => r(b!), 'image/jpeg', 0.85))
+          const blob = await new Promise<Blob>((resolve, reject) =>
+            canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob')), 'image/jpeg', 0.85)
+          )
           const file = new File([blob], `Pago_${nombre}.jpg`, { type: 'image/jpeg' })
           if (navigator.canShare({ files: [file] })) {
             suppressLockForShare()
