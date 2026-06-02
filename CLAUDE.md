@@ -494,6 +494,27 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
     desde `img.onload` para respetar el aspect ratio correcto en el PDF compartido.
   - `AbortError` (usuario cancela el share sheet) tratado como éxito — no muestra fallback de texto.
 
+### v3.10.2 — Landing rediseñada (junio 2026 — PRs #94-#95)
+
+- **Rediseño completo de la landing** (`/`): reemplaza la versión estática anterior por una experiencia
+  interactiva orientada a conversión.
+  - **Mockups animados**: `ConciliacionMockup` (filas pasando PEND.→OK en loop), `OCRMockup` (idle→scan→
+    campos apareciendo), `AlertaMockup` (push + chat IA en 3 pasos). Todos con `IntersectionObserver`.
+  - **Spotlights 01/02/03**: grid 2 columnas desktop (texto + mockup), stack mobile. Secciones:
+    Conciliación, Cheques con OCR, Asistente IA.
+  - **Calculadora interactiva**: 2 sliders (planillas/mes 1–300, horas/planilla 1–8) → muestra horas
+    ahorradas con Cuadra vs hoy.
+  - **Contadores animados** en stats (easing cúbico, activan al hacer scroll en desktop).
+  - **`StatCounter`** y componentes sub-hero: comparativa Excel vs Cuadra, testimoniales, pricing,
+    FAQ acordeón, closing CTA card verde, contacto directo WhatsApp (sin formulario).
+  - **Cormorant Garamond** 600 italic para `.em-serif` (titulos en verde), reemplaza Fraunces/Playfair.
+  - **`--bg: #FFFFFF`** en modo claro — fix definitivo del fondo gris heredado.
+  - **Sin barra sticky mobile** (se eliminó el bar fijo WhatsApp + Contacto del pie en mobile).
+  - **Steps contacto en línea** (`flexWrap: nowrap`): ya no se rompen en triángulo en mobile.
+  - **Botón WhatsApp en spotlight Conciliación** (visible alto en la página sin hacer scroll hasta el final).
+  - **Script tema síncrono** en `<head>` de `index.html` (previene flash blanco→gris antes de React).
+  - Sin nombres de clientes reales, sin branding Gemini, FAQ con ARCA en vez de AFIP.
+
 ### Pendiente para próximas sesiones
 
 - **Ajuste manual del Libro Diario** (Fase 2): `POST /contabilidad/asiento-manual` — elegís cuenta
@@ -596,7 +617,10 @@ Checkpoints disponibles:
   + `porcentaje_comision_interior`, auto-deriva al crear cheque, UI chip simple % general),
   fix WhatsApp share (suppressLockForShare, fondo blanco canvas, AbortError como éxito)
   (junio 2026 — PRs #90-#92)
+- `v3.10.2` — landing rediseñada: mockups animados (conciliación/OCR/asistente IA), calculadora
+  interactiva, spotlights, comparativa, testimoniales; fondo blanco (#FFFFFF), sin sticky bar mobile,
+  steps contacto en línea, WA en spotlight, script tema síncrono en head (junio 2026 — PRs #94-#95)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.10.1
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.10.2
