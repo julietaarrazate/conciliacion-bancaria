@@ -135,6 +135,11 @@ function fmtNum(n: number) { return n.toLocaleString('es-AR', { minimumFractionD
 
 const MODULO_LABEL: Record<string, string> = {
   extracto: '🏦 Extracto', planilla: '📋 Planilla', caja: '💵 Caja', cheque: '🗒️ Cheque',
+  ajuste_manual: '✏️ Ajuste manual', ajuste_manual_reverso: '↩️ Reverso ajuste',
+  um_lote: '📥 UM lote', um_mov: '📥 UM mov', um_reclass: '🔀 Reclasif.', cc_inicial: '🔁 Backfill',
+  cheque_registro: '🗒️ Cheque registro', cheque_acred_banco: '🗒️ Cheque banco', cheque_acred_cliente: '🗒️ Cheque cliente',
+  cheque_rechazo_banco: '🗒️ Rechazo banco', cheque_rechazo_cliente: '🗒️ Rechazo cliente', cheque_rechazo_gasto: '🗒️ Rechazo gasto',
+  egreso: '💸 Egreso', caja_op: '💵 Caja OP', caja_efectivo: '💵 Efectivo',
 }
 
 // ── Filtro desplegable tipo Excel ────────────────────────────
@@ -445,6 +450,55 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     }
   }
 
+  // ── Ajuste manual ───────────────────────────────────────────────────────────
+  const [ajusteModalOpen, setAjusteModalOpen] = useState(false)
+  const [ajusteGuardando, setAjusteGuardando] = useState(false)
+  const [ajusteError, setAjusteError] = useState('')
+  const [ajusteDebeId, setAjusteDebeId] = useState<number | ''>('')
+  const [ajusteHaberId, setAjusteHaberId] = useState<number | ''>('')
+  const [ajusteMonto, setAjusteMonto] = useState('')
+  const [ajusteFecha, setAjusteFecha] = useState(new Date().toISOString().split('T')[0])
+  const [ajusteDesc, setAjusteDesc] = useState('')
+  const [ajusteDebeBusq, setAjusteDebeBusq] = useState('')
+  const [ajusteHaberBusq, setAjusteHaberBusq] = useState('')
+
+  const submitAjusteManual = async () => {
+    if (!ajusteDebeId || !ajusteHaberId || !ajusteMonto || !ajusteFecha) {
+      setAjusteError('Completá todos los campos obligatorios')
+      return
+    }
+    setAjusteGuardando(true)
+    setAjusteError('')
+    const orgQ = activeOrgId ? `?org_id=${activeOrgId}` : ''
+    try {
+      await apiClient.client.post(`/contabilidad/asiento-manual${orgQ}`, {
+        cuenta_debe_id: ajusteDebeId,
+        cuenta_haber_id: ajusteHaberId,
+        monto: parseFloat(ajusteMonto),
+        fecha: ajusteFecha,
+        descripcion: ajusteDesc,
+      })
+      setAjusteModalOpen(false)
+      setAjusteDebeId(''); setAjusteHaberId(''); setAjusteMonto(''); setAjusteDesc('')
+      setAjusteDebeBusq(''); setAjusteHaberBusq('')
+      recargarTodo()
+    } catch (e: any) {
+      setAjusteError(e.response?.data?.detail || 'Error al guardar')
+    } finally {
+      setAjusteGuardando(false)
+    }
+  }
+
+  const deleteAjusteManual = async (asientoId: number) => {
+    const orgQ = activeOrgId ? `?org_id=${activeOrgId}` : ''
+    try {
+      await apiClient.client.delete(`/contabilidad/asientos/${asientoId}${orgQ}`)
+      recargarTodo()
+    } catch (e: any) {
+      alert(e.response?.data?.detail || 'No se pudo revertir el asiento')
+    }
+  }
+
   const [recuperandoCli, setRecuperandoCli] = useState(false)
   const [recModalOpen, setRecModalOpen] = useState(false)
   const [recCandidatos, setRecCandidatos] = useState<string[]>([])
@@ -521,6 +575,8 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   }
 
   const raices = cuentas.filter(c => c.nivel === 1)
+  const parentIds = new Set(cuentas.map(c => c.parent_id).filter(Boolean))
+  const cuentasHoja = cuentas.filter(c => !parentIds.has(c.id))
   const hijos  = (pid: number) => cuentas.filter(c => c.parent_id === pid)
 
   const renderCuenta = (c: CuentaItem, depth = 0): React.ReactNode => {
@@ -626,6 +682,17 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
         </div>
 
       ) : tab === 'diario' ? (
+        <>
+        {canAdminAccounting && (
+          <div className="flex justify-end mb-3">
+            <button
+              onClick={() => { setAjusteError(''); setAjusteModalOpen(true) }}
+              className="text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark flex items-center gap-1.5"
+            >
+              <span>✏️</span> Ajuste manual
+            </button>
+          </div>
+        )}
         <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
           {asientos.length === 0 && !diarioDesde && !diarioHasta && !diarioModulo && !diarioCuentaId ? (
             <div className="py-16 text-center text-gray-400">
@@ -706,6 +773,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                     </ExcelFilterCtb>
                   </th>
                   <th className="px-3 py-2 font-medium text-left">Descripción</th>
+                  {canAdminAccounting && <th className="w-8 px-2 py-2"></th>}
                 </tr>
               </thead>
               <tbody>
@@ -729,10 +797,21 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                         </td>
                         <td className="px-3 py-2 text-gray-700 dark:text-gray-300"></td>
                         <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{a.descripcion || '—'}</td>
+                        {canAdminAccounting && (
+                          <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
+                            {a.modulo === 'ajuste_manual' && (
+                              <button
+                                onClick={() => { if (confirm('¿Revertir este ajuste manual?')) deleteAjusteManual(a.id) }}
+                                className="text-red-400 hover:text-red-600 dark:hover:text-red-300 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                                title="Revertir ajuste"
+                              >🗑️</button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                       {isOpen && (
                         <tr className="border-b border-gray-100 dark:border-slate-700/50 bg-gray-50/60 dark:bg-slate-800/30">
-                          <td colSpan={6} className="px-6 py-2">
+                          <td colSpan={canAdminAccounting ? 7 : 6} className="px-6 py-2">
                             {isLoading ? (
                               <p className="text-gray-400 py-1">Cargando...</p>
                             ) : !lineas || lineas.length === 0 ? (
@@ -770,13 +849,14 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   )
                 })}
                 {asientos.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-xs">Sin asientos para los filtros aplicados.</td></tr>
+                  <tr><td colSpan={canAdminAccounting ? 7 : 6} className="px-4 py-8 text-center text-gray-400 text-xs">Sin asientos para los filtros aplicados.</td></tr>
                 )}
               </tbody>
             </table></div>
             </>
           )}
         </div>
+        </>
 
       ) : tab === 'sumas' ? (
         <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
@@ -1253,6 +1333,74 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   className="text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
                 >{recGuardando ? 'Recuperando…' : `Recuperar ${recSeleccion.size || ''}`}</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Ajuste Manual ──────────────────────────────────── */}
+      {ajusteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !ajusteGuardando && setAjusteModalOpen(false)}>
+          <div className="bg-white dark:bg-ml-dark-surface rounded-xl shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-200 dark:border-ml-dark-border">
+              <h3 className="text-sm font-semibold text-ml-text dark:text-white">✏️ Ajuste manual del Libro Diario</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Solo cuentas hoja. El asiento es reversible con 🗑️ en la tabla.</p>
+            </div>
+            <div className="p-4 flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">Cuenta Debe *</label>
+                <input type="text" placeholder="Buscar cuenta…" value={ajusteDebeBusq} onChange={e => setAjusteDebeBusq(e.target.value)}
+                  className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full mb-1" />
+                <div className="max-h-36 overflow-y-auto border border-gray-100 dark:border-slate-700 rounded">
+                  {cuentasHoja.filter(c => !ajusteDebeBusq || `${c.codigo} ${c.nombre}`.toLowerCase().includes(ajusteDebeBusq.toLowerCase())).map(c => (
+                    <button key={c.id} onClick={() => { setAjusteDebeId(c.id); setAjusteDebeBusq(`${c.codigo} ${c.nombre}`) }}
+                      className={`w-full text-left px-2 py-1 text-xs hover:bg-gray-50 dark:hover:bg-slate-700 ${ajusteDebeId === c.id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                      <span className="font-mono text-gray-400 mr-1">{c.codigo}</span>{c.nombre}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-orange-600 dark:text-orange-400 mb-1">Cuenta Haber *</label>
+                <input type="text" placeholder="Buscar cuenta…" value={ajusteHaberBusq} onChange={e => setAjusteHaberBusq(e.target.value)}
+                  className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full mb-1" />
+                <div className="max-h-36 overflow-y-auto border border-gray-100 dark:border-slate-700 rounded">
+                  {cuentasHoja.filter(c => !ajusteHaberBusq || `${c.codigo} ${c.nombre}`.toLowerCase().includes(ajusteHaberBusq.toLowerCase())).map(c => (
+                    <button key={c.id} onClick={() => { setAjusteHaberId(c.id); setAjusteHaberBusq(`${c.codigo} ${c.nombre}`) }}
+                      className={`w-full text-left px-2 py-1 text-xs hover:bg-gray-50 dark:hover:bg-slate-700 ${ajusteHaberId === c.id ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                      <span className="font-mono text-gray-400 mr-1">{c.codigo}</span>{c.nombre}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Monto *</label>
+                  <input type="number" min="0.01" step="0.01" placeholder="0.00" value={ajusteMonto} onChange={e => setAjusteMonto(e.target.value)}
+                    className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Fecha *</label>
+                  <input type="date" value={ajusteFecha} onChange={e => setAjusteFecha(e.target.value)}
+                    className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Descripción</label>
+                <input type="text" placeholder="Descripción del ajuste…" value={ajusteDesc} onChange={e => setAjusteDesc(e.target.value)}
+                  className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+              </div>
+              {ajusteError && <p className="text-xs text-red-500">{ajusteError}</p>}
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-ml-dark-border flex justify-end gap-2">
+              <button onClick={() => setAjusteModalOpen(false)} disabled={ajusteGuardando}
+                className="text-xs px-3 py-2 rounded-lg border border-gray-300 dark:border-ml-dark-border text-gray-600 dark:text-zinc-300 disabled:opacity-50">
+                Cancelar
+              </button>
+              <button onClick={submitAjusteManual} disabled={ajusteGuardando || !ajusteDebeId || !ajusteHaberId || !ajusteMonto}
+                className="text-xs px-4 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50">
+                {ajusteGuardando ? 'Guardando…' : 'Registrar asiento'}
+              </button>
             </div>
           </div>
         </div>

@@ -28,8 +28,8 @@ from app.config import get_settings
 
 # Sesión del contador de prueba: más corta (4h) y gateada por aprobación en vivo
 CONTADOR_SESSION_MINUTES = 240
-# El pedido de ingreso pendiente caduca si el superadmin no decide a tiempo
 APPROVAL_REQUEST_TTL_MINUTES = 10
+TWOFA_CODE_TTL_MINUTES = 10
 
 
 def _serialize_user(user: User) -> dict:
@@ -85,6 +85,33 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contraseña inválidos"
         )
+
+    # Superadmin con RESEND_API_KEY → 2FA por email
+    if user.is_superadmin and settings.resend_api_key:
+        from app.models.twofa_code import TwofaCode
+        from app.services.email_sender import send_email
+        import random
+        code = f"{random.randint(0, 999999):06d}"
+        code_hash = hashlib.sha256(code.encode()).hexdigest()
+        expires_at = datetime.utcnow() + timedelta(minutes=TWOFA_CODE_TTL_MINUTES)
+        db.add(TwofaCode(user_id=user.id, code_hash=code_hash, expires_at=expires_at))
+        db.commit()
+        try:
+            send_email(
+                to=user.email,
+                subject="Código de verificación Cuadra",
+                html=f"""<div style="font-family:sans-serif;max-width:400px">
+                  <h2>Código de verificación</h2>
+                  <p>Tu código de acceso a Cuadra:</p>
+                  <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#5E6AD2;padding:16px 0">{code}</div>
+                  <p style="color:#666">Válido por {TWOFA_CODE_TTL_MINUTES} minutos.</p>
+                </div>""",
+            )
+        except Exception as _email_ex:
+            logger.warning("2FA: no se pudo enviar email a %s: %s", user.email, _email_ex)
+            if settings.debug:
+                logger.warning("2FA DEBUG code for %s: %s", user.email, code)
+        return JSONResponse(status_code=202, content={"requires_2fa": True, "email": user.email})
 
     # Contador → flujo de aprobación en vivo
     if user.role == RoleEnum.CONTADOR.value and not user.is_superadmin:
@@ -330,3 +357,34 @@ def logout(
         ))
         db.commit()
     return {"ok": True}
+
+
+class TwofaVerifyBody(BaseModel):
+    email: str
+    code: str
+
+
+@router.post("/verify-2fa")
+@limiter.limit("10/minute")
+def verify_2fa(request: Request, body: TwofaVerifyBody, db: Session = Depends(get_db)):
+    from app.models.twofa_code import TwofaCode
+    user = db.query(User).filter(User.email == body.email, User.is_active == True).first()  # noqa: E712
+    if not user or not user.is_superadmin:
+        raise HTTPException(status_code=401, detail="Código inválido o expirado")
+    code_hash = hashlib.sha256(body.code.strip().encode()).hexdigest()
+    now = datetime.utcnow()
+    entry = (
+        db.query(TwofaCode)
+        .filter(TwofaCode.user_id == user.id, TwofaCode.code_hash == code_hash,
+                TwofaCode.used == False, TwofaCode.expires_at > now)  # noqa: E712
+        .order_by(TwofaCode.id.desc()).first()
+    )
+    if not entry:
+        raise HTTPException(status_code=401, detail="Código inválido o expirado")
+    entry.used = True
+    db.commit()
+    access_token = create_access_token(
+        data={"sub": user.email, "user_id": user.id, "role": user.role},
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+    return {"access_token": access_token, "token_type": "bearer", "user": _serialize_user(user)}

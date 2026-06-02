@@ -3,6 +3,7 @@ import {
   User,
   AuthResponse,
   PendingApproval,
+  TwofaChallenge,
   LoginApprovalStatus,
   PendingRequest,
   ExtractoBancario,
@@ -197,7 +198,7 @@ class ApiClient {
     return res.data
   }
 
-  async login(email: string, password: string): Promise<AuthResponse | PendingApproval> {
+  async login(email: string, password: string): Promise<AuthResponse | PendingApproval | TwofaChallenge> {
     const res = await this.client.post('/auth/login', {
       email,
       password

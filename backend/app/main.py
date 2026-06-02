@@ -35,6 +35,7 @@ from app.models.caja import ArqueoDiario  # noqa: F401
 from app.models.push_subscription import PushSubscription  # noqa: F401
 from app.models.revoked_token import RevokedToken  # noqa: F401
 from app.models.login_approval import LoginApproval  # noqa: F401
+from app.models.twofa_code import TwofaCode  # noqa: F401
 from app.models.organizacion import Organizacion
 
 # ── Decimal → float encoder para SQLAlchemy Numeric columns ──────────────────
@@ -113,6 +114,7 @@ def _run_alembic():
         "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS fisico BOOLEAN DEFAULT FALSE",
         "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS fecha_devolucion DATE",
         "UPDATE cheques SET librador = titular WHERE librador IS NULL AND titular IS NOT NULL",
+        "CREATE TABLE IF NOT EXISTS twofa_codes (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), code_hash VARCHAR NOT NULL, expires_at TIMESTAMP NOT NULL, used BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP DEFAULT NOW())",
     ]
     try:
         from sqlalchemy import text as _text
