@@ -331,10 +331,19 @@ export const Pagos: React.FC = () => {
       // 1️⃣ Intentar compartir como PDF con foto escaneada
       const sharedPdf = await sharePagoPdf(nombre, form.tipo, montoNum, form.fecha, form.forma_pago, form.referencia, foto)
       if (sharedPdf) return
-      // 2️⃣ Fallback: compartir como imagen
+      // 2️⃣ Fallback: compartir como imagen (re-render con fondo blanco para evitar negro en JPEG)
       if (navigator.share && navigator.canShare) {
         try {
-          const blob = await fetch(foto).then(r => r.blob())
+          const img = new Image()
+          img.src = foto
+          await new Promise<void>(r => { img.onload = () => r() })
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth; canvas.height = img.naturalHeight
+          const ctx = canvas.getContext('2d')!
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+          ctx.drawImage(img, 0, 0)
+          const blob = await new Promise<Blob>(r => canvas.toBlob(b => r(b!), 'image/jpeg', 0.85))
           const file = new File([blob], `Pago_${nombre}.jpg`, { type: 'image/jpeg' })
           if (navigator.canShare({ files: [file] })) {
             suppressLockForShare()
