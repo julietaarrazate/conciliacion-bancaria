@@ -529,11 +529,27 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - `useEffect` reactivo para el estado del onboarding (evita bug cuando `activeOrgId` carga después
   del mount inicial y cambia el `localStorage` key).
 
+### v3.11 — Ajuste manual Libro Diario + 2FA superadmin + fix onboarding (junio 2026 — PR #102)
+
+- **Ajuste manual del Libro Diario**: modal en `/contabilidad` → tab Libro Diario, visible solo para
+  `admin_accounting`. Selector de cuenta Debe/Haber con búsqueda (solo cuentas hoja, sin hijos).
+  Monto, fecha, descripción libres. Endpoint `POST /contabilidad/asiento-manual` valida partida doble
+  y que ambas cuentas sean hoja. Botón 🗑️ por fila `ajuste_manual` → `DELETE /contabilidad/asientos/{id}`
+  crea asiento reverso (`ajuste_manual_reverso`), nunca borra físicamente. `registrar_ajuste_manual()`
+  en `motor_contable.py` asigna `numero_asiento` correlativo.
+- **2FA para superadmin por email**: al loguearse, si `RESEND_API_KEY` está seteada en Render, se genera
+  un código de 6 dígitos (SHA256 hasheado, TTL 10 min), se envía por email (asunto "Código de verificación
+  Cuadra") y se retorna `202 {requires_2fa: true, email}`. Nuevo modelo `TwofaCode` (tabla `twofa_codes`,
+  safety net `CREATE TABLE IF NOT EXISTS` en `main.py`). Endpoint `POST /auth/verify-2fa` valida hash,
+  marca `used=True` y entrega JWT. Sin `RESEND_API_KEY` el login sigue sin 2FA (degradación elegante).
+  Frontend: nuevo estado `twofa`, pantalla dedicada con input numérico 6 dígitos (font-mono, tracking-widest),
+  tipo `TwofaChallenge` en `types/index.ts`, return type de `login()` ampliado en `api.ts`.
+- **Fix onboarding checklist**: `dataLoaded` + `Promise.all` para carga paralela de extractos y planillas.
+  El checklist solo renderiza después de que los datos cargaron (evita flash de 1-2 s). Auto-dismiss
+  inmediato cuando los 3 pasos ya están completos al cargar (orgs con datos existentes nunca ven el widget).
+
 ### Pendiente para próximas sesiones
 
-- **Ajuste manual del Libro Diario** (Fase 2): `POST /contabilidad/asiento-manual` — elegís cuenta
-  Debe, cuenta Haber, monto, fecha, descripción. Solo cuentas hoja, valida partida doble, módulo
-  `ajuste_manual`. Borrable con reverso. Modal en `/contabilidad`.
 - **Liquidaciones con asientos** — consultar con contador si las liquidaciones deben generar
   entradas contables al aprobar/pagar.
 - **Botones de borrar ocultos** — mostrar/ocultar según permiso `delete_records` en el frontend
@@ -636,7 +652,11 @@ Checkpoints disponibles:
   steps contacto en línea, WA en spotlight, script tema síncrono en head (junio 2026 — PRs #94-#95)
 - `v3.10.3` — dashboard onboarding checklist (3 pasos, barra progreso, dismiss por org) + alertas
   widget (chips cheques/planillas/movimientos, light+dark mode, navega al módulo) (junio 2026 — PR #100)
+- `v3.11` — ajuste manual Libro Diario (modal con cuentas hoja, reverso no destructivo), 2FA superadmin
+  por email (código 6 dígitos SHA256, TTL 10 min, modelo TwofaCode, degradación elegante sin RESEND_API_KEY),
+  fix onboarding checklist (dataLoaded + Promise.all, auto-dismiss inmediato en orgs con datos)
+  (junio 2026 — PR #102)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.10.3
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11

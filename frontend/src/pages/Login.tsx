@@ -21,6 +21,10 @@ export const Login: React.FC = () => {
   // Aprobación en vivo (rol contador)
   const [pending, setPending] = useState<{ id: number; secret: string } | null>(null)
   const pollRef = useRef<number | null>(null)
+  // 2FA superadmin
+  const [twofa, setTwofa] = useState<{ email: string } | null>(null)
+  const [twofaCode, setTwofaCode] = useState('')
+  const [twofaLoading, setTwofaLoading] = useState(false)
 
   // Polling del estado de aprobación mientras esperamos al superadmin
   useEffect(() => {
@@ -58,18 +62,43 @@ export const Login: React.FC = () => {
     }
   }, [pending, setUser, setToken, forceUnlock, navigate])
 
+  const handleTwofaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setTwofaLoading(true)
+    try {
+      const res = await apiClient.client.post('/auth/verify-2fa', {
+        email: twofa!.email,
+        code: twofaCode.trim(),
+      })
+      const data = res.data
+      setUser(data.user)
+      setToken(data.access_token)
+      forceUnlock()
+      navigate('/dashboard')
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Código inválido o expirado')
+    } finally {
+      setTwofaLoading(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
       const response = await apiClient.login(formData.email, formData.password)
-      if ('pending_approval' in response) {
-        setPending({ id: response.approval_id, secret: response.poll_secret })
+      if ('requires_2fa' in response) {
+        setTwofa({ email: (response as any).email })
         return
       }
-      setUser(response.user)
-      setToken(response.access_token)
+      if ('pending_approval' in response) {
+        setPending({ id: (response as any).approval_id, secret: (response as any).poll_secret })
+        return
+      }
+      setUser((response as any).user)
+      setToken((response as any).access_token)
       forceUnlock()
       navigate('/dashboard')
     } catch (err: any) {
@@ -84,13 +113,18 @@ export const Login: React.FC = () => {
           await new Promise(r => setTimeout(r, 8000))
           try {
             const response2 = await apiClient.login(formData.email, formData.password)
-            if ('pending_approval' in response2) {
+            if ('requires_2fa' in response2) {
               setWaking(false)
-              setPending({ id: response2.approval_id, secret: response2.poll_secret })
+              setTwofa({ email: (response2 as any).email })
               return
             }
-            setUser(response2.user)
-            setToken(response2.access_token)
+            if ('pending_approval' in response2) {
+              setWaking(false)
+              setPending({ id: (response2 as any).approval_id, secret: (response2 as any).poll_secret })
+              return
+            }
+            setUser((response2 as any).user)
+            setToken((response2 as any).access_token)
             forceUnlock()
             setWaking(false)
             navigate('/dashboard')
@@ -133,7 +167,62 @@ export const Login: React.FC = () => {
         {/* Card */}
         <div className="bg-white dark:bg-ml-dark-surface rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-ml-dark-border dark:shadow-none">
 
-          {pending ? (
+          {twofa ? (
+            <div className="py-4">
+              <div className="text-center mb-5">
+                <div className="text-4xl mb-3">📧</div>
+                <h2 className="text-lg font-semibold text-ml-text dark:text-white mb-1">
+                  Verificación en dos pasos
+                </h2>
+                <p className="text-sm text-ml-text-soft dark:text-zinc-400">
+                  Ingresá el código que enviamos a
+                </p>
+                <p className="text-sm font-medium text-ml-text dark:text-white mt-1">
+                  {twofa.email}
+                </p>
+              </div>
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm dark:bg-red-950/40 dark:border-red-800/50 dark:text-red-400">
+                  {error}
+                </div>
+              )}
+              <form onSubmit={handleTwofaSubmit} className="space-y-4">
+                <div>
+                  <label className="label">Código de 6 dígitos</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    className="input-field text-center font-mono text-2xl tracking-widest"
+                    placeholder="000000"
+                    value={twofaCode}
+                    onChange={(e) => setTwofaCode(e.target.value.replace(/\D/g, ''))}
+                    autoFocus
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="btn-yellow w-full py-3 text-base"
+                  disabled={twofaLoading || twofaCode.length < 6}
+                >
+                  {twofaLoading
+                    ? <span className="font-mono tracking-widest">verificando...</span>
+                    : 'Verificar'}
+                </button>
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => { setTwofa(null); setTwofaCode(''); setError('') }}
+                    className="text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-green transition-colors"
+                  >
+                    Volver al login
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : pending ? (
             <div className="text-center py-6">
               <div className="text-4xl mb-4 animate-pulse">🔐</div>
               <h2 className="text-lg font-semibold text-ml-text dark:text-white mb-2">

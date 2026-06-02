@@ -1169,3 +1169,103 @@ def reset_y_rebuild_asientos(
         db.rollback()
         logger.error("reset-y-rebuild error: %s", ex)
         raise HTTPException(status_code=500, detail=str(ex))
+
+
+# ── Ajuste manual del Libro Diario ──────────────────────────────────────────
+
+class AsientoManualIn(BaseModel):
+    cuenta_debe_id: int
+    cuenta_haber_id: int
+    monto: float
+    fecha: str
+    descripcion: str
+
+
+@router.post("/asiento-manual")
+def post_asiento_manual(
+    body: AsientoManualIn,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    from decimal import Decimal, InvalidOperation
+    from datetime import date as _date
+    from app.services.motor_contable import registrar_ajuste_manual
+
+    oid = _org_id(current_user, org_id)
+    cuenta_debe = db.query(PlanCuenta).filter(PlanCuenta.id == body.cuenta_debe_id, PlanCuenta.organizacion_id == oid).first()
+    cuenta_haber = db.query(PlanCuenta).filter(PlanCuenta.id == body.cuenta_haber_id, PlanCuenta.organizacion_id == oid).first()
+    if not cuenta_debe or not cuenta_haber:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+    if body.cuenta_debe_id == body.cuenta_haber_id:
+        raise HTTPException(status_code=400, detail="Las cuentas Debe y Haber no pueden ser la misma")
+    for c in (cuenta_debe, cuenta_haber):
+        if db.query(PlanCuenta).filter(PlanCuenta.parent_id == c.id).first():
+            raise HTTPException(status_code=400, detail=f"'{c.nombre}' no es cuenta hoja (tiene subcuentas)")
+    try:
+        monto = Decimal(str(body.monto))
+    except InvalidOperation:
+        raise HTTPException(status_code=400, detail="Monto inválido")
+    if monto <= 0:
+        raise HTTPException(status_code=400, detail="El monto debe ser mayor que cero")
+    try:
+        fecha = _date.fromisoformat(body.fecha)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Fecha inválida")
+    try:
+        asiento_id = registrar_ajuste_manual(
+            db=db, org_id=oid, usuario_id=current_user.id,
+            cuenta_debe_id=cuenta_debe.id, cuenta_haber_id=cuenta_haber.id,
+            monto=monto, fecha=fecha,
+            descripcion=body.descripcion.strip() or f"Ajuste manual: {cuenta_debe.nombre} / {cuenta_haber.nombre}",
+        )
+        db.commit()
+        return {"ok": True, "asiento_id": asiento_id}
+    except Exception as ex:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+@router.delete("/asientos/{asiento_id}")
+def delete_asiento_manual(
+    asiento_id: int,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    from app.services.motor_contable import _next_numero_asiento
+    from datetime import date as _date
+
+    oid = _org_id(current_user, org_id)
+    asiento = db.query(Asiento).filter(Asiento.id == asiento_id, Asiento.organizacion_id == oid).first()
+    if not asiento:
+        raise HTTPException(status_code=404, detail="Asiento no encontrado")
+    if asiento.modulo != "ajuste_manual":
+        raise HTTPException(status_code=400, detail="Solo se pueden revertir asientos de ajuste manual")
+    ya_reversado = db.query(Asiento).filter(
+        Asiento.modulo == "ajuste_manual_reverso",
+        Asiento.referencia_id == asiento_id,
+        Asiento.organizacion_id == oid,
+    ).first()
+    if ya_reversado:
+        raise HTTPException(status_code=400, detail="Este asiento ya fue revertido")
+    lineas_orig = db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id == asiento_id).all()
+    try:
+        reverso = Asiento(
+            fecha=_date.today(),
+            descripcion=f"REVERSO #{asiento_id}: {asiento.descripcion or ''} — Revertido manualmente",
+            modulo="ajuste_manual_reverso",
+            referencia_id=asiento_id,
+            organizacion_id=oid,
+            usuario_id=current_user.id,
+            numero_asiento=_next_numero_asiento(db, oid),
+        )
+        db.add(reverso)
+        db.flush()
+        for linea in lineas_orig:
+            db.add(AsientoDetalle(asiento_id=reverso.id, cuenta_id=linea.cuenta_id, debe=linea.haber, haber=linea.debe))
+        db.commit()
+        return {"ok": True, "reverso_id": reverso.id}
+    except Exception as ex:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(ex))

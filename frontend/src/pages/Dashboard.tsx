@@ -195,6 +195,7 @@ export const Dashboard: React.FC = () => {
   const isDark = useThemeStore(s => s.theme === 'dark')
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [planillas, setPlanillas] = useState<PlanillaHistorialItem[]>([])
+  const [dataLoaded, setDataLoaded] = useState(false)
   const onboardingKey = `onboarding-dismissed-${activeOrgId ?? 'default'}`
   const [onboardingVisible, setOnboardingVisible] = useState(true)
   useEffect(() => {
@@ -288,14 +289,19 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     setExtractoId(null)
     setExtractoNombre('')
-    apiClient.listExtractos(activeOrgId).then((data) => {
-      setExtractos(data.items)
-      if (data.items.length > 0) {
-        setExtractoId(data.items[0].id)
-        setExtractoNombre(data.items[0].nombre_archivo)
+    setDataLoaded(false)
+    Promise.all([
+      apiClient.listExtractos(activeOrgId),
+      apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }),
+    ]).then(([extData, planData]) => {
+      setExtractos(extData.items)
+      if (extData.items.length > 0) {
+        setExtractoId(extData.items[0].id)
+        setExtractoNombre(extData.items[0].nombre_archivo)
       }
+      setPlanillas(planData.items)
+      setDataLoaded(true)
     })
-    apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then((d) => setPlanillas(d.items))
   }, [activeOrgId])
 
   const refreshExtractos = async () => {
@@ -448,6 +454,13 @@ export const Dashboard: React.FC = () => {
     try { localStorage.setItem(onboardingKey, '1') } catch {}
     setOnboardingVisible(false)
   }
+  // Auto-dismiss once data loads if all 3 onboarding steps are already done
+  useEffect(() => {
+    if (dataLoaded && onboardingVisible && extractos.length > 0 && planillas.length > 0 && tieneConciliacion) {
+      handleDismissOnboarding()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataLoaded])
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
@@ -466,7 +479,7 @@ export const Dashboard: React.FC = () => {
 
       <AlertasWidget orgId={activeOrgId} isDark={isDark} />
 
-      {onboardingVisible && (
+      {dataLoaded && onboardingVisible && (
         <OnboardingChecklist
           tieneExtracto={extractos.length > 0}
           tienePlanilla={planillas.length > 0}

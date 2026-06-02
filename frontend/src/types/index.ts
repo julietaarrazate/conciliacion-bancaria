@@ -40,6 +40,11 @@ export interface LoginApprovalStatus {
   user?: User
 }
 
+export interface TwofaChallenge {
+  requires_2fa: true
+  email: string
+}
+
 export interface PendingRequest {
   id: number
   user_email: string

@@ -927,3 +927,32 @@ def reversar_asientos(
         db.rollback()
         logger.warning("Error reversando %s/%s: %s", modulo, referencia_id, ex)
         return 0
+
+
+def registrar_ajuste_manual(
+    db: Session,
+    org_id: int,
+    usuario_id: int,
+    cuenta_debe_id: int,
+    cuenta_haber_id: int,
+    monto: Decimal,
+    fecha: date,
+    descripcion: str,
+) -> int:
+    """Crea un asiento de ajuste manual. Retorna el ID del asiento creado.
+    NO es idempotente — cada llamada crea un asiento nuevo.
+    """
+    a = Asiento(
+        fecha=fecha,
+        descripcion=descripcion,
+        modulo="ajuste_manual",
+        referencia_id=None,
+        organizacion_id=org_id,
+        usuario_id=usuario_id,
+        numero_asiento=_next_numero_asiento(db, org_id),
+    )
+    db.add(a)
+    db.flush()
+    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_debe_id, debe=monto, haber=Decimal("0")))
+    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_haber_id, debe=Decimal("0"), haber=monto))
+    return a.id
