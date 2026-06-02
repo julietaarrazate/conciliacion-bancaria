@@ -15,7 +15,7 @@ interface AuthState {
 
 const rolePermissions: Record<UserRole, string[]> = {
   [UserRole.ADMIN]: ['upload_files', 'reconcile', 'manage_users', 'view_audit', 'view_accounting', 'manage_finance', 'admin_accounting', 'delete_records'],
-  [UserRole.OPERADOR]: ['upload_files', 'reconcile', 'manage_finance', 'view_accounting', 'delete_records'],
+  [UserRole.OPERADOR]: ['upload_files', 'reconcile', 'manage_finance', 'view_accounting'],
   [UserRole.REVISOR]: ['view_results', 'view_accounting'],
   [UserRole.AUDITOR]: ['view_audit', 'view_accounting', 'manage_finance'],
   // Contador de prueba: opera (sube, concilia, finanzas, liquidaciones) y ve
