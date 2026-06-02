@@ -451,54 +451,40 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     }
   }
 
-  const fixFechasUtc = async () => {
+  // ── Fix fechas UTC — modal propio (reemplaza window.prompt que no anda en mobile) ──
+  const [fixFechasOpen, setFixFechasOpen] = useState(false)
+  const [fixDesde, setFixDesde] = useState('2026-05-31')
+  const [fixHasta, setFixHasta] = useState('2026-06-02')
+  const [fixDir, setFixDir] = useState<'adelantar' | 'atrasar'>('adelantar')
+  const [fixPreview, setFixPreview] = useState<null | { asientos_afectados: number; egresos_afectados: number; detalle_asientos: any[]; detalle_egresos: any[] }>(null)
+  const [fixLoading, setFixLoading] = useState(false)
+  const [fixMsg, setFixMsg] = useState('')
+
+  const fixFechasDryRun = async () => {
+    setFixLoading(true); setFixMsg(''); setFixPreview(null)
     const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
-
-    // Pedir al usuario el rango y la dirección
-    const rango = window.prompt(
-      '🕐 CORRECCIÓN DE FECHAS EN LIBRO DIARIO\n\n' +
-      'Ingresá el rango de fechas a corregir (formato YYYY-MM-DD):\n' +
-      'desde,hasta,dirección\n\n' +
-      'Dirección:\n' +
-      '  • adelantar → suma 1 día (fechas muestran 1 día antes de lo correcto)\n' +
-      '  • atrasar   → resta 1 día (fechas muestran 1 día después de lo correcto)\n\n' +
-      'Ejemplo: 2026-05-31,2026-06-01,adelantar',
-      '2026-05-31,2026-06-02,adelantar'
-    )
-    if (!rango) return
-    const parts = rango.split(',').map(s => s.trim())
-    if (parts.length < 2) { alert('Formato incorrecto'); return }
-    const [desde, hasta, dir = 'adelantar'] = parts
-    if (!['adelantar', 'atrasar'].includes(dir)) { alert('Dirección debe ser "adelantar" o "atrasar"'); return }
-
     try {
-      const q = `dry_run=true&desde=${desde}&hasta=${hasta}&direccion=${dir}${orgQ}`
-      const prev = await apiClient.client.post(`/contabilidad/fix-fechas-utc?${q}`)
-      const { asientos_afectados, egresos_afectados, detalle_asientos, detalle_egresos } = prev.data
-      if (asientos_afectados === 0 && egresos_afectados === 0) {
-        alert(`✓ No hay asientos ni egresos en el rango ${desde} – ${hasta}.\nNada que corregir.`)
-        return
-      }
-      const preview = [...detalle_asientos, ...detalle_egresos].slice(0, 6).map((a: any) =>
-        `  #${a.id} · ${a.fecha_actual} · ${a.modulo || 'egreso'} — ${a.descripcion}`
-      ).join('\n')
-      const accionLabel = dir === 'adelantar' ? '+1 día (ej: 31/05 → 01/06)' : '−1 día (ej: 01/06 → 31/05)'
-      const confirmar = window.confirm(
-        `🕐 CORRECCIÓN DE FECHAS\n\n` +
-        `Rango: ${desde} – ${hasta} · Dirección: ${accionLabel}\n` +
-        `Afectados: ${asientos_afectados} asientos + ${egresos_afectados} egresos\n\n` +
-        `Muestra:\n${preview || '  (ninguno)'}` +
-        (asientos_afectados + egresos_afectados > 6 ? `\n  ...y más` : '') +
-        `\n\n¿Confirmar?`
-      )
-      if (!confirmar) return
-      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=false&desde=${desde}&hasta=${hasta}&direccion=${dir}${orgQ}`)
-      alert(`✓ ${r.data.mensaje}`)
+      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=true&desde=${fixDesde}&hasta=${fixHasta}&direccion=${fixDir}${orgQ}`)
+      setFixPreview(r.data)
+    } catch (e: any) {
+      setFixMsg(`❌ ${e.response?.data?.detail || e.message}`)
+    } finally { setFixLoading(false) }
+  }
+
+  const fixFechasEjecutar = async () => {
+    setFixLoading(true); setFixMsg('')
+    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    try {
+      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=false&desde=${fixDesde}&hasta=${fixHasta}&direccion=${fixDir}${orgQ}`)
+      setFixMsg(`✓ ${r.data.mensaje}`)
+      setFixPreview(null)
       recargarTodo()
     } catch (e: any) {
-      alert(`❌ Error: ${e.response?.data?.detail || e.message}`)
-    }
+      setFixMsg(`❌ ${e.response?.data?.detail || e.message}`)
+    } finally { setFixLoading(false) }
   }
+
+  const fixFechasUtc = () => { setFixFechasOpen(true); setFixPreview(null); setFixMsg('') }
 
   // ── Ajuste manual ───────────────────────────────────────────────────────────
   const [ajusteModalOpen, setAjusteModalOpen] = useState(false)
@@ -1460,6 +1446,80 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                 className="text-xs px-4 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50">
                 {ajusteGuardando ? 'Guardando…' : 'Registrar asiento'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Fix Fechas UTC ───────────────────────────────────────── */}
+      {fixFechasOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-ml-dark-surface rounded-2xl shadow-xl w-full max-w-md">
+            <div className="p-4 border-b border-gray-200 dark:border-ml-dark-border flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900 dark:text-white text-sm">🕐 Corrección de fechas en Libro Diario</h3>
+              <button onClick={() => setFixFechasOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-gray-500 dark:text-zinc-400">
+                Corrige egresos o asientos cuya fecha quedó 1 día adelantada o atrasada por diferencia UTC/ART.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Desde</label>
+                  <input type="date" value={fixDesde} onChange={e => { setFixDesde(e.target.value); setFixPreview(null) }}
+                    className="input-field w-full text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Hasta</label>
+                  <input type="date" value={fixHasta} onChange={e => { setFixHasta(e.target.value); setFixPreview(null) }}
+                    className="input-field w-full text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Dirección</label>
+                <select value={fixDir} onChange={e => { setFixDir(e.target.value as any); setFixPreview(null) }}
+                  className="input-field w-full text-sm">
+                  <option value="adelantar">Adelantar +1 día (muestran 1 día antes de lo correcto)</option>
+                  <option value="atrasar">Atrasar −1 día (muestran 1 día después de lo correcto)</option>
+                </select>
+              </div>
+
+              {fixPreview && (
+                <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-3 text-xs space-y-1">
+                  <p className="font-semibold text-orange-800 dark:text-orange-300">
+                    Afectados: {fixPreview.asientos_afectados} asientos + {fixPreview.egresos_afectados} egresos
+                  </p>
+                  {[...fixPreview.detalle_asientos, ...fixPreview.detalle_egresos].slice(0, 5).map((a: any, i) => (
+                    <p key={i} className="text-orange-700 dark:text-orange-400 truncate">
+                      #{a.id} · {a.fecha_actual} → {a.fecha_nueva} · {a.descripcion}
+                    </p>
+                  ))}
+                  {(fixPreview.asientos_afectados + fixPreview.egresos_afectados) > 5 && (
+                    <p className="text-orange-600 dark:text-orange-500">…y más</p>
+                  )}
+                </div>
+              )}
+
+              {fixMsg && (
+                <p className={`text-xs rounded-lg px-3 py-2 ${fixMsg.startsWith('✓') ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'}`}>
+                  {fixMsg}
+                </p>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-ml-dark-border flex flex-wrap justify-end gap-2">
+              <button onClick={() => setFixFechasOpen(false)} className="text-xs px-3 py-2 rounded-lg border border-gray-300 dark:border-ml-dark-border text-gray-600 dark:text-zinc-300">
+                Cerrar
+              </button>
+              <button onClick={fixFechasDryRun} disabled={fixLoading || !fixDesde || !fixHasta}
+                className="text-xs px-3 py-2 rounded-lg border border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50">
+                {fixLoading && !fixPreview ? 'Buscando…' : '🔍 Vista previa'}
+              </button>
+              {fixPreview && (fixPreview.asientos_afectados + fixPreview.egresos_afectados) > 0 && (
+                <button onClick={fixFechasEjecutar} disabled={fixLoading}
+                  className="text-xs px-4 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 disabled:opacity-50">
+                  {fixLoading ? 'Corrigiendo…' : `✓ Corregir ${fixPreview.asientos_afectados + fixPreview.egresos_afectados} registros`}
+                </button>
+              )}
             </div>
           </div>
         </div>
