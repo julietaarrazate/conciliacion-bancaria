@@ -12,6 +12,127 @@ import {
   PlanillaHistorialItem
 } from '@/types'
 
+// ── OnboardingChecklist ────────────────────────────────────────────────────────
+const OnboardingChecklist: React.FC<{
+  tieneExtracto: boolean
+  tienePlanilla: boolean
+  tieneConciliacion: boolean
+  orgId: number | null
+  onDismiss: () => void
+  onUploadPlanilla: () => void
+}> = ({ tieneExtracto, tienePlanilla, tieneConciliacion, orgId, onDismiss, onUploadPlanilla }) => {
+  const navigate = useNavigate()
+  const steps = [
+    {
+      done: tieneExtracto,
+      title: 'Subir el extracto bancario',
+      desc: 'Exportá el Excel de tu banco (Macro, BBVA, Santander…) y subilo acá.',
+      action: { label: 'Subir extracto', onClick: () => navigate('/extractos-archivo') },
+    },
+    {
+      done: tienePlanilla,
+      title: 'Cargar la planilla de un cliente',
+      desc: 'Subí la planilla de pagos con nombre del cliente, monto y referencia.',
+      action: { label: 'Cargar planilla', onClick: onUploadPlanilla },
+    },
+    {
+      done: tieneConciliacion,
+      title: 'Ver tu primera conciliación',
+      desc: 'El motor cruza automáticamente y marca cada fila como OK o pendiente.',
+      action: null,
+    },
+  ]
+  const done = steps.filter(s => s.done).length
+  const allDone = done === steps.length
+  if (allDone) return null
+
+  return (
+    <div style={{
+      marginBottom: 24,
+      borderRadius: 14,
+      border: '1px solid #E4E4E7',
+      background: '#FFFFFF',
+      overflow: 'hidden',
+    }} className="dark:bg-ml-dark-surface dark:border-ml-dark-border">
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid #F0F0F0' }} className="dark:border-ml-dark-border">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>🚀</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }} className="dark:text-white">
+              Primeros pasos
+            </div>
+            <div style={{ fontSize: 11, color: '#71717A', marginTop: 1 }}>
+              {done} de {steps.length} completados
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Progress bar */}
+          <div style={{ width: 80, height: 5, borderRadius: 3, background: '#F0F0F0', overflow: 'hidden' }} className="dark:bg-ml-dark-border">
+            <div style={{ width: `${(done / steps.length) * 100}%`, height: '100%', background: '#22C55E', borderRadius: 3, transition: 'width 0.4s ease' }} />
+          </div>
+          <button
+            onClick={onDismiss}
+            style={{ fontSize: 12, color: '#71717A', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 6 }}
+            title="Ocultar"
+          >✕</button>
+        </div>
+      </div>
+      {/* Steps */}
+      <div style={{ padding: '8px 0' }}>
+        {steps.map((s, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'flex-start', gap: 14,
+            padding: '12px 18px',
+            opacity: s.done ? 0.5 : 1,
+            transition: 'opacity 0.3s',
+          }}>
+            {/* Icon */}
+            <div style={{
+              width: 28, height: 28, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: s.done ? '#22C55E' : '#F4F4F5',
+              border: s.done ? 'none' : '2px solid #E4E4E7',
+              transition: 'all 0.3s',
+            }} className={s.done ? '' : 'dark:bg-ml-dark-card dark:border-ml-dark-border'}>
+              {s.done
+                ? <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5L5.5 10.5L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                : <span style={{ fontSize: 11, fontWeight: 700, color: '#A1A1AA' }}>{i + 1}</span>
+              }
+            </div>
+            {/* Text */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: s.done ? '#71717A' : '#111', marginBottom: 2 }} className={s.done ? '' : 'dark:text-white'}>
+                {s.done && <span style={{ marginRight: 6, color: '#22C55E' }}>✓</span>}{s.title}
+              </div>
+              {!s.done && (
+                <div style={{ fontSize: 12, color: '#71717A', lineHeight: 1.5 }}>{s.desc}</div>
+              )}
+            </div>
+            {/* Action */}
+            {!s.done && s.action && (
+              <button
+                onClick={s.action.onClick}
+                style={{
+                  flexShrink: 0, fontSize: 12, fontWeight: 600,
+                  padding: '6px 14px', borderRadius: 8,
+                  background: '#22C55E', color: '#000', border: 'none', cursor: 'pointer',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#16A34A')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#22C55E')}
+              >
+                {s.action.label}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function fmtFecha(s: string) {
   if (!s) return '—'
   try {
@@ -27,6 +148,10 @@ export const Dashboard: React.FC = () => {
   const { activeOrgId, activeOrgNombre } = useOrgStore()
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [planillas, setPlanillas] = useState<PlanillaHistorialItem[]>([])
+  const onboardingKey = `onboarding-dismissed-${activeOrgId ?? 'default'}`
+  const [onboardingVisible, setOnboardingVisible] = useState(() => {
+    try { return localStorage.getItem(`onboarding-dismissed-${activeOrgId ?? 'default'}`) !== '1' } catch { return true }
+  })
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [extractoNombre, setExtractoNombre] = useState<string>('')
   const [clienteNombre, setClienteNombre] = useState('')
@@ -270,6 +395,12 @@ export const Dashboard: React.FC = () => {
   const fmtMonto = (n: number) =>
     n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 
+  const tieneConciliacion = planillas.some(p => p.acreditadas > 0)
+  const handleDismissOnboarding = () => {
+    try { localStorage.setItem(onboardingKey, '1') } catch {}
+    setOnboardingVisible(false)
+  }
+
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="mb-6">
@@ -284,6 +415,20 @@ export const Dashboard: React.FC = () => {
           </p>
         )}
       </div>
+
+      {onboardingVisible && (
+        <OnboardingChecklist
+          tieneExtracto={extractos.length > 0}
+          tienePlanilla={planillas.length > 0}
+          tieneConciliacion={tieneConciliacion}
+          orgId={activeOrgId}
+          onDismiss={handleDismissOnboarding}
+          onUploadPlanilla={() => {
+            setTab('individual')
+            setTimeout(() => document.getElementById('upload-planilla-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+          }}
+        />
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-slate-700">
@@ -509,7 +654,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Paso 2: Cliente + Planilla */}
-        <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-5 shadow-sm">
+        <div id="upload-planilla-section" className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/15 text-violet-500 dark:text-violet-400 text-xs font-bold shrink-0">2</span>
             <h3 className="text-sm font-semibold text-gray-800 dark:text-white tracking-tight">
