@@ -342,12 +342,16 @@ export const Cheques: React.FC = () => {
   const [depositoLoading, setDepositoLoading] = useState(false)
   const [exportandoDeposito, setExportandoDeposito] = useState(false)
 
-  // Form modal
+  // Form modal (create + edit)
   const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId]     = useState<number | null>(null)
   const [formData, setFormData] = useState<FormState>(emptyForm())
   const [formFoto, setFormFoto] = useState<string | null>(null)
   const [saving, setSaving]     = useState(false)
   const fotoInputRef            = useRef<HTMLInputElement>(null)
+
+  // Export todos
+  const [exportandoTodos, setExportandoTodos] = useState(false)
 
   // Banco accounts for acreditación
   const [bancoCuentas, setBancoCuentas] = useState<BancoCuenta[]>([])
@@ -533,12 +537,34 @@ export const Cheques: React.FC = () => {
     } catch { /* OCR no disponible */ }
   }
 
-  const handleCreate = async () => {
+  const handleOpenEdit = (c: Cheque) => {
+    setEditId(c.id)
+    setFormData({
+      cliente_id:          c.cliente_id,
+      portador_id:         c.portador_id,
+      numero:              c.numero || '',
+      banco_origen:        c.banco_origen || '',
+      librador:            c.librador || c.titular || '',
+      codigo_postal:       c.codigo_postal || '',
+      local_interior:      c.local_interior || '',
+      monto:               c.monto,
+      comision:            c.comision,
+      porcentaje_comision: c.porcentaje_comision,
+      fecha_emision:       c.fecha_emision || '',
+      fecha_deposito:      c.fecha_deposito || '',
+      notas:               c.notas || '',
+    })
+    setFormFoto(null)
+    setMsg('')
+    setShowForm(true)
+  }
+
+  const handleSave = async () => {
     if (!formData.monto || formData.monto <= 0) { setMsg('El monto es requerido'); return }
     setSaving(true); setMsg('')
     try {
       const li = formData.local_interior || computeLI(formData.codigo_postal)
-      const res = await apiClient.client.post('/cheques', {
+      const payload = {
         cliente_id:          formData.cliente_id || null,
         portador_id:         formData.portador_id || null,
         numero:              formData.numero || null,
@@ -552,12 +578,37 @@ export const Cheques: React.FC = () => {
         fecha_emision:       formData.fecha_emision || null,
         fecha_deposito:      formData.fecha_deposito || null,
         notas:               formData.notas || null,
-      })
-      if (formFoto && res.data.id)
-        await apiClient.client.post(`/cheques/${res.data.id}/foto`, { foto_base64: formFoto })
-      setShowForm(false); setFormData(emptyForm()); setFormFoto(null); load()
+      }
+      let id: number
+      if (editId) {
+        const res = await apiClient.client.patch(`/cheques/${editId}`, payload)
+        id = res.data.id
+      } else {
+        const res = await apiClient.client.post('/cheques', payload)
+        id = res.data.id
+        if (formFoto && id)
+          await apiClient.client.post(`/cheques/${id}/foto`, { foto_base64: formFoto })
+      }
+      setShowForm(false); setEditId(null); setFormData(emptyForm()); setFormFoto(null); load()
     } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al guardar') }
     finally { setSaving(false) }
+  }
+
+  const handleExportarTodos = async () => {
+    setExportandoTodos(true)
+    try {
+      const params: Record<string, string | number> = {}
+      if (activeOrgId)   params.org_id    = activeOrgId
+      if (filtroEstado)  params.estado     = filtroEstado
+      if (filtroCliente) params.cliente_id = filtroCliente
+      if (filtroDesde)   params.desde      = filtroDesde
+      if (filtroHasta)   params.hasta      = filtroHasta
+      const res = await apiClient.client.get('/cheques/exportar', { params, responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a'); a.href = url; a.download = 'cheques.xlsx'; a.click()
+      URL.revokeObjectURL(url)
+    } catch { setMsg('Error al exportar') }
+    finally { setExportandoTodos(false) }
   }
 
   const handleAcreditar = async () => {
@@ -711,13 +762,17 @@ export const Cheques: React.FC = () => {
 
           <p className="text-xs text-gray-500 mt-0.5">Registro y seguimiento de cheques de terceros</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportExcel} />
           <button onClick={() => importRef.current?.click()} disabled={importando}
             className="px-3 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-50">
             {importando ? 'Importando…' : '↑ Importar Excel'}
           </button>
-          <button onClick={() => { setShowForm(true); setFormData(emptyForm()); setFormFoto(null); setMsg('') }}
+          <button onClick={handleExportarTodos} disabled={exportandoTodos}
+            className="px-3 py-1.5 bg-green-100 hover:bg-green-200 dark:bg-green-700/30 dark:hover:bg-green-700/50 text-green-700 dark:text-green-400 text-sm rounded-lg transition-colors disabled:opacity-50">
+            {exportandoTodos ? 'Exportando…' : '↓ Excel'}
+          </button>
+          <button onClick={() => { setEditId(null); setShowForm(true); setFormData(emptyForm()); setFormFoto(null); setMsg('') }}
             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
             + Nuevo cheque
           </button>
@@ -839,6 +894,9 @@ export const Cheques: React.FC = () => {
                             title="Compartir">📤</button>
                           {esRegistrado(c.estado) && (
                             <>
+                              <button onClick={() => handleOpenEdit(c)}
+                                className="px-2 py-0.5 bg-gray-50 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 rounded text-xs transition-colors"
+                                title="Editar">✏️</button>
                               <button onClick={() => { setAcreditarId(c.id); setAcreditarFecha(''); setAcreditarBancoId('') }}
                                 className="px-2 py-0.5 bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-600/20 dark:hover:bg-green-600/40 dark:text-green-400 rounded text-xs transition-colors">Acreditar</button>
                               {canDelete && <button onClick={() => handleDelete(c.id)}
@@ -1098,8 +1156,8 @@ export const Cheques: React.FC = () => {
           onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div className="bg-white dark:bg-[#16161A] border border-gray-200 dark:border-white/10 rounded-xl p-5 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Nuevo cheque</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-300 text-xl leading-none">×</button>
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{editId ? 'Editar cheque' : 'Nuevo cheque'}</h2>
+              <button onClick={() => { setShowForm(false); setEditId(null) }} className="text-gray-500 hover:text-gray-700 dark:text-gray-300 text-xl leading-none">×</button>
             </div>
             {msg && <p className="text-xs text-red-600 dark:text-red-400">{msg}</p>}
             <div className="grid grid-cols-2 gap-3">
@@ -1140,7 +1198,7 @@ export const Cheques: React.FC = () => {
                 <input type="number" value={formData.monto || ''} onChange={e => setFormData(p => ({ ...p, monto: parseFloat(e.target.value) || 0 }))} className={inputClass} />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Comisión banco</label>
+                <label className="block text-xs text-gray-400 mb-1">Comisión $</label>
                 <input type="number" value={formData.comision || ''} onChange={e => setFormData(p => ({ ...p, comision: parseFloat(e.target.value) || 0 }))} className={inputClass} />
               </div>
               <div>
@@ -1195,7 +1253,7 @@ export const Cheques: React.FC = () => {
                   onChange={e => setFormData(p => ({ ...p, notas: e.target.value }))}
                   className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-[#ffffff1a] rounded px-3 py-1.5 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-indigo-500 resize-none" />
               </div>
-              <div className="col-span-2">
+              {!editId && <div className="col-span-2">
                 <label className="block text-xs text-gray-400 mb-1">Foto del cheque (opcional)</label>
                 <div className="flex items-center gap-3">
                   <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoChange} />
@@ -1210,13 +1268,13 @@ export const Cheques: React.FC = () => {
                     </div>
                   )}
                 </div>
-              </div>
+              </div>}
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowForm(false)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-800 dark:text-gray-200">Cancelar</button>
-              <button onClick={handleCreate} disabled={saving}
+              <button onClick={() => { setShowForm(false); setEditId(null) }} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-800 dark:text-gray-200">Cancelar</button>
+              <button onClick={handleSave} disabled={saving}
                 className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors">
-                {saving ? 'Guardando…' : 'Guardar'}
+                {saving ? 'Guardando…' : editId ? 'Guardar cambios' : 'Guardar'}
               </button>
             </div>
           </div>

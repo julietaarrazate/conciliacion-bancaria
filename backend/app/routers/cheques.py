@@ -143,6 +143,103 @@ def crear_portador(
     return {"id": p.id, "nombre": p.nombre}
 
 
+# ── Export general ───────────────────────────────────────────────
+
+@router.get("/exportar")
+def exportar_todos_excel(
+    org_id:    Optional[int] = Query(None),
+    estado:    Optional[str] = Query(None),
+    cliente_id: Optional[int] = Query(None),
+    desde:     Optional[str] = Query(None),
+    hasta:     Optional[str] = Query(None),
+    db:        Session       = Depends(get_db),
+    current_user: User       = Depends(get_current_user),
+):
+    oid = _org_id(current_user, org_id)
+    q = db.query(Cheque).filter(Cheque.organizacion_id == oid)
+    if estado:
+        q = q.filter(Cheque.estado == estado)
+    if cliente_id:
+        q = q.filter(Cheque.cliente_id == cliente_id)
+    if desde:
+        q = q.filter(Cheque.fecha_deposito >= desde)
+    if hasta:
+        q = q.filter(Cheque.fecha_deposito <= hasta)
+    cheques = q.order_by(Cheque.fecha_deposito.desc().nullslast(), Cheque.id.desc()).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Cheques"
+
+    HEADER_FILL = PatternFill("solid", fgColor="1E1E2E")
+    HEADER_FONT = Font(bold=True, color="A0A0C0", size=9)
+    TOTAL_FONT  = Font(bold=True, color="FFFFFF")
+
+    headers = [
+        "Estado", "F. Depósito", "F. Acred.", "Cliente", "Portador",
+        "Librador", "Banco", "Número", "CP", "L/I",
+        "Monto", "Comisión", "Notas",
+    ]
+    ws.append(headers)
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.font = HEADER_FONT
+        cell.fill = HEADER_FILL
+        cell.alignment = Alignment(horizontal="center")
+
+    col_widths = [12, 14, 14, 18, 18, 22, 14, 14, 10, 8, 16, 14, 30]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    total_monto = 0.0
+    total_comision = 0.0
+
+    for c in cheques:
+        nombre   = c.cliente.nombre if c.cliente else "Sin cliente"
+        portador = c.portador.nombre if c.portador else ""
+        librador = c.librador or c.titular or ""
+        monto    = float(c.monto)
+        comision = float(c.comision) if c.comision else 0.0
+
+        ws.append([
+            c.estado.capitalize(),
+            str(c.fecha_deposito) if c.fecha_deposito else "",
+            str(c.fecha_acred)    if c.fecha_acred    else "",
+            nombre, portador, librador,
+            c.banco_origen or "",
+            c.numero or "",
+            c.codigo_postal or "",
+            (c.local_interior or "").capitalize(),
+            monto,
+            comision if comision else "",
+            c.notas or "",
+        ])
+        ws.cell(row=ws.max_row, column=11).number_format = '#,##0.00'
+        if comision:
+            ws.cell(row=ws.max_row, column=12).number_format = '#,##0.00'
+        total_monto    += monto
+        total_comision += comision
+
+    ws.append([])
+    ws.append(["TOTAL", "", "", "", "", "", "", "", "", "", total_monto, total_comision if total_comision else ""])
+    total_row = ws.max_row
+    for cell in ws[total_row]:
+        cell.font = TOTAL_FONT
+    ws.cell(row=total_row, column=11).number_format = '#,##0.00'
+    if total_comision:
+        ws.cell(row=total_row, column=12).number_format = '#,##0.00'
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = "cheques.xlsx"
+    return Response(
+        content=buf.read(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ── Vista por depósito ────────────────────────────────────────────
 
 @router.get("/deposito/exportar")

@@ -1270,3 +1270,81 @@ def delete_asiento_manual(
     except Exception as ex:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(ex))
+
+
+# ── Diagnóstico y fix de fechas con timezone incorrecto ────────────────────────
+
+@router.post("/fix-fechas-utc")
+def fix_fechas_utc(
+    dry_run: bool = Query(True),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    """
+    Identifica asientos y egresos cuya fecha de negocio puede ser incorrecta
+    porque se crearon entre 21:00–24:00 ART (= 00:00–03:00 UTC del día siguiente).
+    En ese rango, date.today() en UTC devolvía un día ADELANTE respecto a ART.
+
+    La heurística: si created_at (UTC) cae entre 00:00 y 03:00 UTC, la fecha
+    de negocio pudo haberse guardado con el día de created_at (UTC) en vez del
+    día correcto ART (= created_at - 1 día). Solo aplica a registros anteriores
+    al fix (antes del 2026-06-02 aprox).
+
+    dry_run=true (default): solo cuenta los afectados sin tocar nada.
+    dry_run=false: retrocede la fecha de negocio 1 día en los afectados.
+    """
+    from datetime import datetime, timezone, timedelta
+    from app.models.egreso import Egreso
+
+    oid = _org_id(current_user, org_id)
+
+    # Límite temporal: el commit del fix hoy_art entró el 2026-06-02 mediodía UTC
+    fix_cutoff = datetime(2026, 6, 2, 12, 0, tzinfo=timezone.utc)
+
+    asientos_q = db.query(Asiento).filter(
+        Asiento.organizacion_id == oid,
+        Asiento.created_at < fix_cutoff,
+        func.extract('hour', Asiento.created_at) < 3,
+    ).all()
+
+    try:
+        egresos_q = db.query(Egreso).filter(
+            Egreso.organizacion_id == oid,
+            Egreso.created_at < fix_cutoff,
+            func.extract('hour', Egreso.created_at) < 3,
+        ).all()
+    except Exception:
+        egresos_q = []
+
+    asientos_afectados = [
+        {"id": a.id, "fecha_actual": str(a.fecha), "created_at_utc": str(a.created_at),
+         "modulo": a.modulo, "descripcion": (a.descripcion or '')[:60]}
+        for a in asientos_q
+    ]
+    egresos_afectados = [
+        {"id": e.id, "fecha_actual": str(e.fecha), "created_at_utc": str(e.created_at),
+         "descripcion": (e.descripcion or '')[:60]}
+        for e in egresos_q
+    ]
+
+    if not dry_run:
+        for a in asientos_q:
+            if a.fecha:
+                a.fecha = a.fecha - timedelta(days=1)
+        for e in egresos_q:
+            if e.fecha:
+                e.fecha = e.fecha - timedelta(days=1)
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "asientos_afectados": len(asientos_afectados),
+        "egresos_afectados": len(egresos_afectados),
+        "detalle_asientos": asientos_afectados,
+        "detalle_egresos": egresos_afectados,
+        "mensaje": (
+            "Solo conteo — no se modificó nada." if dry_run else
+            f"Fechas corregidas: {len(asientos_afectados)} asientos + {len(egresos_afectados)} egresos retrocedidos 1 día."
+        ),
+    }

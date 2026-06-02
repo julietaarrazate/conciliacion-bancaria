@@ -451,6 +451,35 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     }
   }
 
+  const fixFechasUtc = async () => {
+    const orgQ = activeOrgId ? `org_id=${activeOrgId}` : ''
+    try {
+      const prev = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=true${orgQ ? '&' + orgQ : ''}`)
+      const { asientos_afectados, egresos_afectados, detalle_asientos, detalle_egresos } = prev.data
+      if (asientos_afectados === 0 && egresos_afectados === 0) {
+        alert('✓ No se encontraron registros con posible fecha UTC incorrecta.\nTodo está bien.')
+        return
+      }
+      const preview = detalle_asientos.slice(0, 5).map((a: any) =>
+        `  Asiento #${a.id} · ${a.fecha_actual} · ${a.modulo} — ${a.descripcion}`
+      ).join('\n')
+      const confirmar = window.confirm(
+        `🕐 FIX DE FECHAS UTC\n\n` +
+        `Registros creados entre 21:00 y 24:00 ART pueden tener fecha 1 día adelantada.\n\n` +
+        `Encontrados: ${asientos_afectados} asientos + ${egresos_afectados} egresos\n\n` +
+        `Muestra (hasta 5):\n${preview || '  (ninguno)'}` +
+        (detalle_asientos.length > 5 ? `\n  ...y ${detalle_asientos.length - 5} más` : '') +
+        `\n\n¿Corregir las fechas? (se retrocede 1 día a cada registro)`
+      )
+      if (!confirmar) return
+      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=false${orgQ ? '&' + orgQ : ''}`)
+      alert(`✓ ${r.data.mensaje}`)
+      recargarTodo()
+    } catch (e: any) {
+      alert(`❌ Error: ${e.response?.data?.detail || e.message}`)
+    }
+  }
+
   // ── Ajuste manual ───────────────────────────────────────────────────────────
   const [ajusteModalOpen, setAjusteModalOpen] = useState(false)
   const [ajusteGuardando, setAjusteGuardando] = useState(false)
@@ -1106,14 +1135,23 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   {backfilling ? 'Reconstruyendo…' : '↻ Reconstruir desde conciliaciones'}
                 </button>
                 {user?.is_superadmin && (
-                  <button
-                    onClick={resetYRebuild}
-                    disabled={backfilling}
-                    className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-medium hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
-                    title="Borra TODOS los asientos y los reconstruye limpio desde los datos reales"
-                  >
-                    ⚠️ Reset Libro Diario
-                  </button>
+                  <>
+                    <button
+                      onClick={resetYRebuild}
+                      disabled={backfilling}
+                      className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-medium hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                      title="Borra TODOS los asientos y los reconstruye limpio desde los datos reales"
+                    >
+                      ⚠️ Reset Libro Diario
+                    </button>
+                    <button
+                      onClick={fixFechasUtc}
+                      className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-orange-300 dark:border-orange-800 text-orange-600 dark:text-orange-400 font-medium hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                      title="Identifica y corrige registros con fecha UTC en vez de ART"
+                    >
+                      🕐 Fix fechas UTC
+                    </button>
+                  </>
                 )}
               </div>
             )}
