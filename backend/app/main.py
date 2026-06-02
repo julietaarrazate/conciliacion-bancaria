@@ -115,6 +115,7 @@ def _run_alembic():
         "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS fecha_devolucion DATE",
         "UPDATE cheques SET librador = titular WHERE librador IS NULL AND titular IS NOT NULL",
         "CREATE TABLE IF NOT EXISTS twofa_codes (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), code_hash VARCHAR NOT NULL, expires_at TIMESTAMP NOT NULL, used BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP DEFAULT NOW())",
+        "ALTER TABLE twofa_codes ADD COLUMN IF NOT EXISTS failed_attempts INTEGER NOT NULL DEFAULT 0",
     ]
     try:
         from sqlalchemy import text as _text

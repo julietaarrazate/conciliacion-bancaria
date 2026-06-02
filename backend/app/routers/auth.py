@@ -90,8 +90,7 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
     if (user.is_superadmin or user.role == RoleEnum.ADMIN.value) and settings.resend_api_key:
         from app.models.twofa_code import TwofaCode
         from app.services.email_sender import send_email
-        import random
-        code = f"{random.randint(0, 999999):06d}"
+        code = f"{secrets.randbelow(1_000_000):06d}"
         code_hash = hashlib.sha256(code.encode()).hexdigest()
         expires_at = datetime.utcnow() + timedelta(minutes=TWOFA_CODE_TTL_MINUTES)
         db.add(TwofaCode(user_id=user.id, code_hash=code_hash, expires_at=expires_at))
@@ -364,24 +363,40 @@ class TwofaVerifyBody(BaseModel):
     code: str
 
 
+TWOFA_MAX_ATTEMPTS = 3
+
+
 @router.post("/verify-2fa")
 @limiter.limit("10/minute")
 def verify_2fa(request: Request, body: TwofaVerifyBody, db: Session = Depends(get_db)):
     from app.models.twofa_code import TwofaCode
     user = db.query(User).filter(User.email == body.email, User.is_active == True).first()  # noqa: E712
-    if not user or not user.is_superadmin:
+    is_eligible = user and (user.is_superadmin or user.role == RoleEnum.ADMIN.value)
+    if not is_eligible:
         raise HTTPException(status_code=401, detail="Código inválido o expirado")
-    code_hash = hashlib.sha256(body.code.strip().encode()).hexdigest()
     now = datetime.utcnow()
-    entry = (
+    # Buscar el código activo más reciente para este usuario
+    active = (
         db.query(TwofaCode)
-        .filter(TwofaCode.user_id == user.id, TwofaCode.code_hash == code_hash,
-                TwofaCode.used == False, TwofaCode.expires_at > now)  # noqa: E712
+        .filter(TwofaCode.user_id == user.id, TwofaCode.used == False,  # noqa: E712
+                TwofaCode.expires_at > now)
         .order_by(TwofaCode.id.desc()).first()
     )
-    if not entry:
+    if not active:
         raise HTTPException(status_code=401, detail="Código inválido o expirado")
-    entry.used = True
+    # Lockout tras 3 intentos fallidos
+    if active.failed_attempts >= TWOFA_MAX_ATTEMPTS:
+        active.used = True
+        db.commit()
+        raise HTTPException(status_code=401, detail="Demasiados intentos. Pedí un nuevo código iniciando sesión.")
+    code_hash = hashlib.sha256(body.code.strip().encode()).hexdigest()
+    if active.code_hash != code_hash:
+        active.failed_attempts += 1
+        if active.failed_attempts >= TWOFA_MAX_ATTEMPTS:
+            active.used = True
+        db.commit()
+        raise HTTPException(status_code=401, detail="Código inválido o expirado")
+    active.used = True
     db.commit()
     access_token = create_access_token(
         data={"sub": user.email, "user_id": user.id, "role": user.role},
