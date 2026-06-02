@@ -35,10 +35,12 @@ export const AppLockGuard: React.FC = () => {
         // No bloquear si hay una descarga deliberada en curso (PDF/Excel)
         if (useLockStore.getState().suppressUntil > Date.now()) return
         bgTimer.current = window.setTimeout(() => {
-          // Re-chequear al disparar: la descarga pudo iniciarse dentro del debounce
+          // Re-chequear al disparar: la página ya puede ser visible de nuevo
+          // (animación de navegación SPA en mobile dura más de 500ms a veces)
+          if (!document.hidden) return
           if (useLockStore.getState().suppressUntil > Date.now()) return
           lock()
-        }, 500)
+        }, 1500)
       } else {
         if (bgTimer.current) {
           window.clearTimeout(bgTimer.current)

@@ -137,7 +137,7 @@ export const Pagos: React.FC = () => {
   const cargarLista = useCallback(async () => {
     setLoadingList(true)
     try {
-      const params: Record<string, string | number> = { limit: 200 }
+      const params: Record<string, string | number> = { limit: 50 }
       if (activeOrgId) params.org_id = activeOrgId
       if (fTipo) params.tipo = fTipo
       if (fForma) params.forma_pago = fForma
@@ -266,7 +266,7 @@ export const Pagos: React.FC = () => {
             const d = res.data
             setForm(prev => ({
               ...prev,
-              monto:        prev.monto        || (d.monto != null ? String(d.monto) : prev.monto),
+              monto:        prev.monto        || (d.monto != null ? new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(d.monto) : prev.monto),
               fecha:        prev.fecha        || d.fecha        || prev.fecha,
               beneficiario: prev.beneficiario || d.beneficiario || prev.beneficiario,
               referencia:   prev.referencia   || d.referencia   || prev.referencia,
@@ -590,7 +590,7 @@ export const Pagos: React.FC = () => {
                 <>
                   <input ref={fileInputRef} type="file" accept="image/*" capture="environment"
                     className="hidden" onChange={handleFoto} />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="btn-secondary w-full text-sm">
+                  <button type="button" onClick={() => { suppressLockForShare(); fileInputRef.current?.click() }} className="btn-secondary w-full text-sm">
                     📷 Sacar / subir foto
                   </button>
                 </>

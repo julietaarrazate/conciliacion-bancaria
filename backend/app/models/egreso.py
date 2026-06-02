@@ -35,15 +35,15 @@ class Egreso(Base):
     id              = Column(Integer, primary_key=True, index=True)
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=False, index=True)
 
-    tipo            = Column(String, nullable=False, default="gasto")     # proveedor | gasto | pago_cliente
-    categoria       = Column(String, nullable=True)                       # nombre de CategoriaEgreso (texto libre)
-    forma_pago      = Column(String, nullable=False, default="banco")     # banco | efectivo
+    tipo            = Column(String, nullable=False, default="gasto", index=True)   # proveedor | gasto | pago_cliente
+    categoria       = Column(String, nullable=True)
+    forma_pago      = Column(String, nullable=False, default="banco", index=True)  # banco | efectivo
 
     monto           = Column(Numeric(12, 2), nullable=False)
     fecha           = Column(Date, nullable=False, default=date.today, index=True)
 
     beneficiario    = Column(String, nullable=True)                       # proveedor / destinatario
-    cliente_id      = Column(Integer, ForeignKey("clientes.id"), nullable=True)  # para pago_cliente
+    cliente_id      = Column(Integer, ForeignKey("clientes.id"), nullable=True, index=True)
     concepto        = Column(String, nullable=True)
     referencia      = Column(String, nullable=True)
 

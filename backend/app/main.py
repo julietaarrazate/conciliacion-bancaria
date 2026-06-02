@@ -116,6 +116,10 @@ def _run_alembic():
         "UPDATE cheques SET librador = titular WHERE librador IS NULL AND titular IS NOT NULL",
         "CREATE TABLE IF NOT EXISTS twofa_codes (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), code_hash VARCHAR NOT NULL, expires_at TIMESTAMP NOT NULL, used BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP DEFAULT NOW())",
         "ALTER TABLE twofa_codes ADD COLUMN IF NOT EXISTS failed_attempts INTEGER NOT NULL DEFAULT 0",
+        "CREATE INDEX IF NOT EXISTS ix_egresos_tipo ON egresos (tipo)",
+        "CREATE INDEX IF NOT EXISTS ix_egresos_forma_pago ON egresos (forma_pago)",
+        "CREATE INDEX IF NOT EXISTS ix_egresos_cliente_id ON egresos (cliente_id)",
+        "CREATE INDEX IF NOT EXISTS ix_egresos_org_fecha ON egresos (organizacion_id, fecha DESC)",
     ]
     try:
         from sqlalchemy import text as _text
