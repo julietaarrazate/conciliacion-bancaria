@@ -35,6 +35,7 @@ export const Login: React.FC = () => {
         const st = await apiClient.getLoginApprovalStatus(pending.id, pending.secret)
         if (cancelled) return
         if (st.status === 'approved' && st.access_token && st.user) {
+          apiClient.setToken(st.access_token)
           setUser(st.user)
           setToken(st.access_token)
           forceUnlock()
