@@ -246,7 +246,7 @@ export const Historial: React.FC = () => {
                     👁️ Ver / Editar
                   </button>
                   <button
-                    onClick={() => { setRecFecha(new Date().toISOString().split('T')[0]); setRecError(''); setRecModal(it) }}
+                    onClick={() => { const _d = new Date(); setRecFecha(`${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`); setRecError(''); setRecModal(it) }}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 font-medium active:scale-95"
                     title="Re-conciliar: busca movimientos nuevos para las filas que no estaban"
                   >

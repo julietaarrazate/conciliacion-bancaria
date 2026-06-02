@@ -733,9 +733,9 @@ export const Cheques: React.FC = () => {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Pendientes',  value: fmt(totalPend),  sub: `${pendientes.length} cheq.`, color: 'text-yellow-400' },
-          { label: 'Acreditados', value: fmt(totalAcred), sub: 'en el listado',               color: 'text-green-400'  },
-          { label: 'Rechazados',  value: fmt(totalRech),  sub: 'en el listado',               color: 'text-red-400'    },
+          { label: 'Pendientes',  value: fmt(totalPend),  sub: `${pendientes.length} cheq.`, color: 'text-yellow-600 dark:text-yellow-400' },
+          { label: 'Acreditados', value: fmt(totalAcred), sub: 'en el listado',               color: 'text-green-600 dark:text-green-400'  },
+          { label: 'Rechazados',  value: fmt(totalRech),  sub: 'en el listado',               color: 'text-red-600 dark:text-red-400'    },
         ].map(s => (
           <div key={s.label} className="bg-white dark:bg-white/3 border border-gray-200 dark:border-white/8 rounded-xl p-3">
             <p className="text-xs text-gray-500">{s.label}</p>
@@ -886,7 +886,7 @@ export const Cheques: React.FC = () => {
             </div>
             {depositoFecha && (
               <button onClick={handleExportDeposito} disabled={exportandoDeposito}
-                className="px-3 py-1.5 bg-green-700/30 hover:bg-green-700/50 text-green-400 text-sm rounded-lg transition-colors disabled:opacity-50">
+                className="px-3 py-1.5 bg-green-100 hover:bg-green-200 dark:bg-green-700/30 dark:hover:bg-green-700/50 text-green-700 dark:text-green-400 text-sm rounded-lg transition-colors disabled:opacity-50">
                 {exportandoDeposito ? 'Exportando…' : '↓ Excel'}
               </button>
             )}
@@ -1101,7 +1101,7 @@ export const Cheques: React.FC = () => {
               <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Nuevo cheque</h2>
               <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-300 text-xl leading-none">×</button>
             </div>
-            {msg && <p className="text-xs text-red-400">{msg}</p>}
+            {msg && <p className="text-xs text-red-600 dark:text-red-400">{msg}</p>}
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <ClienteSelector
@@ -1206,7 +1206,7 @@ export const Cheques: React.FC = () => {
                   {formFoto && (
                     <div className="flex items-center gap-2">
                       <img src={formFoto} alt="preview" className="h-10 w-10 object-cover rounded border border-gray-200 dark:border-white/10" />
-                      <button onClick={() => setFormFoto(null)} className="text-xs text-red-400 hover:text-red-300">✕ quitar</button>
+                      <button onClick={() => setFormFoto(null)} className="text-xs text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300">✕ quitar</button>
                     </div>
                   )}
                 </div>
@@ -1318,7 +1318,7 @@ export const Cheques: React.FC = () => {
                     const c = cheques.find(x => x.id === verFotoId) || rechazadosList.find(x => x.id === verFotoId)
                     if (c) handleCompartir(c)
                   }}
-                  className="mt-3 w-full py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg text-sm transition-colors">
+                  className="mt-3 w-full py-2 bg-green-100 hover:bg-green-200 dark:bg-green-600/20 dark:hover:bg-green-600/30 text-green-700 dark:text-green-400 rounded-lg text-sm transition-colors">
                   📤 Compartir por WhatsApp
                 </button>
               </>
