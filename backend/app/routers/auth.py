@@ -81,6 +81,10 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
     """
     user = authenticate_user(db, credentials.email, credentials.password)
     if not user:
+        logger.warning(
+            "LOGIN_FAILED email=%s ip=%s",
+            credentials.email, get_remote_address(request),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contraseña inválidos"
@@ -371,7 +375,7 @@ TWOFA_MAX_ATTEMPTS = 3
 
 
 @router.post("/verify-2fa")
-@limiter.limit("10/minute")
+@limiter.limit("3/minute")
 def verify_2fa(request: Request, body: TwofaVerifyBody, db: Session = Depends(get_db)):
     from app.models.twofa_code import TwofaCode
     user = db.query(User).filter(User.email == body.email, User.is_active == True).first()  # noqa: E712
