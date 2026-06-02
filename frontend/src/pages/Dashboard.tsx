@@ -149,9 +149,10 @@ export const Dashboard: React.FC = () => {
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [planillas, setPlanillas] = useState<PlanillaHistorialItem[]>([])
   const onboardingKey = `onboarding-dismissed-${activeOrgId ?? 'default'}`
-  const [onboardingVisible, setOnboardingVisible] = useState(() => {
-    try { return localStorage.getItem(`onboarding-dismissed-${activeOrgId ?? 'default'}`) !== '1' } catch { return true }
-  })
+  const [onboardingVisible, setOnboardingVisible] = useState(true)
+  useEffect(() => {
+    try { setOnboardingVisible(localStorage.getItem(onboardingKey) !== '1') } catch {}
+  }, [onboardingKey])
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [extractoNombre, setExtractoNombre] = useState<string>('')
   const [clienteNombre, setClienteNombre] = useState('')
