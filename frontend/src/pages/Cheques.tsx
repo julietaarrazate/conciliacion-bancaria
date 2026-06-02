@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
+import { useAuthStore } from '@/store/auth'
 import { useLockStore } from '@/store/lock'
 
 // Evita que abrir el menú nativo de compartir dispare el bloqueo por PIN/huella.
@@ -292,6 +293,7 @@ const ClienteSelector: React.FC<{
 
 export const Cheques: React.FC = () => {
   const { activeOrgId } = useOrgStore()
+  const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
 
   const [tab, setTab] = useState<'todos' | 'deposito' | 'rechazados'>('todos')
 
@@ -810,8 +812,8 @@ export const Cheques: React.FC = () => {
                             <>
                               <button onClick={() => { setAcreditarId(c.id); setAcreditarFecha(''); setAcreditarBancoId('') }}
                                 className="px-2 py-0.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded text-xs transition-colors">Acreditar</button>
-                              <button onClick={() => handleDelete(c.id)}
-                                className="px-2 py-0.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded text-xs transition-colors">✕</button>
+                              {canDelete && <button onClick={() => handleDelete(c.id)}
+                                className="px-2 py-0.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded text-xs transition-colors">✕</button>}
                             </>
                           )}
                           {c.estado === 'acreditado' && (
