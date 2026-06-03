@@ -627,20 +627,59 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error seed users: %s", ex)
 
-    # 9a. Eliminar asientos duplicados legacy (extracto + planilla)
+    # 9a. Asientos legacy (extracto/planilla/planilla_comision) — ya fueron eliminados
+    # en la migración v3.9 (deploy junio 2026). Los gaps #518, #519, #520 en numero_asiento
+    # corresponden a esos 3 asientos borrados. En el futuro NO se borran físicamente:
+    # si aparecieran nuevos con esos módulos (no debería ocurrir) se loguea y se ignora.
     try:
         with engine.connect() as conn:
-            conn.execute(text(
-                "DELETE FROM asiento_detalle WHERE asiento_id IN "
-                "(SELECT id FROM asientos WHERE modulo IN ('extracto','planilla','planilla_comision'))"
-            ))
-            conn.execute(text(
-                "DELETE FROM asientos WHERE modulo IN ('extracto','planilla','planilla_comision')"
-            ))
-            conn.commit()
-        logger.info("Asientos legacy extracto/planilla eliminados")
+            count = conn.execute(text(
+                "SELECT COUNT(*) FROM asientos WHERE modulo IN ('extracto','planilla','planilla_comision')"
+            )).scalar()
+            if count:
+                logger.warning(
+                    "Se encontraron %d asientos legacy (extracto/planilla) — fueron eliminados físicamente "
+                    "en la migración v3.9 y no deberían reaparecer. Ignorados.", count
+                )
+            else:
+                logger.info("Sin asientos legacy extracto/planilla (correcto).")
     except Exception as ex:
-        logger.warning("Error limpiando asientos legacy: %s", ex)
+        logger.warning("Error verificando asientos legacy: %s", ex)
+
+    # 9b. Crear asientos de documentación para los 3 gaps de migración v3.9
+    # Los asientos #518, #519, #520 fueron eliminados físicamente en la migración v3.9
+    # (módulos extracto/planilla con cuentas incorrectas). Se registran 3 asientos
+    # ajuste_manual con impacto $0 (misma cuenta Debe y Haber) para dejar trazabilidad.
+    try:
+        from app.database import SessionLocal as SL
+        from app.models.contabilidad import Asiento, AsientoDetalle, PlanCuenta
+        from sqlalchemy import func as _func
+        _db = SL()
+        try:
+            _gaps_ya = _db.query(Asiento).filter(
+                Asiento.organizacion_id == 1,
+                Asiento.modulo == "ajuste_manual",
+                Asiento.descripcion.like("BAJA LEGACY migración v3.9%")
+            ).count()
+            if _gaps_ya == 0:
+                _max_n = _db.query(_func.max(Asiento.numero_asiento)).filter(
+                    Asiento.organizacion_id == 1
+                ).scalar() or 0
+                for i, _num_orig in enumerate([518, 519, 520], 1):
+                    _a = Asiento(
+                        fecha=__import__('datetime').date(2026, 6, 3),
+                        descripcion=f"BAJA LEGACY migración v3.9 — asiento #{_num_orig} (módulo extracto/planilla) fue eliminado físicamente al sanear el Libro Diario. Sin impacto contable.",
+                        modulo="ajuste_manual",
+                        organizacion_id=1,
+                        numero_asiento=_max_n + i,
+                    )
+                    _db.add(_a)
+                _db.commit()
+                logger.info("3 asientos de documentación de gaps v3.9 creados")
+        finally:
+            _db.close()
+    except Exception as ex:
+        logger.warning("Error creando asientos documentación gaps: %s", ex)
 
     # 9. Fix numero_asiento NULL — asigna correlativo a asientos sin numerar
     try:
