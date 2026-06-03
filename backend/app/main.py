@@ -660,33 +660,37 @@ def _init_db():
     # 9b. Crear asientos de documentación para los 3 gaps de migración v3.9
     # Los asientos #518, #519, #520 fueron eliminados físicamente en la migración v3.9
     # (módulos extracto/planilla con cuentas incorrectas). Se registran 3 asientos
-    # ajuste_manual con impacto $0 (misma cuenta Debe y Haber) para dejar trazabilidad.
+    # ajuste_manual con numero_asiento = 518/519/520 para mantener la correlatividad.
     try:
         from app.database import SessionLocal as SL
-        from app.models.contabilidad import Asiento, AsientoDetalle, PlanCuenta
-        from sqlalchemy import func as _func
+        from app.models.contabilidad import Asiento
         _db = SL()
         try:
-            _gaps_ya = _db.query(Asiento).filter(
-                Asiento.organizacion_id == 1,
-                Asiento.modulo == "ajuste_manual",
-                Asiento.descripcion.like("BAJA LEGACY migración v3.9%")
-            ).count()
-            if _gaps_ya == 0:
-                _max_n = _db.query(_func.max(Asiento.numero_asiento)).filter(
-                    Asiento.organizacion_id == 1
-                ).scalar() or 0
-                for i, _num_orig in enumerate([518, 519, 520], 1):
+            for _num_orig in [518, 519, 520]:
+                _existe = _db.query(Asiento).filter(
+                    Asiento.organizacion_id == 1,
+                    Asiento.numero_asiento == _num_orig,
+                ).first()
+                if not _existe:
                     _a = Asiento(
                         fecha=__import__('datetime').date(2026, 6, 3),
                         descripcion=f"BAJA LEGACY migración v3.9 — asiento #{_num_orig} (módulo extracto/planilla) fue eliminado físicamente al sanear el Libro Diario. Sin impacto contable.",
                         modulo="ajuste_manual",
                         organizacion_id=1,
-                        numero_asiento=_max_n + i,
+                        numero_asiento=_num_orig,
                     )
                     _db.add(_a)
-                _db.commit()
-                logger.info("3 asientos de documentación de gaps v3.9 creados")
+            _db.commit()
+
+            # Eliminar los registros mal-numerados (888/889/890) si existen
+            _db.query(Asiento).filter(
+                Asiento.organizacion_id == 1,
+                Asiento.modulo == "ajuste_manual",
+                Asiento.descripcion.like("BAJA LEGACY migración v3.9%"),
+                Asiento.numero_asiento > 520,
+            ).delete(synchronize_session=False)
+            _db.commit()
+            logger.info("Asientos documentación gaps v3.9 en posiciones 518/519/520 (correlativos)")
         finally:
             _db.close()
     except Exception as ex:
@@ -734,11 +738,12 @@ async def lifespan(app: FastAPI):
     try:
         from app.services.backup_scheduler import (
             start_backup_scheduler, stop_backup_scheduler,
-            start_alertas_push_job, start_token_cleanup_job,
+            start_alertas_push_job, start_token_cleanup_job, start_r2_storage_alert_job,
         )
         start_backup_scheduler()
         start_alertas_push_job()       # 10:00 ART — push cheques/movs urgentes
         start_token_cleanup_job()      # 03:30 ART — purga tokens revocados
+        start_r2_storage_alert_job()   # 09:00 ART — alerta si R2 > 8 GB
     except Exception as ex:
         logger.warning("No se pudo iniciar schedulers: %s", ex)
     yield

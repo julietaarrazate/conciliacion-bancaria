@@ -184,6 +184,114 @@ def _run_alertas_push() -> None:
         db.close()
 
 
+def start_r2_storage_alert_job() -> None:
+    """Cron diario 09:00 ART — chequea uso de R2 y alerta si > 8 GB."""
+    global _scheduler
+    if not settings.s3_endpoint or not settings.resend_api_key:
+        logger.info("Alerta R2 no configurada: falta S3_ENDPOINT o RESEND_API_KEY")
+        return
+    if _scheduler is None:
+        sched = BackgroundScheduler(timezone=_ART)
+        sched.start()
+        _scheduler = sched
+    if _scheduler.get_job("r2_storage_alert"):
+        return
+    _scheduler.add_job(
+        _run_r2_storage_alert,
+        CronTrigger(hour=9, minute=0, timezone=_ART),
+        id="r2_storage_alert",
+        name="Alerta diaria de uso de R2",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("Alerta de uso R2 programada para 09:00 ART")
+
+
+def _run_r2_storage_alert() -> None:
+    """Chequea uso total de R2. Si > 8 GB, envía email de alerta."""
+    try:
+        import os
+        import boto3
+        from botocore.config import Config
+
+        endpoint = os.getenv("S3_ENDPOINT")
+        bucket = os.getenv("S3_BUCKET")
+        access_key = os.getenv("S3_ACCESS_KEY")
+        secret_key = os.getenv("S3_SECRET_KEY")
+        region = os.getenv("S3_REGION", "auto")
+
+        if not all([endpoint, bucket, access_key, secret_key]):
+            logger.warning("R2 storage alert: configuracion incompleta")
+            return
+
+        client = boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name=region,
+            config=Config(signature_version="s3v4"),
+        )
+
+        total_bytes = 0
+        paginator = client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket):
+            if "Contents" in page:
+                for obj in page["Contents"]:
+                    total_bytes += obj.get("Size", 0)
+
+        total_gb = total_bytes / (1024 ** 3)
+        limite_gb = 10
+        umbral_gb = 8
+
+        logger.info("Uso de R2: %.2f GB / %.0f GB", total_gb, limite_gb)
+
+        if total_gb > umbral_gb:
+            subject = f"⚠️ Alerta R2: Almacenamiento en {total_gb:.2f} GB"
+            html_body = f"""
+<div style="font-family:sans-serif;max-width:500px;margin:0 auto;color:#222">
+  <h2 style="color:#d9534f">⚠️ Alerta de almacenamiento R2</h2>
+  <p style="font-size:16px;margin:16px 0">
+    <strong>Uso actual: {total_gb:.2f} GB</strong> (de {limite_gb} GB gratis/mes)
+  </p>
+  <p style="color:#666;font-size:14px;margin:16px 0">
+    Se ha alcanzado el <strong>80% del límite gratuito</strong>.
+    Una vez que se superen los {limite_gb} GB en un mes,
+    los costos serán de <strong>$0.015/GB</strong>.
+  </p>
+  <p style="color:#666;font-size:14px;margin:16px 0">
+    <strong>Recomendación:</strong> Revisar fotos duplicadas o antiguas que puedan eliminarse.
+  </p>
+  <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:13px">
+    <tr style="background:#f5f5f5">
+      <td style="padding:8px 12px;border:1px solid #ddd"><strong>Uso</strong></td>
+      <td style="padding:8px 12px;border:1px solid #ddd;text-align:right"><strong>{total_gb:.2f} GB</strong></td>
+    </tr>
+    <tr>
+      <td style="padding:8px 12px;border:1px solid #ddd">Límite gratuito</td>
+      <td style="padding:8px 12px;border:1px solid #ddd;text-align:right">{limite_gb} GB</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 12px;border:1px solid #ddd">% disponible</td>
+      <td style="padding:8px 12px;border:1px solid #ddd;text-align:right">{((limite_gb - total_gb) / limite_gb * 100):.0f}%</td>
+    </tr>
+  </table>
+</div>
+"""
+            send_email(
+                to=settings.backup_email_to,
+                subject=subject,
+                html=html_body,
+            )
+            logger.warning("Alerta R2 enviada: %.2f GB / %.0f GB", total_gb, limite_gb)
+        else:
+            logger.info("Uso R2 OK (%.2f / %.0f GB)", total_gb, limite_gb)
+    except Exception as ex:
+        logger.error("R2 storage alert FALLO: %s", ex, exc_info=True)
+
+
 def start_token_cleanup_job() -> None:
     """Cron diario 03:30 ART — purga tokens revocados que ya estan vencidos."""
     global _scheduler
