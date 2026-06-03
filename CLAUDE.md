@@ -296,8 +296,8 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   `detail` de errores 422 de Pydantic (array de objetos `{type, loc, msg, ...}`) a un string legible
   antes de llegar a los componentes. Evita "Objects are not valid as a React child" al renderizar
   `err.response.data.detail` (afectaba los 25 sitios con ese patrón).
-- **Pendiente (UX)**: ocultar los botones de borrar en el frontend para quien no tiene
-  `delete_records` (hoy el backend bloquea con 403, pero el botón sigue visible).
+- **Botones de borrar ocultos**: todas las páginas con delete buttons usan `canDelete = hasPermission('delete_records')`.
+  Usuarios.tsx y Liquidaciones.tsx usaban chequeos de rol — alineados en v3.11.4.
 
 ### v3.8 — Reset Libro Diario + filtros Excel + orden de fechas (mayo 2026 — PRs #63-#68)
 
@@ -548,12 +548,103 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   El checklist solo renderiza después de que los datos cargaron (evita flash de 1-2 s). Auto-dismiss
   inmediato cuando los 3 pasos ya están completos al cargar (orgs con datos existentes nunca ven el widget).
 
+### v3.11.1 — Fix compartir WhatsApp + contraste de mensajes en dark/light (junio 2026)
+
+- **Fix imagen negra al compartir por WhatsApp** (`Pagos.tsx`): el fallback de compartir como imagen
+  re-renderiza la foto sobre un canvas con fondo blanco (`ctx.fillStyle = '#ffffff'; fillRect`) antes de
+  exportar a JPEG. Antes pasaba el blob original (PNG con alpha) etiquetado como `image/jpeg` → WhatsApp
+  mostraba los píxeles transparentes en negro. Mismo patrón que ya usaba `sharePagoPdf`.
+- **Fix mensajes con mal contraste en dark/light**: cuadros de estado (`setMsg`/`error`/`success`) que
+  tenían solo variante de un modo quedaban ilegibles en el otro. Estandarizados con variantes light **y**
+  dark:
+  - Faltaba variante dark (fondo claro en dark mode): `Dashboard.tsx` (error+success), `Caja.tsx` (error),
+    `Perfil.tsx` (2 cuadros error), `Historial.tsx` (error).
+  - Faltaba variante light (texto claro invisible en light mode): `Cheques.tsx` (mensaje de form),
+    `Resumen.tsx` (error de carga).
+  - El resto de páginas (Organizaciones, Revision, Liquidaciones, Clientes, Login, Papelera, password reset)
+    ya tenían ambas variantes. El Toaster global ya estaba correcto.
+  - Nota: el CSS global (`index.css`) ya sobreescribe `text-gray-400/500/700/800/900` en dark mode, por eso
+    esos grises no requieren `dark:` por instancia.
+- **Fix Cheques light mode completo**: toda la página `Cheques.tsx` era dark-first (colores sin `dark:`
+  prefijo). Convertido a dual-mode: ESTADO_BADGE con pastel light, `inputClass` con hex fallback para
+  evitar replace_all collisions, LiBadge, acreditación masiva panel, botones de acción, modales,
+  alternación de filas, tab activa, stat cards de importe, fechas rechazadas.
+- **Fix PDF scanner en Cheques** (`shareChequePdf`): canvas con fondo blanco + aspect ratio preservado
+  (`ratio = Math.min(maxW/w, maxH/h)`), centrado horizontal. Mismo patrón que `sharePagoPdf` en Pagos.
+- **Fix OCR monto en Pagos**: helper `parseMonto()` para parsear formatos argentinos ("15.000,00"),
+  US y planos. OCR canvas sin filtros grayscale (Gemini lee mejor color). Error visible en lugar de
+  silencioso cuando OCR falla (`.catch(() => {})` → mensaje "OCR no disponible").
+- **Fix compartir imagen en Pagos y Cheques**: race condition `img.src` antes de `img.onload` → await
+  explícito con Promise + `canvas.toBlob()` null-safe.
+- **Lazy loading en Pagos**: clientes/categorías se cargan solo cuando `vista === 'nuevo'`.
+
+### v3.11.2 — Fecha local (timezone UTC-3) + light mode Caja/Compartir/Cheques (junio 2026)
+
+- **Fix fecha local en formularios (FRONTEND)**: `new Date().toISOString().slice(0,10)` devuelve fecha
+  UTC — antes de las 3 AM en Argentina (UTC-3) generaba la fecha de ayer. Nuevo helper compartido
+  `src/utils/fecha.ts` (`localIsoDate()/hoyIso()/isoHaceNDias()`) = `getFullYear()/getMonth()+1/getDate()`,
+  usado en: `Pagos.tsx` (fecha default del pago → afectaba Libro Diario), `Caja.tsx` (`toISO`/`today` →
+  selector de arqueo), `Clientes.tsx` (modal Acreditar), `EstadoCuenta.tsx`, `Resumen.tsx`, `Historial.tsx`
+  (modal re-conciliar + botones Hoy/Ayer), `Dashboard.tsx` (fechaAcred/bulkFecha/hoyStr), `Bulk.tsx`,
+  `Movimientos.tsx` (acreditar), `Contabilidad.tsx` (ajuste manual).
+- **Fix hora de Argentina (BACKEND)**: el servidor Render corre en UTC; `date.today()` y `datetime.now()`
+  devolvían la fecha UTC → fechas de negocio quedaban 1 día adelantadas entre 21:00–00:00 ART. Nuevo
+  helper `app/services/tz.py` (`hoy_art()/now_art()` con `ZoneInfo("America/Argentina/Buenos_Aires")`).
+  Reemplazado en TODAS las fechas de negocio: `models/egreso.py` (default `Egreso.fecha`), `routers/pagos.py`,
+  `routers/cheques.py` (depósito/acreditación/rechazo/import — 7 casos), `routers/caja.py` (arqueo),
+  `routers/agente.py` (consultas IA caja/resumen — 5 casos), `routers/contabilidad.py` (asientos
+  cc_inicial/reset/ajuste — 5 casos), `routers/planillas.py` (ref liquidación), `routers/clientes_dir.py`
+  (acreditar mov), `services/motor_contable.py` (TODOS los asientos automáticos — 6 casos),
+  `services/backup_scheduler.py` (alertas cheques por vencer), `main.py` (backfill). Las marcas de
+  AUDITORÍA (`created_at`, expiración de tokens 2FA/reset/aprobación) siguen en UTC a propósito —
+  eso es correcto y consistente. Tests: `test_tz.py` (4 tests). Suite total: **156 passing**.
+- **Fix light mode Caja — historial de arqueos**: panel `bg-white/3 border-white/8` → `bg-gray-50
+  dark:bg-white/3 border-gray-200 dark:border-white/8`. Texto `text-gray-300/200` → dual-mode.
+  Dividers y hover también duales. Date pickers EFT: `bg-white/5 text-gray-300` → variantes light.
+- **Fix light mode Compartir**: toda la página era dark-only. Error box, panel de titulo/texto,
+  tarjetas de archivos, botones Cheque/Pago — todos con variantes light/dark.
+- **Fix Cheques colores residuales**: stats (importe pendientes/acreditados/rechazados) usaban
+  `text-yellow/green/red-400` (tenues en light) → `*-600 dark:*-400`. Botón Excel depósito y
+  compartir WhatsApp: `bg-green-*/*` → `bg-green-100 dark:bg-green-*/...`. Quitar foto: dual-mode.
+
+### v3.11.3 — Editar cheque + Export Excel + Comisión auto + Fix fechas bidireccional (junio 2026)
+
+- **Editar cheque** (`✏️` en tabla): botón inline en la columna de acciones de cheques en estado
+  `registrado`. `handleOpenEdit(c)` pre-llena el form (sin foto — ocultada en modo edición).
+  `PATCH /cheques/{id}` acepta todos los campos del cheque. `handleSave()` unificado (POST si nuevo,
+  PATCH si editId ≠ null). Modal muestra "Editar cheque" / "Nuevo cheque" según estado. Cancelar
+  limpia `editId`.
+- **Export Excel todos los cheques** (`↓ Excel` en toolbar): `GET /cheques/exportar` con filtros
+  opcionales `org_id, estado, cliente_id, desde, hasta`. Devuelve xlsx con columnas: Estado,
+  F.Depósito, F.Acred., Cliente, Portador, Librador, Banco, Número, CP, L/I, Monto, Comisión,
+  Notas + fila de total. Ruta registrada ANTES de `/deposito/exportar` para evitar conflictos.
+  `exportandoTodos` state para feedback del botón.
+- **Comisión auto-calculada en cheques**: se eliminó el campo "Comisión $" (monto plano) del form.
+  Queda solo `% Comisión (cuenta 3-1-3-0)` con preview `= $X.XX` calculado en tiempo real
+  (`monto × pct / 100`). Al guardar, `comisionCalc = Math.round(monto * pct) / 100` se envía
+  como `comision` en el payload (no viene del form). `emptyForm()` sin `comision`. Label claro
+  referencia la cuenta 3-1-3-0 para no confundir con gastos bancarios (3-2-2-1).
+- **Stats cards overflow**: `overflow-hidden` en card container + `text-sm` + `truncate` en el
+  valor monetario → montos grandes ($6,972,528.75) no desbordan en mobile de 3 columnas.
+- **Fix fechas bidireccional** (`🕐 Fix fechas UTC` en `/contabilidad` → tab Cuentas Corrientes,
+  solo superadmin): `POST /contabilidad/fix-fechas-utc` acepta `desde`, `hasta`, `modulo`,
+  `direccion` (adelantar = +1 día · atrasar = −1 día), `dry_run`. Corrige tanto `Asiento.fecha`
+  como `Egreso.fecha` en el rango dado. UI con `window.prompt` para ingresar rango+dirección,
+  `window.confirm` con preview (dry_run) antes de ejecutar. Uso: egresos cargados antes de las
+  3 AM ART quedaban con fecha UTC del día anterior → `adelantar` los corrige.
+
+### v3.11.4 — Botones de borrar ocultados por permiso (junio 2026)
+
+- **Todas las páginas con botones de borrar** usan `canDelete = hasPermission('delete_records')` de forma
+  consistente. `Usuarios.tsx` (antes `!u.is_superadmin`) y `Liquidaciones.tsx` (antes `isAdmin`) migrados
+  al permiso estándar. El backend ya bloqueaba con 403; ahora el frontend no muestra el botón a quienes no
+  tienen `delete_records` (solo Admin y Superadmin).
+
 ### Pendiente para próximas sesiones
 
 - **Liquidaciones con asientos** — consultar con contador si las liquidaciones deben generar
   entradas contables al aprobar/pagar.
-- **Botones de borrar ocultos** — mostrar/ocultar según permiso `delete_records` en el frontend
-  (hoy el backend bloquea con 403 pero el botón sigue visible).
+- ~~**Botones de borrar ocultos**~~ — resuelto en v3.11.4.
 - **UI comisión L/I por cliente** — chip expandible en `/clientes` para editar `porcentaje_comision_local`
   e `porcentaje_comision_interior` directamente desde la lista (hoy solo edita el % general).
 

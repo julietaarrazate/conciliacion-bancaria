@@ -41,7 +41,7 @@ const estadoBadge = (e: string) => {
 }
 
 export const Liquidaciones: React.FC = () => {
-  const { user } = useAuthStore()
+  const { user, hasPermission } = useAuthStore()
   const { activeOrgId } = useOrgStore()
   const [items, setItems] = useState<Liq[]>([])
   const [loading, setLoading] = useState(true)
@@ -58,6 +58,7 @@ export const Liquidaciones: React.FC = () => {
   })
 
   const isAdmin = user?.is_superadmin || user?.role === 'admin'
+  const canDelete = hasPermission('delete_records')
 
   const load = async () => {
     setLoading(true)
@@ -321,7 +322,7 @@ export const Liquidaciones: React.FC = () => {
                       </p>
                       <p className="text-xs text-gray-400 dark:text-zinc-500">neto</p>
                     </div>
-                    {liq.estado === 'borrador' && isAdmin && (
+                    {liq.estado === 'borrador' && canDelete && (
                       <button
                         onClick={(e) => { e.stopPropagation(); handleEliminar(liq.id) }}
                         className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"

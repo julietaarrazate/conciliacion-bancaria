@@ -8,6 +8,7 @@ import { useOrgStore } from '@/store/org'
 
 export const Usuarios: React.FC = () => {
   const me = useAuthStore(s => s.user)
+  const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
   const { activeOrgId } = useOrgStore()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -271,7 +272,7 @@ export const Usuarios: React.FC = () => {
                       {new Date(u.created_at).toLocaleDateString('es-AR')}
                     </td>
                     <td className="px-4 py-2.5 text-center">
-                      {!u.is_superadmin && (
+                      {canDelete && !u.is_superadmin && (
                         <button
                           onClick={() => handleDelete(u)}
                           disabled={deletingId === u.id}
