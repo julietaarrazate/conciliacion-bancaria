@@ -243,6 +243,73 @@ def marcar_compartido(
     return {"ok": True, "egreso_id": egreso_id, "compartido": True}
 
 
+@router.patch("/{egreso_id}")
+def editar_egreso(
+    egreso_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("reconcile")),
+):
+    """Edita campos básicos de un egreso (monto, fecha, beneficiario, concepto,
+    referencia, categoria). No modifica forma_pago ni foto (flujos propios).
+    Reversa el asiento original y genera uno nuevo con el monto corregido."""
+    q = db.query(Egreso).filter(Egreso.id == egreso_id)
+    if not current_user.is_superadmin:
+        q = q.filter(Egreso.organizacion_id == (current_user.organizacion_id or 1))
+    e = q.first()
+    if not e:
+        raise HTTPException(404, "Egreso no encontrado")
+
+    # Campos editables
+    if "monto" in payload:
+        try:
+            nuevo_monto = Decimal(str(payload["monto"]))
+        except Exception:
+            raise HTTPException(400, "monto inválido")
+        if nuevo_monto <= 0:
+            raise HTTPException(400, "El monto debe ser mayor a 0")
+        e.monto = nuevo_monto
+    if "fecha" in payload and payload["fecha"]:
+        try:
+            e.fecha = date.fromisoformat(payload["fecha"])
+        except Exception:
+            raise HTTPException(400, "fecha inválida")
+    if "beneficiario" in payload:
+        e.beneficiario = (payload["beneficiario"] or "").strip() or None
+    if "concepto" in payload:
+        e.concepto = (payload["concepto"] or "").strip() or None
+    if "referencia" in payload:
+        e.referencia = (payload["referencia"] or "").strip() or None
+    if "categoria" in payload:
+        e.categoria = (payload["categoria"] or "").strip() or None
+
+    # Reversar asiento anterior y crear uno nuevo con los valores corregidos
+    try:
+        from app.services.motor_contable import reversar_asientos, registrar_egreso as _reg_egreso
+        reversar_asientos(
+            db=db, modulo="egreso", referencia_id=e.id,
+            org_id=e.organizacion_id, usuario_id=current_user.id,
+            motivo="Edición de egreso",
+        )
+        cliente_nombre = e.cliente.nombre if e.cliente else ""
+        _reg_egreso(
+            db=db, egreso_id=e.id, org_id=e.organizacion_id, usuario_id=current_user.id,
+            tipo=e.tipo, forma_pago=e.forma_pago, monto=e.monto, fecha=e.fecha,
+            beneficiario=e.beneficiario or "",
+            concepto=e.concepto or "",
+            cliente_id=e.cliente_id,
+            cliente_nombre=cliente_nombre,
+        )
+    except Exception as ex:
+        logger.warning("asiento egreso edit %s: %s", e.id, ex)
+
+    registrar_log(db, current_user.id, "egresos", e.id, "UPDATE", {
+        "monto": str(e.monto), "fecha": str(e.fecha), "beneficiario": e.beneficiario,
+    })
+    db.commit()
+    return {"ok": True, "egreso": _egreso_dict(e)}
+
+
 @router.delete("/{egreso_id}")
 def eliminar_egreso(
     egreso_id: int,

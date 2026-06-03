@@ -331,7 +331,14 @@ export const Pagos: React.FC = () => {
     if (vista !== 'nuevo') return
     const params = activeOrgId ? { org_id: activeOrgId } : {}
     apiClient.client.get('/clientes/archivos', { params }).then(r => {
-      setClientes(r.data.clientes?.map((c: any) => ({ id: c.id || 0, nombre: c.nombre })) || [])
+      // r.data.clientes solo incluye clientes con planillas; usar organizaciones[0].clientes
+      // que incluye TODOS los clientes de la org (incluso los recién creados sin planillas)
+      const orgs: any[] = r.data.organizaciones || []
+      const todos = orgs.flatMap((o: any) => o.clientes || [])
+      const lista = todos.length
+        ? todos.map((c: any) => ({ id: c.id, nombre: c.nombre }))
+        : (r.data.clientes?.map((c: any) => ({ id: c.id || 0, nombre: c.nombre })) || [])
+      setClientes(lista.sort((a: any, b: any) => a.nombre.localeCompare(b.nombre)))
     }).catch(() => {})
     apiClient.client.get('/pagos/categorias', { params }).then(r => {
       setCategorias(r.data || [])
@@ -465,6 +472,46 @@ export const Pagos: React.FC = () => {
     setResultado(null); setMsg('')
   }
 
+  // ── Editar egreso ─────────────────────────────────────────────────
+  const [editItem, setEditItem] = useState<Egreso | null>(null)
+  const [editForm, setEditForm] = useState({ monto: '', fecha: '', beneficiario: '', concepto: '', referencia: '', categoria: '' })
+  const [editSaving, setEditSaving] = useState(false)
+  const [editMsg, setEditMsg] = useState('')
+
+  const abrirEdit = (e: Egreso) => {
+    setEditItem(e)
+    setEditForm({
+      monto: String(e.monto),
+      fecha: e.fecha || localIsoDate(),
+      beneficiario: e.beneficiario || e.cliente_nombre || '',
+      concepto: e.concepto || '',
+      referencia: e.referencia || '',
+      categoria: e.categoria || '',
+    })
+    setEditMsg('')
+  }
+
+  const guardarEdit = async () => {
+    if (!editItem) return
+    const m = parseFloat(editForm.monto)
+    if (!m || m <= 0) { setEditMsg('Ingresá un monto válido'); return }
+    setEditSaving(true); setEditMsg('')
+    try {
+      await apiClient.client.patch(`/pagos/${editItem.id}`, {
+        monto: m,
+        fecha: editForm.fecha,
+        beneficiario: editForm.beneficiario || undefined,
+        concepto: editForm.concepto || undefined,
+        referencia: editForm.referencia || undefined,
+        categoria: editForm.categoria || undefined,
+      })
+      setEditItem(null)
+      cargarLista()
+    } catch (err: any) {
+      setEditMsg(err.response?.data?.detail || 'No se pudo guardar')
+    } finally { setEditSaving(false) }
+  }
+
   // ── Render ────────────────────────────────────────────────────────
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
@@ -543,6 +590,12 @@ export const Pagos: React.FC = () => {
                         {e.tiene_foto && <span className="badge badge-ok text-2xs">📷</span>}
                       </div>
                     </div>
+                    <button
+                      onClick={() => abrirEdit(e)}
+                      title="Editar"
+                      className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
+                    </button>
                     {canDelete && (
                       <button
                         onClick={() => eliminar(e)}
@@ -706,6 +759,79 @@ export const Pagos: React.FC = () => {
           <button onClick={confirmar} disabled={saving} className="btn-yellow w-full text-base py-3">
             {saving ? 'Registrando...' : '✓ Registrar pago'}
           </button>
+        </div>
+      )}
+
+      {/* ── MODAL EDITAR ── */}
+      {editItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={e => { if (e.target === e.currentTarget) setEditItem(null) }}>
+          <div className="w-full max-w-sm bg-white dark:bg-ml-dark-card rounded-2xl shadow-xl p-5 space-y-4">
+            <h2 className="text-base font-bold dark:text-white">Editar pago</h2>
+
+            <div>
+              <label className="label">Importe</label>
+              <input
+                type="number"
+                className="input-field font-mono text-lg"
+                value={editForm.monto}
+                onChange={e => setEditForm(p => ({ ...p, monto: e.target.value }))}
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label className="label">Fecha</label>
+              <input
+                type="date"
+                className="input-field"
+                value={editForm.fecha}
+                onChange={e => setEditForm(p => ({ ...p, fecha: e.target.value }))}
+              />
+            </div>
+
+            <div>
+              <label className="label">{editItem.tipo === 'pago_cliente' ? 'A favor de' : 'Proveedor / Beneficiario'}</label>
+              <input
+                className="input-field"
+                placeholder="Nombre"
+                value={editForm.beneficiario}
+                onChange={e => setEditForm(p => ({ ...p, beneficiario: e.target.value }))}
+              />
+            </div>
+
+            <div>
+              <label className="label">Nro. OP / Referencia</label>
+              <input
+                className="input-field"
+                placeholder="opcional"
+                value={editForm.referencia}
+                onChange={e => setEditForm(p => ({ ...p, referencia: e.target.value }))}
+              />
+            </div>
+
+            <div>
+              <label className="label">Concepto / notas</label>
+              <input
+                className="input-field"
+                placeholder="opcional"
+                value={editForm.concepto}
+                onChange={e => setEditForm(p => ({ ...p, concepto: e.target.value }))}
+              />
+            </div>
+
+            {editMsg && (
+              <div className="px-3 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">{editMsg}</div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setEditItem(null)} className="btn-secondary flex-1">
+                Cancelar
+              </button>
+              <button onClick={guardarEdit} disabled={editSaving} className="btn-yellow flex-1">
+                {editSaving ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
