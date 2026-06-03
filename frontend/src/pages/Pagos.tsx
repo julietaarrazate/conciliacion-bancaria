@@ -20,11 +20,21 @@ const fmt = (n: number) =>
 const parseMonto = (raw: any): number | null => {
   if (raw == null) return null
   if (typeof raw === 'number') return isNaN(raw) ? null : raw
-  const s = String(raw).trim().replace(/[^0-9.,-]/g, '')
+  // quitar símbolo $ y espacios, luego analizar formato
+  const s = String(raw).trim().replace(/[$\s]/g, '')
   if (!s) return null
-  if (/^\d{1,3}(\.\d{3})+(,\d*)?$/.test(s)) return parseFloat(s.replace(/\./g, '').replace(',', '.'))
-  if (/^\d{1,3}(,\d{3})+(\.\d*)?$/.test(s)) return parseFloat(s.replace(/,/g, ''))
-  return parseFloat(s.replace(',', '.')) || null
+  // formato argentino: 1.200.000,50 o 15.000,50
+  if (/^\d{1,3}(\.\d{3})+(,\d{0,2})?$/.test(s))
+    return parseFloat(s.replace(/\./g, '').replace(',', '.'))
+  // formato con coma de miles: 1,200,000.50
+  if (/^\d{1,3}(,\d{3})+(\.\d{0,2})?$/.test(s))
+    return parseFloat(s.replace(/,/g, ''))
+  // número con coma decimal: 15000,50
+  if (/^\d+(,\d{1,2})$/.test(s))
+    return parseFloat(s.replace(',', '.'))
+  // número plano con o sin punto decimal
+  const n = parseFloat(s.replace(',', '.'))
+  return isNaN(n) ? null : n
 }
 
 interface Cliente { id: number; nombre: string }
@@ -263,18 +273,17 @@ export const Pagos: React.FC = () => {
         ctx.drawImage(img, 0, 0, w, h)
         const compressed = canvas.toDataURL('image/jpeg', 0.7)
         setFoto(compressed)
-        // Compress further to 768px for OCR (1 Gemini tile = 258 tokens)
-        const OCR_MAX = 768
-        let ow = w, oh = h
+        // Para OCR: máx 1024px, calidad alta, sin filtros (Gemini lee mejor color)
+        const OCR_MAX = 1024
+        let ow = img.width, oh = img.height
         if (ow > OCR_MAX) { oh = Math.round(oh * OCR_MAX / ow); ow = OCR_MAX }
         if (oh > OCR_MAX) { ow = Math.round(ow * OCR_MAX / oh); oh = OCR_MAX }
         const ocrCanvas = document.createElement('canvas')
         ocrCanvas.width = ow; ocrCanvas.height = oh
         const ocrCtx = ocrCanvas.getContext('2d')!
         ocrCtx.fillStyle = '#ffffff'; ocrCtx.fillRect(0, 0, ow, oh)
-        // Sin filtro para OCR — Gemini lee mejor imágenes en color sin procesamiento
         ocrCtx.drawImage(img, 0, 0, ow, oh)
-        const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.8)
+        const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.92)
         apiClient.client.post('/agente/ocr-transferencia', { imagen_base64: ocrCompressed })
           .then(res => {
             const d = res.data

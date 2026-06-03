@@ -449,11 +449,13 @@ def ocr_transferencia(
         mime_type, raw_bytes = _parse_b64_image(imagen_b64)
         prompt = (
             "Extraé los datos de este comprobante de transferencia bancaria argentina. "
-            "Respondé SOLO con un JSON válido (sin texto extra, sin markdown), con estos campos "
-            "(usá null si no está visible o no podés leerlo): "
-            '{"monto": número_sin_formato_o_null, "fecha": "YYYY-MM-DD o null", '
+            "Respondé SOLO con un JSON válido (sin texto extra, sin markdown). "
+            "Para el monto: devolvé SOLO el número decimal puro, sin $, sin puntos de miles, sin comas de miles. "
+            "Usá punto como separador decimal. Ejemplo: si ves '$15.000,50' devolvé 15000.50, si ves '$ 1.200.000' devolvé 1200000. "
+            "Si un campo no está visible o no podés leerlo, devolvé null. "
+            'Campos: {"monto": numero_o_null, "fecha": "YYYY-MM-DD o null", '
             '"beneficiario": "nombre del destinatario o null", '
-            '"referencia": "número de operación o null"}'
+            '"referencia": "número de operación/CVU/alias o null"}'
         )
         datos = _call_gemini_ocr(api_key, mime_type, raw_bytes, prompt)
         return datos
