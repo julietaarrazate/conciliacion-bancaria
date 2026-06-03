@@ -813,7 +813,7 @@ def get_cuenta_corriente(
         q = q.filter(Asiento.fecha >= desde)
     if hasta:
         q = q.filter(Asiento.fecha <= hasta)
-    filas = q.order_by(Asiento.fecha, Asiento.id).all()
+    filas = q.order_by(Asiento.fecha, Asiento.id).all()  # ASC para saldo correcto; se invierte al retornar
 
     # Set de asientos revertidos (existe un *_reverso que los referencia)
     asiento_ids = [a.id for _, a in filas]
@@ -894,7 +894,7 @@ def get_cuenta_corriente(
         "cliente": {"id": cli.id, "nombre": cli.nombre},
         "cuenta": {"id": cuenta.id, "codigo": cuenta.codigo, "nombre": cuenta.nombre} if cuenta else None,
         "sin_cuenta": False,
-        "movimientos": movimientos,
+        "movimientos": list(reversed(movimientos)),
         "total_debito": round(sum(m["debito"] for m in movimientos), 2),
         "total_credito": round(sum(m["credito"] for m in movimientos), 2),
         "saldo_final": round(saldo, 2),
