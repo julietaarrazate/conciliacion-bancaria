@@ -538,6 +538,20 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     }
   }
 
+  const [editFechaId, setEditFechaId] = useState<number | null>(null)
+  const [editFechaVal, setEditFechaVal] = useState('')
+
+  const saveFechaAsiento = async (asientoId: number) => {
+    const orgQ = activeOrgId ? `?org_id=${activeOrgId}` : ''
+    try {
+      await apiClient.client.patch(`/contabilidad/asientos/${asientoId}/fecha${orgQ}`, { fecha: editFechaVal })
+      setEditFechaId(null)
+      recargarTodo()
+    } catch (e: any) {
+      alert(e.response?.data?.detail || 'No se pudo guardar')
+    }
+  }
+
   const [recuperandoCli, setRecuperandoCli] = useState(false)
   const [recModalOpen, setRecModalOpen] = useState(false)
   const [recCandidatos, setRecCandidatos] = useState<string[]>([])
@@ -828,7 +842,26 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                       >
                         <td className="px-2 py-2 text-gray-400 text-center">{isOpen ? '▾' : '▸'}</td>
                         <td className="px-3 py-2 text-gray-400 font-mono">{(a as any).numero_asiento ?? a.id}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">{fmtDate(a.fecha)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                          {user?.is_superadmin && editFechaId === a.id ? (
+                            <div className="flex items-center gap-1">
+                              <input type="date" value={editFechaVal}
+                                onChange={e => setEditFechaVal(e.target.value)}
+                                className="text-xs border border-orange-300 dark:border-orange-600 rounded px-1 py-0.5 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
+                                onKeyDown={e => { if (e.key === 'Enter') saveFechaAsiento(a.id); if (e.key === 'Escape') setEditFechaId(null) }}
+                                autoFocus
+                              />
+                              <button onClick={() => saveFechaAsiento(a.id)} className="text-green-600 hover:text-green-700 text-xs font-bold">✓</button>
+                              <button onClick={() => setEditFechaId(null)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                            </div>
+                          ) : (
+                            <span
+                              className={`text-gray-700 dark:text-gray-300 ${user?.is_superadmin ? 'cursor-pointer hover:underline hover:text-orange-600 dark:hover:text-orange-400' : ''}`}
+                              title={user?.is_superadmin ? 'Clic para editar fecha' : undefined}
+                              onClick={() => { if (user?.is_superadmin) { setEditFechaId(a.id); setEditFechaVal(a.fecha || '') } }}
+                            >{fmtDate(a.fecha)}</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2">
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500">
                             {(a.modulo && MODULO_LABEL[a.modulo]) || a.modulo || '—'}
