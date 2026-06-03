@@ -60,6 +60,17 @@ settings = get_settings()
 setup_logging(debug=settings.debug)
 logger = logging.getLogger(__name__)
 
+# Sentry — monitoreo de errores (opt-in, requiere SENTRY_DSN en env)
+if settings.sentry_dsn:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        traces_sample_rate=0.05,
+        send_default_pii=False,
+        environment="production" if not settings.debug else "development",
+    )
+    logger.info("Sentry inicializado")
+
 # Rate limiter — protección brute force
 limiter = Limiter(key_func=get_remote_address)
 

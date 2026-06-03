@@ -296,8 +296,8 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   `detail` de errores 422 de Pydantic (array de objetos `{type, loc, msg, ...}`) a un string legible
   antes de llegar a los componentes. Evita "Objects are not valid as a React child" al renderizar
   `err.response.data.detail` (afectaba los 25 sitios con ese patrón).
-- **Pendiente (UX)**: ocultar los botones de borrar en el frontend para quien no tiene
-  `delete_records` (hoy el backend bloquea con 403, pero el botón sigue visible).
+- **Botones de borrar ocultos**: todas las páginas con delete buttons usan `canDelete = hasPermission('delete_records')`.
+  Usuarios.tsx y Liquidaciones.tsx usaban chequeos de rol — alineados en v3.11.4.
 
 ### v3.8 — Reset Libro Diario + filtros Excel + orden de fechas (mayo 2026 — PRs #63-#68)
 
@@ -637,12 +637,29 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   `window.confirm` con preview (dry_run) antes de ejecutar. Uso: egresos cargados antes de las
   3 AM ART quedaban con fecha UTC del día anterior → `adelantar` los corrige.
 
+### v3.11.4 — Botones de borrar + Sentry + Validación extracto (junio 2026)
+
+- **Botones de borrar por permiso**: `Usuarios.tsx` y `Liquidaciones.tsx` migrados a
+  `canDelete = hasPermission('delete_records')` (antes usaban chequeos de rol ad-hoc).
+  Todas las páginas con delete buttons usan el permiso estándar.
+- **Sentry — monitoreo de errores (opt-in)**: backend `sentry-sdk[fastapi]` en `requirements.txt`;
+  `sentry_dsn: str = ""` en `config.py`; inicialización en `main.py` solo si `SENTRY_DSN` env var
+  está seteada (`traces_sample_rate=0.05`, `send_default_pii=False`). Frontend `@sentry/react`;
+  `VITE_SENTRY_DSN` declarado en `vite-env.d.ts`; `Sentry.init()` en `main.tsx` solo si la var existe;
+  `Sentry.captureException(err)` en el ErrorBoundary global. Sin DSN → sin overhead, sin errores.
+  Activar: setear `SENTRY_DSN` en Render y `VITE_SENTRY_DSN` en Vercel (Environment Variables).
+- **Validación post-parse del extracto**: `POST /extractos` ahora rechaza con HTTP 400 si el parser
+  devuelve 0 movimientos (formato no reconocido) o si la suma absoluta de montos es cero (columna
+  de monto mal detectada). Protege contra cambios de formato bancario silenciosos.
+
+
 ### Pendiente para próximas sesiones
 
 - **Liquidaciones con asientos** — consultar con contador si las liquidaciones deben generar
   entradas contables al aprobar/pagar.
-- **Botones de borrar ocultos** — mostrar/ocultar según permiso `delete_records` en el frontend
-  (hoy el backend bloquea con 403 pero el botón sigue visible).
+- ~~**Botones de borrar ocultos**~~ — resuelto en v3.11.4.
+- ~~**Sentry monitoreo**~~ — resuelto en v3.11.4 (opt-in via SENTRY_DSN / VITE_SENTRY_DSN).
+- ~~**Validación extracto post-parse**~~ — resuelto en v3.11.4.
 - **UI comisión L/I por cliente** — chip expandible en `/clientes` para editar `porcentaje_comision_local`
   e `porcentaje_comision_interior` directamente desde la lista (hoy solo edita el % general).
 
@@ -758,7 +775,10 @@ Checkpoints disponibles:
   monto plano), stats cards overflow fixed (truncate), fix fechas bidireccional Libro Diario
   (POST /contabilidad/fix-fechas-utc: adelantar/atrasar por rango, dry_run, afecta Asiento+Egreso)
   (junio 2026 — PR #103).
+- `v3.11.4` — botones de borrar ocultos por permiso delete_records (Usuarios, Liquidaciones),
+  Sentry opt-in (SENTRY_DSN en Render / VITE_SENTRY_DSN en Vercel, sin overhead si no configurado),
+  validación post-parse extracto (400 si 0 movimientos o montos todos cero) (junio 2026 — PR #104).
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11.3
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11.4

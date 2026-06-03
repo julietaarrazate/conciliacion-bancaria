@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     # (recuperacion de contraseña, etc). Se puede sobreescribir con FRONTEND_URL.
     frontend_url: str = "https://conciliacion-bancaria-ten.vercel.app"
 
+    # Sentry — monitoreo de errores en producción (opt-in)
+    # Setear SENTRY_DSN en Render para activar. Sin DSN, no se envía nada.
+    sentry_dsn: str = ""
+
     # Web Push (VAPID) — generados via POST /push/setup
     # Si están vacíos, el push queda deshabilitado (opt-in).
     vapid_private_key: str = ""

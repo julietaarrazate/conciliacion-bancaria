@@ -1,6 +1,15 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import * as Sentry from '@sentry/react'
 import { App } from './App'
+
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    tracesSampleRate: 0.05,
+    sendDefaultPii: false,
+  })
+}
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -14,6 +23,7 @@ class ErrorBoundary extends React.Component<
     return { hasError: true, message: err?.message || 'Error desconocido' }
   }
   componentDidCatch(err: Error) {
+    Sentry.captureException(err)
     // Chunk caducado tras un nuevo deploy → recarga automática silenciosa
     const isChunkError =
       err?.message?.includes('Failed to fetch dynamically imported module') ||
