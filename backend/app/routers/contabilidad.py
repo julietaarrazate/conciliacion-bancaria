@@ -124,6 +124,19 @@ def get_asientos(
         ))
     total = q.count()
     items = q.order_by(Asiento.fecha.desc(), Asiento.id.desc()).offset(skip).limit(limit).all()
+
+    # Batch: cuentas involucradas por asiento (para mostrar en columna Cuenta)
+    ids = [a.id for a in items]
+    cuentas_por_asiento: dict[int, list[str]] = {a.id: [] for a in items}
+    if ids:
+        for det, pc in (
+            db.query(AsientoDetalle, PlanCuenta)
+            .join(PlanCuenta, AsientoDetalle.cuenta_id == PlanCuenta.id)
+            .filter(AsientoDetalle.asiento_id.in_(ids))
+            .all()
+        ):
+            cuentas_por_asiento[det.asiento_id].append(f"{pc.codigo} {pc.nombre}")
+
     return {
         "total": total,
         "items": [
@@ -135,6 +148,7 @@ def get_asientos(
                 "modulo": a.modulo,
                 "referencia_id": a.referencia_id,
                 "created_at": a.created_at,
+                "cuentas": cuentas_por_asiento.get(a.id, []),
             }
             for a in items
         ],

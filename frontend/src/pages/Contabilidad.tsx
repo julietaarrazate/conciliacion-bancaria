@@ -875,7 +875,11 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                             {(a.modulo && MODULO_LABEL[a.modulo]) || a.modulo || '—'}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300"></td>
+                        <td className="px-3 py-2 max-w-[180px]">
+                          {((a as any).cuentas as string[] || []).map((c, i) => (
+                            <span key={i} className="block font-mono text-[10px] text-gray-500 dark:text-gray-400 truncate" title={c}>{c}</span>
+                          ))}
+                        </td>
                         <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{a.descripcion || '—'}</td>
                         {canAdminAccounting && (
                           <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
