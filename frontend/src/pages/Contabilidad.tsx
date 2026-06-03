@@ -544,9 +544,10 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   const saveFechaAsiento = async (asientoId: number) => {
     const orgQ = activeOrgId ? `?org_id=${activeOrgId}` : ''
     try {
-      await apiClient.client.patch(`/contabilidad/asientos/${asientoId}/fecha${orgQ}`, { fecha: editFechaVal })
+      const r = await apiClient.client.patch(`/contabilidad/asientos/${asientoId}/fecha${orgQ}`, { fecha: editFechaVal })
+      const nuevaFecha = r.data.fecha  // "YYYY-MM-DD" confirmado por el backend
+      setAsientos(prev => prev.map(a => a.id === asientoId ? { ...a, fecha: nuevaFecha } : a))
       setEditFechaId(null)
-      recargarTodo()
     } catch (e: any) {
       alert(e.response?.data?.detail || 'No se pudo guardar')
     }
