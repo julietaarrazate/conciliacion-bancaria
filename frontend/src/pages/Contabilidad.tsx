@@ -129,7 +129,12 @@ const TIPO_BG: Record<string, string> = {
 }
 
 function fmtDate(s: string) {
-  try { return new Date(s.endsWith('Z') ? s : s + 'Z').toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' }) }
+  if (!s) return '—'
+  try {
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    return new Date(s.endsWith('Z') ? s : s + 'Z').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
   catch { return s }
 }
 function fmtNum(n: number) { return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
