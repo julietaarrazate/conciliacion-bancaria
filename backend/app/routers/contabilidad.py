@@ -98,6 +98,32 @@ def get_reglas(
     ]
 
 
+@router.get("/asientos/gaps")
+def get_asientos_gaps(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Devuelve los numero_asiento faltantes en la secuencia (solo superadmin/admin_accounting)."""
+    oid = _org_id(current_user, org_id)
+    rows = db.query(Asiento.numero_asiento).filter(
+        Asiento.organizacion_id == oid,
+        Asiento.numero_asiento.isnot(None)
+    ).order_by(Asiento.numero_asiento).all()
+    nums = [r[0] for r in rows]
+    if not nums:
+        return {"gaps": [], "total": 0, "max": 0, "count": 0}
+    max_n = nums[-1]
+    existing = set(nums)
+    gaps = [n for n in range(1, max_n + 1) if n not in existing]
+    return {
+        "count": len(nums),
+        "max": max_n,
+        "gaps": gaps,
+        "total_gaps": len(gaps),
+    }
+
+
 @router.get("/asientos")
 def get_asientos(
     org_id: Optional[int] = Query(None),

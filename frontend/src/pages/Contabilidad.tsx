@@ -1208,6 +1208,22 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                     >
                       🕐 Fix fechas UTC
                     </button>
+                    <button
+                      onClick={async () => {
+                        const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
+                        const r = await apiClient.client.get(`/contabilidad/asientos/gaps${q}`)
+                        const d = r.data
+                        if (d.total_gaps === 0) {
+                          alert(`✅ Secuencia completa: ${d.count} asientos, máximo #${d.max}, sin gaps.`)
+                        } else {
+                          alert(`⚠️ ${d.total_gaps} gap(s) en la secuencia (${d.count} activos, máx #${d.max}):\n\nNros faltantes: ${d.gaps.join(', ')}`)
+                        }
+                      }}
+                      className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
+                      title="Ver qué números de asiento están faltando en la secuencia"
+                    >
+                      🔍 Ver gaps
+                    </button>
                   </>
                 )}
               </div>
