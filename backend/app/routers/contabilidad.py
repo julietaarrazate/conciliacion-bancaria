@@ -843,6 +843,21 @@ def get_cuenta_corriente(
         for m in db.query(MovimientoBanco.id, MovimientoBanco.extracto_id).filter(MovimientoBanco.id.in_(mov_ids)).all():
             mov_map[m.id] = m.extracto_id
 
+    # Batch: cuentas contraparte (los otros detalles del mismo asiento)
+    asiento_ids_all = [a.id for _, a in filas]
+    contra_map: dict[int, str] = {}  # asiento_id → "codigo nombre"
+    if asiento_ids_all:
+        otras = (
+            db.query(AsientoDetalle, PlanCuenta)
+            .join(PlanCuenta, AsientoDetalle.cuenta_id == PlanCuenta.id)
+            .filter(AsientoDetalle.asiento_id.in_(asiento_ids_all),
+                    AsientoDetalle.cuenta_id != cli.cuenta_contable_id)
+            .all()
+        )
+        for od, pc in otras:
+            if od.asiento_id not in contra_map:
+                contra_map[od.asiento_id] = f"{pc.codigo} {pc.nombre}"
+
     movimientos = []
     saldo = 0.0
     for det, a in filas:
@@ -883,6 +898,7 @@ def get_cuenta_corriente(
             "tipo_cat": cat,
             "tipo_label": label,
             "referencia": a.descripcion or "—",
+            "cuenta_contraparte": contra_map.get(a.id, ""),
             "debito": round(debe, 2),
             "credito": round(haber, 2),
             "saldo": round(saldo, 2),

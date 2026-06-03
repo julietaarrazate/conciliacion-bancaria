@@ -1328,6 +1328,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Fecha</th>
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Tipo</th>
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Referencia</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-500">Cuenta</th>
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Estado</th>
                           <th className="text-right px-3 py-2 font-medium text-blue-600 dark:text-blue-400">Débito</th>
                           <th className="text-right px-3 py-2 font-medium text-orange-600 dark:text-orange-400">Crédito</th>
@@ -1340,7 +1341,8 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                           <tr key={i} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
                             <td className="px-3 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">{fmtDate(m.fecha)}</td>
                             <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{m.tipo_label}</td>
-                            <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[200px] truncate" title={m.referencia}>{m.referencia}</td>
+                            <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[150px] truncate" title={m.referencia}>{m.referencia}</td>
+                            <td className="px-3 py-2 font-mono text-[11px] text-gray-500 dark:text-gray-400 max-w-[140px] truncate" title={(m as any).cuenta_contraparte}>{(m as any).cuenta_contraparte || '—'}</td>
                             <td className="px-3 py-2">
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${ESTADO_BADGE[m.estado] || ''}`}>{m.estado}</span>
                             </td>
