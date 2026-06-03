@@ -633,18 +633,28 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   `window.confirm` con preview (dry_run) antes de ejecutar. Uso: egresos cargados antes de las
   3 AM ART quedaban con fecha UTC del día anterior → `adelantar` los corrige.
 
-### v3.11.4 — Botones de borrar ocultados por permiso (junio 2026)
+### v3.11.4 — Botones de borrar + Sentry + Validación extracto (junio 2026)
 
-- **Todas las páginas con botones de borrar** usan `canDelete = hasPermission('delete_records')` de forma
-  consistente. `Usuarios.tsx` (antes `!u.is_superadmin`) y `Liquidaciones.tsx` (antes `isAdmin`) migrados
-  al permiso estándar. El backend ya bloqueaba con 403; ahora el frontend no muestra el botón a quienes no
-  tienen `delete_records` (solo Admin y Superadmin).
+- **Botones de borrar por permiso**: `Usuarios.tsx` y `Liquidaciones.tsx` migrados a
+  `canDelete = hasPermission('delete_records')` (antes usaban chequeos de rol ad-hoc).
+  Todas las páginas con delete buttons usan el permiso estándar.
+- **Sentry — monitoreo de errores (opt-in)**: backend `sentry-sdk[fastapi]` en `requirements.txt`;
+  `sentry_dsn: str = ""` en `config.py`; inicialización en `main.py` solo si `SENTRY_DSN` env var
+  está seteada (`traces_sample_rate=0.05`, `send_default_pii=False`). Frontend `@sentry/react`;
+  `VITE_SENTRY_DSN` declarado en `vite-env.d.ts`; `Sentry.init()` en `main.tsx` solo si la var existe;
+  `Sentry.captureException(err)` en el ErrorBoundary global. Sin DSN → sin overhead, sin errores.
+  Activar: setear `SENTRY_DSN` en Render y `VITE_SENTRY_DSN` en Vercel (Environment Variables).
+- **Validación post-parse del extracto**: `POST /extractos` ahora rechaza con HTTP 400 si el parser
+  devuelve 0 movimientos (formato no reconocido) o si la suma absoluta de montos es cero (columna
+  de monto mal detectada). Protege contra cambios de formato bancario silenciosos.
 
 ### Pendiente para próximas sesiones
 
 - **Liquidaciones con asientos** — consultar con contador si las liquidaciones deben generar
   entradas contables al aprobar/pagar.
 - ~~**Botones de borrar ocultos**~~ — resuelto en v3.11.4.
+- ~~**Sentry monitoreo**~~ — resuelto en v3.11.4 (opt-in via SENTRY_DSN / VITE_SENTRY_DSN).
+- ~~**Validación extracto post-parse**~~ — resuelto en v3.11.4.
 - **UI comisión L/I por cliente** — chip expandible en `/clientes` para editar `porcentaje_comision_local`
   e `porcentaje_comision_interior` directamente desde la lista (hoy solo edita el % general).
 

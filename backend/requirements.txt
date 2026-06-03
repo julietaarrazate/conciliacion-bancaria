@@ -46,3 +46,6 @@ boto3==1.35.49
 
 # Agente IA (Gemini Flash — activado via env var GEMINI_API_KEY)
 google-generativeai==0.8.3
+
+# Monitoreo de errores (opt-in via env var SENTRY_DSN)
+sentry-sdk[fastapi]

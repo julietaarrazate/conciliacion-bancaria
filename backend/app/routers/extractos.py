@@ -119,6 +119,17 @@ async def upload_extracto(file: UploadFile = File(...),
 
         parsed = parsear_extracto_bancario(tmp_path)
         movs = parsed["movimientos"]
+        if len(movs) == 0:
+            raise HTTPException(400,
+                "El archivo no contiene movimientos reconocibles. "
+                "Verificá que sea un extracto bancario en formato .xlsx (Macro, BBVA, Santander, Galicia)."
+            )
+        suma_abs = sum(abs(float(m.get("monto") or 0)) for m in movs)
+        if suma_abs == 0:
+            raise HTTPException(400,
+                "El archivo se procesó pero todos los montos son cero. "
+                "El formato puede no coincidir con el esperado — intentá exportarlo nuevamente desde el banco."
+            )
         banco_detectado = parsed.get("banco_detectado", "generico")
         banco_final = _resolver_banco(banco, banco_detectado)
         fp = _fingerprint(movs)
