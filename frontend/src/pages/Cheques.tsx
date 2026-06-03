@@ -312,7 +312,7 @@ export const Cheques: React.FC = () => {
   const { activeOrgId } = useOrgStore()
   const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
 
-  const [tab, setTab] = useState<'todos' | 'deposito' | 'rechazados'>('todos')
+  const [tab, setTab] = useState<'todos' | 'deposito' | 'rechazados' | 'masiva'>('todos')
 
   // Main list
   const [cheques, setCheques]   = useState<Cheque[]>([])
@@ -377,6 +377,33 @@ export const Cheques: React.FC = () => {
   // Import Excel
   const [importando, setImportando] = useState(false)
   const importRef                   = useRef<HTMLInputElement>(null)
+
+  // Carga masiva OCR
+  interface BulkOcrRow {
+    index:          number
+    filename:       string
+    previewUrl:     string
+    numero:         string
+    banco_origen:   string
+    librador:       string
+    monto:          string
+    fecha_emision:  string
+    fecha_deposito: string
+    codigo_postal:  string
+    local_interior: string
+    cliente_id:     number | null
+    porcentaje_comision: string
+    notas:          string
+    error:          boolean
+    error_msg:      string
+  }
+  const [bulkFiles, setBulkFiles]     = useState<File[]>([])
+  const [bulkPreviews, setBulkPreviews] = useState<string[]>([])
+  const [bulkRows, setBulkRows]       = useState<BulkOcrRow[]>([])
+  const [bulkProcessing, setBulkProcessing] = useState(false)
+  const [bulkSaving, setBulkSaving]   = useState(false)
+  const [bulkMsg, setBulkMsg]         = useState('')
+  const bulkInputRef                  = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -803,12 +830,12 @@ export const Cheques: React.FC = () => {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200 dark:border-white/8">
-        {(['todos', 'deposito', 'rechazados'] as const).map(t => (
+        {(['todos', 'deposito', 'rechazados', 'masiva'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === t ? 'border-indigo-600 text-indigo-600 dark:border-indigo-500 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}>
-            {t === 'todos' ? 'Todos' : t === 'deposito' ? 'Por depósito' : 'Rechazados'}
+            {t === 'todos' ? 'Todos' : t === 'deposito' ? 'Por depósito' : t === 'rechazados' ? 'Rechazados' : '📷 Carga masiva'}
           </button>
         ))}
       </div>

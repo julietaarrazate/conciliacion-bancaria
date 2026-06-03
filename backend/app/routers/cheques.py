@@ -64,6 +64,41 @@ class PortadorIn(BaseModel):
     nombre: str
 
 
+class BulkOcrItem(BaseModel):
+    index:          int
+    filename:       str
+    numero:         Optional[str]   = None
+    banco_origen:   Optional[str]   = None
+    librador:       Optional[str]   = None
+    monto:          Optional[float] = None
+    fecha_emision:  Optional[str]   = None
+    fecha_deposito: Optional[str]   = None
+    codigo_postal:  Optional[str]   = None
+    local_interior: Optional[str]   = None
+    error:          bool            = False
+    error_msg:      Optional[str]   = None
+
+
+class BulkCrearItem(BaseModel):
+    cliente_id:          Optional[int]   = None
+    portador_id:         Optional[int]   = None
+    numero:              Optional[str]   = None
+    banco_origen:        Optional[str]   = None
+    librador:            Optional[str]   = None
+    monto:               float           = Field(..., gt=0)
+    porcentaje_comision: Optional[float] = None
+    codigo_postal:       Optional[str]   = None
+    local_interior:      Optional[str]   = None
+    fecha_emision:       Optional[str]   = None
+    fecha_deposito:      Optional[str]   = None
+    notas:               Optional[str]   = None
+
+
+class BulkCrearIn(BaseModel):
+    items:  List[BulkCrearItem]
+    org_id: Optional[int] = None
+
+
 # ── Helpers ───────────────────────────────────────────────────────
 
 def _org_id(current_user: User, org_id: Optional[int]) -> int:
@@ -109,6 +144,233 @@ def _cheque_dict(c: Cheque) -> dict:
         "tiene_foto":          bool(c.foto_comprobante),
         "banco_cuenta_id":     c.banco_cuenta_id,
         "created_at":          c.created_at,
+    }
+
+
+# ── Carga masiva OCR ──────────────────────────────────────────────
+
+@router.post("/bulk-ocr")
+async def bulk_ocr(
+    fotos: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Recibe hasta 30 fotos, aplica OCR a cada una en paralelo y devuelve los datos extraídos."""
+    import asyncio
+    import os
+    import json
+    import base64 as _base64
+
+    MAX_FOTOS = 30
+    if len(fotos) > MAX_FOTOS:
+        raise HTTPException(400, f"Máximo {MAX_FOTOS} fotos por lote")
+    if len(fotos) == 0:
+        raise HTTPException(400, "Se requiere al menos una foto")
+
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(503, "OCR no configurado (falta GEMINI_API_KEY)")
+
+    from routers.agente import _GEMINI_MODEL, _classify_gemini_error
+
+    OCR_PROMPT = (
+        "Extraé los datos de este cheque bancario argentino. "
+        "Respondé SOLO con un JSON válido (sin texto extra, sin markdown), con estos campos "
+        "(usá null si no está visible o no podés leerlo): "
+        '{"numero": "string o null", "banco_origen": "string o null", "librador": "string o null", '
+        '"monto": número_sin_formato_o_null, "fecha_emision": "YYYY-MM-DD o null", '
+        '"fecha_deposito": "YYYY-MM-DD o null", "codigo_postal": "string o null"}'
+    )
+
+    async def _ocr_single(index: int, foto: UploadFile) -> dict:
+        filename = foto.filename or f"foto_{index}"
+        base_result = {
+            "index": index,
+            "filename": filename,
+            "numero": None,
+            "banco_origen": None,
+            "librador": None,
+            "monto": None,
+            "fecha_emision": None,
+            "fecha_deposito": None,
+            "codigo_postal": None,
+            "local_interior": None,
+        }
+        try:
+            raw = await foto.read()
+            mime_type = foto.content_type or "image/jpeg"
+            # Llamada a Gemini en thread pool para no bloquear el event loop
+            loop = asyncio.get_event_loop()
+
+            def _call():
+                import google.generativeai as genai
+                import time as _time
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel(_GEMINI_MODEL)
+                image_part = genai.protos.Part(
+                    inline_data=genai.protos.Blob(mime_type=mime_type, data=raw)
+                )
+                for attempt in range(2):
+                    try:
+                        resp = model.generate_content([image_part, OCR_PROMPT])
+                        try:
+                            texto = resp.text.strip()
+                        except Exception:
+                            return {}
+                        if not texto:
+                            return {}
+                        if texto.startswith("```"):
+                            lines = [l for l in texto.split("\n") if not l.startswith("```")]
+                            texto = "\n".join(lines).strip()
+                        return json.loads(texto)
+                    except Exception as ex:
+                        msg = str(ex).upper()
+                        is_transient = "RESOURCE_EXHAUSTED" in msg or "429" in str(ex)
+                        if is_transient and attempt == 0:
+                            _time.sleep(5)
+                            continue
+                        raise
+
+            datos = await loop.run_in_executor(None, _call)
+            cp = str(datos.get("codigo_postal") or "").strip() or None
+            li = _local_interior(cp)
+            return {
+                **base_result,
+                "numero":         str(datos["numero"]).strip()        if datos.get("numero")         else None,
+                "banco_origen":   str(datos["banco_origen"]).strip()  if datos.get("banco_origen")   else None,
+                "librador":       str(datos["librador"]).strip()      if datos.get("librador")        else None,
+                "monto":          float(datos["monto"])               if datos.get("monto") is not None else None,
+                "fecha_emision":  str(datos["fecha_emision"])         if datos.get("fecha_emision")   else None,
+                "fecha_deposito": str(datos["fecha_deposito"])        if datos.get("fecha_deposito")  else None,
+                "codigo_postal":  cp,
+                "local_interior": li,
+                "error":          False,
+            }
+        except json.JSONDecodeError:
+            return {**base_result, "error": True, "error_msg": "Respuesta OCR inválida"}
+        except Exception as ex:
+            _, msg = _classify_gemini_error(ex)
+            return {**base_result, "error": True, "error_msg": msg}
+
+    tasks = [_ocr_single(i, foto) for i, foto in enumerate(fotos)]
+    results = await asyncio.gather(*tasks)
+    return {"items": list(results)}
+
+
+@router.post("/bulk-crear")
+def bulk_crear(
+    body: BulkCrearIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Crea múltiples cheques en un solo request. Valida cliente por item; no aborta ante error parcial."""
+    oid = _org_id(current_user, body.org_id)
+
+    creados_cheques = []
+    errores = []
+
+    for idx, item in enumerate(body.items):
+        try:
+            cli = None
+            if item.cliente_id:
+                cli = db.query(Cliente).filter(
+                    Cliente.id == item.cliente_id, Cliente.organizacion_id == oid
+                ).first()
+                if not cli:
+                    errores.append({"index": idx, "msg": f"Cliente {item.cliente_id} no encontrado"})
+                    continue
+                if not cli.cuenta_contable_id:
+                    errores.append({"index": idx, "msg": f"'{cli.nombre}' no tiene cuenta contable. Creala en Contabilidad → Clientes."})
+                    continue
+
+            if item.portador_id:
+                if not db.query(Portador).filter(Portador.id == item.portador_id, Portador.organizacion_id == oid).first():
+                    errores.append({"index": idx, "msg": f"Portador {item.portador_id} no encontrado"})
+                    continue
+
+            li = item.local_interior or _local_interior(item.codigo_postal)
+
+            if item.porcentaje_comision is not None:
+                pct_comision = Decimal(str(item.porcentaje_comision))
+            elif cli:
+                if li == "local" and cli.porcentaje_comision_local is not None:
+                    pct_comision = cli.porcentaje_comision_local
+                elif li == "interior" and cli.porcentaje_comision_interior is not None:
+                    pct_comision = cli.porcentaje_comision_interior
+                else:
+                    pct_comision = cli.porcentaje_comision
+            else:
+                pct_comision = None
+
+            monto_dec = Decimal(str(item.monto))
+            comision_dec = Decimal("0")
+            if pct_comision is not None:
+                comision_dec = (monto_dec * pct_comision / Decimal("100")).quantize(Decimal("0.01"))
+
+            fecha_dep = None
+            if item.fecha_deposito:
+                try:
+                    from datetime import date as _date
+                    fecha_dep = _date.fromisoformat(item.fecha_deposito[:10])
+                except Exception:
+                    fecha_dep = None
+            fecha_dep = fecha_dep or hoy_art()
+
+            fecha_emi = None
+            if item.fecha_emision:
+                try:
+                    from datetime import date as _date
+                    fecha_emi = _date.fromisoformat(item.fecha_emision[:10])
+                except Exception:
+                    fecha_emi = None
+
+            c = Cheque(
+                organizacion_id=oid,
+                cliente_id=item.cliente_id,
+                portador_id=item.portador_id,
+                numero=item.numero,
+                banco_origen=item.banco_origen,
+                librador=item.librador,
+                monto=monto_dec,
+                comision=comision_dec,
+                porcentaje_comision=pct_comision,
+                codigo_postal=item.codigo_postal,
+                local_interior=li,
+                fecha_emision=fecha_emi,
+                fecha_deposito=fecha_dep,
+                estado="registrado",
+                notas=item.notas,
+                usuario_id=current_user.id,
+            )
+            db.add(c)
+            db.flush()
+
+            registrar_cheque(
+                db=db, cheque_id=c.id, org_id=oid, usuario_id=current_user.id,
+                titular=c.librador or "", monto=c.monto, comision=c.comision,
+                fecha=fecha_dep,
+            )
+            registrar_log(db, current_user.id, "cheques", c.id, "INSERT",
+                          {"monto": float(c.monto), "librador": c.librador,
+                           "cliente_id": c.cliente_id, "bulk": True,
+                           "fecha_deposito": str(fecha_dep)})
+            creados_cheques.append(c)
+
+        except Exception as ex:
+            db.rollback()
+            errores.append({"index": idx, "msg": str(ex)})
+            continue
+
+    db.commit()
+    for c in creados_cheques:
+        try:
+            db.refresh(c)
+        except Exception:
+            pass
+
+    return {
+        "creados":  len(creados_cheques),
+        "errores":  errores,
+        "cheques":  [_cheque_dict(c) for c in creados_cheques],
     }
 
 
