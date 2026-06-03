@@ -781,6 +781,116 @@ export const Cheques: React.FC = () => {
   const totalAcred = cheques.filter(c => c.estado === 'acreditado').reduce((s, c) => s + c.monto, 0)
   const totalRech  = cheques.filter(c => c.estado === 'rechazado').reduce((s, c) => s + c.monto, 0)
 
+  const handleBulkFileChange = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    const MAX = 30
+    const arr = Array.from(files).slice(0, MAX)
+    setBulkFiles(arr)
+    setBulkRows([])
+    setBulkMsg('')
+    const previews = await Promise.all(arr.map(f => toBase64(f)))
+    setBulkPreviews(previews)
+  }
+
+  const handleBulkRemoveFile = (idx: number) => {
+    setBulkFiles(prev => prev.filter((_, i) => i !== idx))
+    setBulkPreviews(prev => prev.filter((_, i) => i !== idx))
+    setBulkRows([])
+    setBulkMsg('')
+  }
+
+  const handleBulkProcess = async () => {
+    if (bulkFiles.length === 0) return
+    setBulkProcessing(true); setBulkMsg(''); setBulkRows([])
+    try {
+      const fd = new FormData()
+      bulkFiles.forEach(f => fd.append('fotos', f))
+      const params: Record<string, string | number> = {}
+      if (activeOrgId) params.org_id = activeOrgId
+      const res = await apiClient.client.post('/cheques/bulk-ocr', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        params,
+      })
+      const items: any[] = res.data.items || []
+      setBulkRows(items.map((item: any, i: number) => ({
+        index:               item.index ?? i,
+        filename:            item.filename ?? bulkFiles[i]?.name ?? `foto_${i}`,
+        previewUrl:          bulkPreviews[item.index ?? i] ?? '',
+        numero:              item.numero ?? '',
+        banco_origen:        item.banco_origen ?? '',
+        librador:            item.librador ?? '',
+        monto:               item.monto != null ? String(item.monto) : '',
+        fecha_emision:       item.fecha_emision ?? '',
+        fecha_deposito:      item.fecha_deposito ?? '',
+        codigo_postal:       item.codigo_postal ?? '',
+        local_interior:      item.local_interior ?? '',
+        cliente_id:          null,
+        porcentaje_comision: '',
+        notas:               '',
+        error:               item.error ?? false,
+        error_msg:           item.error_msg ?? '',
+      })))
+    } catch (e: any) { setBulkMsg(e?.response?.data?.detail || 'Error al procesar OCR') }
+    finally { setBulkProcessing(false) }
+  }
+
+  const handleBulkUpdateRow = (idx: number, field: string, value: string | number | null) => {
+    setBulkRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r
+      const updated: any = { ...r, [field]: value }
+      if (field === 'codigo_postal') updated.local_interior = computeLI(String(value ?? ''))
+      if (field === 'cliente_id') {
+        const cli = clientes.find(c => c.id === (value as number)) ?? null
+        const li = updated.local_interior || computeLI(updated.codigo_postal)
+        const pct = pctParaCliente(cli, li)
+        updated.porcentaje_comision = pct != null ? String(pct) : ''
+      }
+      return updated
+    }))
+  }
+
+  const handleBulkRemoveRow = (idx: number) => {
+    setBulkRows(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleBulkSave = async () => {
+    if (bulkRows.length === 0) return
+    const readyRows = bulkRows.filter(r => !r.error && parseFloat(r.monto) > 0)
+    if (readyRows.length === 0) { setBulkMsg('No hay filas válidas para guardar'); return }
+    setBulkSaving(true); setBulkMsg('')
+    try {
+      const items = readyRows.map(r => ({
+        cliente_id:          r.cliente_id || null,
+        portador_id:         null,
+        numero:              r.numero || null,
+        banco_origen:        r.banco_origen || null,
+        librador:            r.librador || null,
+        monto:               parseFloat(r.monto),
+        porcentaje_comision: r.porcentaje_comision ? parseFloat(r.porcentaje_comision) : null,
+        codigo_postal:       r.codigo_postal || null,
+        local_interior:      r.local_interior || null,
+        fecha_emision:       r.fecha_emision || null,
+        fecha_deposito:      r.fecha_deposito || null,
+        notas:               r.notas || null,
+      }))
+      const params: Record<string, string | number> = {}
+      if (activeOrgId) params.org_id = activeOrgId
+      const res = await apiClient.client.post('/cheques/bulk-crear', { items, org_id: activeOrgId || null }, { params })
+      const { creados, errores } = res.data
+      const msg = `✓ ${creados} cheque${creados !== 1 ? 's' : ''} guardado${creados !== 1 ? 's' : ''}${errores.length ? ` · ${errores.length} error(es)` : ''}`
+      setBulkMsg(msg)
+      if (creados > 0) {
+        setBulkFiles([]); setBulkPreviews([]); setBulkRows([])
+        load()
+      }
+      if (errores.length > 0) {
+        const errMsgs = errores.map((e: any) => `Fila ${e.index + 1}: ${e.msg}`).join(' | ')
+        setBulkMsg(`${msg} — ${errMsgs}`)
+      }
+    } catch (e: any) { setBulkMsg(e?.response?.data?.detail || 'Error al guardar') }
+    finally { setBulkSaving(false) }
+  }
+
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
       {/* Header */}
