@@ -329,7 +329,8 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     setLoadingCartera(true)
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
     apiClient.client.get(`/contabilidad/cuentas-corrientes${q}`)
-      .then(r => setCartera(r.data.items))
+      .then(r => setCartera(r.data.items ?? []))
+      .catch(() => setCartera([]))
       .finally(() => setLoadingCartera(false))
   }
 
@@ -802,7 +803,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   <th className="px-3 py-2 font-medium text-left">
                     <ExcelFilterCtb label="Concepto" active={!!diarioModulo}>
                       <div className="flex flex-col gap-1">
-                        {['', 'um_lote', 'um_mov', 'um_reclass', 'cc_inicial', 'planilla', 'planilla_comision', 'cheque_carga', 'cheque_rechazo', 'pago', 'caja_op', 'caja_efectivo'].map(m => (
+                        {['', 'um_lote', 'um_reclass', 'cc_inicial', 'cheque_registro', 'cheque_acred_banco', 'cheque_acred_cliente', 'cheque_rechazo_banco', 'cheque_rechazo_cliente', 'cheque_rechazo_gasto', 'egreso', 'caja_op', 'caja_efectivo', 'ajuste_manual', 'ajuste_manual_reverso'].map(m => (
                           <button key={m} onClick={() => setDiarioModulo(m)}
                             className={`text-left px-2 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-slate-700 ${diarioModulo === m ? 'bg-ml-blue text-white' : 'text-gray-700 dark:text-gray-300'}`}>
                             {m === '' ? '(Todos)' : (MODULO_LABEL[m] || m)}
