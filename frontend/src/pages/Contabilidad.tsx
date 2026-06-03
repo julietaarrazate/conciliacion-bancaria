@@ -844,15 +844,17 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                         <td className="px-3 py-2 text-gray-400 font-mono">{(a as any).numero_asiento ?? a.id}</td>
                         <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                           {user?.is_superadmin && editFechaId === a.id ? (
-                            <div className="flex items-center gap-1">
+                            <div className="flex flex-col gap-1 min-w-[130px]">
                               <input type="date" value={editFechaVal}
                                 onChange={e => setEditFechaVal(e.target.value)}
-                                className="text-xs border border-orange-300 dark:border-orange-600 rounded px-1 py-0.5 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
+                                className="text-xs border border-orange-300 dark:border-orange-600 rounded px-2 py-1 bg-white dark:bg-slate-800 text-gray-900 dark:text-white w-full"
                                 onKeyDown={e => { if (e.key === 'Enter') saveFechaAsiento(a.id); if (e.key === 'Escape') setEditFechaId(null) }}
                                 autoFocus
                               />
-                              <button onClick={() => saveFechaAsiento(a.id)} className="text-green-600 hover:text-green-700 text-xs font-bold">✓</button>
-                              <button onClick={() => setEditFechaId(null)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                              <button onClick={() => saveFechaAsiento(a.id)}
+                                className="w-full text-xs px-2 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white font-semibold">
+                                Guardar
+                              </button>
                             </div>
                           ) : (
                             <span

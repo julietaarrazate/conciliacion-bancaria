@@ -1227,10 +1227,13 @@ def post_asiento_manual(
         raise HTTPException(status_code=500, detail=str(ex))
 
 
+class PatchFechaBody(BaseModel):
+    fecha: str  # YYYY-MM-DD
+
 @router.patch("/asientos/{asiento_id}/fecha")
 def patch_asiento_fecha(
     asiento_id: int,
-    body: dict,
+    body: PatchFechaBody,
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("admin_accounting")),
@@ -1241,11 +1244,8 @@ def patch_asiento_fecha(
     a = db.query(Asiento).filter(Asiento.id == asiento_id, Asiento.organizacion_id == oid).first()
     if not a:
         raise HTTPException(404, "Asiento no encontrado")
-    nueva_fecha = body.get("fecha")
-    if not nueva_fecha:
-        raise HTTPException(400, "Campo 'fecha' requerido")
     try:
-        a.fecha = _date.fromisoformat(str(nueva_fecha))
+        a.fecha = _date.fromisoformat(body.fecha)
     except ValueError:
         raise HTTPException(400, "Formato de fecha inválido (YYYY-MM-DD)")
     db.commit()
