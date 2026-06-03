@@ -63,7 +63,9 @@ const TIPO_LABEL: Record<string, string> = {
 type Vista = 'lista' | 'nuevo'
 type Step = 'foto' | 'datos' | 'exito'
 
-// Share payment as PDF document (jsPDF loaded on-demand)
+// Comparte el comprobante como PDF (foto + datos del pago). jsPDF on-demand.
+// Es la opción preferida; si el dispositivo no acepta compartir PDF, el caller
+// cae a sharePagoImagen (imagen compuesta) y nunca a la foto sola.
 const sharePagoPdf = async (
   nombre: string, tipo: string, montoNum: number, fecha: string,
   formaPago: string, referencia: string, fotoB64: string
@@ -135,7 +137,91 @@ const sharePagoPdf = async (
     }
   } catch (e: any) {
     // Si el usuario cancela el share sheet (AbortError), considerarlo "compartido"
-    // para NO caer al fallback de WhatsApp solo-texto.
+    // para NO caer al fallback.
+    if (e?.name === 'AbortError') return true
+  }
+  return false
+}
+
+// Fallback cuando el dispositivo NO acepta compartir PDF: imagen compuesta
+// (foto + datos del pago) en un solo JPEG. Nunca comparte la foto sola.
+const sharePagoImagen = async (
+  nombre: string, tipo: string, montoNum: number, fecha: string,
+  formaPago: string, referencia: string, fotoB64: string
+): Promise<boolean> => {
+  try {
+    const img = new Image()
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error('img'))
+      img.src = fotoB64
+    })
+
+    const PX = 900          // ancho fijo del comprobante
+    const PAD = 32
+    const ROW_H = 48
+    const fotoW = PX
+    const fotoH = Math.round(img.naturalHeight * PX / (img.naturalWidth || PX))
+    const fmtN = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n)
+    const TIPO_LABEL_SHORT: Record<string, string> = { proveedor: 'Proveedor', gasto: 'Gasto', pago_cliente: 'Pago a cliente' }
+    const rows = [
+      ['Importe', fmtN(montoNum)],
+      ['Tipo', TIPO_LABEL_SHORT[tipo] || tipo],
+      ['Forma de pago', formaPago === 'banco' ? 'Banco' : 'Efectivo'],
+      ['Fecha', new Date(fecha + 'T00:00:00').toLocaleDateString('es-AR')],
+      ...(referencia ? [['Referencia', referencia]] : []),
+    ]
+    const headerH = 56
+    const footerH = headerH + rows.length * ROW_H + PAD
+    const totalH = fotoH + footerH
+
+    const canvas = document.createElement('canvas')
+    canvas.width = PX; canvas.height = totalH
+    const ctx = canvas.getContext('2d')!
+
+    // Foto sobre fondo blanco (evita negro de canales alpha en JPEG)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, PX, totalH)
+    ctx.drawImage(img, 0, 0, fotoW, fotoH)
+
+    // Separador
+    ctx.fillStyle = '#f3f4f6'
+    ctx.fillRect(0, fotoH, PX, footerH)
+
+    // Título
+    ctx.fillStyle = '#111827'
+    ctx.font = `bold 30px system-ui, sans-serif`
+    ctx.fillText(`COMPROBANTE DE PAGO`, PAD, fotoH + 38)
+    ctx.fillStyle = '#6b7280'
+    ctx.font = `22px system-ui, sans-serif`
+    ctx.fillText(nombre, PAD, fotoH + 62)
+
+    // Línea divisora
+    ctx.strokeStyle = '#d1d5db'
+    ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(PAD, fotoH + 72); ctx.lineTo(PX - PAD, fotoH + 72); ctx.stroke()
+
+    // Filas de datos
+    rows.forEach(([label, value], i) => {
+      const y = fotoH + headerH + i * ROW_H + 30
+      ctx.fillStyle = '#6b7280'
+      ctx.font = `20px system-ui, sans-serif`
+      ctx.fillText(label, PAD, y)
+      ctx.fillStyle = '#111827'
+      ctx.font = `bold 22px system-ui, sans-serif`
+      ctx.fillText(value, PX / 2, y)
+    })
+
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob')), 'image/jpeg', 0.92)
+    )
+    const file = new File([blob], `Pago_${nombre.replace(/\s+/g, '_')}.jpg`, { type: 'image/jpeg' })
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      suppressLockForShare()
+      await navigator.share({ title: `Pago - ${nombre}`, files: [file] })
+      return true
+    }
+  } catch (e: any) {
     if (e?.name === 'AbortError') return true
   }
   return false
@@ -291,7 +377,8 @@ export const Pagos: React.FC = () => {
               const ocrMonto = parseMonto(d.monto)
               return {
                 ...prev,
-                monto:        prev.monto        || (ocrMonto != null ? new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(ocrMonto) : prev.monto),
+                // type="number" input requires standard decimal format ("15000.5"), NOT Argentine ("15.000,50")
+                monto:        prev.monto        || (ocrMonto != null ? String(Math.round(ocrMonto * 100) / 100) : prev.monto),
                 fecha:        prev.fecha        || d.fecha        || prev.fecha,
                 beneficiario: prev.beneficiario || d.beneficiario || prev.beneficiario,
                 referencia:   prev.referencia   || d.referencia   || prev.referencia,
@@ -305,7 +392,7 @@ export const Pagos: React.FC = () => {
     reader.readAsDataURL(file)
   }
 
-  const montoNum = parseFloat(form.monto.replace(/\./g, '').replace(',', '.')) || 0
+  const montoNum = parseFloat(form.monto) || 0
 
   const crearCategoria = async () => {
     const nombre = nuevaCat.trim()
@@ -352,40 +439,17 @@ export const Pagos: React.FC = () => {
     if (!resultado) return
     const nombre = form.beneficiario || form.cliente_nombre || form.concepto || 'Pago'
     const texto = `Pago registrado%0A• ${TIPO_LABEL[form.tipo]}: ${nombre}%0A• Importe: ${fmt(montoNum)}%0A• ${form.forma_pago === 'banco' ? 'Banco' : 'Efectivo'}%0A• Fecha: ${new Date(form.fecha).toLocaleDateString('es-AR')}`
-    await apiClient.client.post(`/pagos/${resultado.id}/compartir`).catch(() => {})
+    // Fire-and-forget: NO usar await acá. navigator.share() requiere activación de
+    // usuario transitoria (~5s); si esperamos el POST (Render cold start puede tardar),
+    // la activación expira y share() lanza NotAllowedError → caía al fallback de foto.
+    apiClient.client.post(`/pagos/${resultado.id}/compartir`).catch(() => {})
     if (foto) {
-      // 1️⃣ Intentar compartir como PDF con foto escaneada
+      // 1️⃣ Preferido: compartir como PDF con foto + datos.
       const sharedPdf = await sharePagoPdf(nombre, form.tipo, montoNum, form.fecha, form.forma_pago, form.referencia, foto)
       if (sharedPdf) return
-      // 2️⃣ Fallback: compartir como imagen (re-render con fondo blanco para evitar negro en JPEG)
-      if (navigator.share && navigator.canShare) {
-        try {
-          const img = new Image()
-          // onload ANTES de src para evitar race condition con data URLs
-          await new Promise<void>((resolve, reject) => {
-            img.onload = () => resolve()
-            img.onerror = () => reject(new Error('img'))
-            img.src = foto
-          })
-          const canvas = document.createElement('canvas')
-          canvas.width = img.naturalWidth || 800; canvas.height = img.naturalHeight || 600
-          const ctx = canvas.getContext('2d')!
-          ctx.fillStyle = '#ffffff'
-          ctx.fillRect(0, 0, canvas.width, canvas.height)
-          ctx.drawImage(img, 0, 0)
-          const blob = await new Promise<Blob>((resolve, reject) =>
-            canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob')), 'image/jpeg', 0.85)
-          )
-          const file = new File([blob], `Pago_${nombre}.jpg`, { type: 'image/jpeg' })
-          if (navigator.canShare({ files: [file] })) {
-            suppressLockForShare()
-            await navigator.share({ title: `Pago - ${nombre} - ${fmt(montoNum)}`, files: [file] })
-            return
-          }
-        } catch (e: any) {
-          if (e?.name === 'AbortError') return  // el usuario cerró el menú de compartir
-        }
-      }
+      // 2️⃣ Si el dispositivo no acepta compartir PDF: imagen compuesta (foto + datos).
+      const sharedImg = await sharePagoImagen(nombre, form.tipo, montoNum, form.fecha, form.forma_pago, form.referencia, foto)
+      if (sharedImg) return
     }
     window.open(`whatsapp://send?text=${texto}`, '_blank')
   }
