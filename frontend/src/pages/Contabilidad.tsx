@@ -454,8 +454,9 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   // ── Fix fechas UTC — modal propio (reemplaza window.prompt que no anda en mobile) ──
   const [fixFechasOpen, setFixFechasOpen] = useState(false)
   const [fixDesde, setFixDesde] = useState('2026-05-31')
-  const [fixHasta, setFixHasta] = useState('2026-06-02')
+  const [fixHasta, setFixHasta] = useState('2026-06-01')
   const [fixDir, setFixDir] = useState<'adelantar' | 'atrasar'>('adelantar')
+  const [fixSoloEgresos, setFixSoloEgresos] = useState(true)
   const [fixPreview, setFixPreview] = useState<null | { asientos_afectados: number; egresos_afectados: number; detalle_asientos: any[]; detalle_egresos: any[] }>(null)
   const [fixLoading, setFixLoading] = useState(false)
   const [fixMsg, setFixMsg] = useState('')
@@ -463,8 +464,9 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   const fixFechasDryRun = async () => {
     setFixLoading(true); setFixMsg(''); setFixPreview(null)
     const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    const moduloQ = fixSoloEgresos ? '&modulo=egreso' : ''
     try {
-      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=true&desde=${fixDesde}&hasta=${fixHasta}&direccion=${fixDir}${orgQ}`)
+      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=true&desde=${fixDesde}&hasta=${fixHasta}&direccion=${fixDir}${orgQ}${moduloQ}`)
       setFixPreview(r.data)
     } catch (e: any) {
       setFixMsg(`❌ ${e.response?.data?.detail || e.message}`)
@@ -474,8 +476,9 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   const fixFechasEjecutar = async () => {
     setFixLoading(true); setFixMsg('')
     const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    const moduloQ = fixSoloEgresos ? '&modulo=egreso' : ''
     try {
-      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=false&desde=${fixDesde}&hasta=${fixHasta}&direccion=${fixDir}${orgQ}`)
+      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=false&desde=${fixDesde}&hasta=${fixHasta}&direccion=${fixDir}${orgQ}${moduloQ}`)
       setFixMsg(`✓ ${r.data.mensaje}`)
       setFixPreview(null)
       recargarTodo()
@@ -1483,6 +1486,10 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   <option value="atrasar">Atrasar −1 día (muestran 1 día después de lo correcto)</option>
                 </select>
               </div>
+              <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-zinc-400 cursor-pointer">
+                <input type="checkbox" checked={fixSoloEgresos} onChange={e => { setFixSoloEgresos(e.target.checked); setFixPreview(null) }} className="rounded" />
+                Solo egresos (no tocar asientos de cheques, UM, etc.)
+              </label>
 
               {fixPreview && (
                 <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-3 text-xs space-y-1">

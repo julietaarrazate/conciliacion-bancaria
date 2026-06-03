@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios'
+import { localIsoDate } from '@/utils/fecha'
 import {
   User,
   AuthResponse,
@@ -574,7 +575,7 @@ class ApiClient {
     const url = URL.createObjectURL(new Blob([res.data]))
     const a = document.createElement('a')
     a.href = url
-    a.download = `movimientos_${new Date().toISOString().slice(0,10)}.xlsx`
+    a.download = `movimientos_${localIsoDate()}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -611,7 +612,7 @@ class ApiClient {
     const url = URL.createObjectURL(new Blob([res.data]))
     const a = document.createElement('a')
     a.href = url
-    a.download = `historial_${new Date().toISOString().slice(0,10)}.xlsx`
+    a.download = `historial_${localIsoDate()}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -647,7 +648,7 @@ class ApiClient {
     const a = document.createElement('a')
     const cd = res.headers['content-disposition'] || ''
     const match = cd.match(/filename="([^"]+)"/)
-    a.download = match ? match[1] : `conciliaciones_${new Date().toISOString().slice(0,10)}.xlsx`
+    a.download = match ? match[1] : `conciliaciones_${localIsoDate()}.xlsx`
     a.href = url; a.click()
     URL.revokeObjectURL(url)
   }

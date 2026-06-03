@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import List
 from datetime import datetime
 import io
+from app.services.tz import now_art
 
 from app.database import get_db
 from app.models.organizacion import Organizacion, CONFIG_DEFAULT
@@ -274,7 +275,7 @@ def panel_actividad(
     from app.models.cliente import Cliente
 
     orgs = db.query(Organizacion).filter(Organizacion.activo == True).all()
-    hoy = datetime.utcnow()
+    hoy = now_art()
     inicio_mes = hoy.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     hace_7_dias = hoy - timedelta(days=7)
 
