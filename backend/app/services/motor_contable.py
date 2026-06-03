@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
+from app.services.tz import hoy_art
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ def registrar_extracto(
         total = sum(abs(_monto(m.monto)) for m in movimientos)
         if total <= 0:
             return
-        hoy = date.today()
+        hoy = hoy_art()
         _crear_asiento(
             db=db,
             regla=regla,
@@ -705,7 +706,7 @@ def registrar_um_import(
                 monto_abs = abs(monto)
                 if monto_abs <= 0:
                     continue
-                fecha_mov = mov.fecha if isinstance(mov.fecha, date) else date.today()
+                fecha_mov = mov.fecha if isinstance(mov.fecha, date) else hoy_art()
                 a = Asiento(
                     fecha=fecha_mov,
                     descripcion=f"UM: {mov.titular or 'Sin titular'}",
@@ -732,7 +733,7 @@ def registrar_um_import(
             total_neg = sum(abs(min(_monto(m.monto), Decimal("0"))) for m in movimientos_nuevos)
             if total_pos <= 0 and total_neg <= 0:
                 return
-            fecha_ref = primer_mov.fecha if isinstance(primer_mov.fecha, date) else date.today()
+            fecha_ref = primer_mov.fecha if isinstance(primer_mov.fecha, date) else hoy_art()
             lote = primer_mov.um_lote or 1
             a = Asiento(
                 fecha=fecha_ref,
@@ -781,7 +782,7 @@ def registrar_reclasificacion_um(
         monto_d = abs(_monto(monto))
         if monto_d <= 0:
             return
-        fecha_asiento = fecha if isinstance(fecha, date) else date.today()
+        fecha_asiento = fecha if isinstance(fecha, date) else hoy_art()
         a = Asiento(
             fecha=fecha_asiento,
             descripcion=f"Reclasif. UM → {cliente_nombre}",
@@ -828,7 +829,7 @@ def registrar_cc_inicial(
         monto_d = abs(_monto(monto))
         if monto_d <= 0:
             return False
-        fecha_asiento = fecha if isinstance(fecha, date) else date.today()
+        fecha_asiento = fecha if isinstance(fecha, date) else hoy_art()
         desc = f"Acreditación histórica — {cliente_nombre}"
         if nombre_archivo:
             desc += f" ({nombre_archivo})"
@@ -899,7 +900,7 @@ def reversar_asientos(
                 continue
 
             reverso = Asiento(
-                fecha=date.today(),
+                fecha=hoy_art(),
                 descripcion=f"REVERSO #{orig.id}: {orig.descripcion or ''} — {motivo}",
                 modulo=modulo_reverso,
                 referencia_id=orig.id,

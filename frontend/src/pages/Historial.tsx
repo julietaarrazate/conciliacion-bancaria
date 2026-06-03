@@ -7,6 +7,7 @@ import { confirmDialog } from '@/store/confirm'
 import { Skeleton } from '@/components/Skeleton'
 import { toast } from '@/store/toast'
 import { useAuthStore } from '@/store/auth'
+import { localIsoDate, isoHaceNDias } from '@/utils/fecha'
 
 export const Historial: React.FC = () => {
   const { activeOrgId } = useOrgStore()
@@ -20,7 +21,7 @@ export const Historial: React.FC = () => {
   const [panelId, setPanelId] = useState<number | null>(null)
   const [msg, setMsg] = useState('')
   const [recModal, setRecModal] = useState<PlanillaHistorialItem | null>(null)
-  const [recFecha, setRecFecha] = useState(new Date().toISOString().split('T')[0])
+  const [recFecha, setRecFecha] = useState(localIsoDate())
   const [recRunning, setRecRunning] = useState(false)
   const [recError, setRecError] = useState('')
 
@@ -145,7 +146,7 @@ export const Historial: React.FC = () => {
 
       {/* ── Mensaje ──────────────────────────────────────── */}
       {msg && (
-        <div className={`mx-4 mt-2 px-3 py-2 rounded text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-600'}`}>
+        <div className={`mx-4 mt-2 px-3 py-2 rounded text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
           {msg}
         </div>
       )}
@@ -246,7 +247,7 @@ export const Historial: React.FC = () => {
                     👁️ Ver / Editar
                   </button>
                   <button
-                    onClick={() => { setRecFecha(new Date().toISOString().split('T')[0]); setRecError(''); setRecModal(it) }}
+                    onClick={() => { setRecFecha(localIsoDate()); setRecError(''); setRecModal(it) }}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 font-medium active:scale-95"
                     title="Re-conciliar: busca movimientos nuevos para las filas que no estaban"
                   >
@@ -299,14 +300,14 @@ export const Historial: React.FC = () => {
                 <label className="label text-xs">Fecha de acreditación</label>
                 <div className="flex gap-2 mb-1">
                   <button
-                    onClick={() => setRecFecha(new Date().toISOString().split('T')[0])}
-                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${recFecha === new Date().toISOString().split('T')[0] ? 'bg-ml-blue text-white border-ml-blue' : 'border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 dark:text-gray-300'}`}
+                    onClick={() => setRecFecha(localIsoDate())}
+                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${recFecha === localIsoDate() ? 'bg-ml-blue text-white border-ml-blue' : 'border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 dark:text-gray-300'}`}
                   >
                     Hoy
                   </button>
                   <button
-                    onClick={() => { const d = new Date(); d.setDate(d.getDate()-1); setRecFecha(d.toISOString().split('T')[0]) }}
-                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${recFecha === (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0] })() ? 'bg-ml-blue text-white border-ml-blue' : 'border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 dark:text-gray-300'}`}
+                    onClick={() => setRecFecha(isoHaceNDias(1))}
+                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${recFecha === isoHaceNDias(1) ? 'bg-ml-blue text-white border-ml-blue' : 'border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 dark:text-gray-300'}`}
                   >
                     Ayer
                   </button>

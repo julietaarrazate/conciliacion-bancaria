@@ -5,6 +5,7 @@ import { Skeleton, SkeletonKpi } from '@/components/Skeleton'
 import { LineChart } from '@/components/charts/LineChart'
 import { useOrgStore } from '@/store/org'
 import { toast } from '@/store/toast'
+import { localIsoDate } from '@/utils/fecha'
 
 type Periodo = 'hoy' | 'semana' | 'mes' | 'rango'
 
@@ -61,7 +62,7 @@ export const Resumen: React.FC = () => {
   const [periodo, setPeriodo] = useState<Periodo>('hoy')
   const [anio, setAnio] = useState(hoy.getFullYear())
   const [mes, setMes] = useState(hoy.getMonth() + 1)
-  const fmtIso = (d: Date) => d.toISOString().slice(0, 10)
+  const fmtIso = (d: Date) => localIsoDate(d)
   const [rangoDesde, setRangoDesde] = useState(() => fmtIso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)))
   const [rangoHasta, setRangoHasta] = useState(() => fmtIso(hoy))
   const [data, setData] = useState<Dashboard | null>(null)
@@ -152,7 +153,7 @@ export const Resumen: React.FC = () => {
   if (!data) {
     if (error) return (
       <div className="p-6">
-        <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">{error}</div>
+        <div className="text-sm text-red-700 bg-red-50 border border-red-200 dark:text-red-400 dark:bg-red-500/10 dark:border-red-500/20 rounded-lg px-4 py-3">{error}</div>
       </div>
     )
     return null

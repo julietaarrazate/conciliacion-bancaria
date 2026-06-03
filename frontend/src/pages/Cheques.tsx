@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
+import { useAuthStore } from '@/store/auth'
 import { useLockStore } from '@/store/lock'
 
 // Evita que abrir el menú nativo de compartir dispare el bloqueo por PIN/huella.
@@ -61,12 +62,12 @@ interface DepositoData {
 }
 
 const ESTADO_BADGE: Record<string, string> = {
-  pendiente:  'bg-yellow-500/15 text-yellow-400',
-  registrado: 'bg-yellow-500/15 text-yellow-400',
-  depositado: 'bg-orange-500/15 text-orange-400',
-  acreditado: 'bg-green-500/15 text-green-400',
-  rechazado:  'bg-red-500/15 text-red-400',
-  anulado:    'bg-gray-500/15 text-gray-400',
+  pendiente:  'bg-yellow-50 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400',
+  registrado: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400',
+  depositado: 'bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400',
+  acreditado: 'bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-400',
+  rechazado:  'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400',
+  anulado:    'bg-gray-100 text-gray-600 dark:bg-gray-500/15 dark:text-gray-400',
 }
 const ESTADO_LABEL: Record<string, string> = {
   pendiente: 'Registrado', registrado: 'Registrado', depositado: 'Depositado',
@@ -83,7 +84,6 @@ const emptyForm = () => ({
   codigo_postal:       '',
   local_interior:      '',
   monto:               0,
-  comision:            0,
   porcentaje_comision: null as number | null,
   fecha_emision:       '',
   fecha_deposito:      '',
@@ -92,7 +92,7 @@ const emptyForm = () => ({
 
 type FormState = ReturnType<typeof emptyForm>
 
-const inputClass = "w-full bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
+const inputClass = "w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-[#ffffff1a] rounded px-3 py-1.5 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-indigo-500"
 
 const computeLI = (cp: string): string => {
   if (!cp) return ''
@@ -111,10 +111,10 @@ const pctParaCliente = (cli: ClienteOpt | null | undefined, li: string): number 
 }
 
 const LiBadge: React.FC<{ value: string | null }> = ({ value }) => {
-  if (!value) return <span className="text-gray-600">—</span>
+  if (!value) return <span className="text-gray-500">—</span>
   return (
     <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-      value === 'local' ? 'bg-blue-500/15 text-blue-400' : 'bg-orange-500/15 text-orange-400'
+      value === 'local' ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400' : 'bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400'
     }`}>
       {value === 'local' ? 'L' : 'I'}
     </span>
@@ -157,8 +157,26 @@ const shareChequePdf = async (c: Cheque, fotoB64: string): Promise<boolean> => {
     pdf.text('COMPROBANTE DE CHEQUE', 105, 16, { align: 'center' })
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9)
     pdf.text(`N° ${c.numero || '—'} · ${c.banco_origen || '—'}`, 105, 23, { align: 'center' })
-    pdf.addImage(fotoB64, 'JPEG', 10, 28, 190, 128)
-    pdf.setDrawColor(180, 180, 180); pdf.line(10, 162, 200, 162)
+    // Re-renderizar con fondo blanco y respetar aspect ratio (igual que Pagos)
+    const { jpeg, w, h } = await new Promise<{ jpeg: string; w: number; h: number }>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => {
+        const iw = img.naturalWidth || 1000; const ih = img.naturalHeight || 700
+        const canvas = document.createElement('canvas')
+        canvas.width = iw; canvas.height = ih
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { reject(new Error('no ctx')); return }
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, iw, ih); ctx.drawImage(img, 0, 0)
+        resolve({ jpeg: canvas.toDataURL('image/jpeg', 0.85), w: iw, h: ih })
+      }
+      img.onerror = () => reject(new Error('img load'))
+      img.src = fotoB64
+    })
+    const maxW = 190, maxH = 135, x0 = 10, y0 = 28
+    const ratio = Math.min(maxW / w, maxH / h)
+    const drawW = w * ratio, drawH = h * ratio
+    pdf.addImage(jpeg, 'JPEG', x0 + (maxW - drawW) / 2, y0, drawW, drawH)
+    pdf.setDrawColor(180, 180, 180); pdf.line(10, 169, 200, 169)
     pdf.setFontSize(10)
     const rows = [
       ['Cliente:', nombre], ['Importe:', fmt(c.monto)],
@@ -166,7 +184,7 @@ const shareChequePdf = async (c: Cheque, fotoB64: string): Promise<boolean> => {
       ['Estado:', c.estado], ['Generado:', new Date().toLocaleDateString('es-AR')],
     ]
     rows.forEach(([label, value], i) => {
-      const y = 170 + i * 8
+      const y = 177 + i * 8
       pdf.setFont('helvetica', 'bold'); pdf.text(label, 12, y)
       pdf.setFont('helvetica', 'normal'); pdf.text(value, 52, y)
     })
@@ -213,7 +231,7 @@ const PortadorSelector: React.FC<{
           </select>
           <button type="button"
             onClick={() => { setAdding(true); setTimeout(() => inputRef.current?.focus(), 50) }}
-            className="px-2.5 py-1.5 bg-white/8 hover:bg-white/12 text-gray-300 text-sm rounded border border-white/10 transition-colors"
+            className="px-2.5 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded border border-gray-200 dark:border-white/10 transition-colors"
             title="Agregar portador">+</button>
         </div>
       ) : (
@@ -227,7 +245,7 @@ const PortadorSelector: React.FC<{
           <button type="button" onClick={handleAdd} disabled={saving || !newNombre.trim()}
             className="px-2 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded disabled:opacity-50 transition-colors">✓</button>
           <button type="button" onClick={() => { setAdding(false); setNewNombre('') }}
-            className="px-2 py-1.5 bg-white/8 hover:bg-white/12 text-gray-400 text-sm rounded transition-colors">✕</button>
+            className="px-2 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-400 text-sm rounded transition-colors">✕</button>
         </div>
       )}
     </div>
@@ -269,7 +287,7 @@ const ClienteSelector: React.FC<{
           </select>
           <button type="button"
             onClick={() => { setAdding(true); setTimeout(() => inputRef.current?.focus(), 50) }}
-            className="px-2.5 py-1.5 bg-white/8 hover:bg-white/12 text-gray-300 text-sm rounded border border-white/10 transition-colors"
+            className="px-2.5 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded border border-gray-200 dark:border-white/10 transition-colors"
             title="Agregar cliente">+</button>
         </div>
       ) : (
@@ -283,7 +301,7 @@ const ClienteSelector: React.FC<{
           <button type="button" onClick={handleAdd} disabled={saving || !newNombre.trim()}
             className="px-2 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded disabled:opacity-50 transition-colors">✓</button>
           <button type="button" onClick={() => { setAdding(false); setNewNombre('') }}
-            className="px-2 py-1.5 bg-white/8 hover:bg-white/12 text-gray-400 text-sm rounded transition-colors">✕</button>
+            className="px-2 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-400 text-sm rounded transition-colors">✕</button>
         </div>
       )}
     </div>
@@ -292,6 +310,7 @@ const ClienteSelector: React.FC<{
 
 export const Cheques: React.FC = () => {
   const { activeOrgId } = useOrgStore()
+  const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
 
   const [tab, setTab] = useState<'todos' | 'deposito' | 'rechazados'>('todos')
 
@@ -322,12 +341,16 @@ export const Cheques: React.FC = () => {
   const [depositoLoading, setDepositoLoading] = useState(false)
   const [exportandoDeposito, setExportandoDeposito] = useState(false)
 
-  // Form modal
+  // Form modal (create + edit)
   const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId]     = useState<number | null>(null)
   const [formData, setFormData] = useState<FormState>(emptyForm())
   const [formFoto, setFormFoto] = useState<string | null>(null)
   const [saving, setSaving]     = useState(false)
   const fotoInputRef            = useRef<HTMLInputElement>(null)
+
+  // Export todos
+  const [exportandoTodos, setExportandoTodos] = useState(false)
 
   // Banco accounts for acreditación
   const [bancoCuentas, setBancoCuentas] = useState<BancoCuenta[]>([])
@@ -513,12 +536,36 @@ export const Cheques: React.FC = () => {
     } catch { /* OCR no disponible */ }
   }
 
-  const handleCreate = async () => {
+  const handleOpenEdit = (c: Cheque) => {
+    setEditId(c.id)
+    setFormData({
+      cliente_id:          c.cliente_id,
+      portador_id:         c.portador_id,
+      numero:              c.numero || '',
+      banco_origen:        c.banco_origen || '',
+      librador:            c.librador || c.titular || '',
+      codigo_postal:       c.codigo_postal || '',
+      local_interior:      c.local_interior || '',
+      monto:               c.monto,
+      porcentaje_comision: c.porcentaje_comision,
+      fecha_emision:       c.fecha_emision || '',
+      fecha_deposito:      c.fecha_deposito || '',
+      notas:               c.notas || '',
+    })
+    setFormFoto(null)
+    setMsg('')
+    setShowForm(true)
+  }
+
+  const handleSave = async () => {
     if (!formData.monto || formData.monto <= 0) { setMsg('El monto es requerido'); return }
     setSaving(true); setMsg('')
     try {
       const li = formData.local_interior || computeLI(formData.codigo_postal)
-      const res = await apiClient.client.post('/cheques', {
+      // Comisión calculada automáticamente desde el %, sin campo manual
+      const pct = formData.porcentaje_comision ?? 0
+      const comisionCalc = pct > 0 ? Math.round(formData.monto * pct) / 100 : 0
+      const payload = {
         cliente_id:          formData.cliente_id || null,
         portador_id:         formData.portador_id || null,
         numero:              formData.numero || null,
@@ -527,17 +574,42 @@ export const Cheques: React.FC = () => {
         codigo_postal:       formData.codigo_postal || null,
         local_interior:      li || null,
         monto:               formData.monto,
-        comision:            formData.comision || 0,
+        comision:            comisionCalc,
         porcentaje_comision: formData.porcentaje_comision || null,
         fecha_emision:       formData.fecha_emision || null,
         fecha_deposito:      formData.fecha_deposito || null,
         notas:               formData.notas || null,
-      })
-      if (formFoto && res.data.id)
-        await apiClient.client.post(`/cheques/${res.data.id}/foto`, { foto_base64: formFoto })
-      setShowForm(false); setFormData(emptyForm()); setFormFoto(null); load()
+      }
+      let id: number
+      if (editId) {
+        const res = await apiClient.client.patch(`/cheques/${editId}`, payload)
+        id = res.data.id
+      } else {
+        const res = await apiClient.client.post('/cheques', payload)
+        id = res.data.id
+        if (formFoto && id)
+          await apiClient.client.post(`/cheques/${id}/foto`, { foto_base64: formFoto })
+      }
+      setShowForm(false); setEditId(null); setFormData(emptyForm()); setFormFoto(null); load()
     } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al guardar') }
     finally { setSaving(false) }
+  }
+
+  const handleExportarTodos = async () => {
+    setExportandoTodos(true)
+    try {
+      const params: Record<string, string | number> = {}
+      if (activeOrgId)   params.org_id    = activeOrgId
+      if (filtroEstado)  params.estado     = filtroEstado
+      if (filtroCliente) params.cliente_id = filtroCliente
+      if (filtroDesde)   params.desde      = filtroDesde
+      if (filtroHasta)   params.hasta      = filtroHasta
+      const res = await apiClient.client.get('/cheques/exportar', { params, responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a'); a.href = url; a.download = 'cheques.xlsx'; a.click()
+      URL.revokeObjectURL(url)
+    } catch { setMsg('Error al exportar') }
+    finally { setExportandoTodos(false) }
   }
 
   const handleAcreditar = async () => {
@@ -623,12 +695,22 @@ export const Cheques: React.FC = () => {
         if (fotoB64) {
           const sharedPdf = await shareChequePdf(c, fotoB64); if (sharedPdf) return
           if (navigator.share && navigator.canShare) {
-            const blob = await fetch(fotoB64).then(r => r.blob())
-            const file = new File([blob], `Cheque_${nombre}.jpg`, { type: 'image/jpeg' })
-            if (navigator.canShare({ files: [file] })) {
-              suppressLockForShare()
-              await navigator.share({ title: `Cheque - ${nombre} - ${fmt(c.monto)}`, files: [file] }); return
-            }
+            try {
+              const img = new Image()
+              await new Promise<void>((resolve, reject) => {
+                img.onload = () => resolve(); img.onerror = () => reject(new Error('img')); img.src = fotoB64
+              })
+              const canvas = document.createElement('canvas')
+              canvas.width = img.naturalWidth || 800; canvas.height = img.naturalHeight || 600
+              const ctx = canvas.getContext('2d')!
+              ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0)
+              const blob = await new Promise<Blob>((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob')), 'image/jpeg', 0.85))
+              const file = new File([blob], `Cheque_${nombre}.jpg`, { type: 'image/jpeg' })
+              if (navigator.canShare({ files: [file] })) {
+                suppressLockForShare()
+                await navigator.share({ title: `Cheque - ${nombre} - ${fmt(c.monto)}`, files: [file] }); return
+              }
+            } catch (imgErr: any) { if (imgErr?.name === 'AbortError') return }
           }
         }
       } catch (e: any) {
@@ -677,16 +759,21 @@ export const Cheques: React.FC = () => {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-100">Cheques</h1>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Cheques</h1>
+
           <p className="text-xs text-gray-500 mt-0.5">Registro y seguimiento de cheques de terceros</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportExcel} />
           <button onClick={() => importRef.current?.click()} disabled={importando}
-            className="px-3 py-1.5 bg-white/8 hover:bg-white/12 text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-50">
+            className="px-3 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-50">
             {importando ? 'Importando…' : '↑ Importar Excel'}
           </button>
-          <button onClick={() => { setShowForm(true); setFormData(emptyForm()); setFormFoto(null); setMsg('') }}
+          <button onClick={handleExportarTodos} disabled={exportandoTodos}
+            className="px-3 py-1.5 bg-green-100 hover:bg-green-200 dark:bg-green-700/30 dark:hover:bg-green-700/50 text-green-700 dark:text-green-400 text-sm rounded-lg transition-colors disabled:opacity-50">
+            {exportandoTodos ? 'Exportando…' : '↓ Excel'}
+          </button>
+          <button onClick={() => { setEditId(null); setShowForm(true); setFormData(emptyForm()); setFormFoto(null); setMsg('') }}
             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
             + Nuevo cheque
           </button>
@@ -694,7 +781,7 @@ export const Cheques: React.FC = () => {
       </div>
 
       {msg && (
-        <div className={`text-sm rounded-lg px-3 py-2 border ${msg.startsWith('✓') ? 'text-green-400 bg-green-500/10 border-green-500/20' : 'text-red-400 bg-red-500/10 border-red-500/20'}`}>
+        <div className={`text-sm rounded-lg px-3 py-2 border ${msg.startsWith('✓') ? 'text-green-700 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-500/10 dark:border-green-500/20' : 'text-red-700 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-500/10 dark:border-red-500/20'}`}>
           {msg}
         </div>
       )}
@@ -702,24 +789,24 @@ export const Cheques: React.FC = () => {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Pendientes',  value: fmt(totalPend),  sub: `${pendientes.length} cheq.`, color: 'text-yellow-400' },
-          { label: 'Acreditados', value: fmt(totalAcred), sub: 'en el listado',               color: 'text-green-400'  },
-          { label: 'Rechazados',  value: fmt(totalRech),  sub: 'en el listado',               color: 'text-red-400'    },
+          { label: 'Pendientes',  value: fmt(totalPend),  sub: `${pendientes.length} cheq.`, color: 'text-yellow-600 dark:text-yellow-400' },
+          { label: 'Acreditados', value: fmt(totalAcred), sub: 'en el listado',               color: 'text-green-600 dark:text-green-400'  },
+          { label: 'Rechazados',  value: fmt(totalRech),  sub: 'en el listado',               color: 'text-red-600 dark:text-red-400'    },
         ].map(s => (
-          <div key={s.label} className="bg-white/3 border border-white/8 rounded-xl p-3">
+          <div key={s.label} className="bg-white dark:bg-white/3 border border-gray-200 dark:border-white/8 rounded-xl p-3 overflow-hidden">
             <p className="text-xs text-gray-500">{s.label}</p>
-            <p className={`text-base font-semibold mt-1 ${s.color}`}>{s.value}</p>
+            <p className={`text-sm font-semibold mt-1 truncate ${s.color}`}>{s.value}</p>
             <p className="text-xs text-gray-600 mt-0.5">{s.sub}</p>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-white/8">
+      <div className="flex gap-1 border-b border-gray-200 dark:border-white/8">
         {(['todos', 'deposito', 'rechazados'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-              tab === t ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-300'
+              tab === t ? 'border-indigo-600 text-indigo-600 dark:border-indigo-500 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}>
             {t === 'todos' ? 'Todos' : t === 'deposito' ? 'Por depósito' : 'Rechazados'}
           </button>
@@ -731,7 +818,7 @@ export const Cheques: React.FC = () => {
         <>
           <div className="flex flex-wrap gap-2">
             <select value={filtroEstado} onChange={e => { setFiltroEstado(e.target.value); setSkip(0) }}
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none">
+              className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none">
               <option value="">Todos los estados</option>
               <option value="registrado">Registrado</option>
               <option value="depositado">Depositado</option>
@@ -739,25 +826,25 @@ export const Cheques: React.FC = () => {
               <option value="rechazado">Rechazado</option>
             </select>
             <select value={filtroCliente} onChange={e => { setFiltroCliente(e.target.value); setSkip(0) }}
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none">
+              className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none">
               <option value="">Todos los clientes</option>
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
             <input type="date" value={filtroDesde} onChange={e => { setFiltroDesde(e.target.value); setSkip(0) }}
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none" />
+              className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none" />
             <input type="date" value={filtroHasta} onChange={e => { setFiltroHasta(e.target.value); setSkip(0) }}
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none" />
+              className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none" />
             {(filtroEstado || filtroCliente || filtroDesde || filtroHasta) && (
               <button onClick={() => { setFiltroEstado(''); setFiltroCliente(''); setFiltroDesde(''); setFiltroHasta(''); setSkip(0) }}
-                className="text-xs text-gray-400 hover:text-gray-200 px-2">Limpiar</button>
+                className="text-xs text-gray-400 hover:text-gray-800 dark:text-gray-200 px-2">Limpiar</button>
             )}
           </div>
 
-          <div className="rounded-xl overflow-hidden border border-white/8">
+          <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-white/8">
             <div className="overflow-x-auto">
               <table className="w-full text-xs min-w-[860px]">
                 <thead>
-                  <tr className="bg-white/4 text-left text-gray-400">
+                  <tr className="bg-gray-50 dark:bg-white/4 text-left text-gray-400">
                     <th className="px-3 py-2 font-medium">F. Depósito</th>
                     <th className="px-3 py-2 font-medium">Cliente</th>
                     <th className="px-3 py-2 font-medium">Librador</th>
@@ -779,16 +866,16 @@ export const Cheques: React.FC = () => {
                   ) : cheques.length === 0 ? (
                     <tr><td colSpan={13} className="text-center py-8 text-gray-500">Sin cheques registrados</td></tr>
                   ) : cheques.map((c, i) => (
-                    <tr key={c.id} className={`border-t border-white/5 hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-white/1'}`}>
-                      <td className="px-3 py-2 text-gray-300 whitespace-nowrap">{fmtDate(c.fecha_deposito)}</td>
-                      <td className="px-3 py-2 text-gray-200">{c.cliente_nombre || <span className="text-gray-500">—</span>}</td>
-                      <td className="px-3 py-2 text-gray-300 max-w-[110px] truncate" title={c.librador || c.titular || ''}>{c.librador || c.titular || '—'}</td>
+                    <tr key={c.id} className={`border-t border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-gray-50/60 dark:bg-white/1'}`}>
+                      <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmtDate(c.fecha_deposito)}</td>
+                      <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{c.cliente_nombre || <span className="text-gray-500">—</span>}</td>
+                      <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[110px] truncate" title={c.librador || c.titular || ''}>{c.librador || c.titular || '—'}</td>
                       <td className="px-3 py-2 text-gray-400">{c.portador_nombre || '—'}</td>
                       <td className="px-3 py-2 text-gray-400">{c.banco_origen || '—'}</td>
                       <td className="px-3 py-2 text-gray-400">{c.numero || '—'}</td>
                       <td className="px-3 py-2 text-gray-400">{c.codigo_postal || '—'}</td>
                       <td className="px-3 py-2"><LiBadge value={c.local_interior} /></td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-100">{fmt(c.monto)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{fmt(c.monto)}</td>
                       <td className="px-3 py-2 text-right font-mono text-gray-400">{c.comision > 0 ? fmt(c.comision) : '—'}</td>
                       <td className="px-3 py-2">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[c.estado] || ''}`}>
@@ -800,23 +887,26 @@ export const Cheques: React.FC = () => {
                         <div className="flex gap-1">
                           {c.tiene_foto && (
                             <button onClick={() => handleVerFoto(c.id)}
-                              className="px-2 py-0.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 rounded text-xs transition-colors"
+                              className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-600/20 dark:hover:bg-indigo-600/40 dark:text-indigo-400 rounded text-xs transition-colors"
                               title="Ver foto">📷</button>
                           )}
                           <button onClick={() => handleCompartir(c)}
-                            className="px-2 py-0.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded text-xs transition-colors"
+                            className="px-2 py-0.5 bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-600/20 dark:hover:bg-green-600/40 dark:text-green-400 rounded text-xs transition-colors"
                             title="Compartir">📤</button>
                           {esRegistrado(c.estado) && (
                             <>
+                              <button onClick={() => handleOpenEdit(c)}
+                                className="px-2 py-0.5 bg-gray-50 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 rounded text-xs transition-colors"
+                                title="Editar">✏️</button>
                               <button onClick={() => { setAcreditarId(c.id); setAcreditarFecha(''); setAcreditarBancoId('') }}
-                                className="px-2 py-0.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded text-xs transition-colors">Acreditar</button>
-                              <button onClick={() => handleDelete(c.id)}
-                                className="px-2 py-0.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded text-xs transition-colors">✕</button>
+                                className="px-2 py-0.5 bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-600/20 dark:hover:bg-green-600/40 dark:text-green-400 rounded text-xs transition-colors">Acreditar</button>
+                              {canDelete && <button onClick={() => handleDelete(c.id)}
+                                className="px-2 py-0.5 bg-gray-50 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400 rounded text-xs transition-colors">✕</button>}
                             </>
                           )}
                           {c.estado === 'acreditado' && (
                             <button onClick={() => { setRechazarId(c.id); setRechazarData({ fecha_rechazo: '', gastos_bancarios: '', fisico: false, fecha_devolucion: '' }) }}
-                              className="px-2 py-0.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-xs transition-colors">Rechazar</button>
+                              className="px-2 py-0.5 bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-600/20 dark:hover:bg-red-600/40 dark:text-red-400 rounded text-xs transition-colors">Rechazar</button>
                           )}
                         </div>
                       </td>
@@ -832,9 +922,9 @@ export const Cheques: React.FC = () => {
               <span>{skip + 1}–{Math.min(skip + LIMIT, total)} de {total}</span>
               <div className="flex gap-2">
                 <button disabled={skip === 0} onClick={() => setSkip(s => Math.max(0, s - LIMIT))}
-                  className="px-3 py-1 bg-white/5 rounded disabled:opacity-40 hover:bg-white/10">← Anterior</button>
+                  className="px-3 py-1 bg-gray-50 dark:bg-white/5 rounded disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-white/10">← Anterior</button>
                 <button disabled={skip + LIMIT >= total} onClick={() => setSkip(s => s + LIMIT)}
-                  className="px-3 py-1 bg-white/5 rounded disabled:opacity-40 hover:bg-white/10">Siguiente →</button>
+                  className="px-3 py-1 bg-gray-50 dark:bg-white/5 rounded disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-white/10">Siguiente →</button>
               </div>
             </div>
           )}
@@ -848,14 +938,14 @@ export const Cheques: React.FC = () => {
             <div>
               <label className="block text-xs text-gray-400 mb-1">Fecha de depósito</label>
               <select value={depositoFecha} onChange={e => { setDepositoFecha(e.target.value); setSelectedCheques(new Set()) }}
-                className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none min-w-[170px]">
+                className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none min-w-[170px]">
                 <option value="">Seleccioná una fecha</option>
                 {depositoFechas.map(f => <option key={f} value={f}>{fmtDate(f)}</option>)}
               </select>
             </div>
             {depositoFecha && (
               <button onClick={handleExportDeposito} disabled={exportandoDeposito}
-                className="px-3 py-1.5 bg-green-700/30 hover:bg-green-700/50 text-green-400 text-sm rounded-lg transition-colors disabled:opacity-50">
+                className="px-3 py-1.5 bg-green-100 hover:bg-green-200 dark:bg-green-700/30 dark:hover:bg-green-700/50 text-green-700 dark:text-green-400 text-sm rounded-lg transition-colors disabled:opacity-50">
                 {exportandoDeposito ? 'Exportando…' : '↓ Excel'}
               </button>
             )}
@@ -863,11 +953,11 @@ export const Cheques: React.FC = () => {
 
           {/* Acreditación masiva */}
           {depositoData && depositoData.items.some(c => esRegistrado(c.estado)) && (
-            <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-xl p-3 flex flex-wrap items-end gap-3">
+            <div className="bg-indigo-50 border border-indigo-200 dark:bg-indigo-500/5 dark:border-indigo-500/20 rounded-xl p-3 flex flex-wrap items-end gap-3">
               <div className="flex-1 min-w-[160px]">
                 <label className="block text-xs text-gray-400 mb-1">Banco de acreditación</label>
                 <select value={acredMasivoBanco} onChange={e => setAcredMasivoBanco(e.target.value ? parseInt(e.target.value) : '')}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none">
+                  className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none">
                   <option value="">Seleccioná banco</option>
                   {bancoCuentas.map(b => <option key={b.id} value={b.id}>{b.nombre} ({b.codigo})</option>)}
                 </select>
@@ -875,7 +965,7 @@ export const Cheques: React.FC = () => {
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Fecha de acreditación</label>
                 <input type="date" value={acredMasivoFecha} onChange={e => setAcredMasivoFecha(e.target.value)}
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none" />
+                  className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none" />
               </div>
               <button
                 onClick={handleAcreditarMasivo}
@@ -884,7 +974,7 @@ export const Cheques: React.FC = () => {
                 {acreditandoMasivo ? 'Procesando…' : `✓ Acreditar ${selectedCheques.size > 0 ? `(${selectedCheques.size})` : 'seleccionados'}`}
               </button>
               {selectedCheques.size > 0 && (
-                <button onClick={() => setSelectedCheques(new Set())} className="text-xs text-gray-500 hover:text-gray-300 px-2">
+                <button onClick={() => setSelectedCheques(new Set())} className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-300 px-2">
                   Limpiar selección
                 </button>
               )}
@@ -901,25 +991,25 @@ export const Cheques: React.FC = () => {
             <>
               {/* Resumen cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-white/3 border border-white/8 rounded-xl p-3 col-span-2 md:col-span-1">
+                <div className="bg-white dark:bg-white/3 border border-gray-200 dark:border-white/8 rounded-xl p-3 col-span-2 md:col-span-1">
                   <p className="text-xs text-gray-500">Total del día</p>
-                  <p className="text-lg font-semibold text-gray-100 mt-1">{fmt(depositoData.resumen.total)}</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">{fmt(depositoData.resumen.total)}</p>
                   <p className="text-xs text-gray-600 mt-0.5">{depositoData.items.length} cheques</p>
                 </div>
                 {depositoData.resumen.por_local_interior.map(li => (
-                  <div key={li.tipo} className="bg-white/3 border border-white/8 rounded-xl p-3">
+                  <div key={li.tipo} className="bg-white dark:bg-white/3 border border-gray-200 dark:border-white/8 rounded-xl p-3">
                     <p className="text-xs text-gray-500">{li.tipo === 'local' ? 'Local (CP < 2000)' : 'Interior (CP ≥ 2000)'}</p>
-                    <p className={`text-base font-semibold mt-1 ${li.tipo === 'local' ? 'text-blue-400' : 'text-orange-400'}`}>{fmt(li.total)}</p>
+                    <p className={`text-base font-semibold mt-1 ${li.tipo === 'local' ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>{fmt(li.total)}</p>
                     <p className="text-xs text-gray-600 mt-0.5">{li.count} cheques</p>
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-xl overflow-hidden border border-white/8">
+              <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-white/8">
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs min-w-[680px]">
                     <thead>
-                      <tr className="bg-white/4 text-left text-gray-400">
+                      <tr className="bg-gray-50 dark:bg-white/4 text-left text-gray-400">
                         <th className="px-2 py-2">
                           <input type="checkbox" className="w-3.5 h-3.5 accent-indigo-500"
                             checked={depositoData.items.filter(c => esRegistrado(c.estado)).length > 0 &&
@@ -942,7 +1032,7 @@ export const Cheques: React.FC = () => {
                     </thead>
                     <tbody>
                       {depositoData.items.map((c, i) => (
-                        <tr key={c.id} className={`border-t border-white/5 hover:bg-white/2 ${selectedCheques.has(c.id) ? 'bg-indigo-500/5' : i % 2 === 0 ? '' : 'bg-white/1'}`}>
+                        <tr key={c.id} className={`border-t border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/2 ${selectedCheques.has(c.id) ? 'bg-indigo-50 dark:bg-indigo-500/5' : i % 2 === 0 ? '' : 'bg-gray-50/60 dark:bg-white/1'}`}>
                           <td className="px-2 py-2">
                             {esRegistrado(c.estado) ? (
                               <input type="checkbox" className="w-3.5 h-3.5 accent-indigo-500"
@@ -954,14 +1044,14 @@ export const Cheques: React.FC = () => {
                                 }} />
                             ) : <span className="w-3.5 h-3.5 block" />}
                           </td>
-                          <td className="px-3 py-2 text-gray-200">{c.cliente_nombre || '—'}</td>
-                          <td className="px-3 py-2 text-gray-300 max-w-[110px] truncate">{c.librador || c.titular || '—'}</td>
+                          <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{c.cliente_nombre || '—'}</td>
+                          <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[110px] truncate">{c.librador || c.titular || '—'}</td>
                           <td className="px-3 py-2 text-gray-400">{c.portador_nombre || '—'}</td>
                           <td className="px-3 py-2 text-gray-400">{c.banco_origen || '—'}</td>
                           <td className="px-3 py-2 text-gray-400">{c.numero || '—'}</td>
                           <td className="px-3 py-2 text-gray-400">{c.codigo_postal || '—'}</td>
                           <td className="px-3 py-2"><LiBadge value={c.local_interior} /></td>
-                          <td className="px-3 py-2 text-right font-mono text-gray-100">{fmt(c.monto)}</td>
+                          <td className="px-3 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{fmt(c.monto)}</td>
                           <td className="px-3 py-2">
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[c.estado] || ''}`}>
                               {ESTADO_LABEL[c.estado] || c.estado}
@@ -971,9 +1061,9 @@ export const Cheques: React.FC = () => {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="border-t border-white/10 bg-white/4">
+                      <tr className="border-t border-gray-200 dark:border-white/10 bg-white/4">
                         <td colSpan={8} className="px-3 py-2 text-xs text-gray-400 font-medium">Total</td>
-                        <td className="px-3 py-2 text-right font-mono text-gray-100 font-semibold">{fmt(depositoData.resumen.total)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-900 dark:text-gray-100 font-semibold">{fmt(depositoData.resumen.total)}</td>
                         <td />
                       </tr>
                     </tfoot>
@@ -982,15 +1072,15 @@ export const Cheques: React.FC = () => {
               </div>
 
               {depositoData.resumen.por_cliente.length > 0 && (
-                <div className="bg-white/3 border border-white/8 rounded-xl p-4">
+                <div className="bg-white dark:bg-white/3 border border-gray-200 dark:border-white/8 rounded-xl p-4">
                   <h3 className="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wider">Resumen por cliente</h3>
                   <div className="space-y-1.5">
                     {depositoData.resumen.por_cliente.map(r => (
                       <div key={r.cliente} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-300">{r.cliente}</span>
+                        <span className="text-gray-700 dark:text-gray-300">{r.cliente}</span>
                         <div className="flex items-center gap-3">
                           <span className="text-gray-500">{r.count} cheq.</span>
-                          <span className="font-mono text-gray-100 font-medium">{fmt(r.total)}</span>
+                          <span className="font-mono text-gray-900 dark:text-gray-100 font-medium">{fmt(r.total)}</span>
                         </div>
                       </div>
                     ))}
@@ -1010,11 +1100,11 @@ export const Cheques: React.FC = () => {
           ) : rechazadosList.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-8">No hay cheques rechazados</p>
           ) : (
-            <div className="rounded-xl overflow-hidden border border-white/8">
+            <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-white/8">
               <div className="overflow-x-auto">
                 <table className="w-full text-xs min-w-[960px]">
                   <thead>
-                    <tr className="bg-white/4 text-left text-gray-400">
+                    <tr className="bg-gray-50 dark:bg-white/4 text-left text-gray-400">
                       <th className="px-3 py-2 font-medium">F. Depósito</th>
                       <th className="px-3 py-2 font-medium">F. Rechazo</th>
                       <th className="px-3 py-2 font-medium">Cliente</th>
@@ -1032,21 +1122,21 @@ export const Cheques: React.FC = () => {
                   </thead>
                   <tbody>
                     {rechazadosList.map((c, i) => (
-                      <tr key={c.id} className={`border-t border-white/5 hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-white/1'}`}>
+                      <tr key={c.id} className={`border-t border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/2 ${i % 2 === 0 ? '' : 'bg-gray-50/60 dark:bg-white/1'}`}>
                         <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{fmtDate(c.fecha_deposito)}</td>
-                        <td className="px-3 py-2 text-red-400 whitespace-nowrap">{fmtDate(c.fecha_rechazo)}</td>
-                        <td className="px-3 py-2 text-gray-200">{c.cliente_nombre || '—'}</td>
+                        <td className="px-3 py-2 text-red-600 dark:text-red-400 whitespace-nowrap">{fmtDate(c.fecha_rechazo)}</td>
+                        <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{c.cliente_nombre || '—'}</td>
                         <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{fmtDate(c.fecha_emision)}</td>
                         <td className="px-3 py-2 text-gray-400">{c.numero || '—'}</td>
                         <td className="px-3 py-2 text-gray-400">{c.banco_origen || '—'}</td>
-                        <td className="px-3 py-2 text-gray-300 max-w-[100px] truncate" title={c.librador || c.titular || ''}>{c.librador || c.titular || '—'}</td>
+                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[100px] truncate" title={c.librador || c.titular || ''}>{c.librador || c.titular || '—'}</td>
                         <td className="px-3 py-2 text-gray-400">{c.numero || '—'}</td>
                         <td className="px-3 py-2 text-gray-400">{c.codigo_postal || '—'}</td>
                         <td className="px-3 py-2"><LiBadge value={c.local_interior} /></td>
-                        <td className="px-3 py-2 text-right font-mono text-gray-100">{fmt(c.monto)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{fmt(c.monto)}</td>
                         <td className="px-3 py-2">
                           {c.fisico
-                            ? <span className="px-1.5 py-0.5 rounded text-xs bg-blue-500/15 text-blue-400">Sí</span>
+                            ? <span className="px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">Sí</span>
                             : <span className="text-gray-600">No</span>
                           }
                         </td>
@@ -1065,12 +1155,12 @@ export const Cheques: React.FC = () => {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="bg-[#16161A] border border-white/10 rounded-xl p-5 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#16161A] border border-gray-200 dark:border-white/10 rounded-xl p-5 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-100">Nuevo cheque</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{editId ? 'Editar cheque' : 'Nuevo cheque'}</h2>
+              <button onClick={() => { setShowForm(false); setEditId(null) }} className="text-gray-500 hover:text-gray-700 dark:text-gray-300 text-xl leading-none">×</button>
             </div>
-            {msg && <p className="text-xs text-red-400">{msg}</p>}
+            {msg && <p className="text-xs text-red-600 dark:text-red-400">{msg}</p>}
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <ClienteSelector
@@ -1108,15 +1198,18 @@ export const Cheques: React.FC = () => {
                 <label className="block text-xs text-gray-400 mb-1">Monto *</label>
                 <input type="number" value={formData.monto || ''} onChange={e => setFormData(p => ({ ...p, monto: parseFloat(e.target.value) || 0 }))} className={inputClass} />
               </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Comisión banco</label>
-                <input type="number" value={formData.comision || ''} onChange={e => setFormData(p => ({ ...p, comision: parseFloat(e.target.value) || 0 }))} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">% Comisión</label>
-                <input type="number" step="0.1" min="0" max="100" placeholder="ej: 1.5"
-                  value={formData.porcentaje_comision ?? ''} className={inputClass}
-                  onChange={e => setFormData(p => ({ ...p, porcentaje_comision: e.target.value === '' ? null : parseFloat(e.target.value) }))} />
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">% Comisión (cuenta 3-1-3-0)</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" step="0.1" min="0" max="100" placeholder="ej: 1.5"
+                    value={formData.porcentaje_comision ?? ''} className={`${inputClass} flex-1`}
+                    onChange={e => setFormData(p => ({ ...p, porcentaje_comision: e.target.value === '' ? null : parseFloat(e.target.value) }))} />
+                  {formData.porcentaje_comision != null && formData.monto > 0 && (
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                      = {fmt(formData.monto * formData.porcentaje_comision / 100)}
+                    </span>
+                  )}
+                </div>
                 {formData.porcentaje_comision != null && (() => {
                   const cli = clientes.find(c => c.id === formData.cliente_id) ?? null
                   const li = formData.local_interior || computeLI(formData.codigo_postal)
@@ -1143,7 +1236,7 @@ export const Cheques: React.FC = () => {
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Local / Interior</label>
-                <div className="flex items-center gap-2 h-[34px] px-3 bg-white/5 border border-white/10 rounded">
+                <div className="flex items-center gap-2 h-[34px] px-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded">
                   {formData.local_interior
                     ? <LiBadge value={formData.local_interior} />
                     : <span className="text-xs text-gray-600">Auto por CP</span>
@@ -1162,30 +1255,30 @@ export const Cheques: React.FC = () => {
                 <label className="block text-xs text-gray-400 mb-1">Notas</label>
                 <textarea rows={2} value={formData.notas}
                   onChange={e => setFormData(p => ({ ...p, notas: e.target.value }))}
-                  className="w-full bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 resize-none" />
+                  className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-[#ffffff1a] rounded px-3 py-1.5 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-indigo-500 resize-none" />
               </div>
-              <div className="col-span-2">
+              {!editId && <div className="col-span-2">
                 <label className="block text-xs text-gray-400 mb-1">Foto del cheque (opcional)</label>
                 <div className="flex items-center gap-3">
                   <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoChange} />
                   <button type="button" onClick={() => fotoInputRef.current?.click()}
-                    className="px-3 py-1.5 bg-white/8 hover:bg-white/12 text-gray-300 text-sm rounded border border-white/10 transition-colors">
+                    className="px-3 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded border border-gray-200 dark:border-white/10 transition-colors">
                     📷 Sacar foto / subir imagen
                   </button>
                   {formFoto && (
                     <div className="flex items-center gap-2">
-                      <img src={formFoto} alt="preview" className="h-10 w-10 object-cover rounded border border-white/10" />
-                      <button onClick={() => setFormFoto(null)} className="text-xs text-red-400 hover:text-red-300">✕ quitar</button>
+                      <img src={formFoto} alt="preview" className="h-10 w-10 object-cover rounded border border-gray-200 dark:border-white/10" />
+                      <button onClick={() => setFormFoto(null)} className="text-xs text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300">✕ quitar</button>
                     </div>
                   )}
                 </div>
-              </div>
+              </div>}
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowForm(false)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200">Cancelar</button>
-              <button onClick={handleCreate} disabled={saving}
+              <button onClick={() => { setShowForm(false); setEditId(null) }} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-800 dark:text-gray-200">Cancelar</button>
+              <button onClick={handleSave} disabled={saving}
                 className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors">
-                {saving ? 'Guardando…' : 'Guardar'}
+                {saving ? 'Guardando…' : editId ? 'Guardar cambios' : 'Guardar'}
               </button>
             </div>
           </div>
@@ -1195,8 +1288,8 @@ export const Cheques: React.FC = () => {
       {/* ═══ Modal: Acreditar ═══ */}
       {acreditarId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-[#16161A] border border-white/10 rounded-xl p-5 w-full max-w-sm space-y-4">
-            <h2 className="text-base font-semibold text-gray-100">Acreditar cheque</h2>
+          <div className="bg-white dark:bg-[#16161A] border border-gray-200 dark:border-white/10 rounded-xl p-5 w-full max-w-sm space-y-4">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Acreditar cheque</h2>
             <p className="text-xs text-gray-500">A1: Banco D / Cheques en cartera H — A2: Cheques depositados D / Cliente H</p>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Banco *</label>
@@ -1212,7 +1305,7 @@ export const Cheques: React.FC = () => {
               <p className="text-xs text-gray-500 mt-1">Si no se indica, se usa hoy.</p>
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setAcreditarId(null)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200">Cancelar</button>
+              <button onClick={() => setAcreditarId(null)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-800 dark:text-gray-200">Cancelar</button>
               <button onClick={handleAcreditar} disabled={actioning || !acreditarBancoId}
                 className="px-4 py-1.5 bg-green-600 hover:bg-green-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors">
                 {actioning ? 'Procesando…' : 'Confirmar'}
@@ -1225,8 +1318,8 @@ export const Cheques: React.FC = () => {
       {/* ═══ Modal: Rechazar ═══ */}
       {rechazarId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-[#16161A] border border-white/10 rounded-xl p-5 w-full max-w-sm space-y-4">
-            <h2 className="text-base font-semibold text-gray-100">Registrar rechazo</h2>
+          <div className="bg-white dark:bg-[#16161A] border border-gray-200 dark:border-white/10 rounded-xl p-5 w-full max-w-sm space-y-4">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Registrar rechazo</h2>
             <p className="text-xs text-gray-500">A1: Cliente D / Banco H — A2: Cliente D / Gastos rechazos H — A3: Gastos rechazos D / Banco H</p>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Fecha de rechazo</label>
@@ -1247,7 +1340,7 @@ export const Cheques: React.FC = () => {
               <input type="checkbox" id="fisico-check" checked={rechazarData.fisico}
                 onChange={e => setRechazarData(p => ({ ...p, fisico: e.target.checked }))}
                 className="w-4 h-4 rounded accent-indigo-500" />
-              <label htmlFor="fisico-check" className="text-sm text-gray-300">El cheque físico fue devuelto</label>
+              <label htmlFor="fisico-check" className="text-sm text-gray-700 dark:text-gray-300">El cheque físico fue devuelto</label>
             </div>
             {rechazarData.fisico && (
               <div>
@@ -1258,7 +1351,7 @@ export const Cheques: React.FC = () => {
               </div>
             )}
             <div className="flex justify-end gap-2">
-              <button onClick={() => setRechazarId(null)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200">Cancelar</button>
+              <button onClick={() => setRechazarId(null)} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-800 dark:text-gray-200">Cancelar</button>
               <button onClick={handleRechazar} disabled={actioning}
                 className="px-4 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors">
                 {actioning ? 'Procesando…' : 'Registrar rechazo'}
@@ -1272,10 +1365,10 @@ export const Cheques: React.FC = () => {
       {verFotoId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
           onClick={() => { setVerFotoId(null); setFotoData(null) }}>
-          <div className="bg-[#16161A] border border-white/10 rounded-xl p-4 max-w-lg w-full" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-[#16161A] border border-gray-200 dark:border-white/10 rounded-xl p-4 max-w-lg w-full" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-3">
-              <h2 className="text-sm font-semibold text-gray-100">Comprobante del cheque</h2>
-              <button onClick={() => { setVerFotoId(null); setFotoData(null) }} className="text-gray-500 hover:text-gray-300 text-xl">×</button>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Comprobante del cheque</h2>
+              <button onClick={() => { setVerFotoId(null); setFotoData(null) }} className="text-gray-500 hover:text-gray-700 dark:text-gray-300 text-xl">×</button>
             </div>
             {loadingFoto ? (
               <div className="text-center py-8 text-gray-400 text-sm">Cargando imagen…</div>
@@ -1287,7 +1380,7 @@ export const Cheques: React.FC = () => {
                     const c = cheques.find(x => x.id === verFotoId) || rechazadosList.find(x => x.id === verFotoId)
                     if (c) handleCompartir(c)
                   }}
-                  className="mt-3 w-full py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg text-sm transition-colors">
+                  className="mt-3 w-full py-2 bg-green-100 hover:bg-green-200 dark:bg-green-600/20 dark:hover:bg-green-600/30 text-green-700 dark:text-green-400 rounded-lg text-sm transition-colors">
                   📤 Compartir por WhatsApp
                 </button>
               </>

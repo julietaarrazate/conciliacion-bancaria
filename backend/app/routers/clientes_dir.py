@@ -24,6 +24,7 @@ from app.models.extracto import MovimientoBanco
 from app.models.user import User
 from app.middleware.auth import get_current_user, require_permission, can_switch_org
 from app.services.excel_export import export_planilla_conciliada
+from app.services.tz import hoy_art, now_art
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 
@@ -118,7 +119,7 @@ def guardar_planilla_en_carpeta(
 
     # Nombre: "{cliente} acreditado {d.m}.xlsx" — usa la fecha mas reciente de acreditacion
     fechas_acred = [mov.fecha_acred for mov in movs_map.values() if mov.fecha_acred]
-    fecha_hoy = datetime.now()
+    fecha_hoy = now_art()
     fecha_ref = max(fechas_acred) if fechas_acred else fecha_hoy.date()
     cliente_slug = (p.cliente.nombre or "cliente").strip().lower()
     nombre_archivo = f"{cliente_slug} acreditado {fecha_ref.day}.{fecha_ref.month}.xlsx"
@@ -463,7 +464,7 @@ def acreditar_movimiento_a_cliente(
         except ValueError:
             pass
     if not fecha_acred:
-        fecha_acred = mov.fecha or datetime.now().date()
+        fecha_acred = mov.fecha or hoy_art()
 
     anterior = mov.cliente_acreditado
     mov.cliente_acreditado = cli.nombre

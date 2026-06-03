@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models.caja import ArqueoDiario, DENOMINACIONES, denominaciones_vacias
 from app.models.user import User
 from app.middleware.auth import get_current_user, can_switch_org
+from app.services.tz import hoy_art
 
 router = APIRouter(prefix="/caja", tags=["caja"])
 
@@ -32,7 +33,7 @@ def get_arqueo_hoy(
 ):
     """Obtiene o crea el arqueo del día. Si es nuevo, arrastra el saldo del día anterior."""
     org_id = _org_id(current_user, org_id)
-    fecha = date.fromisoformat(fecha_str) if fecha_str else date.today()
+    fecha = date.fromisoformat(fecha_str) if fecha_str else hoy_art()
 
     arqueo = db.query(ArqueoDiario).filter(
         ArqueoDiario.organizacion_id == org_id,
@@ -81,7 +82,7 @@ def update_arqueo(
     """Actualiza saldo inicial, pesos agregados, ingresos o denominaciones físicas del día."""
     org_id = _org_id(current_user, payload.get("org_id"))
     fecha_str = payload.get("fecha")
-    fecha = date.fromisoformat(fecha_str) if fecha_str else date.today()
+    fecha = date.fromisoformat(fecha_str) if fecha_str else hoy_art()
 
     arqueo = db.query(ArqueoDiario).filter(
         ArqueoDiario.organizacion_id == org_id,

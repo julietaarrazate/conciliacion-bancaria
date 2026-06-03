@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 from datetime import datetime
 from typing import Any, Optional
+from app.services.tz import now_art
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT
@@ -250,7 +251,7 @@ def _page_decorator(generado_por: str):
         canvas.line(_ML * mm, 14 * mm, (210 - _MR) * mm, 14 * mm)
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(_GRAY)
-        fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
+        fecha = now_art().strftime("%d/%m/%Y %H:%M")
         canvas.drawString(_ML * mm, 9.5 * mm, f"Generado {fecha}  ·  {generado_por}")
         canvas.drawCentredString(w / 2, 9.5 * mm, "Conciliación Bancaria")
         canvas.drawRightString((210 - _MR) * mm, 9.5 * mm, f"Página {doc.page}")

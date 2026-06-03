@@ -12,6 +12,7 @@ import {
   ExtractoListItem,
   PlanillaHistorialItem
 } from '@/types'
+import { localIsoDate } from '@/utils/fecha'
 
 // ── AlertasWidget ─────────────────────────────────────────────────────────────
 type Alerta = { tipo: string; cantidad: number; label: string; urgencia: string; link: string }
@@ -209,9 +210,7 @@ export const Dashboard: React.FC = () => {
   const [success, setSuccess] = useState('')
   const [resultado, setResultado] = useState<ConciliacionResultado | null>(null)
   const [panelId, setPanelId] = useState<number | null>(null)
-  const [fechaAcred, setFechaAcred] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  )
+  const [fechaAcred, setFechaAcred] = useState<string>(localIsoDate())
   const [banco, setBanco] = useState('Banco Macro')
   const [comisionPct, setComisionPct] = useState('')
   const [umCorteDetectado, setUmCorteDetectado] = useState<number | null>(null)
@@ -227,7 +226,7 @@ export const Dashboard: React.FC = () => {
   const [tab, setTab] = useState<'individual' | 'masiva'>('individual')
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([])
   const [bulkRunning, setBulkRunning] = useState(false)
-  const [bulkFecha, setBulkFecha] = useState(new Date().toISOString().split('T')[0])
+  const [bulkFecha, setBulkFecha] = useState(localIsoDate())
   const [autoRun, setAutoRun] = useState(true)
   const justAddedRef = useRef(false)
 
@@ -443,7 +442,7 @@ export const Dashboard: React.FC = () => {
     : 0
 
   // Monto conciliado HOY (planillas cargadas hoy)
-  const hoyStr = new Date().toISOString().split('T')[0]
+  const hoyStr = localIsoDate()
   const planillasHoy = planillas.filter(p => p.fecha_carga.startsWith(hoyStr))
   const montoConciliadoHoy = planillasHoy.reduce((s, p) => s + (p.monto_conciliado ?? 0), 0)
   const fmtMonto = (n: number) =>
@@ -536,12 +535,12 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm dark:bg-red-900/20 dark:border-red-800/50 dark:text-red-400">
           {error}
         </div>
       )}
       {success && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-green-700 text-sm">
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-green-700 text-sm dark:bg-green-900/20 dark:border-green-800/50 dark:text-green-400">
           {success}
         </div>
       )}

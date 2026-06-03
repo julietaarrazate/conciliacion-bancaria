@@ -130,13 +130,13 @@ def start_alertas_push_job() -> None:
 
 def _run_alertas_push() -> None:
     """Revisa cheques por vencer y movimientos sin asignar. Manda push si hay urgentes."""
-    from datetime import date
+    from datetime import datetime
     from app.models.cheque import Cheque
     from app.models.extracto import MovimientoBanco
 
     db = SessionLocal()
     try:
-        hoy = date.today()
+        hoy = datetime.now(_ART).date()
         en_3_dias = hoy + timedelta(days=3)
         hace_7_dias = hoy - timedelta(days=7)
 
@@ -207,14 +207,26 @@ def start_token_cleanup_job() -> None:
 
 
 def _run_token_cleanup() -> None:
-    from datetime import datetime
+    from datetime import datetime, timedelta
     from app.models.revoked_token import RevokedToken
+    from app.models.login_approval import LoginApproval
+    from app.models.twofa_code import TwofaCode
     db = SessionLocal()
     try:
         ahora = datetime.utcnow()
-        deleted = db.query(RevokedToken).filter(RevokedToken.expires_at < ahora).delete(synchronize_session=False)
+        hace_30_dias = ahora - timedelta(days=30)
+        hace_7_dias = ahora - timedelta(days=7)
+
+        rt = db.query(RevokedToken).filter(RevokedToken.expires_at < ahora).delete(synchronize_session=False)
+        la = db.query(LoginApproval).filter(
+            LoginApproval.request_expires_at < hace_30_dias
+        ).delete(synchronize_session=False)
+        tc = db.query(TwofaCode).filter(
+            TwofaCode.expires_at < hace_7_dias
+        ).delete(synchronize_session=False)
+
         db.commit()
-        logger.info("Tokens revocados purgados: %d", deleted)
+        logger.info("Cleanup diario: revoked_tokens=%d login_approvals=%d twofa_codes=%d", rt, la, tc)
     except Exception as ex:
         logger.error("Token cleanup FALLO: %s", ex, exc_info=True)
     finally:

@@ -10,6 +10,7 @@ from app.middleware.auth import get_current_user, require_permission, can_switch
 from app.models.user import User
 from app.models.cliente import Cliente
 from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
+from app.services.tz import hoy_art
 
 router = APIRouter(prefix="/contabilidad", tags=["contabilidad"])
 logger = logging.getLogger(__name__)
@@ -97,6 +98,32 @@ def get_reglas(
     ]
 
 
+@router.get("/asientos/gaps")
+def get_asientos_gaps(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Devuelve los numero_asiento faltantes en la secuencia (solo superadmin/admin_accounting)."""
+    oid = _org_id(current_user, org_id)
+    rows = db.query(Asiento.numero_asiento).filter(
+        Asiento.organizacion_id == oid,
+        Asiento.numero_asiento.isnot(None)
+    ).order_by(Asiento.numero_asiento).all()
+    nums = [r[0] for r in rows]
+    if not nums:
+        return {"gaps": [], "total": 0, "max": 0, "count": 0}
+    max_n = nums[-1]
+    existing = set(nums)
+    gaps = [n for n in range(1, max_n + 1) if n not in existing]
+    return {
+        "count": len(nums),
+        "max": max_n,
+        "gaps": gaps,
+        "total_gaps": len(gaps),
+    }
+
+
 @router.get("/asientos")
 def get_asientos(
     org_id: Optional[int] = Query(None),
@@ -123,6 +150,19 @@ def get_asientos(
         ))
     total = q.count()
     items = q.order_by(Asiento.fecha.desc(), Asiento.id.desc()).offset(skip).limit(limit).all()
+
+    # Batch: cuentas involucradas por asiento (para mostrar en columna Cuenta)
+    ids = [a.id for a in items]
+    cuentas_por_asiento: dict[int, list[str]] = {a.id: [] for a in items}
+    if ids:
+        for det, pc in (
+            db.query(AsientoDetalle, PlanCuenta)
+            .join(PlanCuenta, AsientoDetalle.cuenta_id == PlanCuenta.id)
+            .filter(AsientoDetalle.asiento_id.in_(ids))
+            .all()
+        ):
+            cuentas_por_asiento[det.asiento_id].append(f"{pc.codigo} {pc.nombre}")
+
     return {
         "total": total,
         "items": [
@@ -134,6 +174,7 @@ def get_asientos(
                 "modulo": a.modulo,
                 "referencia_id": a.referencia_id,
                 "created_at": a.created_at,
+                "cuentas": cuentas_por_asiento.get(a.id, []),
             }
             for a in items
         ],
@@ -722,7 +763,7 @@ def backfill_cuentas_corrientes(
             continue
         fecha_acred = d["fecha_acred"]
         fecha_carga = d["fecha_carga"]
-        fecha_asiento = fecha_acred or (fecha_carga.date() if fecha_carga else _date.today())
+        fecha_asiento = fecha_acred or (fecha_carga.date() if fecha_carga else hoy_art())
         desc = f"Acreditación histórica — {d['cliente_nombre']}"
         if d["nombre_archivo"]:
             desc += f" ({d['nombre_archivo']})"
@@ -812,7 +853,7 @@ def get_cuenta_corriente(
         q = q.filter(Asiento.fecha >= desde)
     if hasta:
         q = q.filter(Asiento.fecha <= hasta)
-    filas = q.order_by(Asiento.fecha, Asiento.id).all()
+    filas = q.order_by(Asiento.fecha, Asiento.id).all()  # ASC para saldo correcto; se invierte al retornar
 
     # Set de asientos revertidos (existe un *_reverso que los referencia)
     asiento_ids = [a.id for _, a in filas]
@@ -841,6 +882,21 @@ def get_cuenta_corriente(
         from app.models.extracto import MovimientoBanco
         for m in db.query(MovimientoBanco.id, MovimientoBanco.extracto_id).filter(MovimientoBanco.id.in_(mov_ids)).all():
             mov_map[m.id] = m.extracto_id
+
+    # Batch: cuentas contraparte (los otros detalles del mismo asiento)
+    asiento_ids_all = [a.id for _, a in filas]
+    contra_map: dict[int, str] = {}  # asiento_id → "codigo nombre"
+    if asiento_ids_all:
+        otras = (
+            db.query(AsientoDetalle, PlanCuenta)
+            .join(PlanCuenta, AsientoDetalle.cuenta_id == PlanCuenta.id)
+            .filter(AsientoDetalle.asiento_id.in_(asiento_ids_all),
+                    AsientoDetalle.cuenta_id != cli.cuenta_contable_id)
+            .all()
+        )
+        for od, pc in otras:
+            if od.asiento_id not in contra_map:
+                contra_map[od.asiento_id] = f"{pc.codigo} {pc.nombre}"
 
     movimientos = []
     saldo = 0.0
@@ -882,6 +938,7 @@ def get_cuenta_corriente(
             "tipo_cat": cat,
             "tipo_label": label,
             "referencia": a.descripcion or "—",
+            "cuenta_contraparte": contra_map.get(a.id, ""),
             "debito": round(debe, 2),
             "credito": round(haber, 2),
             "saldo": round(saldo, 2),
@@ -893,7 +950,7 @@ def get_cuenta_corriente(
         "cliente": {"id": cli.id, "nombre": cli.nombre},
         "cuenta": {"id": cuenta.id, "codigo": cuenta.codigo, "nombre": cuenta.nombre} if cuenta else None,
         "sin_cuenta": False,
-        "movimientos": movimientos,
+        "movimientos": list(reversed(movimientos)),
         "total_debito": round(sum(m["debito"] for m in movimientos), 2),
         "total_credito": round(sum(m["credito"] for m in movimientos), 2),
         "saldo_final": round(saldo, 2),
@@ -1088,7 +1145,7 @@ def reset_y_rebuild_asientos(
             if total_pos <= 0 and total_neg <= 0:
                 continue
             primer = movs[0]
-            fecha_ref = primer.fecha if isinstance(primer.fecha, _date) else _date.today()
+            fecha_ref = primer.fecha if isinstance(primer.fecha, _date) else hoy_art()
             a = Asiento(
                 fecha=fecha_ref,
                 descripcion=f"UM lote {lote_key} — {len(movs)} movimientos (extracto #{primer.extracto_id})",
@@ -1122,13 +1179,13 @@ def reset_y_rebuild_asientos(
             monto = abs(_monto(row.monto))  # planilla rows son siempre ingresos (positivos)
             if monto <= 0:
                 continue
-            fecha = (row.fecha_acred or planilla.fecha_carga or _date.today())
+            fecha = (row.fecha_acred or planilla.fecha_carga or hoy_art())
             if not isinstance(fecha, _date):
                 try:
                     from datetime import datetime as _dt
                     fecha = _dt.strptime(str(fecha)[:10], "%Y-%m-%d").date()
                 except Exception:
-                    fecha = _date.today()
+                    fecha = hoy_art()
             a = Asiento(
                 fecha=fecha,
                 descripcion=f"Acreditación {cliente.nombre} — {planilla.nombre_archivo}",
@@ -1226,6 +1283,31 @@ def post_asiento_manual(
         raise HTTPException(status_code=500, detail=str(ex))
 
 
+class PatchFechaBody(BaseModel):
+    fecha: str  # YYYY-MM-DD
+
+@router.patch("/asientos/{asiento_id}/fecha")
+def patch_asiento_fecha(
+    asiento_id: int,
+    body: PatchFechaBody,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    """Editar la fecha de un asiento individual (solo superadmin)."""
+    from datetime import date as _date
+    oid = _org_id(current_user, org_id)
+    a = db.query(Asiento).filter(Asiento.id == asiento_id, Asiento.organizacion_id == oid).first()
+    if not a:
+        raise HTTPException(404, "Asiento no encontrado")
+    try:
+        a.fecha = _date.fromisoformat(body.fecha)
+    except ValueError:
+        raise HTTPException(400, "Formato de fecha inválido (YYYY-MM-DD)")
+    db.commit()
+    return {"ok": True, "id": a.id, "fecha": str(a.fecha)}
+
+
 @router.delete("/asientos/{asiento_id}")
 def delete_asiento_manual(
     asiento_id: int,
@@ -1252,7 +1334,7 @@ def delete_asiento_manual(
     lineas_orig = db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id == asiento_id).all()
     try:
         reverso = Asiento(
-            fecha=_date.today(),
+            fecha=hoy_art(),
             descripcion=f"REVERSO #{asiento_id}: {asiento.descripcion or ''} — Revertido manualmente",
             modulo="ajuste_manual_reverso",
             referencia_id=asiento_id,
@@ -1269,3 +1351,82 @@ def delete_asiento_manual(
     except Exception as ex:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(ex))
+
+
+# ── Diagnóstico y fix de fechas con timezone incorrecto ────────────────────────
+
+@router.post("/fix-fechas-utc")
+def fix_fechas_utc(
+    dry_run: bool = Query(True),
+    org_id: Optional[int] = Query(None),
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    modulo: Optional[str] = Query(None),
+    direccion: str = Query("atrasar"),  # "atrasar" (−1 día) o "adelantar" (+1 día)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    """
+    Corrige fechas de asientos y egresos en un rango de fechas dado.
+    direccion=atrasar  → resta 1 día (para registros UTC-creados 1 día adelantado)
+    direccion=adelantar → suma 1 día (para registros ingresados con fecha de ayer por error)
+    dry_run=true: solo muestra los afectados sin modificar nada.
+    """
+    from datetime import datetime, timezone, timedelta, date as _date
+    from app.models.egreso import Egreso
+
+    oid = _org_id(current_user, org_id)
+    delta = timedelta(days=1) if direccion == "adelantar" else timedelta(days=-1)
+
+    a_q = db.query(Asiento).filter(Asiento.organizacion_id == oid)
+    if desde:
+        a_q = a_q.filter(Asiento.fecha >= desde)
+    if hasta:
+        a_q = a_q.filter(Asiento.fecha <= hasta)
+    if modulo:
+        a_q = a_q.filter(Asiento.modulo == modulo)
+    asientos_q = a_q.all()
+
+    try:
+        e_q = db.query(Egreso).filter(Egreso.organizacion_id == oid)
+        if desde:
+            e_q = e_q.filter(Egreso.fecha >= desde)
+        if hasta:
+            e_q = e_q.filter(Egreso.fecha <= hasta)
+        egresos_q = e_q.all()
+    except Exception:
+        egresos_q = []
+
+    asientos_afectados = [
+        {"id": a.id, "fecha_actual": str(a.fecha), "created_at_utc": str(a.created_at),
+         "modulo": a.modulo, "descripcion": (a.descripcion or '')[:60]}
+        for a in asientos_q
+    ]
+    egresos_afectados = [
+        {"id": e.id, "fecha_actual": str(e.fecha), "created_at_utc": str(e.created_at),
+         "descripcion": (e.descripcion or '')[:60]}
+        for e in egresos_q
+    ]
+
+    if not dry_run:
+        for a in asientos_q:
+            if a.fecha:
+                a.fecha = a.fecha + delta
+        for e in egresos_q:
+            if e.fecha:
+                e.fecha = e.fecha + delta
+        db.commit()
+
+    accion = "+1 día (adelantado)" if direccion == "adelantar" else "−1 día (atrasado)"
+    return {
+        "dry_run": dry_run,
+        "direccion": direccion,
+        "asientos_afectados": len(asientos_afectados),
+        "egresos_afectados": len(egresos_afectados),
+        "detalle_asientos": asientos_afectados,
+        "detalle_egresos": egresos_afectados,
+        "mensaje": (
+            f"Solo conteo — no se modificó nada. ({len(asientos_afectados)} asientos + {len(egresos_afectados)} egresos en el rango)." if dry_run else
+            f"Fechas corregidas {accion}: {len(asientos_afectados)} asientos + {len(egresos_afectados)} egresos."
+        ),
+    }

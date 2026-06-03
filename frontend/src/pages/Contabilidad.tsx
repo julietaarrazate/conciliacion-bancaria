@@ -5,6 +5,7 @@ import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
 import { toast } from '@/store/toast'
 import { confirmDialog } from '@/store/confirm'
+import { localIsoDate } from '@/utils/fecha'
 
 interface CarteraItem {
   cliente_id: number
@@ -128,7 +129,12 @@ const TIPO_BG: Record<string, string> = {
 }
 
 function fmtDate(s: string) {
-  try { return new Date(s.endsWith('Z') ? s : s + 'Z').toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' }) }
+  if (!s) return '—'
+  try {
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    return new Date(s.endsWith('Z') ? s : s + 'Z').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
   catch { return s }
 }
 function fmtNum(n: number) { return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
@@ -207,6 +213,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   const [reglas, setReglas]           = useState<ReglaItem[]>([])
   const [asientos, setAsientos]       = useState<AsientoItem[]>([])
   const [totalAsientos, setTotalAsientos] = useState(0)
+  const firstRenderRef = useRef(true)
   const [diarioDesde, setDiarioDesde]   = useState('')
   const [diarioHasta, setDiarioHasta]   = useState('')
   const [diarioModulo, setDiarioModulo] = useState('')
@@ -258,20 +265,19 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       canViewAccounting
         ? apiClient.client.get(`/contabilidad/reglas${q}`).then(r => r.data)
         : Promise.resolve([]),
-      apiClient.client.get(`/contabilidad/asientos?limit=500${activeOrgId ? `&org_id=${activeOrgId}` : ''}`).then(r => r.data),
       apiClient.client.get(`/contabilidad/sumas-saldo${q}`).then(r => r.data),
       apiClient.client.get(`/contabilidad/balance${q}`).then(r => r.data),
-    ]).then(([c, r, a, ss, b]) => {
+    ]).then(([c, r, ss, b]) => {
       setCuentas(c); setReglas(r)
-      setAsientos(a.items); setTotalAsientos(a.total)
       setSumasSaldo(ss); setBalance(b)
       setLoading(false)
+      cargarAsientos()
     }).catch(() => setLoading(false))
   }
 
   const cargarAsientos = () => {
     const params = new URLSearchParams()
-    params.set('limit', '500')
+    params.set('limit', '2000')
     if (activeOrgId) params.set('org_id', String(activeOrgId))
     if (diarioDesde)    params.set('desde', diarioDesde)
     if (diarioHasta)    params.set('hasta', diarioHasta)
@@ -284,6 +290,8 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   }
 
   useEffect(() => {
+    // skip first render — recargarTodo handles the initial load and calls cargarAsientos() at the end
+    if (firstRenderRef.current) { firstRenderRef.current = false; return }
     cargarAsientos()
   }, [diarioDesde, diarioHasta, diarioModulo, diarioCuentaId, activeOrgId])
 
@@ -323,7 +331,8 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     setLoadingCartera(true)
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
     apiClient.client.get(`/contabilidad/cuentas-corrientes${q}`)
-      .then(r => setCartera(r.data.items))
+      .then(r => setCartera(r.data.items ?? []))
+      .catch(() => setCartera([]))
       .finally(() => setLoadingCartera(false))
   }
 
@@ -450,6 +459,44 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     }
   }
 
+  // ── Fix fechas UTC — modal propio (reemplaza window.prompt que no anda en mobile) ──
+  const [fixFechasOpen, setFixFechasOpen] = useState(false)
+  const [fixDesde, setFixDesde] = useState('2026-05-31')
+  const [fixHasta, setFixHasta] = useState('2026-06-01')
+  const [fixDir, setFixDir] = useState<'adelantar' | 'atrasar'>('adelantar')
+  const [fixSoloEgresos, setFixSoloEgresos] = useState(true)
+  const [fixPreview, setFixPreview] = useState<null | { asientos_afectados: number; egresos_afectados: number; detalle_asientos: any[]; detalle_egresos: any[] }>(null)
+  const [fixLoading, setFixLoading] = useState(false)
+  const [fixMsg, setFixMsg] = useState('')
+
+  const fixFechasDryRun = async () => {
+    setFixLoading(true); setFixMsg(''); setFixPreview(null)
+    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    const moduloQ = fixSoloEgresos ? '&modulo=egreso' : ''
+    try {
+      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=true&desde=${fixDesde}&hasta=${fixHasta}&direccion=${fixDir}${orgQ}${moduloQ}`)
+      setFixPreview(r.data)
+    } catch (e: any) {
+      setFixMsg(`❌ ${e.response?.data?.detail || e.message}`)
+    } finally { setFixLoading(false) }
+  }
+
+  const fixFechasEjecutar = async () => {
+    setFixLoading(true); setFixMsg('')
+    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    const moduloQ = fixSoloEgresos ? '&modulo=egreso' : ''
+    try {
+      const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=false&desde=${fixDesde}&hasta=${fixHasta}&direccion=${fixDir}${orgQ}${moduloQ}`)
+      setFixMsg(`✓ ${r.data.mensaje}`)
+      setFixPreview(null)
+      recargarTodo()
+    } catch (e: any) {
+      setFixMsg(`❌ ${e.response?.data?.detail || e.message}`)
+    } finally { setFixLoading(false) }
+  }
+
+  const fixFechasUtc = () => { setFixFechasOpen(true); setFixPreview(null); setFixMsg('') }
+
   // ── Ajuste manual ───────────────────────────────────────────────────────────
   const [ajusteModalOpen, setAjusteModalOpen] = useState(false)
   const [ajusteGuardando, setAjusteGuardando] = useState(false)
@@ -457,7 +504,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   const [ajusteDebeId, setAjusteDebeId] = useState<number | ''>('')
   const [ajusteHaberId, setAjusteHaberId] = useState<number | ''>('')
   const [ajusteMonto, setAjusteMonto] = useState('')
-  const [ajusteFecha, setAjusteFecha] = useState(new Date().toISOString().split('T')[0])
+  const [ajusteFecha, setAjusteFecha] = useState(localIsoDate())
   const [ajusteDesc, setAjusteDesc] = useState('')
   const [ajusteDebeBusq, setAjusteDebeBusq] = useState('')
   const [ajusteHaberBusq, setAjusteHaberBusq] = useState('')
@@ -496,6 +543,21 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       recargarTodo()
     } catch (e: any) {
       alert(e.response?.data?.detail || 'No se pudo revertir el asiento')
+    }
+  }
+
+  const [editFechaId, setEditFechaId] = useState<number | null>(null)
+  const [editFechaVal, setEditFechaVal] = useState('')
+
+  const saveFechaAsiento = async (asientoId: number) => {
+    const orgQ = activeOrgId ? `?org_id=${activeOrgId}` : ''
+    try {
+      const r = await apiClient.client.patch(`/contabilidad/asientos/${asientoId}/fecha${orgQ}`, { fecha: editFechaVal })
+      const nuevaFecha = r.data.fecha  // "YYYY-MM-DD" confirmado por el backend
+      setAsientos(prev => prev.map(a => a.id === asientoId ? { ...a, fecha: nuevaFecha } : a))
+      setEditFechaId(null)
+    } catch (e: any) {
+      alert(e.response?.data?.detail || 'No se pudo guardar')
     }
   }
 
@@ -743,7 +805,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   <th className="px-3 py-2 font-medium text-left">
                     <ExcelFilterCtb label="Concepto" active={!!diarioModulo}>
                       <div className="flex flex-col gap-1">
-                        {['', 'um_lote', 'um_mov', 'um_reclass', 'cc_inicial', 'planilla', 'planilla_comision', 'cheque_carga', 'cheque_rechazo', 'pago', 'caja_op', 'caja_efectivo'].map(m => (
+                        {['', 'um_lote', 'um_reclass', 'cc_inicial', 'cheque_registro', 'cheque_acred_banco', 'cheque_acred_cliente', 'cheque_rechazo_banco', 'cheque_rechazo_cliente', 'cheque_rechazo_gasto', 'egreso', 'caja_op', 'caja_efectivo', 'ajuste_manual', 'ajuste_manual_reverso'].map(m => (
                           <button key={m} onClick={() => setDiarioModulo(m)}
                             className={`text-left px-2 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-slate-700 ${diarioModulo === m ? 'bg-ml-blue text-white' : 'text-gray-700 dark:text-gray-300'}`}>
                             {m === '' ? '(Todos)' : (MODULO_LABEL[m] || m)}
@@ -789,13 +851,38 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                       >
                         <td className="px-2 py-2 text-gray-400 text-center">{isOpen ? '▾' : '▸'}</td>
                         <td className="px-3 py-2 text-gray-400 font-mono">{(a as any).numero_asiento ?? a.id}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">{fmtDate(a.fecha)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                          {user?.is_superadmin && editFechaId === a.id ? (
+                            <div className="flex flex-col gap-1 min-w-[130px]">
+                              <input type="date" value={editFechaVal}
+                                onChange={e => setEditFechaVal(e.target.value)}
+                                className="text-xs border border-orange-300 dark:border-orange-600 rounded px-2 py-1 bg-white dark:bg-slate-800 text-gray-900 dark:text-white w-full"
+                                onKeyDown={e => { if (e.key === 'Enter') saveFechaAsiento(a.id); if (e.key === 'Escape') setEditFechaId(null) }}
+                                autoFocus
+                              />
+                              <button onClick={() => saveFechaAsiento(a.id)}
+                                className="w-full text-xs px-2 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white font-semibold">
+                                Guardar
+                              </button>
+                            </div>
+                          ) : (
+                            <span
+                              className={`text-gray-700 dark:text-gray-300 ${user?.is_superadmin ? 'cursor-pointer hover:underline hover:text-orange-600 dark:hover:text-orange-400' : ''}`}
+                              title={user?.is_superadmin ? 'Clic para editar fecha' : undefined}
+                              onClick={() => { if (user?.is_superadmin) { setEditFechaId(a.id); setEditFechaVal(a.fecha || '') } }}
+                            >{fmtDate(a.fecha)}</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2">
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500">
                             {(a.modulo && MODULO_LABEL[a.modulo]) || a.modulo || '—'}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300"></td>
+                        <td className="px-3 py-2 max-w-[180px]">
+                          {((a as any).cuentas as string[] || []).map((c, i) => (
+                            <span key={i} className="block font-mono text-[10px] text-gray-500 dark:text-gray-400 truncate" title={c}>{c}</span>
+                          ))}
+                        </td>
                         <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{a.descripcion || '—'}</td>
                         {canAdminAccounting && (
                           <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
@@ -1105,14 +1192,39 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   {backfilling ? 'Reconstruyendo…' : '↻ Reconstruir desde conciliaciones'}
                 </button>
                 {user?.is_superadmin && (
-                  <button
-                    onClick={resetYRebuild}
-                    disabled={backfilling}
-                    className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-medium hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
-                    title="Borra TODOS los asientos y los reconstruye limpio desde los datos reales"
-                  >
-                    ⚠️ Reset Libro Diario
-                  </button>
+                  <>
+                    <button
+                      onClick={resetYRebuild}
+                      disabled={backfilling}
+                      className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-medium hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                      title="Borra TODOS los asientos y los reconstruye limpio desde los datos reales"
+                    >
+                      ⚠️ Reset Libro Diario
+                    </button>
+                    <button
+                      onClick={fixFechasUtc}
+                      className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-orange-300 dark:border-orange-800 text-orange-600 dark:text-orange-400 font-medium hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                      title="Identifica y corrige registros con fecha UTC en vez de ART"
+                    >
+                      🕐 Fix fechas UTC
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
+                        const r = await apiClient.client.get(`/contabilidad/asientos/gaps${q}`)
+                        const d = r.data
+                        if (d.total_gaps === 0) {
+                          alert(`✅ Secuencia completa: ${d.count} asientos, máximo #${d.max}, sin gaps.`)
+                        } else {
+                          alert(`⚠️ ${d.total_gaps} gap(s) en la secuencia (${d.count} activos, máx #${d.max}):\n\nNros faltantes: ${d.gaps.join(', ')}`)
+                        }
+                      }}
+                      className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
+                      title="Ver qué números de asiento están faltando en la secuencia"
+                    >
+                      🔍 Ver gaps
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -1224,10 +1336,23 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
             const visibles = ctaCte.movimientos.filter(m => catFiltro.has(m.tipo_cat))
             return (
               <div>
-                <div className="flex flex-wrap gap-3 mb-3 text-xs">
+                <div className="flex flex-wrap gap-3 mb-2 text-xs">
                   <span className="text-gray-500 dark:text-gray-400">Cuenta: <span className="font-mono text-amber-600 dark:text-amber-400">{ctaCte.cuenta?.codigo} {ctaCte.cuenta?.nombre}</span></span>
-                  <span className="text-gray-500 dark:text-gray-400">Saldo: <b className="text-ml-text dark:text-white">{fmtNum(ctaCte.saldo_final)}</b></span>
                   <span className="text-gray-400">({visibles.length} de {ctaCte.movimientos.length} movimientos)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 flex sm:block items-center justify-between sm:text-center">
+                    <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">Total Débito</p>
+                    <p className="font-mono text-sm font-semibold text-blue-700 dark:text-blue-300">{fmtNum(ctaCte.total_debito)}</p>
+                  </div>
+                  <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg px-3 py-2 flex sm:block items-center justify-between sm:text-center">
+                    <p className="text-[10px] text-orange-600 dark:text-orange-400 font-medium">Total Crédito</p>
+                    <p className="font-mono text-sm font-semibold text-orange-700 dark:text-orange-300">{fmtNum(ctaCte.total_credito)}</p>
+                  </div>
+                  <div className={`rounded-lg px-3 py-2 flex sm:block items-center justify-between sm:text-center border ${ctaCte.saldo_final >= 0 ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'}`}>
+                    <p className={`text-[10px] font-medium ${ctaCte.saldo_final >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>Saldo Final</p>
+                    <p className={`font-mono text-sm font-bold ${ctaCte.saldo_final >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>{fmtNum(ctaCte.saldo_final)}</p>
+                  </div>
                 </div>
                 {visibles.length === 0 ? (
                   <p className="text-center py-8 text-gray-400 text-sm">Sin movimientos para los filtros elegidos.</p>
@@ -1239,6 +1364,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Fecha</th>
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Tipo</th>
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Referencia</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-500">Cuenta</th>
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Estado</th>
                           <th className="text-right px-3 py-2 font-medium text-blue-600 dark:text-blue-400">Débito</th>
                           <th className="text-right px-3 py-2 font-medium text-orange-600 dark:text-orange-400">Crédito</th>
@@ -1251,7 +1377,8 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                           <tr key={i} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
                             <td className="px-3 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">{fmtDate(m.fecha)}</td>
                             <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{m.tipo_label}</td>
-                            <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[200px] truncate" title={m.referencia}>{m.referencia}</td>
+                            <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[150px] truncate" title={m.referencia}>{m.referencia}</td>
+                            <td className="px-3 py-2 font-mono text-[11px] text-gray-500 dark:text-gray-400 max-w-[140px] truncate" title={(m as any).cuenta_contraparte}>{(m as any).cuenta_contraparte || '—'}</td>
                             <td className="px-3 py-2">
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${ESTADO_BADGE[m.estado] || ''}`}>{m.estado}</span>
                             </td>
@@ -1401,6 +1528,84 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                 className="text-xs px-4 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50">
                 {ajusteGuardando ? 'Guardando…' : 'Registrar asiento'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Fix Fechas UTC ───────────────────────────────────────── */}
+      {fixFechasOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-ml-dark-surface rounded-2xl shadow-xl w-full max-w-md">
+            <div className="p-4 border-b border-gray-200 dark:border-ml-dark-border flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900 dark:text-white text-sm">🕐 Corrección de fechas en Libro Diario</h3>
+              <button onClick={() => setFixFechasOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-gray-500 dark:text-zinc-400">
+                Corrige egresos o asientos cuya fecha quedó 1 día adelantada o atrasada por diferencia UTC/ART.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Desde</label>
+                  <input type="date" value={fixDesde} onChange={e => { setFixDesde(e.target.value); setFixPreview(null) }}
+                    className="input-field w-full text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Hasta</label>
+                  <input type="date" value={fixHasta} onChange={e => { setFixHasta(e.target.value); setFixPreview(null) }}
+                    className="input-field w-full text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Dirección</label>
+                <select value={fixDir} onChange={e => { setFixDir(e.target.value as any); setFixPreview(null) }}
+                  className="input-field w-full text-sm">
+                  <option value="adelantar">Adelantar +1 día (muestran 1 día antes de lo correcto)</option>
+                  <option value="atrasar">Atrasar −1 día (muestran 1 día después de lo correcto)</option>
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-zinc-400 cursor-pointer">
+                <input type="checkbox" checked={fixSoloEgresos} onChange={e => { setFixSoloEgresos(e.target.checked); setFixPreview(null) }} className="rounded" />
+                Solo egresos (no tocar asientos de cheques, UM, etc.)
+              </label>
+
+              {fixPreview && (
+                <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-3 text-xs space-y-1">
+                  <p className="font-semibold text-orange-800 dark:text-orange-300">
+                    Afectados: {fixPreview.asientos_afectados} asientos + {fixPreview.egresos_afectados} egresos
+                  </p>
+                  {[...fixPreview.detalle_asientos, ...fixPreview.detalle_egresos].slice(0, 5).map((a: any, i) => (
+                    <p key={i} className="text-orange-700 dark:text-orange-400 truncate">
+                      #{a.id} · {a.fecha_actual} → {a.fecha_nueva} · {a.descripcion}
+                    </p>
+                  ))}
+                  {(fixPreview.asientos_afectados + fixPreview.egresos_afectados) > 5 && (
+                    <p className="text-orange-600 dark:text-orange-500">…y más</p>
+                  )}
+                </div>
+              )}
+
+              {fixMsg && (
+                <p className={`text-xs rounded-lg px-3 py-2 ${fixMsg.startsWith('✓') ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'}`}>
+                  {fixMsg}
+                </p>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-ml-dark-border flex flex-wrap justify-end gap-2">
+              <button onClick={() => setFixFechasOpen(false)} className="text-xs px-3 py-2 rounded-lg border border-gray-300 dark:border-ml-dark-border text-gray-600 dark:text-zinc-300">
+                Cerrar
+              </button>
+              <button onClick={fixFechasDryRun} disabled={fixLoading || !fixDesde || !fixHasta}
+                className="text-xs px-3 py-2 rounded-lg border border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50">
+                {fixLoading && !fixPreview ? 'Buscando…' : '🔍 Vista previa'}
+              </button>
+              {fixPreview && (fixPreview.asientos_afectados + fixPreview.egresos_afectados) > 0 && (
+                <button onClick={fixFechasEjecutar} disabled={fixLoading}
+                  className="text-xs px-4 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 disabled:opacity-50">
+                  {fixLoading ? 'Corrigiendo…' : `✓ Corregir ${fixPreview.asientos_afectados + fixPreview.egresos_afectados} registros`}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -5,6 +5,7 @@ import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
 import { confirmDialog } from '@/store/confirm'
 import { useLockStore } from '@/store/lock'
+import { localIsoDate } from '@/utils/fecha'
 
 // Evita que abrir el menú nativo de compartir dispare el bloqueo por PIN/huella:
 // al abrir el share sheet el navegador pierde foco un instante (igual que las descargas).
@@ -14,6 +15,17 @@ function suppressLockForShare() {
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
+
+// Parse monto from OCR: handles number OR string (incl. Argentine "15.000,00" / US "15,000.00")
+const parseMonto = (raw: any): number | null => {
+  if (raw == null) return null
+  if (typeof raw === 'number') return isNaN(raw) ? null : raw
+  const s = String(raw).trim().replace(/[^0-9.,-]/g, '')
+  if (!s) return null
+  if (/^\d{1,3}(\.\d{3})+(,\d*)?$/.test(s)) return parseFloat(s.replace(/\./g, '').replace(',', '.'))
+  if (/^\d{1,3}(,\d{3})+(\.\d*)?$/.test(s)) return parseFloat(s.replace(/,/g, ''))
+  return parseFloat(s.replace(',', '.')) || null
+}
 
 interface Cliente { id: number; nombre: string }
 interface Categoria { id: number; nombre: string }
@@ -137,7 +149,7 @@ export const Pagos: React.FC = () => {
   const cargarLista = useCallback(async () => {
     setLoadingList(true)
     try {
-      const params: Record<string, string | number> = { limit: 200 }
+      const params: Record<string, string | number> = { limit: 50 }
       if (activeOrgId) params.org_id = activeOrgId
       if (fTipo) params.tipo = fTipo
       if (fForma) params.forma_pago = fForma
@@ -183,7 +195,7 @@ export const Pagos: React.FC = () => {
     monto: '',
     concepto: '',
     referencia: '',
-    fecha: new Date().toISOString().slice(0, 10),
+    fecha: localIsoDate(),
   })
   const [saving, setSaving] = useState(false)
   const [resultado, setResultado] = useState<any>(null)
@@ -218,7 +230,9 @@ export const Pagos: React.FC = () => {
     setSearchParams(sp, { replace: true })
   }, [searchParams, setSearchParams])
 
+  // Lazy: cargar clientes/categorías solo al abrir el form (no bloquea la carga inicial del historial)
   useEffect(() => {
+    if (vista !== 'nuevo') return
     const params = activeOrgId ? { org_id: activeOrgId } : {}
     apiClient.client.get('/clientes/archivos', { params }).then(r => {
       setClientes(r.data.clientes?.map((c: any) => ({ id: c.id || 0, nombre: c.nombre })) || [])
@@ -226,7 +240,7 @@ export const Pagos: React.FC = () => {
     apiClient.client.get('/pagos/categorias', { params }).then(r => {
       setCategorias(r.data || [])
     }).catch(() => {})
-  }, [activeOrgId])
+  }, [activeOrgId, vista])
 
   const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -257,22 +271,25 @@ export const Pagos: React.FC = () => {
         const ocrCanvas = document.createElement('canvas')
         ocrCanvas.width = ow; ocrCanvas.height = oh
         const ocrCtx = ocrCanvas.getContext('2d')!
-        ocrCtx.fillStyle = '#ffffff'; ocrCtx.fillRect(0, 0, ow, oh)  // fondo blanco → evita negro en JPEG
-        ocrCtx.filter = 'grayscale(1) contrast(1.4) brightness(1.1)'
+        ocrCtx.fillStyle = '#ffffff'; ocrCtx.fillRect(0, 0, ow, oh)
+        // Sin filtro para OCR — Gemini lee mejor imágenes en color sin procesamiento
         ocrCtx.drawImage(img, 0, 0, ow, oh)
-        const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.7)
+        const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.8)
         apiClient.client.post('/agente/ocr-transferencia', { imagen_base64: ocrCompressed })
           .then(res => {
             const d = res.data
-            setForm(prev => ({
-              ...prev,
-              monto:        prev.monto        || (d.monto != null ? String(d.monto) : prev.monto),
-              fecha:        prev.fecha        || d.fecha        || prev.fecha,
-              beneficiario: prev.beneficiario || d.beneficiario || prev.beneficiario,
-              referencia:   prev.referencia   || d.referencia   || prev.referencia,
-            }))
+            setForm(prev => {
+              const ocrMonto = parseMonto(d.monto)
+              return {
+                ...prev,
+                monto:        prev.monto        || (ocrMonto != null ? new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(ocrMonto) : prev.monto),
+                fecha:        prev.fecha        || d.fecha        || prev.fecha,
+                beneficiario: prev.beneficiario || d.beneficiario || prev.beneficiario,
+                referencia:   prev.referencia   || d.referencia   || prev.referencia,
+              }
+            })
           })
-          .catch(() => { /* OCR no disponible — el usuario carga manualmente */ })
+          .catch(() => { setMsg('OCR no disponible — completá el importe manualmente') })
       }
       img.src = base64
     }
@@ -331,10 +348,25 @@ export const Pagos: React.FC = () => {
       // 1️⃣ Intentar compartir como PDF con foto escaneada
       const sharedPdf = await sharePagoPdf(nombre, form.tipo, montoNum, form.fecha, form.forma_pago, form.referencia, foto)
       if (sharedPdf) return
-      // 2️⃣ Fallback: compartir como imagen
+      // 2️⃣ Fallback: compartir como imagen (re-render con fondo blanco para evitar negro en JPEG)
       if (navigator.share && navigator.canShare) {
         try {
-          const blob = await fetch(foto).then(r => r.blob())
+          const img = new Image()
+          // onload ANTES de src para evitar race condition con data URLs
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve()
+            img.onerror = () => reject(new Error('img'))
+            img.src = foto
+          })
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth || 800; canvas.height = img.naturalHeight || 600
+          const ctx = canvas.getContext('2d')!
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+          ctx.drawImage(img, 0, 0)
+          const blob = await new Promise<Blob>((resolve, reject) =>
+            canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob')), 'image/jpeg', 0.85)
+          )
           const file = new File([blob], `Pago_${nombre}.jpg`, { type: 'image/jpeg' })
           if (navigator.canShare({ files: [file] })) {
             suppressLockForShare()
@@ -355,7 +387,7 @@ export const Pagos: React.FC = () => {
     setForm({
       tipo: 'proveedor', forma_pago: 'banco', beneficiario: '', cliente_nombre: '',
       categoria: '', monto: '', concepto: '', referencia: '',
-      fecha: new Date().toISOString().slice(0, 10),
+      fecha: localIsoDate(),
     })
     setResultado(null); setMsg('')
   }
@@ -590,7 +622,7 @@ export const Pagos: React.FC = () => {
                 <>
                   <input ref={fileInputRef} type="file" accept="image/*" capture="environment"
                     className="hidden" onChange={handleFoto} />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="btn-secondary w-full text-sm">
+                  <button type="button" onClick={() => { suppressLockForShare(); fileInputRef.current?.click() }} className="btn-secondary w-full text-sm">
                     📷 Sacar / subir foto
                   </button>
                 </>

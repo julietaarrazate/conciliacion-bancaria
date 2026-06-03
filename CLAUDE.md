@@ -262,7 +262,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   liquidaciones) y ve contabilidad + auditoría en solo lectura. Permisos:
   `upload_files, reconcile, manage_finance, view_accounting, view_audit`. NO ve Usuarios/Orgs/
   Papelera/Actividad. El panel Actividad es cross-org de superadmin → queda fuera.
-- **Permiso `delete_records`** (nuevo): solo ADMIN + OPERADOR (+ superadmin) lo tienen. Todos los
+- **Permiso `delete_records`** (nuevo): solo ADMIN (+ superadmin) lo tienen — el Operador lo tuvo originalmente pero se quitó en v3.11 por principio de menor privilegio. Todos los
   DELETE destructivos pasaron a `require_permission("delete_records")`: cheques (+foto), caja OP,
   clientes, planillas/filas, extractos, movimientos, mov-UM, liquidaciones. pagos/gastos y purgar
   papelera ya eran admin/superadmin-only. El contador NO puede borrar nada (devuelve 403).
@@ -529,7 +529,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - `useEffect` reactivo para el estado del onboarding (evita bug cuando `activeOrgId` carga después
   del mount inicial y cambia el `localStorage` key).
 
-### v3.11 — Ajuste manual Libro Diario + 2FA superadmin + fix onboarding (junio 2026 — PR #102)
+### v3.11 — Ajuste manual Libro Diario + 2FA + permisos hardening + fix onboarding (junio 2026 — PR #102)
 
 - **Ajuste manual del Libro Diario**: modal en `/contabilidad` → tab Libro Diario, visible solo para
   `admin_accounting`. Selector de cuenta Debe/Haber con búsqueda (solo cuentas hoja, sin hijos).
@@ -537,13 +537,17 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   y que ambas cuentas sean hoja. Botón 🗑️ por fila `ajuste_manual` → `DELETE /contabilidad/asientos/{id}`
   crea asiento reverso (`ajuste_manual_reverso`), nunca borra físicamente. `registrar_ajuste_manual()`
   en `motor_contable.py` asigna `numero_asiento` correlativo.
-- **2FA para superadmin por email**: al loguearse, si `RESEND_API_KEY` está seteada en Render, se genera
-  un código de 6 dígitos (SHA256 hasheado, TTL 10 min), se envía por email (asunto "Código de verificación
-  Cuadra") y se retorna `202 {requires_2fa: true, email}`. Nuevo modelo `TwofaCode` (tabla `twofa_codes`,
-  safety net `CREATE TABLE IF NOT EXISTS` en `main.py`). Endpoint `POST /auth/verify-2fa` valida hash,
-  marca `used=True` y entrega JWT. Sin `RESEND_API_KEY` el login sigue sin 2FA (degradación elegante).
-  Frontend: nuevo estado `twofa`, pantalla dedicada con input numérico 6 dígitos (font-mono, tracking-widest),
-  tipo `TwofaChallenge` en `types/index.ts`, return type de `login()` ampliado en `api.ts`.
+- **2FA por email para Superadmin y Admin**: al loguearse, si `RESEND_API_KEY` está seteada en Render, se
+  genera un código de 6 dígitos (SHA256 hasheado, TTL 10 min), se envía por email (asunto "Código de
+  verificación Cuadra") y se retorna `202 {requires_2fa: true, email}`. Nuevo modelo `TwofaCode` (tabla
+  `twofa_codes`, safety net `CREATE TABLE IF NOT EXISTS` en `main.py`). Endpoint `POST /auth/verify-2fa`
+  valida hash, marca `used=True` y entrega JWT. Sin `RESEND_API_KEY` el login sigue sin 2FA (degradación
+  elegante). Aplica a roles `is_superadmin` o `role == "admin"`. El Contador ya tiene protección mejor
+  (aprobación en vivo). Frontend: pantalla 2FA con input 6 dígitos, tipo `TwofaChallenge` en `types/index.ts`.
+- **`delete_records` solo para Admin y Superadmin**: se quitó el permiso al rol Operador (principio de
+  menor privilegio). El Operador sigue haciendo toda la operatoria diaria (subir, conciliar, caja,
+  cheques, pagos, liquidaciones) pero no puede borrar datos. Si algo se subió mal, lo reporta y un Admin
+  lo corrige. Cambio en `middleware/auth.py` y `store/auth.ts`.
 - **Fix onboarding checklist**: `dataLoaded` + `Promise.all` para carga paralela de extractos y planillas.
   El checklist solo renderiza después de que los datos cargaron (evita flash de 1-2 s). Auto-dismiss
   inmediato cuando los 3 pasos ya están completos al cargar (orgs con datos existentes nunca ven el widget).
@@ -647,6 +651,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - **Validación post-parse del extracto**: `POST /extractos` ahora rechaza con HTTP 400 si el parser
   devuelve 0 movimientos (formato no reconocido) o si la suma absoluta de montos es cero (columna
   de monto mal detectada). Protege contra cambios de formato bancario silenciosos.
+
 
 ### Pendiente para próximas sesiones
 
@@ -753,11 +758,27 @@ Checkpoints disponibles:
   steps contacto en línea, WA en spotlight, script tema síncrono en head (junio 2026 — PRs #94-#95)
 - `v3.10.3` — dashboard onboarding checklist (3 pasos, barra progreso, dismiss por org) + alertas
   widget (chips cheques/planillas/movimientos, light+dark mode, navega al módulo) (junio 2026 — PR #100)
-- `v3.11` — ajuste manual Libro Diario (modal con cuentas hoja, reverso no destructivo), 2FA superadmin
-  por email (código 6 dígitos SHA256, TTL 10 min, modelo TwofaCode, degradación elegante sin RESEND_API_KEY),
+- `v3.11` — ajuste manual Libro Diario (modal con cuentas hoja, reverso no destructivo), 2FA por email
+  para Superadmin y Admin (código 6 dígitos SHA256, TTL 10 min, modelo TwofaCode, degradación elegante
+  sin RESEND_API_KEY), delete_records quitado del Operador (principio de menor privilegio),
   fix onboarding checklist (dataLoaded + Promise.all, auto-dismiss inmediato en orgs con datos)
   (junio 2026 — PR #102)
+- `v3.11.1` — fix imagen negra WhatsApp (canvas fondo blanco), contraste mensajes dark/light en
+  Dashboard/Caja/Perfil/Historial/Cheques/Resumen, Cheques light mode completo (dual-mode),
+  PDF scanner Cheques (aspect ratio + canvas blanco), OCR monto Pagos (parseMonto + error visible),
+  lazy loading clientes/categorias en Pagos.
+- `v3.11.2` — fix fecha local UTC-3 en Pagos/Caja/Clientes/EstadoCuenta/Resumen/Historial
+  (localIsoDate vs toISOString que daba ayer antes de las 3 AM ART), light mode Caja historial +
+  EFT inputs, Compartir page dual-mode completo, Cheques stats colores light mode (junio 2026).
+- `v3.11.3` — editar cheque inline (✏️, PATCH /cheques/{id}, form reutilizado), export Excel
+  todos los cheques (GET /cheques/exportar con filtros), comisión auto-calculada desde % (sin campo
+  monto plano), stats cards overflow fixed (truncate), fix fechas bidireccional Libro Diario
+  (POST /contabilidad/fix-fechas-utc: adelantar/atrasar por rango, dry_run, afecta Asiento+Egreso)
+  (junio 2026 — PR #103).
+- `v3.11.4` — botones de borrar ocultos por permiso delete_records (Usuarios, Liquidaciones),
+  Sentry opt-in (SENTRY_DSN en Render / VITE_SENTRY_DSN en Vercel, sin overhead si no configurado),
+  validación post-parse extracto (400 si 0 movimientos o montos todos cero) (junio 2026 — PR #104).
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11.4

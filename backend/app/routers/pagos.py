@@ -20,6 +20,7 @@ from app.models.egreso import Egreso, CategoriaEgreso, TIPOS_EGRESO, FORMAS_PAGO
 from app.models.caja import ArqueoDiario, denominaciones_vacias
 from app.services.auditoria import registrar_log
 from app.services.storage import upload_comprobante
+from app.services.tz import hoy_art
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,7 @@ def crear_egreso(
         raise HTTPException(400, "El monto debe ser mayor a 0")
 
     fecha_str = payload.get("fecha")
-    fecha = date.fromisoformat(fecha_str) if fecha_str else date.today()
+    fecha = date.fromisoformat(fecha_str) if fecha_str else hoy_art()
 
     beneficiario = (payload.get("beneficiario") or "").strip() or None
     concepto     = (payload.get("concepto") or "").strip() or None
@@ -317,7 +318,7 @@ def exportar_egresos(
     } for e in egresos]
 
     desde_str = str(desde) if desde else "inicio"
-    hasta_str = str(hasta) if hasta else str(date.today())
+    hasta_str = str(hasta) if hasta else str(hoy_art())
     periodo = f"{desde_str}_{hasta_str}"
 
     xlsx = export_eft_historial(data, periodo)

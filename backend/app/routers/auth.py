@@ -81,6 +81,10 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
     """
     user = authenticate_user(db, credentials.email, credentials.password)
     if not user:
+        logger.warning(
+            "LOGIN_FAILED email=%s ip=%s",
+            credentials.email, get_remote_address(request),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contraseña inválidos"
@@ -90,28 +94,35 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
     if (user.is_superadmin or user.role == RoleEnum.ADMIN.value) and settings.resend_api_key:
         from app.models.twofa_code import TwofaCode
         from app.services.email_sender import send_email
-        import random
-        code = f"{random.randint(0, 999999):06d}"
-        code_hash = hashlib.sha256(code.encode()).hexdigest()
-        expires_at = datetime.utcnow() + timedelta(minutes=TWOFA_CODE_TTL_MINUTES)
-        db.add(TwofaCode(user_id=user.id, code_hash=code_hash, expires_at=expires_at))
-        db.commit()
         try:
-            send_email(
-                to=user.email,
-                subject="Código de verificación Cuadra",
-                html=f"""<div style="font-family:sans-serif;max-width:400px">
-                  <h2>Código de verificación</h2>
-                  <p>Tu código de acceso a Cuadra:</p>
-                  <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#5E6AD2;padding:16px 0">{code}</div>
-                  <p style="color:#666">Válido por {TWOFA_CODE_TTL_MINUTES} minutos.</p>
-                </div>""",
-            )
-        except Exception as _email_ex:
-            logger.warning("2FA: no se pudo enviar email a %s: %s", user.email, _email_ex)
-            if settings.debug:
-                logger.warning("2FA DEBUG code for %s: %s", user.email, code)
-        return JSONResponse(status_code=202, content={"requires_2fa": True, "email": user.email})
+            # Limpiar códigos expirados del usuario antes de generar uno nuevo
+            db.query(TwofaCode).filter(
+                TwofaCode.user_id == user.id, TwofaCode.expires_at <= datetime.utcnow()
+            ).delete()
+            code = f"{secrets.randbelow(1_000_000):06d}"
+            code_hash = hashlib.sha256(code.encode()).hexdigest()
+            expires_at = datetime.utcnow() + timedelta(minutes=TWOFA_CODE_TTL_MINUTES)
+            db.add(TwofaCode(user_id=user.id, code_hash=code_hash, expires_at=expires_at))
+            db.commit()
+            try:
+                send_email(
+                    to=user.email,
+                    subject="Código de verificación Cuadra",
+                    html=f"""<div style="font-family:sans-serif;max-width:400px">
+                      <h2>Código de verificación</h2>
+                      <p>Tu código de acceso a Cuadra:</p>
+                      <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#5E6AD2;padding:16px 0">{code}</div>
+                      <p style="color:#666">Válido por {TWOFA_CODE_TTL_MINUTES} minutos.</p>
+                    </div>""",
+                )
+            except Exception as _email_ex:
+                logger.warning("2FA: no se pudo enviar email a %s: %s", user.email, _email_ex)
+                if settings.debug:
+                    logger.warning("2FA DEBUG code for %s: %s", user.email, code)
+            return JSONResponse(status_code=202, content={"requires_2fa": True, "email": user.email})
+        except Exception as _2fa_ex:
+            logger.error("2FA: error al crear código para %s — fallback a login directo: %s", user.email, _2fa_ex)
+            db.rollback()
 
     # Contador → flujo de aprobación en vivo
     if user.role == RoleEnum.CONTADOR.value and not user.is_superadmin:
@@ -364,24 +375,40 @@ class TwofaVerifyBody(BaseModel):
     code: str
 
 
+TWOFA_MAX_ATTEMPTS = 3
+
+
 @router.post("/verify-2fa")
-@limiter.limit("10/minute")
+@limiter.limit("3/minute")
 def verify_2fa(request: Request, body: TwofaVerifyBody, db: Session = Depends(get_db)):
     from app.models.twofa_code import TwofaCode
     user = db.query(User).filter(User.email == body.email, User.is_active == True).first()  # noqa: E712
-    if not user or not user.is_superadmin:
+    is_eligible = user and (user.is_superadmin or user.role == RoleEnum.ADMIN.value)
+    if not is_eligible:
         raise HTTPException(status_code=401, detail="Código inválido o expirado")
-    code_hash = hashlib.sha256(body.code.strip().encode()).hexdigest()
     now = datetime.utcnow()
-    entry = (
+    # Buscar el código activo más reciente para este usuario
+    active = (
         db.query(TwofaCode)
-        .filter(TwofaCode.user_id == user.id, TwofaCode.code_hash == code_hash,
-                TwofaCode.used == False, TwofaCode.expires_at > now)  # noqa: E712
+        .filter(TwofaCode.user_id == user.id, TwofaCode.used == False,  # noqa: E712
+                TwofaCode.expires_at > now)
         .order_by(TwofaCode.id.desc()).first()
     )
-    if not entry:
+    if not active:
         raise HTTPException(status_code=401, detail="Código inválido o expirado")
-    entry.used = True
+    # Lockout tras 3 intentos fallidos
+    if active.failed_attempts >= TWOFA_MAX_ATTEMPTS:
+        active.used = True
+        db.commit()
+        raise HTTPException(status_code=401, detail="Demasiados intentos. Pedí un nuevo código iniciando sesión.")
+    code_hash = hashlib.sha256(body.code.strip().encode()).hexdigest()
+    if active.code_hash != code_hash:
+        active.failed_attempts += 1
+        if active.failed_attempts >= TWOFA_MAX_ATTEMPTS:
+            active.used = True
+        db.commit()
+        raise HTTPException(status_code=401, detail="Código inválido o expirado")
+    active.used = True
     db.commit()
     access_token = create_access_token(
         data={"sub": user.email, "user_id": user.id, "role": user.role},

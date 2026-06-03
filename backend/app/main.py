@@ -126,6 +126,11 @@ def _run_alembic():
         "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS fecha_devolucion DATE",
         "UPDATE cheques SET librador = titular WHERE librador IS NULL AND titular IS NOT NULL",
         "CREATE TABLE IF NOT EXISTS twofa_codes (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), code_hash VARCHAR NOT NULL, expires_at TIMESTAMP NOT NULL, used BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP DEFAULT NOW())",
+        "ALTER TABLE twofa_codes ADD COLUMN IF NOT EXISTS failed_attempts INTEGER NOT NULL DEFAULT 0",
+        "CREATE INDEX IF NOT EXISTS ix_egresos_tipo ON egresos (tipo)",
+        "CREATE INDEX IF NOT EXISTS ix_egresos_forma_pago ON egresos (forma_pago)",
+        "CREATE INDEX IF NOT EXISTS ix_egresos_cliente_id ON egresos (cliente_id)",
+        "CREATE INDEX IF NOT EXISTS ix_egresos_org_fecha ON egresos (organizacion_id, fecha DESC)",
     ]
     try:
         from sqlalchemy import text as _text
@@ -450,6 +455,7 @@ def _init_db():
         from app.models.contabilidad import Asiento as A
         from app.services.motor_contable import registrar_extracto, registrar_planilla
         from datetime import date as _date
+        from app.services.tz import hoy_art
 
         db = SL()
 
@@ -475,9 +481,9 @@ def _init_db():
         for p in db.query(Plan).filter(Plan.organizacion_id == 1).all():
             if p.id not in ids_plan:
                 try:
-                    fecha = p.fecha_carga.date() if p.fecha_carga else _date.today()
+                    fecha = p.fecha_carga.date() if p.fecha_carga else hoy_art()
                 except Exception:
-                    fecha = _date.today()
+                    fecha = hoy_art()
                 registrar_planilla(
                     db=db, planilla_id=p.id,
                     org_id=p.organizacion_id or 1,
@@ -632,20 +638,59 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error seed users: %s", ex)
 
-    # 9a. Eliminar asientos duplicados legacy (extracto + planilla)
+    # 9a. Asientos legacy (extracto/planilla/planilla_comision) — ya fueron eliminados
+    # en la migración v3.9 (deploy junio 2026). Los gaps #518, #519, #520 en numero_asiento
+    # corresponden a esos 3 asientos borrados. En el futuro NO se borran físicamente:
+    # si aparecieran nuevos con esos módulos (no debería ocurrir) se loguea y se ignora.
     try:
         with engine.connect() as conn:
-            conn.execute(text(
-                "DELETE FROM asiento_detalle WHERE asiento_id IN "
-                "(SELECT id FROM asientos WHERE modulo IN ('extracto','planilla','planilla_comision'))"
-            ))
-            conn.execute(text(
-                "DELETE FROM asientos WHERE modulo IN ('extracto','planilla','planilla_comision')"
-            ))
-            conn.commit()
-        logger.info("Asientos legacy extracto/planilla eliminados")
+            count = conn.execute(text(
+                "SELECT COUNT(*) FROM asientos WHERE modulo IN ('extracto','planilla','planilla_comision')"
+            )).scalar()
+            if count:
+                logger.warning(
+                    "Se encontraron %d asientos legacy (extracto/planilla) — fueron eliminados físicamente "
+                    "en la migración v3.9 y no deberían reaparecer. Ignorados.", count
+                )
+            else:
+                logger.info("Sin asientos legacy extracto/planilla (correcto).")
     except Exception as ex:
-        logger.warning("Error limpiando asientos legacy: %s", ex)
+        logger.warning("Error verificando asientos legacy: %s", ex)
+
+    # 9b. Crear asientos de documentación para los 3 gaps de migración v3.9
+    # Los asientos #518, #519, #520 fueron eliminados físicamente en la migración v3.9
+    # (módulos extracto/planilla con cuentas incorrectas). Se registran 3 asientos
+    # ajuste_manual con impacto $0 (misma cuenta Debe y Haber) para dejar trazabilidad.
+    try:
+        from app.database import SessionLocal as SL
+        from app.models.contabilidad import Asiento, AsientoDetalle, PlanCuenta
+        from sqlalchemy import func as _func
+        _db = SL()
+        try:
+            _gaps_ya = _db.query(Asiento).filter(
+                Asiento.organizacion_id == 1,
+                Asiento.modulo == "ajuste_manual",
+                Asiento.descripcion.like("BAJA LEGACY migración v3.9%")
+            ).count()
+            if _gaps_ya == 0:
+                _max_n = _db.query(_func.max(Asiento.numero_asiento)).filter(
+                    Asiento.organizacion_id == 1
+                ).scalar() or 0
+                for i, _num_orig in enumerate([518, 519, 520], 1):
+                    _a = Asiento(
+                        fecha=__import__('datetime').date(2026, 6, 3),
+                        descripcion=f"BAJA LEGACY migración v3.9 — asiento #{_num_orig} (módulo extracto/planilla) fue eliminado físicamente al sanear el Libro Diario. Sin impacto contable.",
+                        modulo="ajuste_manual",
+                        organizacion_id=1,
+                        numero_asiento=_max_n + i,
+                    )
+                    _db.add(_a)
+                _db.commit()
+                logger.info("3 asientos de documentación de gaps v3.9 creados")
+        finally:
+            _db.close()
+    except Exception as ex:
+        logger.warning("Error creando asientos documentación gaps: %s", ex)
 
     # 9. Fix numero_asiento NULL — asigna correlativo a asientos sin numerar
     try:
@@ -743,10 +788,9 @@ async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"]    = "nosniff"
     response.headers["X-Frame-Options"]           = "DENY"
-    response.headers["X-XSS-Protection"]          = "1; mode=block"
     response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"]        = "geolocation=(), microphone=(), camera=()"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Permissions-Policy"]        = "geolocation=(), microphone=(), camera=(), payment=()"
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     return response
 
 app.include_router(auth.router)

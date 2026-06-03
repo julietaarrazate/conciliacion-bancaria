@@ -12,6 +12,7 @@ from sqlalchemy import func
 from app.database import get_db
 from app.models.user import User
 from app.middleware.auth import get_current_user
+from app.services.tz import hoy_art
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agente", tags=["agente"])
@@ -27,7 +28,7 @@ _ocr_ctr  = _make_counter()
 _chat_ctr = _make_counter()
 
 def _check_limit(ctr: dict, limit: int) -> bool:
-    today = date.today()
+    today = hoy_art()
     with ctr["lock"]:
         if ctr["date"] != today:
             ctr["date"] = today
@@ -38,7 +39,7 @@ def _check_limit(ctr: dict, limit: int) -> bool:
         return True
 
 def _usage(ctr: dict, limit: int) -> dict:
-    today = date.today()
+    today = hoy_art()
     with ctr["lock"]:
         used = ctr["count"] if ctr["date"] == today else 0
     return {"used": used, "limit": limit, "remaining": max(0, limit - used), "date": str(today)}
@@ -148,7 +149,7 @@ def _consultar_saldo_caja(db, org_id):
 
     arqueo = db.query(ArqueoDiario).filter(
         ArqueoDiario.organizacion_id == org_id,
-        ArqueoDiario.fecha == date.today()
+        ArqueoDiario.fecha == hoy_art()
     ).first()
     if not arqueo:
         return {"error": "No hay arqueo del día de hoy. Abrí la Caja para crearlo."}
@@ -181,7 +182,7 @@ def _resumen_financiero(db, org_id, mes=None, año=None):
     from app.models.planilla import Planilla, PlanillaRow
     from app.models.cheque import Cheque
 
-    hoy = date.today()
+    hoy = hoy_art()
     mes = int(mes) if mes else hoy.month
     año = int(año) if año else hoy.year
 
@@ -304,7 +305,7 @@ def chat(
             },
         ]
 
-        hoy = date.today()
+        hoy = hoy_art()
         system = (
             f"Sos el asistente financiero de Cuadra, sistema de conciliación bancaria argentino. "
             f"Hoy es {hoy.strftime('%d/%m/%Y')}. "

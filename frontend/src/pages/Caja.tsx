@@ -1,15 +1,17 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
+import { useAuthStore } from '@/store/auth'
 import { confirmDialog } from '@/store/confirm'
+import { localIsoDate } from '@/utils/fecha'
 
 const DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 200, 100]
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 
-const toISO = (d: Date) => d.toISOString().slice(0, 10)
-const today = () => toISO(new Date())
+const toISO = (d: Date) => localIsoDate(d)
+const today = () => localIsoDate()
 
 const fmtDayLabel = (iso: string) => {
   const d = new Date(iso + 'T12:00:00')
@@ -57,6 +59,7 @@ interface ArqueoResumen {
 
 export const Caja: React.FC = () => {
   const { activeOrgId } = useOrgStore()
+  const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
   const [selectedDate, setSelectedDate] = useState(today())
   const [arqueo, setArqueo]             = useState<Arqueo | null>(null)
   const [loading, setLoading]           = useState(true)
@@ -234,20 +237,20 @@ export const Caja: React.FC = () => {
 
       {/* Historial panel */}
       {showHistorial && (
-        <div className="bg-white/3 border border-white/8 rounded-xl overflow-hidden">
-          <div className="px-4 py-2 border-b border-white/8 text-xs text-gray-400 font-medium">Historial de arqueos</div>
+        <div className="bg-gray-50 dark:bg-white/3 border border-gray-200 dark:border-white/8 rounded-xl overflow-hidden">
+          <div className="px-4 py-2 border-b border-gray-200 dark:border-white/8 text-xs text-gray-500 dark:text-gray-400 font-medium">Historial de arqueos</div>
           {loadingHist ? (
             <div className="text-center py-4 text-gray-500 text-xs">Cargando…</div>
           ) : historial.length === 0 ? (
             <div className="text-center py-4 text-gray-500 text-xs">Sin historial</div>
           ) : (
-            <div className="divide-y divide-white/5 max-h-64 overflow-y-auto">
+            <div className="divide-y divide-gray-100 dark:divide-white/5 max-h-64 overflow-y-auto">
               {historial.map(h => (
                 <button key={h.id} onClick={() => goToDate(h.fecha)}
-                  className={`w-full flex items-center justify-between px-4 py-2 text-xs hover:bg-white/5 transition-colors ${h.fecha === selectedDate ? 'bg-indigo-500/10' : ''}`}>
-                  <span className="text-gray-300">{fmtDayLabel(h.fecha)}</span>
+                  className={`w-full flex items-center justify-between px-4 py-2 text-xs hover:bg-gray-100 dark:hover:bg-white/5 transition-colors ${h.fecha === selectedDate ? 'bg-indigo-50 dark:bg-indigo-500/10' : ''}`}>
+                  <span className="text-gray-600 dark:text-gray-300">{fmtDayLabel(h.fecha)}</span>
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-mono text-gray-200">{fmt(h.caja_restante)}</span>
+                    <span className="font-mono text-gray-700 dark:text-gray-200">{fmt(h.caja_restante)}</span>
                     <span className={`w-2 h-2 rounded-full ${Math.abs(h.cruce) < 1 ? 'bg-green-500' : 'bg-red-500'}`} title={Math.abs(h.cruce) < 1 ? 'Cuadra' : 'Revisar'} />
                   </div>
                 </button>
@@ -258,7 +261,7 @@ export const Caja: React.FC = () => {
       )}
 
       {msg && (
-        <div className={`px-3 py-2 rounded-lg text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 'bg-red-50 text-red-600'}`}>
+        <div className={`px-3 py-2 rounded-lg text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
           {msg}
         </div>
       )}
@@ -389,13 +392,13 @@ export const Caja: React.FC = () => {
                         {op.tiene_foto && <span className="badge badge-ok text-2xs">📷</span>}
                       </div>
                     </div>
-                    <button
+                    {canDelete && <button
                       onClick={() => eliminarOp(op)}
                       disabled={arqueo.cerrado}
                       title={arqueo.cerrado ? 'Arqueo cerrado' : 'Eliminar pago'}
                       className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
-                    </button>
+                    </button>}
                   </div>
                 ))}
               </div>
@@ -407,9 +410,9 @@ export const Caja: React.FC = () => {
             <p className="font-semibold text-sm dark:text-white">Exportar historial EFT</p>
             <div className="flex flex-wrap gap-2">
               <input type="date" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)}
-                className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none" />
+                className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-xs text-gray-700 dark:text-gray-300 focus:outline-none" />
               <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)}
-                className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none" />
+                className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-xs text-gray-700 dark:text-gray-300 focus:outline-none" />
               <button onClick={exportarEFT} disabled={exportando}
                 className="btn-ghost text-sm">
                 {exportando ? 'Exportando...' : '↓ Exportar EFT'}

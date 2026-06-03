@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/Skeleton'
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
+import { localIsoDate } from '@/utils/fecha'
 
 interface Archivo {
   id: number
@@ -128,7 +129,7 @@ export const Clientes: React.FC = () => {
   const abrirAcreditar = (cliente: { id: number; nombre: string }) => {
     setAcreditarCli(cliente)
     setAcrMonto(''); setAcrFecha(''); setAcrRef(''); setAcrOrigen('')
-    setAcrFechaAcred(new Date().toISOString().slice(0, 10)) // hoy por default
+    setAcrFechaAcred(localIsoDate()) // hoy local (ART)
     setAcrCandidatos([])
   }
   const cerrarAcreditar = () => {
@@ -158,7 +159,7 @@ export const Clientes: React.FC = () => {
     setAcrConfirming(movId)
     try {
       // Usar la fecha de acreditacion explicita; si no, la fecha de la transferencia; si no, hoy
-      const fechaAcred = acrFechaAcred || acrFecha || new Date().toISOString().slice(0, 10)
+      const fechaAcred = acrFechaAcred || acrFecha || localIsoDate()
       await apiClient.client.post(`/clientes/movimientos/${movId}/acreditar`, {
         cliente_id: acreditarCli.id,
         fecha_acred: fechaAcred,
