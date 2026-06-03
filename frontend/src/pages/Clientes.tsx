@@ -525,9 +525,9 @@ export const Clientes: React.FC = () => {
                               <button
                                 onClick={(e) => { e.stopPropagation(); setEditComisionId(cliente.id); setEditComisionVal(cliente.porcentaje_comision != null ? String(cliente.porcentaje_comision) : '') }}
                                 className={`px-2 py-1 text-[11px] rounded font-medium flex-shrink-0 transition-colors ${cliente.porcentaje_comision != null ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60' : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-600'}`}
-                                title="% comisión — click para editar"
+                                title="% comisión cheques (solo para cheques, no planillas) — click para editar"
                               >
-                                {cliente.porcentaje_comision != null ? `${cliente.porcentaje_comision}%` : '% —'}
+                                {cliente.porcentaje_comision != null ? `${cliente.porcentaje_comision}% 🏦` : '% 🏦'}
                               </button>
                             )}
                             <a

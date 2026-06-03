@@ -105,7 +105,7 @@ async def upload_planilla(
             usuario_id=current_user.id,
             nombre_archivo=file.filename,
             organizacion_id=org_id,
-            porcentaje_comision=cliente.porcentaje_comision if cliente.porcentaje_comision else None,
+            porcentaje_comision=None,
         )
         db.add(planilla)
         db.flush()
@@ -211,12 +211,9 @@ def conciliar(
             cliente_id=planilla.cliente_id,
         )
 
-        # Save commission %: explicit param > existing planilla % > client's default %
+        # Save commission %: explicit param only (no fallback to client default)
         if comision_pct > 0:
             planilla.porcentaje_comision = Decimal(str(comision_pct))
-            db.flush()
-        elif planilla.porcentaje_comision is None and planilla.cliente and planilla.cliente.porcentaje_comision:
-            planilla.porcentaje_comision = planilla.cliente.porcentaje_comision
             db.flush()
 
         registrar_log(

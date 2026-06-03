@@ -135,11 +135,10 @@ def generar_liquidacion(
     if cierre:
         raise HTTPException(400, "Ya existe un cierre para este período")
 
-    # % fallback: se aplica solo a ítems que NO tienen su propio %. Prioridad:
-    # override del form → % propio del cliente → default de org
+    # % fallback: form override solamente. Si la planilla no tiene % propio → 0.
+    # NO se hereda el % del cliente (cada planilla debe tener su propio %).
     pct_form = payload.get("porcentaje_comision")
     pct_form = Decimal(str(pct_form)) if pct_form is not None else None
-    pct_default = _comision_cliente(config, "")  # org default
 
     # Obtener clientes activos de la org
     clientes = db.query(Cliente).filter(Cliente.organizacion_id == org_id).all()
@@ -149,14 +148,9 @@ def generar_liquidacion(
     total_comision   = Decimal("0")
 
     for cliente in clientes:
-        # Fallback chain for items without their own %:
-        # form override → client's own % → org default
-        if pct_form is not None:
-            pct_fallback = pct_form
-        elif cliente.porcentaje_comision is not None:
-            pct_fallback = Decimal(str(cliente.porcentaje_comision))
-        else:
-            pct_fallback = pct_default
+        # Si hay override del form, aplica a todos los ítems sin % propio.
+        # Si no, los ítems sin % propio quedan en 0 (no se hereda del cliente).
+        pct_fallback = pct_form if pct_form is not None else Decimal("0")
 
         monto, comision, pct_efectivo = _calcular_monto_y_comision(
             db, org_id, cliente.id, periodo_inicio, periodo_fin, pct_fallback

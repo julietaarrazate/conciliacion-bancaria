@@ -751,7 +751,7 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div className="mb-3">
-            <label className="label">Comisión % <span className="text-gray-400 dark:text-zinc-600 font-normal">(opcional)</span></label>
+            <label className="label">% Comisión de esta planilla <span className="text-gray-400 dark:text-zinc-600 font-normal">(obligatorio si aplica)</span></label>
             <input
               type="number" min="0" max="100" step="0.01"
               className="input-field font-mono"
@@ -760,8 +760,8 @@ export const Dashboard: React.FC = () => {
               placeholder="0"
               disabled={!extractoId}
             />
-            <p className="mt-1 text-xs text-gray-400 dark:text-zinc-600">
-              % sobre el total acreditado — se registra en contabilidad
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+              Cada planilla tiene su propio %. No se hereda del cliente.
             </p>
           </div>
 
