@@ -291,7 +291,8 @@ export const Pagos: React.FC = () => {
               const ocrMonto = parseMonto(d.monto)
               return {
                 ...prev,
-                monto:        prev.monto        || (ocrMonto != null ? new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(ocrMonto) : prev.monto),
+                // type="number" input requires standard decimal format ("15000.5"), NOT Argentine ("15.000,50")
+                monto:        prev.monto        || (ocrMonto != null ? String(Math.round(ocrMonto * 100) / 100) : prev.monto),
                 fecha:        prev.fecha        || d.fecha        || prev.fecha,
                 beneficiario: prev.beneficiario || d.beneficiario || prev.beneficiario,
                 referencia:   prev.referencia   || d.referencia   || prev.referencia,
@@ -305,7 +306,7 @@ export const Pagos: React.FC = () => {
     reader.readAsDataURL(file)
   }
 
-  const montoNum = parseFloat(form.monto.replace(/\./g, '').replace(',', '.')) || 0
+  const montoNum = parseFloat(form.monto) || 0
 
   const crearCategoria = async () => {
     const nombre = nuevaCat.trim()
