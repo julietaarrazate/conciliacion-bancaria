@@ -40,8 +40,9 @@
 - **Plan:** Free (10 GB/mes gratis)
 - **Límite actual:** 0 GB (sin fotos aún, recién activado)
 - **Costo post-free:** $0.015/GB (después de 10 GB gratis/mes)
-- **Monitoreo:** https://dash.cloudflare.com → R2 → conciliacion-fotos → Overview
-  - Ver: "Usage" (almacenamiento actual)
+- **Monitoreo:** 
+  - Dashboard: https://dash.cloudflare.com → R2 → conciliacion-fotos → Overview
+  - **Alerta automática:** Cron diario **09:00 ART** → si > 8 GB, envía email a `julietaarrazate@gmail.com`
 - **Estimación de consumo:**
   - 1 foto cheque: ~800 KB
   - 100 cheques/mes = 80 MB

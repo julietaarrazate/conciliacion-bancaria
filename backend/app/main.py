@@ -734,11 +734,12 @@ async def lifespan(app: FastAPI):
     try:
         from app.services.backup_scheduler import (
             start_backup_scheduler, stop_backup_scheduler,
-            start_alertas_push_job, start_token_cleanup_job,
+            start_alertas_push_job, start_token_cleanup_job, start_r2_storage_alert_job,
         )
         start_backup_scheduler()
         start_alertas_push_job()       # 10:00 ART — push cheques/movs urgentes
         start_token_cleanup_job()      # 03:30 ART — purga tokens revocados
+        start_r2_storage_alert_job()   # 09:00 ART — alerta si R2 > 8 GB
     except Exception as ex:
         logger.warning("No se pudo iniciar schedulers: %s", ex)
     yield
