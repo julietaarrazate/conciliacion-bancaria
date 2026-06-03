@@ -63,8 +63,88 @@ const TIPO_LABEL: Record<string, string> = {
 type Vista = 'lista' | 'nuevo'
 type Step = 'foto' | 'datos' | 'exito'
 
-// Comparte el comprobante como imagen compuesta (foto + datos del pago).
-// Usamos canvas → JPEG porque Android Chrome NO soporta compartir PDF via Web Share API.
+// Comparte el comprobante como PDF (foto + datos del pago). jsPDF on-demand.
+// Es la opción preferida; si el dispositivo no acepta compartir PDF, el caller
+// cae a sharePagoImagen (imagen compuesta) y nunca a la foto sola.
+const sharePagoPdf = async (
+  nombre: string, tipo: string, montoNum: number, fecha: string,
+  formaPago: string, referencia: string, fotoB64: string
+): Promise<boolean> => {
+  try {
+    const { jsPDF } = await import('jspdf')
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+
+    const tipoLabel: Record<string, string> = { proveedor: 'PROVEEDOR', gasto: 'GASTO OPERATIVO', pago_cliente: 'PAGO A CLIENTE' }
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(13)
+    pdf.text(`COMPROBANTE DE ${tipoLabel[tipo] || 'PAGO'}`, 105, 16, { align: 'center' })
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(9)
+    pdf.text(nombre, 105, 23, { align: 'center' })
+
+    // Re-renderizar la foto sobre fondo blanco para evitar que salga negra
+    // (transparencia → negro en JPEG) y respetar el aspect ratio real.
+    const { jpeg, w, h } = await new Promise<{ jpeg: string; w: number; h: number }>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => {
+        const iw = img.naturalWidth || 1000
+        const ih = img.naturalHeight || 700
+        const canvas = document.createElement('canvas')
+        canvas.width = iw; canvas.height = ih
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { reject(new Error('no ctx')); return }
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, iw, ih)
+        ctx.drawImage(img, 0, 0)
+        resolve({ jpeg: canvas.toDataURL('image/jpeg', 0.85), w: iw, h: ih })
+      }
+      img.onerror = () => reject(new Error('img load'))
+      img.src = fotoB64
+    })
+
+    // Encajar la imagen dentro del área disponible conservando proporción
+    const maxW = 190, maxH = 135, x0 = 10, y0 = 28
+    const ratio = Math.min(maxW / w, maxH / h)
+    const drawW = w * ratio
+    const drawH = h * ratio
+    const dx = x0 + (maxW - drawW) / 2
+    pdf.addImage(jpeg, 'JPEG', dx, y0, drawW, drawH)
+
+    pdf.setDrawColor(180, 180, 180)
+    pdf.line(10, 169, 200, 169)
+
+    pdf.setFontSize(10)
+    const fmtN = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n)
+    const rows = [
+      ['Importe:', fmtN(montoNum)],
+      ['Forma de pago:', formaPago === 'banco' ? 'Banco' : 'Efectivo'],
+      ['Fecha:', new Date(fecha + 'T00:00:00').toLocaleDateString('es-AR')],
+      ['Referencia:', referencia || '—'],
+      ['Generado:', new Date().toLocaleDateString('es-AR')],
+    ]
+    rows.forEach(([label, value], i) => {
+      const y = 177 + i * 8
+      pdf.setFont('helvetica', 'bold'); pdf.text(label, 12, y)
+      pdf.setFont('helvetica', 'normal'); pdf.text(value, 52, y)
+    })
+
+    const blob = pdf.output('blob')
+    const file = new File([blob], `Pago_${nombre.replace(/\s+/g, '_')}.pdf`, { type: 'application/pdf' })
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      suppressLockForShare()
+      await navigator.share({ title: `Pago - ${nombre}`, files: [file] })
+      return true
+    }
+  } catch (e: any) {
+    // Si el usuario cancela el share sheet (AbortError), considerarlo "compartido"
+    // para NO caer al fallback.
+    if (e?.name === 'AbortError') return true
+  }
+  return false
+}
+
+// Fallback cuando el dispositivo NO acepta compartir PDF: imagen compuesta
+// (foto + datos del pago) en un solo JPEG. Nunca comparte la foto sola.
 const sharePagoImagen = async (
   nombre: string, tipo: string, montoNum: number, fecha: string,
   formaPago: string, referencia: string, fotoB64: string
@@ -359,12 +439,17 @@ export const Pagos: React.FC = () => {
     if (!resultado) return
     const nombre = form.beneficiario || form.cliente_nombre || form.concepto || 'Pago'
     const texto = `Pago registrado%0A• ${TIPO_LABEL[form.tipo]}: ${nombre}%0A• Importe: ${fmt(montoNum)}%0A• ${form.forma_pago === 'banco' ? 'Banco' : 'Efectivo'}%0A• Fecha: ${new Date(form.fecha).toLocaleDateString('es-AR')}`
-    await apiClient.client.post(`/pagos/${resultado.id}/compartir`).catch(() => {})
+    // Fire-and-forget: NO usar await acá. navigator.share() requiere activación de
+    // usuario transitoria (~5s); si esperamos el POST (Render cold start puede tardar),
+    // la activación expira y share() lanza NotAllowedError → caía al fallback de foto.
+    apiClient.client.post(`/pagos/${resultado.id}/compartir`).catch(() => {})
     if (foto) {
-      // Compartir imagen compuesta (foto + datos del pago).
-      // PDF no se usa porque Android Chrome no soporta canShare para .pdf.
-      const shared = await sharePagoImagen(nombre, form.tipo, montoNum, form.fecha, form.forma_pago, form.referencia, foto)
-      if (shared) return
+      // 1️⃣ Preferido: compartir como PDF con foto + datos.
+      const sharedPdf = await sharePagoPdf(nombre, form.tipo, montoNum, form.fecha, form.forma_pago, form.referencia, foto)
+      if (sharedPdf) return
+      // 2️⃣ Si el dispositivo no acepta compartir PDF: imagen compuesta (foto + datos).
+      const sharedImg = await sharePagoImagen(nombre, form.tipo, montoNum, form.fecha, form.forma_pago, form.referencia, foto)
+      if (sharedImg) return
     }
     window.open(`whatsapp://send?text=${texto}`, '_blank')
   }
