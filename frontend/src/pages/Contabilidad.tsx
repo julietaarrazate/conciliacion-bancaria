@@ -277,7 +277,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
 
   const cargarAsientos = () => {
     const params = new URLSearchParams()
-    params.set('limit', '500')
+    params.set('limit', '2000')
     if (activeOrgId) params.set('org_id', String(activeOrgId))
     if (diarioDesde)    params.set('desde', diarioDesde)
     if (diarioHasta)    params.set('hasta', diarioHasta)
