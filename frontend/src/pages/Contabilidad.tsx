@@ -213,6 +213,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   const [reglas, setReglas]           = useState<ReglaItem[]>([])
   const [asientos, setAsientos]       = useState<AsientoItem[]>([])
   const [totalAsientos, setTotalAsientos] = useState(0)
+  const firstRenderRef = useRef(true)
   const [diarioDesde, setDiarioDesde]   = useState('')
   const [diarioHasta, setDiarioHasta]   = useState('')
   const [diarioModulo, setDiarioModulo] = useState('')
@@ -264,14 +265,13 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       canViewAccounting
         ? apiClient.client.get(`/contabilidad/reglas${q}`).then(r => r.data)
         : Promise.resolve([]),
-      apiClient.client.get(`/contabilidad/asientos?limit=500${activeOrgId ? `&org_id=${activeOrgId}` : ''}`).then(r => r.data),
       apiClient.client.get(`/contabilidad/sumas-saldo${q}`).then(r => r.data),
       apiClient.client.get(`/contabilidad/balance${q}`).then(r => r.data),
-    ]).then(([c, r, a, ss, b]) => {
+    ]).then(([c, r, ss, b]) => {
       setCuentas(c); setReglas(r)
-      setAsientos(a.items); setTotalAsientos(a.total)
       setSumasSaldo(ss); setBalance(b)
       setLoading(false)
+      cargarAsientos()
     }).catch(() => setLoading(false))
   }
 
@@ -290,6 +290,8 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   }
 
   useEffect(() => {
+    // skip first render — recargarTodo handles the initial load and calls cargarAsientos() at the end
+    if (firstRenderRef.current) { firstRenderRef.current = false; return }
     cargarAsientos()
   }, [diarioDesde, diarioHasta, diarioModulo, diarioCuentaId, activeOrgId])
 
