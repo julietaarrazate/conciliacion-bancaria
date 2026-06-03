@@ -149,7 +149,7 @@ def get_asientos(
             db.query(AsientoDetalle.asiento_id).filter(AsientoDetalle.cuenta_id == cuenta_id)
         ))
     total = q.count()
-    items = q.order_by(Asiento.fecha.desc(), Asiento.id.desc()).offset(skip).limit(limit).all()
+    items = q.order_by(Asiento.numero_asiento.desc().nullslast(), Asiento.id.desc()).offset(skip).limit(limit).all()
 
     # Batch: cuentas involucradas por asiento (para mostrar en columna Cuenta)
     ids = [a.id for a in items]
