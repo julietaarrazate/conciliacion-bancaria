@@ -1324,16 +1324,16 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                   <span className="text-gray-500 dark:text-gray-400">Cuenta: <span className="font-mono text-amber-600 dark:text-amber-400">{ctaCte.cuenta?.codigo} {ctaCte.cuenta?.nombre}</span></span>
                   <span className="text-gray-400">({visibles.length} de {ctaCte.movimientos.length} movimientos)</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 text-center">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 flex sm:block items-center justify-between sm:text-center">
                     <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">Total Débito</p>
                     <p className="font-mono text-sm font-semibold text-blue-700 dark:text-blue-300">{fmtNum(ctaCte.total_debito)}</p>
                   </div>
-                  <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg px-3 py-2 text-center">
+                  <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg px-3 py-2 flex sm:block items-center justify-between sm:text-center">
                     <p className="text-[10px] text-orange-600 dark:text-orange-400 font-medium">Total Crédito</p>
                     <p className="font-mono text-sm font-semibold text-orange-700 dark:text-orange-300">{fmtNum(ctaCte.total_credito)}</p>
                   </div>
-                  <div className={`rounded-lg px-3 py-2 text-center border ${ctaCte.saldo_final >= 0 ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'}`}>
+                  <div className={`rounded-lg px-3 py-2 flex sm:block items-center justify-between sm:text-center border ${ctaCte.saldo_final >= 0 ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'}`}>
                     <p className={`text-[10px] font-medium ${ctaCte.saldo_final >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>Saldo Final</p>
                     <p className={`font-mono text-sm font-bold ${ctaCte.saldo_final >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>{fmtNum(ctaCte.saldo_final)}</p>
                   </div>
