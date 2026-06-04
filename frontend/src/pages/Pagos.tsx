@@ -7,10 +7,16 @@ import { confirmDialog } from '@/store/confirm'
 import { useLockStore } from '@/store/lock'
 import { localIsoDate } from '@/utils/fecha'
 
-// Evita que abrir el menú nativo de compartir dispare el bloqueo por PIN/huella:
-// al abrir el share sheet el navegador pierde foco un instante (igual que las descargas).
+// Evita que el share sheet nativo dispare el bloqueo PIN (el share sheet
+// hace perder foco; puede tardar hasta ~15s si el usuario tarda en elegir la app).
 function suppressLockForShare() {
   try { useLockStore.getState().suppressLock(20000) } catch { /* noop */ }
+}
+// Para el selector de archivos (cámara): suppress corto porque la cámara
+// cierra sola en segundos. 20s sería demasiado: si el usuario minimiza
+// luego de tomar la foto, el lock no se dispararía.
+function suppressLockForCamera() {
+  try { useLockStore.getState().suppressLock(8000) } catch { /* noop */ }
 }
 
 const fmt = (n: number) =>
@@ -587,7 +593,11 @@ export const Pagos: React.FC = () => {
                         <span className={`badge text-2xs ${e.forma_pago === 'banco' ? 'badge-info' : 'badge-ok'}`}>
                           {e.forma_pago === 'banco' ? 'Banco' : 'Efectivo'}
                         </span>
-                        {e.tiene_foto && <span className="badge badge-ok text-2xs">📷</span>}
+                        {e.tiene_foto && (
+                          <span className="badge badge-ok text-2xs flex items-center gap-0.5">
+                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg>
+                          </span>
+                        )}
                       </div>
                     </div>
                     <button
@@ -648,7 +658,17 @@ export const Pagos: React.FC = () => {
                       form.forma_pago === f
                         ? 'bg-ml-blue dark:bg-ml-green text-white dark:text-black'
                         : 'bg-ml-gray dark:bg-ml-dark-card text-gray-500 dark:text-zinc-400'}`}>
-                    {f === 'banco' ? '🏦 Banco' : '💵 Efectivo'}
+                    {f === 'banco' ? (
+                      <span className="flex items-center justify-center gap-1.5">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z"/></svg>
+                        Banco
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-1.5">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/></svg>
+                        Efectivo
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -748,8 +768,9 @@ export const Pagos: React.FC = () => {
                 <>
                   <input ref={fileInputRef} type="file" accept="image/*" capture="environment"
                     className="hidden" onChange={handleFoto} />
-                  <button type="button" onClick={() => { suppressLockForShare(); fileInputRef.current?.click() }} className="btn-secondary w-full text-sm">
-                    📷 Sacar / subir foto
+                  <button type="button" onClick={() => { suppressLockForCamera(); fileInputRef.current?.click() }} className="btn-secondary w-full text-sm flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg>
+                    Sacar / subir foto
                   </button>
                 </>
               )}
@@ -839,7 +860,9 @@ export const Pagos: React.FC = () => {
       {vista === 'nuevo' && step === 'exito' && resultado && (
         <div className="space-y-4">
           <div className="card text-center py-6">
-            <div className="text-5xl mb-3">✅</div>
+            <div className="flex items-center justify-center w-16 h-16 mx-auto mb-3 rounded-full bg-green-100 dark:bg-green-900/30">
+              <svg className="w-9 h-9 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+            </div>
             <p className="font-bold text-lg dark:text-white">Pago registrado</p>
             <p className="text-sm text-gray-400 dark:text-zinc-500 mt-1">
               {form.beneficiario || form.cliente_nombre || form.concepto} · {fmt(montoNum)}
@@ -852,7 +875,7 @@ export const Pagos: React.FC = () => {
           <button
             onClick={compartirWhatsApp}
             className="w-full py-3 rounded-xl text-base font-semibold bg-[#25D366] text-white hover:bg-[#20c25a] transition-colors flex items-center justify-center gap-2">
-            <span className="text-xl">📤</span>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
             Compartir por WhatsApp
           </button>
 
