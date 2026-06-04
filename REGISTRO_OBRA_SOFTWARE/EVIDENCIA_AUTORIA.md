@@ -134,13 +134,13 @@ La autora declara que:
 
 ---
 
-## 9. INFORMACIÓN ADICIONAL A COMPLETAR POR LA AUTORA
+## 9. INFORMACIÓN ADICIONAL — COMPLETADO POR LA AUTORA
 
-> **[COMPLETAR]** Indicar la fecha exacta de inicio del desarrollo (mes y año de los primeros archivos creados antes del primer commit del repositorio, si aplica).
+**Fecha de inicio del desarrollo:** A partir de abril de 2026. Los primeros commits del repositorio datan del 2 de junio de 2026, pero el desarrollo conceptual y arquitectónico se inició en abril de 2026.
 
-> **[COMPLETAR]** Si existe evidencia de desarrollo previo al repositorio git (bocetos, diseños, archivos locales), documentarla aquí.
+**Evidencia de desarrollo previo:** Existe un cuaderno escrito que contiene el brainstorming inicial del proyecto, diseños preliminares y especificaciones funcionales previas al repositorio git. Este material documenta la fase conceptual del sistema.
 
-> **[COMPLETAR]** Indicar si la autora utilizó equipos propios o si hay algún contexto laboral/contractual relevante a declarar.
+**Contexto laboral y contractual:** La autora desarrolló la obra de forma **completamente independiente**, utilizando equipos propios, sin relación de dependencia laboral con terceros, y sin contrato de cesión de derechos. La obra fue desarrollada por iniciativa y financiamiento personal de la autora.
 
 ---
 

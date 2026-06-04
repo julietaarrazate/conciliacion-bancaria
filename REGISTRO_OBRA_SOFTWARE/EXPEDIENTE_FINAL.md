@@ -243,7 +243,7 @@ Asimismo, declaro que las librerías de código abierto utilizadas son de uso li
 **Fecha:** Junio 2026  
 **Firma:** ___________________________  
 **Aclaración:** Julieta Arrazate  
-**DNI:** [COMPLETAR]
+**DNI:** 36316081
 
 ---
 
