@@ -215,7 +215,7 @@ npx expo build:web
 ✓ SOFTWARE/REGISTRO_OBRA_SOFTWARE/  (29 .md, 600 KB)
 ✓ SOFTWARE/README.md, CLAUDE.md, .gitignore
 ✓ DOCUMENTACION/             (8-9 PDFs, 10-12 MB)
-✓ CAPTURAS/                  (24 screenshots, 12-15 MB)
+✓ CAPTURAS/                  (27 screenshots, 12-15 MB)
 ✓ DIAGRAMAS/                 (3-4 diagramas, 500 KB)
 ✓ INDICE_CONTENIDO.txt
 ```
@@ -269,7 +269,7 @@ npx expo build:web
 - [x] DNDA_INCLUIR.md — Qué incluir en ZIP
 - [x] DNDA_EXCLUSIONES.md — Qué excluir (seguridad/privacidad)
 - [x] DNDA_PRIVACIDAD.md — Auditoría de datos personales
-- [x] DNDA_CAPTURAS.md — Plan de 24 screenshots
+- [x] DNDA_CAPTURAS.md — Inventario de 27 screenshots capturados
 - [x] DNDA_REVISION_EXPEDIENTE.md — Auditoría de documentación
 - [x] DNDA_VERSION_REGISTRADA.md — Identificación de versión
 - [x] DNDA_ESTRUCTURA_ZIP.md — Estructura del paquete final
@@ -335,12 +335,12 @@ unzip -l EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip | grep "INDICE_CONTENIDO.txt"
 | Tests | 100% | 156 tests, todos pasando |
 | Documentación .md | 100% | 29 archivos de registro + documentos técnicos |
 | Documentación .pdf | 95% | 8 PDFs listos, 1 opcional (CODIGO_FUENTE_EXTRACTO) |
-| Capturas | 0% | Pendiente responsabilidad del usuario capturar 24 screenshots |
+| Capturas | 100% | 27 screenshots capturados (18/18 módulos cubiertos) |
 | Diagramas | 50% | Estructura definida, pendiente crear 3-4 diagramas |
 | Formulario DNDA | 0% | Pendiente usuario completar y presentar |
 | ZIP final | 95% | Estructura definida, pendiente crear ZIP |
 
-**Completitud global:** 95% (falta: capturas, diagramas, ZIP final, formulario DNDA)
+**Completitud global:** 97% (falta: diagramas opcionales, ZIP final, formulario DNDA)
 
 ---
 
@@ -358,7 +358,7 @@ unzip -l EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip | grep "INDICE_CONTENIDO.txt"
 - ✓ Estructura clara y organizada
 
 **Próximos pasos:**
-1. Capturar 24 screenshots (responsabilidad usuario)
+1. ✓ Capturar screenshots — COMPLETADO (27 capturas)
 2. Crear 3-4 diagramas de arquitectura (responsabilidad usuario)
 3. Generar PDFs de CODIGO_FUENTE_EXTRACTO (opcional)
 4. Crear ZIP final (comando automatizable)

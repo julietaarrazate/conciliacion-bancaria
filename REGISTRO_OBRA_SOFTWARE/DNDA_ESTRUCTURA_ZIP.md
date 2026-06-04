@@ -8,6 +8,21 @@
 
 ---
 
+> **⚠️ ÁMBITO DE ESTE DOCUMENTO — CANAL B (depósito de código fuente)**
+>
+> Este ZIP corresponde al **depósito del código fuente completo**, que la DNDA
+> suele recibir por soporte físico (CD/DVD/USB) o por un canal de depósito
+> aparte. **NO es para el portal de carga online**, que tiene un límite de 20 MB
+> y no acepta ZIP ni archivos de código.
+>
+> Para la carga en el **portal online (Canal A)** ver
+> **`DNDA_FORMATO_PRESENTACION.md`** (documentación y código como PDF, archivos
+> sueltos ≤ 20 MB).
+>
+> **Antes de usar este ZIP, confirmar con la DNDA el medio del Canal B.**
+
+---
+
 ## 1. ESTRUCTURA RECOMENDADA
 
 ```
@@ -120,31 +135,34 @@ EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip
 │   ├── RESUMEN_EJECUTIVO.pdf
 │   └── CODIGO_FUENTE_EXTRACTO.pdf         # (opcional: 50+ páginas código)
 │
-├── CAPTURAS/
-│   ├── 01_login.png
-│   ├── 02_dashboard_overview.png
-│   ├── 03_dashboard_dark.png
+├── CAPTURAS/                         # 27 capturas reales del sistema
+│   ├── 01_resumen_ejecutivo.png
+│   ├── 02_resumen_dark.png
+│   ├── 03_conciliar_dashboard.png
 │   ├── 04_extractos_archivo.png
-│   ├── 05_movimientos_tabla.png
-│   ├── 06_conciliacion_panel.png
-│   ├── 07_conciliacion_scoring.png
-│   ├── 08_cheques_registro.png
-│   ├── 09_cheques_deposito.png
-│   ├── 10_cheques_ocr.png
-│   ├── 11_pagos_listado.png
-│   ├── 12_pagos_nuevo.png
+│   ├── 05_movimientos_extracto.png
+│   ├── 06_conciliaciones.png
+│   ├── 07_historial.png
+│   ├── 08_clientes.png
+│   ├── 09_cheques_listado.png
+│   ├── 10_cheques_editar.png
+│   ├── 11_pagos_nuevo.png
+│   ├── 12_pagos_historial.png
 │   ├── 13_caja_arqueo.png
-│   ├── 14_libro_diario.png
-│   ├── 15_libro_mayor.png
-│   ├── 16_plan_cuentas.png
+│   ├── 14_contabilidad_modulos.png
+│   ├── 15_plan_cuentas_activo_pasivo.png
+│   ├── 16_plan_cuentas_resultado.png
 │   ├── 17_cuentas_corrientes.png
-│   ├── 18_resumen_mensual.png
+│   ├── 18_liquidaciones.png
 │   ├── 19_flujo_caja.png
-│   ├── 20_estado_cuenta_cliente.png
-│   ├── 21_auditoria_log.png
-│   ├── 22_usuarios_rol.png
-│   ├── 23_papelera_reciclaje.png
-│   └── 24_perfil_usuario.png
+│   ├── 20_flujo_caja_detalle.png
+│   ├── 21_flujo_caja_6meses.png
+│   ├── 22_auditoria_inteligencia.png
+│   ├── 23_auditoria_log.png
+│   ├── 24_asistente_ia.png
+│   ├── 25_papelera.png
+│   ├── 26_perfil_datos.png
+│   └── 27_perfil_seguridad_ia.png
 │
 ├── DIAGRAMAS/
 │   ├── arquitectura_3_capas.png
@@ -166,7 +184,7 @@ EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip
 | SOFTWARE/REGISTRO_OBRA_SOFTWARE | 29 .md (documentación) | 600 KB |
 | SOFTWARE/ (raíz) | README, CLAUDE, .gitignore | 50 KB |
 | DOCUMENTACION | 8-9 PDFs en español | 10-12 MB |
-| CAPTURAS | 24 screenshots PNG | 12-15 MB |
+| CAPTURAS | 27 screenshots PNG | 13-16 MB |
 | DIAGRAMAS | 3-4 imágenes PNG | 500 KB |
 | **TOTAL PAQUETE** | **~65 archivos + carpetas** | **~26-30 MB** |
 
@@ -308,15 +326,15 @@ Grupo C (10 nuevos documentos DNDA):
 
 ### 3.7 CAPTURAS/ (Screenshots)
 
-**Incluir (24 archivos PNG):**
-- Nombrados `NN_descripcion.png` (01 a 24)
+**Incluir (27 archivos PNG):**
+- Nombrados `NN_descripcion.png` (01 a 27)
 - Resolución 1280×720 o 1920×1080
 - Con datos demo (NO datos reales)
 - Legibles en pantalla pequeña
 
 Ver DNDA_CAPTURAS.md para lista completa.
 
-**Tamaño:** ~12-15 MB (24 × 500-600 KB)
+**Tamaño:** ~13-16 MB (27 × 500-600 KB)
 
 ### 3.8 DIAGRAMAS/ (Diagramas de arquitectura)
 
@@ -359,7 +377,7 @@ CONTENIDO DEL PAQUETE:
    - 8-9 PDFs en español (memoria, inventario, etc.)
 
 3. CAPTURAS/
-   - 24 screenshots del sistema funcionando
+   - 27 screenshots del sistema funcionando
 
 4. DIAGRAMAS/
    - 3-4 diagramas de arquitectura
@@ -390,7 +408,7 @@ VERSIÓN: v3.12
 - [ ] SOFTWARE/REGISTRO_OBRA_SOFTWARE/ contiene 29 .md
 - [ ] SOFTWARE/ contiene README.md, CLAUDE.md (opcional), .gitignore
 - [ ] DOCUMENTACION/ contiene 8-9 PDFs en español
-- [ ] CAPTURAS/ contiene 24 PNG nombrados 01_*.png a 24_*.png
+- [ ] CAPTURAS/ contiene 27 PNG nombrados 01_*.png a 27_*.png
 - [ ] DIAGRAMAS/ contiene 3-4 PNG de arquitectura
 - [ ] INDICE_CONTENIDO.txt existe en raíz
 - [ ] Tamaño total < 50 MB (recomendado < 100 MB)

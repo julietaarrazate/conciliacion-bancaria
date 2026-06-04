@@ -18,7 +18,7 @@
 | 2 | DNDA_INCLUIR.md | A | ✓ | 250+ | Define qué incluir en ZIP |
 | 3 | DNDA_EXCLUSIONES.md | A | ✓ | 400+ | Define qué excluir (seguridad) |
 | 4 | DNDA_PRIVACIDAD.md | A | ✓ | 450+ | Auditoría de datos privados |
-| 5 | DNDA_CAPTURAS.md | A | ✓ | 350+ | Plan de 24 screenshots |
+| 5 | DNDA_CAPTURAS.md | A | ✓ | 350+ | Inventario de 27 screenshots reales |
 | 6 | DNDA_REVISION_EXPEDIENTE.md | B | ✓ | (este) | Auditoría integral |
 | 7 | DNDA_VERSION_REGISTRADA.md | B | (crear) | ~150 | Identificación de versión |
 | 8 | DNDA_ESTRUCTURA_ZIP.md | B | (crear) | ~200 | Estructura del paquete final |
@@ -180,7 +180,7 @@
 
 - [x] 10 documentos DNDA_* creados para esta carpeta
 - [x] 19 documentos preexistentes reutilizables
-- [x] Plan de capturas de pantalla (24 screenshots)
+- [x] Inventario de capturas de pantalla (27 screenshots reales)
 - [x] Plan de ZIP final y validación
 
 **Resultado:** ✓ EN PROGRESO (falta crear 4 docs finales + capturas)
@@ -289,7 +289,7 @@
 | Originalidad de componentes | ACTIVOS_PI (5 algoritmos) | ✓ |
 | Tests del sistema | /backend/tests (156 tests) | ✓ |
 | Compilabilidad | Backend: `pip install`, Frontend: `npm install` | ✓ |
-| Funcionalidad demostrada | DNDA_CAPTURAS (24 screenshots) | (pendiente capturar) |
+| Funcionalidad demostrada | DNDA_CAPTURAS (27 screenshots) | ✓ Capturadas |
 | Documentación de configuración | MATERIALES_COMPLEMENTARIO | ✓ |
 
 **Hallazgos:** ✓ TODOS LOS REQUISITOS CUBIERTOS (excepto capturas, que es responsabilidad del usuario)
@@ -363,7 +363,7 @@
 
 **Lo que falta:**
 - 4 documentos DNDA por crear (VERSION_REGISTRADA, ESTRUCTURA_ZIP, VALIDACION_FINAL, CHECKLIST_FINAL)
-- 24 capturas de pantalla (responsabilidad del usuario, no del documentador)
+- 27 capturas de pantalla — ✓ COMPLETADAS
 - Completar formulario oficial DNDA (responsabilidad del usuario)
 
 **Calidad actual:**
@@ -372,7 +372,7 @@
 - Evidencia de autoría y originalidad sólida
 - Cumple todos los requisitos técnico-legales
 
-**Recomendación:** Proceder a crear los 4 documentos DNDA finales y tomar las 24 capturas.
+**Recomendación:** Documentos DNDA completos y 27 capturas tomadas. Proceder al armado final según el formato del portal (ver DNDA_FORMATO_PRESENTACION.md).
 
 ---
 

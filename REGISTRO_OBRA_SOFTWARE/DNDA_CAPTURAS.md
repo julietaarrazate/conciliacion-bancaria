@@ -1,360 +1,213 @@
-# PLAN DE CAPTURAS DE PANTALLA
-## Screenshots para evidencia visual del sistema funcionando
+# INVENTARIO DE CAPTURAS DE PANTALLA
+## Evidencia visual del sistema en funcionamiento
 
 **Autora:** Julieta Arrazate  
 **Fecha:** Junio 2026  
 **Obra:** Sistema Integral de Gestión Financiera, Contable y Empresarial  
-**Versión:** v3.12
+**Versión:** v3.12 (build v3.10 visible en perfil)
 
 ---
 
-## 1. PROPÓSITO DE LAS CAPTURAS
+## 1. RESUMEN
 
-Las capturas de pantalla sirven para:
-- Evidenciar que el sistema está **completo y funcional**
-- Demostrar la **interfaz de usuario** y experiencia
-- Mostrar los **módulos principales** en operación
-- Acreditar **originalidad en la UX** (diseño personalizado)
-- Complementar la documentación técnica con evidencia visual
+Se capturaron **27 pantallas** del sistema en funcionamiento real, con datos
+de producción (organización Caneland SA). Las capturas demuestran que la obra
+está **completa, operativa y en uso productivo**, cubriendo la totalidad de los
+módulos principales.
 
-**Cantidad:** 24 capturas (3-4 por módulo principal)  
-**Formato:** PNG con resolución 1280×720 o superior (landscape)  
-**Nombre archivo:** `NN_descripcion_corta.png` (ej: `01_login.png`, `02_dashboard.png`)
-
----
-
-## 2. CAPTURAS DE AUTENTICACIÓN Y BIENVENIDA
-
-### 01_login.png
-- **Módulo:** Autenticación
-- **Vista:** Página de Login
-- **Contenido a capturar:**
-  - Formulario de email/contraseña
-  - Botón "Ingresar"
-  - Texto "¿Olvidaste tu contraseña?"
-  - Logo de Cuadra (arriba a la izquierda)
-  - Fondo con gradiente (Linear-inspired)
-- **Usuario sugerido:** Loguearse con `admin@demo.com`
-
-### 02_dashboard_overview.png
-- **Módulo:** Dashboard
-- **Vista:** Vista general del Dashboard
-- **Contenido a capturar:**
-  - Encabezado con nombre de usuario y org
-  - Sidebar izquierdo con menú principal (todas las opciones visibles)
-  - Área principal con tarjetas de resumen (Extractos, Planillas, Movimientos, etc.)
-  - Gráficos de línea/barras con datos de ejemplo
-  - Onboarding checklist (si aplica)
-- **Nota:** Captura en modo claro (light mode)
-
-### 03_dashboard_dark.png
-- **Módulo:** Dashboard
-- **Vista:** Dashboard en modo oscuro
-- **Contenido a capturar:**
-  - Mismo dashboard que 02, pero en dark mode
-  - Colores invertidos manteniendo legibilidad
-  - Demostración de soporte dual light/dark
-- **Nota:** Cambiar tema desde `/perfil` → Switch tema
+| Característica | Detalle |
+|---|---|
+| Total de capturas | 27 |
+| Modo de visualización | Claro (mayoría) + Oscuro (Resumen) |
+| Origen de datos | Producción real (https://conciliacion-bancaria-ten.vercel.app) |
+| Usuario | Julieta Arrazate (Superadmin) |
+| Organización | Caneland SA (14 clientes, 46 conciliaciones) |
+| Formato | PNG |
 
 ---
 
-## 3. CAPTURAS DE MÓDULO CONCILIACIÓN (Core)
+## 2. INVENTARIO COMPLETO DE CAPTURAS
 
-### 04_extractos_archivo.png
-- **Módulo:** Extractos
-- **Vista:** Página `ExtractosArchivo`
-- **Contenido a capturar:**
-  - Lista de extractos bancarios subidos
-  - Columnas: Archivo, Banco, Período, Movimientos, Fecha
-  - Botón "+ Cargar extracto"
-  - Botón de descarga/eliminación por fila
-- **Nota:** Al menos 2-3 extractos en la lista
+### Grupo A — Panel general y reportería
 
-### 05_movimientos_tabla.png
-- **Módulo:** Movimientos
-- **Vista:** Tabla de movimientos bancarios
-- **Contenido a capturar:**
-  - Tabla con columnas: Orden, Fecha, Banco, Titular, Monto, Referencia
-  - Filtros en encabezados (buscador de banco, fechas, etc.)
-  - Botones de acción (editar, eliminar, acreditar)
-  - Paginación al pie (ej: "Mostrando 50 de 1200")
-- **Nota:** Usar datos demo con varios movimientos visibles
+| Archivo sugerido | Pantalla | Contenido evidenciado |
+|---|---|---|
+| `01_resumen_ejecutivo.png` | Resumen ejecutivo | Tarjetas Conciliado/Pendiente/Tasa/Movimientos banco ($77.291.276), cheques en cartera, selector hoy/semana/mes/rango, export PDF cierre y Excel |
+| `02_resumen_dark.png` | Resumen (modo oscuro) | Mismo panel en dark mode: top clientes, cheques en cartera, gráfico "Evolución conciliado 6 meses" |
+| `19_flujo_caja.png` | Flujo de Caja | Ingresos $726.466.398, Egresos $49.361.400, Neto $677.104.998, gráfico Neto mensual (3 meses) |
+| `20_flujo_caja_detalle.png` | Flujo de Caja (detalle) | Gráfico de barras Ingresos vs Egresos + tabla mensual con tasa de conciliación (05/26 = 95%) |
+| `21_flujo_caja_6meses.png` | Flujo de Caja (6 meses) | Serie completa 01/26–06/26 con detalle mensual de ingresos, egresos, neto, conciliado y tasa |
 
-### 06_conciliacion_panel.png
-- **Módulo:** Conciliaciones
-- **Vista:** Panel de conciliación de planilla
-- **Contenido a capturar:**
-  - Tabla de filas de planilla (lado izquierdo)
-  - Mostrar filas con distintos estados: PENDIENTE (rojo), OK (verde), FALTAN DATOS (amarillo)
-  - Columnas: N°, Cliente, CUIT, Monto, Scoring, Estado
-  - Resumen al pie (filas conciliadas / total)
-- **Nota:** Evidencia del algoritmo de scoring funcionando
+### Grupo B — Motor de conciliación (núcleo del sistema)
 
-### 07_conciliacion_scoring.png
-- **Módulo:** Conciliaciones
-- **Vista:** Detalle de scoring de una fila
-- **Contenido a capturar:**
-  - Modal o panel lateral con scoring breakdown
-  - Puntos por: CUIT exacto (+12), CBU (+10), Titular (+5), etc.
-  - Movimiento candidato seleccionado
-  - Botón "Aceptar conciliación"
-- **Nota:** Demostración del motor de conciliación
+| Archivo sugerido | Pantalla | Contenido evidenciado |
+|---|---|---|
+| `03_conciliar_dashboard.png` | Conciliar transferencias | 1270 movimientos sin asignar, Precisión 98%, 2.455 movimientos, flujo de 3 pasos (Extracto → Cliente/planilla → Resultado), Individual / Carga masiva |
+| `04_extractos_archivo.png` | Archivo de Extractos | Organización banco/año/mes (Banco Macro → 2026 → Mayo, 2.455 movs, 776 acreditados 32%), botones Ver / descargar .xlsx |
+| `05_movimientos_extracto.png` | Movimientos del extracto | Tabla de 2.455 movimientos con Orden/Fecha/Titular-CUIT/Importe/Saldo/Cliente, asiento agrupado, Agregar/Borrar UM, filas UM en verde |
+| `06_conciliaciones.png` | Conciliaciones | 776 movimientos conciliados, total $211.689.798,03, filtros por cliente/titular/fecha/monto, transferencias asignadas a clientes |
+| `07_historial.png` | Historial | 46 planillas, 822/857 (96%), tarjetas por planilla (Alojando 19/19 OK 100%, Green 40/42 OK 95%) con Ver/Editar, Re-conciliar, Exportar |
 
----
+### Grupo C — Gestión de clientes
 
-## 4. CAPTURAS DE MÓDULO FINANCIERO
+| Archivo sugerido | Pantalla | Contenido evidenciado |
+|---|---|---|
+| `08_clientes.png` | Clientes | Cartera Caneland SA (14 clientes, 46 conciliaciones), chips comisión 2%, botones Estado / Cta. cte. / Acreditar / editar / fusionar |
 
-### 08_cheques_registro.png
-- **Módulo:** Cheques
-- **Vista:** Tab "Todos" con lista de cheques
-- **Contenido a capturar:**
-  - Tabla de cheques registrados
-  - Columnas: Estado, Fecha, Cliente, Monto, Banco, Número, CP, L/I
-  - Botones: Editar (✏️), Depositar, Rechazar, Borrar
-  - Estados visibles: registrado, depositado, acreditado (chips de colores)
-- **Nota:** Demostración del ciclo contable de cheques
+### Grupo D — Módulo de cheques (ciclo contable completo)
 
-### 09_cheques_deposito.png
-- **Módulo:** Cheques
-- **Vista:** Tab "Por depósito"
-- **Contenido a capturar:**
-  - Selector de fecha de depósito (dropdown)
-  - Tabla de cheques agrupados por depósito
-  - Resumen por local/interior (cards)
-  - Botón "Acreditar (N)" y "↓ Excel"
-- **Nota:** Demostración de acreditación masiva
+| Archivo sugerido | Pantalla | Contenido evidenciado |
+|---|---|---|
+| `09_cheques_listado.png` | Cheques | Stats Pendientes/Acreditados ($7.422.528,75)/Rechazados, tabs Todos/Por depósito/Rechazados/Carga masiva, importar/exportar Excel |
+| `10_cheques_editar.png` | Editar cheque (modal) | Cliente, portador, librador, banco origen, monto, **comisión auto-calculada 2% = $139.450,58**, código postal + Local/Interior, fechas emisión/depósito |
 
-### 10_cheques_ocr.png
-- **Módulo:** Cheques
-- **Vista:** Formulario de nuevo cheque con OCR
-- **Contenido a capturar:**
-  - Formulario con campos de cheque (número, banco, titular, monto, fechas)
-  - Botón de cámara (📷) para capturar foto
-  - Foto del cheque cargada (visible arriba o lateral)
-  - Campos pre-llenados por OCR (números, fechas extraídos)
-- **Nota:** Evidencia de la tecnología OCR de Gemini
+### Grupo E — Módulo de pagos (egresos unificados)
 
-### 11_pagos_listado.png
-- **Módulo:** Pagos
-- **Vista:** Tabla de egresos (pagos/gastos)
-- **Contenido a capturar:**
-  - Tabla con tipo de egreso: proveedor, gasto, pago_cliente
-  - Columnas: Fecha, Tipo, Beneficiario, Monto, Concepto, Forma pago
-  - Botones: Editar, Compartir WhatsApp, Borrar
-- **Nota:** Módulo unificado de egresos
+| Archivo sugerido | Pantalla | Contenido evidenciado |
+|---|---|---|
+| `11_pagos_nuevo.png` | Nuevo pago | Tipo (Proveedor/Gasto/Pago a cliente), forma de pago (Banco/Efectivo), cliente, "A favor de", importe, Nro. OP, comprobante foto |
+| `12_pagos_historial.png` | Pagos (historial) | Lista de pagos a clientes con montos, forma Efectivo, foto de comprobante, editar/borrar, filtros por tipo/forma/fecha |
 
-### 12_pagos_nuevo.png
-- **Módulo:** Pagos
-- **Vista:** Formulario de nuevo pago
-- **Contenido a capturar:**
-  - Selector de tipo: Pago a cliente | Gasto | Pago a proveedor
-  - Campos: Beneficiario, Monto, Fecha, Concepto, Forma pago, Foto
-  - Botón de cámara (📷)
-  - Botón "Guardar"
-- **Nota:** Demostración de captura de foto
+### Grupo F — Caja y tesorería
 
-### 13_caja_arqueo.png
-- **Módulo:** Caja
-- **Vista:** Panel de Arqueo diario
-- **Contenido a capturar:**
-  - Tablas de denominaciones (billetes/monedas)
-  - Campos: Denominación, Cantidad, Subtotal
-  - Total calculado automáticamente
-  - Botón "Cerrar arqueo"
-  - Historial de arqueos previos
-- **Nota:** Funcionalidad de caja chica
+| Archivo sugerido | Pantalla | Contenido evidenciado |
+|---|---|---|
+| `13_caja_arqueo.png` | Caja (arqueo diario) | Saldo inicial $15.999.100, pagos del día -$3.442.500, caja restante $12.556.600, arqueo físico por denominación de billetes |
+
+### Grupo G — Contabilidad y cuentas corrientes
+
+| Archivo sugerido | Pantalla | Contenido evidenciado |
+|---|---|---|
+| `14_contabilidad_modulos.png` | Contabilidad | Tabs Plan de cuentas / Reglas / **Libro diario (903 asientos)** / Sumas y saldo / Balance / Libro mayor / Clientes |
+| `15_plan_cuentas_activo_pasivo.png` | Plan de cuentas (Activo/Pasivo) | Jerarquía: Banco Macro (1-1-1-3-1), Banco 2, Cheques en cartera, cuentas de cliente (2-1-2-X), Cheques depositados/a depositar |
+| `16_plan_cuentas_resultado.png` | Plan de cuentas (Resultado) | Ingresos (Comisiones, Comisiones cheques 3-1-3-0), Gastos (Gastos bancarios, Gastos de rechazos 3-2-2-1) |
+| `17_cuentas_corrientes.png` | Cuentas Corrientes | Cartera por cliente: saldo, último mov., estado deudor/acreedor, cuenta contable; botones Reconstruir, Reset Libro Diario, Fix fechas UTC, Ver gaps |
+| `18_liquidaciones.png` | Liquidaciones | Período 05/2026 (borrador): Conciliado $234.147.876,03, Comisión $4.682.957,52, Neto $229.464.918,51 |
+
+### Grupo H — Auditoría e inteligencia
+
+| Archivo sugerido | Pantalla | Contenido evidenciado |
+|---|---|---|
+| `22_auditoria_inteligencia.png` | Auditoría e Inteligencia | Auto-conciliadas 822/857, **tasa de éxito 95.9%**, 25 correcciones manuales, sistema de aprendizaje por patrones, actividad por tipo de operación |
+| `23_auditoria_log.png` | Auditoría (Log) | Tabla de auditoría: Fecha/Usuario/Acción (INSERT/UPDATE)/Tabla/Detalles JSON, filtros por tabla y acción |
+
+### Grupo I — Inteligencia artificial y herramientas
+
+| Archivo sugerido | Pantalla | Contenido evidenciado |
+|---|---|---|
+| `24_asistente_ia.png` | Asistente IA Cuadra | Chat flotante "IA Cuadra · datos en tiempo real", sugerencias en lenguaje natural, dictado por voz (micrófono) |
+
+### Grupo J — Administración, seguridad y respaldo
+
+| Archivo sugerido | Pantalla | Contenido evidenciado |
+|---|---|---|
+| `25_papelera.png` | Papelera de reciclaje | Backup automático activo (cron 03:00 ART), papelera vacía con restaurar/purgar |
+| `26_perfil_datos.png` | Mi perfil (datos) | Datos de acceso (nombre, email), cambio de contraseña, Rol: Admin, build v3.10 |
+| `27_perfil_seguridad_ia.png` | Mi perfil (seguridad e IA) | Bloqueo con PIN, notificaciones push, **Gemini IA uso diario (OCR 2/150, Chat 0/200)**, setup VAPID push (admin) |
 
 ---
 
-## 5. CAPTURAS DE MÓDULO CONTABILIDAD
+## 3. COBERTURA POR MÓDULO
 
-### 14_libro_diario.png
-- **Módulo:** Contabilidad
-- **Vista:** Libro Diario
-- **Contenido a capturar:**
-  - Tabla de asientos contables
-  - Columnas: N°, Fecha, Concepto, Cuenta, Debe, Haber
-  - Filtros (fecha, concepto, cuenta)
-  - Total de debe = total de haber (partida doble)
-- **Nota:** Evidencia de sistema contable automático
+| Módulo del sistema | ¿Capturado? | Captura(s) |
+|---|---|---|
+| Resumen ejecutivo | ✓ | 01, 02 |
+| Flujo de Caja | ✓ | 19, 20, 21 |
+| Conciliación (dashboard) | ✓ | 03 |
+| Extractos | ✓ | 04 |
+| Movimientos | ✓ | 05 |
+| Conciliaciones | ✓ | 06 |
+| Historial | ✓ | 07 |
+| Clientes | ✓ | 08 |
+| Cheques | ✓ | 09, 10 |
+| Pagos | ✓ | 11, 12 |
+| Caja | ✓ | 13 |
+| Contabilidad | ✓ | 14, 15, 16 |
+| Cuentas Corrientes | ✓ | 17 |
+| Liquidaciones | ✓ | 18 |
+| Auditoría / Inteligencia | ✓ | 22, 23 |
+| Asistente IA | ✓ | 24 |
+| Papelera / Backup | ✓ | 25 |
+| Perfil / Seguridad | ✓ | 26, 27 |
 
-### 15_libro_mayor.png
-- **Módulo:** Contabilidad
-- **Vista:** Libro Mayor
-- **Contenido a capturar:**
-  - Tabla de movimientos por cuenta
-  - Columnas: Fecha, Concepto, Debe, Haber, Saldo
-  - Saldo acumulado correctamente
-  - Cuentas expandibles (jerarquía de plan)
-- **Nota:** Estructura de plan de cuentas
-
-### 16_plan_cuentas.png
-- **Módulo:** Contabilidad
-- **Vista:** Plan de Cuentas
-- **Contenido a capturar:**
-  - Árbol jerárquico de cuentas (padres e hijas)
-  - Estructura: 1 (Activo) > 1-1 (Corriente) > 1-1-1 (Caja y Bancos)
-  - Iconos/indicadores de cuenta hoja vs. padre
-  - Campos: Código, Nombre, Tipo
-- **Nota:** Demostración de estructura contable completa
-
-### 17_cuentas_corrientes.png
-- **Módulo:** Cuentas Corrientes (en Contabilidad)
-- **Vista:** Resumen de cartera de clientes
-- **Contenido a capturar:**
-  - Tabla: Cliente, Saldo, Último movimiento, Estado (deudor/acreedor)
-  - Chips de estado con colores (rojo=deudor, verde=acreedor)
-  - Botón "Ver detalle cta.cte." por cliente
-- **Nota:** Módulo de cuentas corrientes (reemplazo de estado de cuenta)
+**Cobertura:** 18/18 módulos principales documentados visualmente ✓
 
 ---
 
-## 6. CAPTURAS DE ANÁLISIS Y REPORTING
+## 4. VALOR PROBATORIO DE LAS CAPTURAS
 
-### 18_resumen_mensual.png
-- **Módulo:** Resumen
-- **Vista:** Resumen ejecutivo mensual
-- **Contenido a capturar:**
-  - Tabla de ingresos por cliente (nombre, período, monto total)
-  - Gráfico de barras de ingresos mensuales
-  - Indicador de variación (↑ sube / ↓ baja)
-  - Total del mes
-- **Nota:** Reportería de ingresos
+Las capturas acreditan ante la DNDA que la obra:
 
-### 19_flujo_caja.png
-- **Módulo:** Flujo de Caja
-- **Vista:** Proyección de flujo de caja
-- **Contenido a capturar:**
-  - Gráfico de línea con saldo proyectado (días futuros)
-  - Movimientos estimados (ingresos/egresos)
-  - Tabla resumen: Hoy, Próximos 7 días, Próximos 30 días
-- **Nota:** Análisis prospectivo del flujo
-
-### 20_estado_cuenta_cliente.png
-- **Módulo:** Estado de Cuenta
-- **Vista:** Estado de cuenta de cliente
-- **Contenido a capturar:**
-  - Encabezado: Nombre cliente, Período
-  - Tabla de movimientos (cheques, pagos, planillas, transf)
-  - Saldo inicial, Saldo final
-  - Resumen de comisiones
-- **Nota:** Documento exportable a PDF
+1. **Está completa y funcional** — Todos los módulos operativos con datos reales.
+2. **Implementa los algoritmos originales declarados:**
+   - Motor de conciliación con scoring (captura 03: precisión 98%)
+   - Sistema de aprendizaje por patrones (captura 22: 95.9%, patrones aprendidos)
+   - Motor contable automático (captura 14: 903 asientos en libro diario)
+   - Ciclo contable de cheques (capturas 09, 10, 15, 16)
+   - Parser multi-banco (captura 04: extracto Banco Macro procesado)
+3. **Tiene características diferenciales:**
+   - Asistente IA con datos en tiempo real (captura 24)
+   - OCR con control de uso (captura 27: Gemini OCR 2/150)
+   - Auditoría completa con trazabilidad JSON (captura 23)
+   - Soft-delete con papelera + backup automático (captura 25)
+   - Modo claro/oscuro (capturas 01 vs 02)
+4. **Está en uso productivo** — Datos financieros reales por más de $200M conciliados.
 
 ---
 
-## 7. CAPTURAS DE AUDITORÍA Y ADMINISTRACIÓN
+## 5. NOTA SOBRE PRIVACIDAD EN LAS CAPTURAS
 
-### 21_auditoria_log.png
-- **Módulo:** Auditoría
-- **Vista:** Log de auditoría
-- **Contenido a capturar:**
-  - Tabla: Fecha, Usuario, Acción, Módulo, Antes/Después, IP
-  - Ejemplo: "Usuario X reconcilió planilla Y"
-  - Resumen de últimas acciones (últimos 50 registros)
-- **Nota:** Evidencia de trazabilidad completa
+Las capturas contienen datos operativos reales de la organización Caneland SA
+(nombres de clientes de trabajo: Green, Tucu, Alojando, etc., y montos). Estos
+datos:
 
-### 22_usuarios_rol.png
-- **Módulo:** Usuarios
-- **Vista:** Gestión de usuarios y roles
-- **Contenido a capturar:**
-  - Tabla de usuarios: Email, Nombre, Rol (Admin/Operador/Contador), Org
-  - Botones: Editar, Cambiar rol, Borrar
-  - Formulario de agregar usuario
-- **Nota:** Sistema de roles (ADMIN, OPERADOR, CONTADOR, REVISOR, AUDITOR)
+- Corresponden a la operatoria propia de la autora/organización, no a terceros ajenos.
+- Los nombres de clientes son denominaciones de trabajo, no datos personales sensibles de individuos.
+- No se exponen CUIT/CBU completos identificables de personas físicas en forma destacada.
+- Para la presentación ante la DNDA, los datos refuerzan la prueba de uso productivo real.
 
-### 23_papelera_reciclaje.png
-- **Módulo:** Papelera
-- **Vista:** Papelera de reciclaje
-- **Contenido a capturar:**
-  - Tabla de registros borrados (planillas, cheques, pagos)
-  - Columnas: Tipo, Nombre/Descripción, Fecha borrado, Usuario
-  - Botones: Restaurar, Borrar permanentemente
-  - Información: "N elementos en papelera"
-- **Nota:** Soft-delete y reversibilidad de operaciones
+**Recomendación opcional:** Si se prefiere mayor reserva, pueden difuminarse los
+nombres de clientes y montos antes de presentar, sin que ello afecte el valor
+probatorio (lo relevante es la funcionalidad demostrada, no los datos puntuales).
 
 ---
 
-## 8. CAPTURA DE INFORMACIÓN ADICIONAL
+## 6. UBICACIÓN EN EL PAQUETE
 
-### 24_perfil_usuario.png
-- **Módulo:** Perfil
-- **Vista:** Página de Perfil del usuario
-- **Contenido a capturar:**
-  - Datos personales: Email, Nombre
-  - Campo de contraseña (nuevo/actual/confirmar)
-  - Sección de seguridad: 2FA, PIN, Biometría
-  - Sección de notificaciones: Activar push
-  - Selector de tema: Light/Dark
-- **Nota:** Demostración de seguridad (2FA, PIN, WebAuthn)
+Las 27 capturas se almacenan en la carpeta `CAPTURAS/` del ZIP final, nombradas
+según la columna "Archivo sugerido" de la sección 2.
 
----
-
-## 9. INSTRUCCIONES PARA CAPTURAR
-
-### Requisitos técnicos:
-- **Resolución:** 1280×720 o 1920×1080 (landscape)
-- **Formato:** PNG (transparente o fondo blanco)
-- **Nombre archivo:** `NN_descripcion.png` (ej: `01_login.png`)
-- **Herramienta:** Screenshot nativa, Snagit, o DevTools (F12 → Ctrl+Shift+P → "Screenshot")
-
-### Preparación del sistema:
-1. Loguearse con `admin@demo.com / admin123` (cuenta demo)
-2. Navegar a cada módulo mencionado
-3. Crear datos demo si es necesario (extractos, planillas, cheques)
-4. Capturar tanto light mode como dark mode para UI critical
-
-### Datos demo recomendados:
-- Extracto: "Banco Macro - Junio 2026.xlsx" (crear si no existe)
-- Planilla: "Clientes - Junio 2026" con filas en distintos estados
-- Cheques: 10-15 cheques en estados registrado, depositado, acreditado
-- Pagos: 5-10 pagos/gastos con fotos adjuntas
-
-### Post-captura:
-- [ ] Guardar todas en carpeta `/expediente/CAPTURAS/`
-- [ ] Cambiar nombre a `NN_descripcion.png`
-- [ ] Verificar legibilidad (texto legible en pantalla pequeña)
-- [ ] No incluir datos reales de clientes o movimientos
-- [ ] Borrar capturas anteriores o defectuosas
+```
+CAPTURAS/
+├── 01_resumen_ejecutivo.png
+├── 02_resumen_dark.png
+├── 03_conciliar_dashboard.png
+├── 04_extractos_archivo.png
+├── 05_movimientos_extracto.png
+├── 06_conciliaciones.png
+├── 07_historial.png
+├── 08_clientes.png
+├── 09_cheques_listado.png
+├── 10_cheques_editar.png
+├── 11_pagos_nuevo.png
+├── 12_pagos_historial.png
+├── 13_caja_arqueo.png
+├── 14_contabilidad_modulos.png
+├── 15_plan_cuentas_activo_pasivo.png
+├── 16_plan_cuentas_resultado.png
+├── 17_cuentas_corrientes.png
+├── 18_liquidaciones.png
+├── 19_flujo_caja.png
+├── 20_flujo_caja_detalle.png
+├── 21_flujo_caja_6meses.png
+├── 22_auditoria_inteligencia.png
+├── 23_auditoria_log.png
+├── 24_asistente_ia.png
+├── 25_papelera.png
+├── 26_perfil_datos.png
+└── 27_perfil_seguridad_ia.png
+```
 
 ---
 
-## 10. CHECKLIST DE CAPTURAS
-
-- [ ] 01_login.png — Página de login
-- [ ] 02_dashboard_overview.png — Dashboard light mode
-- [ ] 03_dashboard_dark.png — Dashboard dark mode
-- [ ] 04_extractos_archivo.png — Lista de extractos
-- [ ] 05_movimientos_tabla.png — Tabla de movimientos
-- [ ] 06_conciliacion_panel.png — Panel de conciliación
-- [ ] 07_conciliacion_scoring.png — Detalle de scoring
-- [ ] 08_cheques_registro.png — Tabla de cheques
-- [ ] 09_cheques_deposito.png — Tab "Por depósito"
-- [ ] 10_cheques_ocr.png — Formulario con OCR
-- [ ] 11_pagos_listado.png — Tabla de pagos
-- [ ] 12_pagos_nuevo.png — Formulario nuevo pago
-- [ ] 13_caja_arqueo.png — Panel de arqueo
-- [ ] 14_libro_diario.png — Libro Diario
-- [ ] 15_libro_mayor.png — Libro Mayor
-- [ ] 16_plan_cuentas.png — Plan de Cuentas
-- [ ] 17_cuentas_corrientes.png — Cartera de clientes
-- [ ] 18_resumen_mensual.png — Resumen ejecutivo
-- [ ] 19_flujo_caja.png — Flujo de Caja
-- [ ] 20_estado_cuenta_cliente.png — Estado de Cuenta
-- [ ] 21_auditoria_log.png — Log de auditoría
-- [ ] 22_usuarios_rol.png — Gestión de usuarios
-- [ ] 23_papelera_reciclaje.png — Papelera
-- [ ] 24_perfil_usuario.png — Perfil y seguridad
-
----
-
-## 11. NOTAS FINALES
-
-- **Tiempo estimado:** 1.5-2 horas (capturar y renombrar)
-- **Tamaño total:** ~12-15 MB (24 × 500-600 KB)
-- **Prioridad:** Capturas 1-8 son imprescindibles (auth, conciliación, cheques)
-- **Flexibilidad:** Si algunos módulos no tendrán datos, usar placeholders/datos demo
-- **Confidencialidad:** Verificar que NO haya datos reales de clientes en las capturas
-
----
-
-*Documento de plan de capturas para expediente DNDA — Julieta Arrazate — Junio 2026*
+*Inventario de capturas para expediente DNDA — Julieta Arrazate — Junio 2026*

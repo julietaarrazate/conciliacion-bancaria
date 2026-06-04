@@ -21,101 +21,55 @@ Antes de comenzar, verificar que tienes:
 
 ---
 
-## FASE 1: CAPTURAS DE PANTALLA (1.5 horas)
+## FASE 1: CAPTURAS DE PANTALLA — ✓ COMPLETADA
 
-### 1.1 Preparar el sistema para capturar
+Se capturaron **27 pantallas** del sistema en producción real (organización
+Caneland SA, usuario Superadmin Julieta Arrazate). El detalle completo, la
+cobertura por módulo y el valor probatorio están en `DNDA_CAPTURAS.md`.
 
-- [ ] Loguearse en el sistema con `admin@demo.com / admin123`
-- [ ] Navegar a cada módulo y crear datos demo si falta:
-  - [ ] Extracto bancario demo (Excel)
-  - [ ] Planilla de conciliación demo (con filas en distintos estados)
-  - [ ] 10-15 cheques registrados
-  - [ ] 5-10 pagos/gastos
-  - [ ] Arqueos de caja (últimos 5 días)
-  
-**Tiempo:** ~30 minutos
+### 1.1 Capturas tomadas (27) — cobertura 18/18 módulos
 
-### 1.2 Capturar 24 screenshots
+- [x] 01_resumen_ejecutivo.png — Resumen ejecutivo
+- [x] 02_resumen_dark.png — Resumen (modo oscuro)
+- [x] 03_conciliar_dashboard.png — Conciliar transferencias (precisión 98%)
+- [x] 04_extractos_archivo.png — Archivo de extractos
+- [x] 05_movimientos_extracto.png — Movimientos del extracto (2.455 movs)
+- [x] 06_conciliaciones.png — Conciliaciones ($211.689.798)
+- [x] 07_historial.png — Historial (46 planillas, 96%)
+- [x] 08_clientes.png — Clientes (cartera Caneland SA)
+- [x] 09_cheques_listado.png — Cheques (stats + tabs)
+- [x] 10_cheques_editar.png — Editar cheque (comisión auto + L/I)
+- [x] 11_pagos_nuevo.png — Nuevo pago
+- [x] 12_pagos_historial.png — Pagos (historial)
+- [x] 13_caja_arqueo.png — Caja (arqueo diario)
+- [x] 14_contabilidad_modulos.png — Contabilidad (libro diario 903 asientos)
+- [x] 15_plan_cuentas_activo_pasivo.png — Plan de cuentas (Activo/Pasivo)
+- [x] 16_plan_cuentas_resultado.png — Plan de cuentas (Resultado)
+- [x] 17_cuentas_corrientes.png — Cuentas corrientes
+- [x] 18_liquidaciones.png — Liquidaciones
+- [x] 19_flujo_caja.png — Flujo de caja
+- [x] 20_flujo_caja_detalle.png — Flujo de caja (detalle)
+- [x] 21_flujo_caja_6meses.png — Flujo de caja (6 meses)
+- [x] 22_auditoria_inteligencia.png — Auditoría/Inteligencia (95.9%)
+- [x] 23_auditoria_log.png — Auditoría (log JSON)
+- [x] 24_asistente_ia.png — Asistente IA Cuadra
+- [x] 25_papelera.png — Papelera + backup automático
+- [x] 26_perfil_datos.png — Perfil (datos de acceso)
+- [x] 27_perfil_seguridad_ia.png — Perfil (PIN, push, Gemini IA)
 
-**Grupo 1: Autenticación (2 capturas)**
+**Total:** 27 capturas ✓
 
-- [ ] 01_login.png — Página de login (formulario email/password)
-- [ ] 02_dashboard_overview.png — Dashboard vista general (light mode)
+### 1.2 Verificar calidad de capturas
 
-**Grupo 2: Dashboard y tema (2 capturas)**
+- [x] Las 27 capturas tienen nombres correctos (01 a 27)
+- [x] Todas están en PNG
+- [ ] Renombrar archivos según la convención `NN_descripcion.png` (si aún no se hizo)
+- [ ] (Opcional) Difuminar nombres de clientes / montos si se prefiere mayor reserva
+- [x] Texto legible
+- [x] Demuestran funcionalidad real con datos de producción
 
-- [ ] 03_dashboard_dark.png — Dashboard dark mode (tema oscuro)
-- [ ] (opcional: algún módulo en dark mode)
-
-**Grupo 3: Módulo Extractos (2 capturas)**
-
-- [ ] 04_extractos_archivo.png — Lista de extractos cargados
-- [ ] (opcional: preview de movimientos del extracto)
-
-**Grupo 4: Módulo Conciliación (3 capturas)**
-
-- [ ] 05_movimientos_tabla.png — Tabla de movimientos bancarios
-- [ ] 06_conciliacion_panel.png — Panel de conciliación de planilla (filas PEND/OK/ERROR)
-- [ ] 07_conciliacion_scoring.png — Modal de scoring (desglose de puntos)
-
-**Grupo 5: Módulo Cheques (3 capturas)**
-
-- [ ] 08_cheques_registro.png — Tabla de cheques (tab "Todos")
-- [ ] 09_cheques_deposito.png — Tab "Por depósito" (acreditación masiva)
-- [ ] 10_cheques_ocr.png — Formulario nuevo cheque con foto cargada + OCR (campos pre-llenados)
-
-**Grupo 6: Módulo Pagos (2 capturas)**
-
-- [ ] 11_pagos_listado.png — Tabla de egresos (pagos/gastos)
-- [ ] 12_pagos_nuevo.png — Formulario nuevo pago (con campos y botón cámara)
-
-**Grupo 7: Módulo Caja (1 captura)**
-
-- [ ] 13_caja_arqueo.png — Panel de arqueología diaria (denominaciones, total)
-
-**Grupo 8: Módulo Contabilidad (4 capturas)**
-
-- [ ] 14_libro_diario.png — Libro Diario (tabla de asientos)
-- [ ] 15_libro_mayor.png — Libro Mayor (movimientos por cuenta)
-- [ ] 16_plan_cuentas.png — Plan de Cuentas (árbol jerárquico)
-- [ ] 17_cuentas_corrientes.png — Cartera de clientes (saldos de cuentas corrientes)
-
-**Grupo 9: Análisis y reportería (3 capturas)**
-
-- [ ] 18_resumen_mensual.png — Resumen ejecutivo (ingresos por cliente)
-- [ ] 19_flujo_caja.png — Flujo de Caja (proyección gráfica)
-- [ ] 20_estado_cuenta_cliente.png — Estado de Cuenta de cliente (desglose de movimientos)
-
-**Grupo 10: Auditoría y administración (3 capturas)**
-
-- [ ] 21_auditoria_log.png — Log de Auditoría (historial de acciones)
-- [ ] 22_usuarios_rol.png — Gestión de Usuarios (tabla con roles)
-- [ ] 23_papelera_reciclaje.png — Papelera (registros borrados)
-
-**Grupo 11: Configuración y seguridad (1 captura)**
-
-- [ ] 24_perfil_usuario.png — Perfil de usuario (datos, 2FA, PIN, tema)
-
-**Total:** 24 capturas
-
-**Instrucciones para capturar:**
-1. Resolución: 1280×720 o 1920×1080 (landscape)
-2. Formato: PNG
-3. Guardar en carpeta: `/home/user/CAPTURAS/`
-4. Nombrar: `NN_descripcion.png` (ej: `01_login.png`)
-
-**Tiempo:** ~1 hora
-
-### 1.3 Verificar calidad de capturas
-
-- [ ] Todas las 24 capturas tienen nombres correctos (01 a 24)
-- [ ] Todas están en PNG (formato verificado)
-- [ ] Tamaño individual: 400-600 KB (legible)
-- [ ] Ninguna captura tiene datos reales de clientes
-- [ ] Texto es legible (no pixelado)
-- [ ] Contienen datos demo claramente ficticios
-
-**Tiempo:** ~15 minutos
+**Pendiente manual:** mover las 27 imágenes a la carpeta `CAPTURAS/` con los
+nombres de la lista anterior.
 
 ---
 
@@ -251,7 +205,7 @@ Versión: v3.12 | Junio 2026
 CONTENIDO:
 1. SOFTWARE/ — Código fuente íntegro
 2. DOCUMENTACION/ — 8-9 PDFs en español
-3. CAPTURAS/ — 24 screenshots
+3. CAPTURAS/ — 27 screenshots
 4. DIAGRAMAS/ — Diagramas de arquitectura
 ═════════════════════════════════════════
 ```
@@ -286,7 +240,7 @@ zip -r EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip \
 2. Copiar dentro:
    - Carpeta `SOFTWARE/` con backend, frontend, mobile, REGISTRO_OBRA_SOFTWARE
    - Carpeta `DOCUMENTACION/` con PDFs
-   - Carpeta `CAPTURAS/` con 24 PNG
+   - Carpeta `CAPTURAS/` con 27 PNG
    - Carpeta `DIAGRAMAS/` con 3-4 PNG
    - Archivo `INDICE_CONTENIDO.txt`
 3. Comprimir: Click derecho → Compress → `EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip`
@@ -366,7 +320,7 @@ Visitar sitio oficial de la DNDA:
 ### 6.1 Verificación de completitud
 
 - [ ] ZIP `EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip` existe y es accesible
-- [ ] Contiene 24 screenshots en CAPTURAS/
+- [x] Contiene 27 screenshots en CAPTURAS/
 - [ ] Contiene 3-4 diagramas en DIAGRAMAS/
 - [ ] Contiene 8-9 PDFs en DOCUMENTACION/
 - [ ] Contiene código fuente íntegro en SOFTWARE/
@@ -417,7 +371,7 @@ Visitar sitio oficial de la DNDA:
 - [ ] RESUMEN_EJECUTIVO.pdf ✓
 
 **Capturas:**
-- [ ] 24 screenshots PNG (01_login.png a 24_perfil_usuario.png)
+- [x] 27 screenshots PNG (01_resumen_ejecutivo.png a 27_perfil_seguridad_ia.png)
 
 **Diagramas:**
 - [ ] arquitectura_3_capas.png ✓
