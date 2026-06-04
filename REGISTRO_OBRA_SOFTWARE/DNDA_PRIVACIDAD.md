@@ -190,8 +190,8 @@ grep -r "render\|vercel\|neon\|onrender\|vercel.app" backend --include="*.py"
   - Backend: https://conciliacion-api.onrender.com
 
 **Datos sensibles (NO incluir en ZIP final):**
-- IDs de servicio Render y Vercel (service `srv-d7pqt81j2pic73c0c6fg`, project `prj_cVINkspVm6j3B1fxOrdU81B0ehWg`)
-- Nombre de BD Neon (`ep-ancient-hall-anz4pezn.c-6.us-east-1.aws.neon.tech`)
+- IDs de servicio Render y Vercel (service ID y project ID de producción)
+- Hostname de BD Neon (endpoint de producción)
 - Instrucciones de deploy con API keys (curl a Render API)
 
 **Acción:** CLAUDE.md de la raíz del repositorio NO incluir en ZIP. Solo incluir si se anonymiza o se guarda solo la sección técnica.
