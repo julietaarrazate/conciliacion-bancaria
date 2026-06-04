@@ -35,16 +35,13 @@
 
 **Archivo:** `/backend/crear_datos_prueba.py`
 
-**Contenido sensible:**
-```
-C:/Users/Tomas/Desktop/INBOX/datos_prueba/
-DESKTOP = "C:/Users/Tomas/Desktop"
-```
+**Contenido:** script generador de datos de prueba con ruta de salida local
+(ya normalizada a `~/Desktop/INBOX/datos_prueba/`, configurable por variable
+de entorno `DATOS_PRUEBA_DIR`).
 
 **Razón de exclusión:**
-- Contiene ruta local de desarrollador anterior (Tomas)
-- Ruta hardcodeada expone estructura de directorios personales
-- Script generador de datos de prueba NO es necesario para el registro
+- Script de testing local, NO forma parte del sistema en producción
+- No es necesario para el registro de la obra
 
 **Acción:** NO INCLUIR
 
@@ -215,7 +212,7 @@ Antes de empaquetar, verificar:
 - [ ] NO incluir `__pycache__/` (backend)
 - [ ] NO incluir `.venv/` o `venv/`
 - [ ] NO incluir `.git/` (historial Git)
-- [ ] NO incluir `/backend/crear_datos_prueba.py` (contiene ruta C:/Users/Tomas)
+- [ ] NO incluir `/backend/crear_datos_prueba.py` (script de testing local, no es parte del sistema)
 - [ ] NO incluir `render.yaml`, `vercel.json`, `railway.json` (credentials)
 - [ ] NO incluir `dist/` (build compilado frontend)
 - [ ] NO incluir archivos `.pem`, `.key`, `.crt`, `*.p8`

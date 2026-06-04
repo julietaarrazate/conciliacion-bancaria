@@ -6,7 +6,8 @@ Genera archivos de prueba realistas:
 - planilla_alojando.xlsx  -> 6 pagos (5 OK, 1 no_esta)
 - planilla_tucu.xlsx      -> 7 pagos (6 OK, 1 faltan_datos)
 
-C:/Users/Tomas/Desktop/INBOX/datos_prueba/
+Salida (configurable con la variable de entorno DATOS_PRUEBA_DIR):
+    <carpeta del usuario>/Desktop/INBOX/datos_prueba/
 """
 
 import openpyxl
@@ -14,8 +15,8 @@ from openpyxl.styles import Font, PatternFill
 from datetime import date, timedelta
 import os
 
-DESKTOP  = "C:/Users/Tomas/Desktop"
-OUT_DIR  = os.path.join(DESKTOP, "INBOX", "datos_prueba")
+DESKTOP  = os.path.join(os.path.expanduser("~"), "Desktop")
+OUT_DIR  = os.getenv("DATOS_PRUEBA_DIR", os.path.join(DESKTOP, "INBOX", "datos_prueba"))
 os.makedirs(OUT_DIR, exist_ok=True)
 
 FECHA_BASE = date(2026, 4, 15)

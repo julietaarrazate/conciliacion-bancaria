@@ -23,10 +23,13 @@ from pathlib import Path
 
 BASE_URL = os.getenv("API_URL", "http://localhost:8000")
 
-EXTRACTO_PATH = Path(r"C:\Users\Tomas\Desktop\Extracto Macro\extracto macro abril.xlsx")
+# Rutas a archivos reales para el smoke test (opcionales).
+# Configurables con variables de entorno; por defecto usan la carpeta del usuario.
+_DESKTOP = os.path.join(os.path.expanduser("~"), "Desktop")
+EXTRACTO_PATH = Path(os.getenv("SMOKE_EXTRACTO", os.path.join(_DESKTOP, "Extracto Macro", "extracto macro abril.xlsx")))
 PLANILLAS = [
-    (r"C:\Users\Tomas\Desktop\INBOX\procesados\alojando.xlsx", "Alojando"),
-    (r"C:\Users\Tomas\Desktop\INBOX\procesados\Green 28.4.xlsx", "Green"),
+    (os.getenv("SMOKE_PLANILLA_1", os.path.join(_DESKTOP, "INBOX", "procesados", "alojando.xlsx")), "Alojando"),
+    (os.getenv("SMOKE_PLANILLA_2", os.path.join(_DESKTOP, "INBOX", "procesados", "Green 28.4.xlsx")), "Green"),
 ]
 
 

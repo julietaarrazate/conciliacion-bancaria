@@ -78,7 +78,7 @@ EXPEDIENTE_DNDA_2026_06/
 - `/backend/.venv/` — Entorno virtual (reinstalable)
 - `/backend/__pycache__/` — Caché de Python (generado)
 - `/backend/.env` — Variables de entorno reales (sensibles)
-- `/backend/crear_datos_prueba.py` — Script generador de datos de prueba (contiene path C:/Users/...)
+- `/backend/crear_datos_prueba.py` — Script generador de datos de prueba (testing local, no es parte del sistema)
 - `/backend/node_modules/` — Si hubiera (no existe en este proyecto)
 
 ---
@@ -228,7 +228,7 @@ Grupo C (guías operativas):
 5. ✓ Carpeta DIAGRAMAS/ contiene 3-4 diagramas de arquitectura
 6. ✓ No hay archivos .env con credenciales reales
 7. ✓ No hay archivos .pem, .key, o tokens
-8. ✓ No hay paths de usuario local (C:/Users/...)
+8. ✓ No hay paths con nombre de usuario personal (normalizados a ~/Desktop)
 9. ✓ Tamaño total < 2 GB
 10. ✓ README.md en SOFTWARE/ describe brevemente la instalación
 

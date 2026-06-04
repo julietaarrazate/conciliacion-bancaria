@@ -118,10 +118,11 @@ grep -r "C:/Users\|/home/\|/Users/" backend --include="*.py"
 
 | Ruta | Archivo | Contenido | Acción |
 |---|---|---|---|
-| `C:/Users/Tomas/Desktop/...` | crear_datos_prueba.py | Ruta local de desarrollador anterior | **EXCLUIR** del paquete |
+| `~/Desktop/...` | crear_datos_prueba.py, smoke_test*.py, config.json | Rutas locales de la propia autora (ya normalizadas a `~/Desktop`, sin nombre de usuario) | **EXCLUIR** del paquete (scripts de testing local) |
 
 **Acción recomendada:**
-- Archivo `crear_datos_prueba.py` NO debe incluirse en el expediente DNDA
+- Los scripts de testing local (`crear_datos_prueba.py`, `smoke_test*.py`) NO se incluyen en el expediente DNDA
+- Las rutas fueron normalizadas a `~/Desktop` (portables, sin nombre de usuario personal)
 - Ya documentado en DNDA_EXCLUSIONES.md
 
 ---
@@ -282,7 +283,7 @@ El código fuente presentado es **SOLO el código**, no incluye:
 - [ ] ✓ Archivos .env reales NO versionados
 - [ ] ✓ Cumple Ley 25.326 Argentina
 - [ ] ✓ REGISTRO_OBRA_SOFTWARE/ es seguro para presentar
-- [ ] ✓ Excluir create_datos_prueba.py (ruta C:/Users/Tomas)
+- [ ] ✓ Excluir crear_datos_prueba.py (script de testing local)
 - [ ] ✓ Excluir CLAUDE.md de raíz si contiene IDs sensibles
 
 ---
