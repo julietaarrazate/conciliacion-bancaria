@@ -117,7 +117,7 @@ Extracción automática de datos desde fotografías de cheques (número, banco, 
 | N° | Módulo | Descripción |
 |---|---|---|
 | 1 | Autenticación y Seguridad | JWT, 2FA por email, PIN de bloqueo, biometría WebAuthn |
-| 2 | Gestión de Usuarios y Roles | 5 roles con permisos granulares en 3 capas |
+| 2 | Gestión de Usuarios y Roles | 6 roles con permisos granulares en 3 capas |
 | 3 | Multi-tenancy (Organizaciones) | Soporte multi-empresa con aislamiento completo |
 | 4 | Extractos Bancarios | Importación, parser multi-banco, deduplicación |
 | 5 | Planillas de Pagos | Carga, conciliación, edición, exportación |

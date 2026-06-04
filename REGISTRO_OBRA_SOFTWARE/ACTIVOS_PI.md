@@ -160,7 +160,7 @@ Proceso que permite borrar y reconstruir completamente el libro diario desde los
 
 ### 4.3 Normalización de nombres de clientes
 
-Sistema de normalización que garantiza que "green" y "Green" y "GREEN" se identifiquen como el mismo cliente. La normalización incluye:
+Sistema de normalización que garantiza que "empresa abc" y "Empresa Abc" y "EMPRESA ABC" se identifiquen como el mismo cliente. La normalización incluye:
 - Conversión NFKD Unicode (manejo de caracteres con tilde)
 - Primera letra en mayúscula
 - Búsqueda insensible a mayúsculas (ilike)
