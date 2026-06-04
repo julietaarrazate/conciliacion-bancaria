@@ -132,7 +132,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ---
 
-## Features implementadas (estado actual — v3.6)
+## Features implementadas (estado actual — v3.12)
 
 - Conciliación bancaria multi-extracto con motor de scoring
 - Carga masiva con auto-conciliar al subir planillas
@@ -652,6 +652,29 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   devuelve 0 movimientos (formato no reconocido) o si la suma absoluta de montos es cero (columna
   de monto mal detectada). Protege contra cambios de formato bancario silenciosos.
 
+### v3.12 — Editar pago + SVG icons + fix suppress lock (junio 2026 — PRs #106-#108)
+
+- **Editar pago** (`✏️` en historial): modal inline con campos monto, fecha, beneficiario/proveedor,
+  referencia, concepto. `PATCH /pagos/{id}` edita campos básicos, reversa el asiento contable y
+  genera uno nuevo con los valores corregidos. Permite corregir montos con ceros de más sin borrar.
+- **Fix DELETE /pagos/{id}**: el decorador `@router.delete("/{egreso_id}")` faltaba en `pagos.py`,
+  dejando el endpoint sin registrar (devolvía 404). Corregido.
+- **Fix registrar_egreso en edición**: la llamada a `registrar_egreso()` usaba `egreso=e` (parámetro
+  inexistente); corregido para pasar todos los campos individualmente.
+- **Fix selector de clientes en Pagos**: `r.data.clientes` solo incluye clientes con planillas.
+  Cambiado a `r.data.organizaciones[].clientes` que incluye TODOS los clientes de la org (incluso
+  los recién creados sin planillas).
+- **OCR monto (BUG-03 resuelto)**: `type="number"` rechazaba silenciosamente el formato argentino
+  `"15.000,50"`. Fix: OCR guarda en formato estándar `"15000.5"` y `montoNum = parseFloat(form.monto)`.
+- **Compartir PDF por WhatsApp (BUG-02 resuelto)**: `await apiClient.client.post('/compartir')`
+  consumía la ventana de transient activation (~5s). Fix: fire-and-forget (sin await).
+- **SVG icons en Pagos y Cheques**: emojis 📷/🏦/💵/📤/✅ reemplazados con Heroicons SVG en botones,
+  badges y pantalla de éxito. Pantalla de éxito → círculo verde con checkmark SVG.
+- **Fix suppress lock cámara**: `suppressLockForCamera()` (8s) separado de `suppressLockForShare()`
+  (20s). Antes el botón de cámara suprimía el lock por 20s → el PIN no se pedía al minimizar la app
+  dentro de los 20s de tomar una foto. Aplicado en Pagos.tsx y Cheques.tsx.
+- **BUGS.md**: registro permanente de bugs recurrentes con causa raíz y solución. Ver `/BUGS.md`.
+
 
 ### Pendiente para próximas sesiones
 
@@ -778,7 +801,12 @@ Checkpoints disponibles:
 - `v3.11.4` — botones de borrar ocultos por permiso delete_records (Usuarios, Liquidaciones),
   Sentry opt-in (SENTRY_DSN en Render / VITE_SENTRY_DSN en Vercel, sin overhead si no configurado),
   validación post-parse extracto (400 si 0 movimientos o montos todos cero) (junio 2026 — PR #104).
+- `v3.12` — editar pago (PATCH /pagos/{id}, modal inline, reverso contable), fix DELETE /pagos
+  (decorador faltante), fix selector clientes en Pagos (todos los clientes, no solo con planillas),
+  OCR monto (BUG-03: type=number + formato argentino), compartir PDF (BUG-02: fire-and-forget),
+  SVG icons en Pagos/Cheques (reemplaza emojis), fix suppress lock cámara 8s vs share 20s,
+  BUGS.md (registro de bugs recurrentes) (junio 2026 — PRs #106-#108).
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.11.4
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.12
