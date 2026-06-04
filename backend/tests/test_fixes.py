@@ -29,16 +29,16 @@ from app.services.extracto_merger import _match_existente, _normalizar_titular
 from datetime import date
 
 EXISTENTES = [
-    (128220.58, 99657675.21, "2026-05-18", "ing transf victor sebastian titio"),
-    (50000.0,   99607675.21, "2026-05-17", "tef green sa"),
+    (128220.58, 99657675.21, "2026-05-18", "ing transf juan ejemplo perez"),
+    (50000.0,   99607675.21, "2026-05-17", "tef empresa abc sa"),
 ]
 
 def test_match_por_saldo_y_monto():
-    mov = {"monto": 128220.58, "saldo": 99657675.21, "fecha": date(2026, 5, 18), "titular": "ING TRANSF:VICTOR SEBASTIAN TITIO-20416122955"}
+    mov = {"monto": 128220.58, "saldo": 99657675.21, "fecha": date(2026, 5, 18), "titular": "ING TRANSF:JUAN EJEMPLO PEREZ-20111111112"}
     assert _match_existente(mov, EXISTENTES) is True
 
 def test_no_match_distinto_saldo():
-    mov = {"monto": 128220.58, "saldo": 99841971.69, "fecha": date(2026, 5, 18), "titular": "TEF DATANET PR LOBE SAS"}
+    mov = {"monto": 128220.58, "saldo": 99841971.69, "fecha": date(2026, 5, 18), "titular": "TEF EMPRESA DEMO SAS"}
     assert _match_existente(mov, EXISTENTES) is False
 
 def test_no_match_distinto_monto():
@@ -47,9 +47,9 @@ def test_no_match_distinto_monto():
 
 def test_normalizar_titular_saca_cuit():
     # CUIT (11 dígitos) debe eliminarse del titular normalizado
-    t = _normalizar_titular("ING TRANSF:VICTOR SEBASTIAN TITIO-20416122955")
-    assert "20416122955" not in t
-    assert "victor" in t
+    t = _normalizar_titular("ING TRANSF:JUAN EJEMPLO PEREZ-20111111112")
+    assert "20111111112" not in t
+    assert "juan" in t
 
 
 # ── 3. Conciliación: estados duplicado vs acreditado ─────────

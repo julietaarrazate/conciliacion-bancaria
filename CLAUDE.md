@@ -685,6 +685,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - ~~**Validación extracto post-parse**~~ — resuelto en v3.11.4.
 - **UI comisión L/I por cliente** — chip expandible en `/clientes` para editar `porcentaje_comision_local`
   e `porcentaje_comision_interior` directamente desde la lista (hoy solo edita el % general).
+- ~~**Expediente DNDA**~~ — resuelto en PR #112 (junio 2026). Ver sección abajo.
 
 ---
 
@@ -806,6 +807,38 @@ Checkpoints disponibles:
   OCR monto (BUG-03: type=number + formato argentino), compartir PDF (BUG-02: fire-and-forget),
   SVG icons en Pagos/Cheques (reemplaza emojis), fix suppress lock cámara 8s vs share 20s,
   BUGS.md (registro de bugs recurrentes) (junio 2026 — PRs #106-#108).
+
+---
+
+---
+
+## Registro de Obra de Software (DNDA)
+
+**Estado:** expediente preparado, trámite pendiente de inicio por la autora.
+
+**Carpeta:** `REGISTRO_OBRA_SOFTWARE/` — documentación completa del expediente.
+
+**Contenido preparado:**
+- 9 PDFs legibles para el portal DNDA (en `/home/user/PDFS_DNDA/` en la máquina de trabajo)
+- `CODIGO_FUENTE.zip` (596 KB, 241 archivos) — para el link de 72hs que envía DNDA
+- Docs internos: DNDA_CHECKLIST_FINAL.md, DNDA_CAPTURAS.md, DNDA_PRIVACIDAD.md, DNDA_EXCLUSIONES.md
+
+**Pasos que quedan para la autora:**
+1. Crear `CAPTURAS.pdf` con las 27 capturas del sistema y agregarlo al portal
+2. Iniciar el trámite en tramites.argentina.gob.ar → Inscripción de Obra Publicada — Software
+3. Pagar $3.800 (trámite) + 0.2% del valor declarado → guardar comprobantes y subirlos al portal
+4. Esperar mail de `dndadigital@jus.gov.ar` con link de 72hs para subir el código
+5. Cifrar el ZIP con contraseña AES-256 (7-Zip en Windows) y subirlo por el link
+
+**Privacidad del expediente:** sin datos de terceros, sin IDs de infraestructura, sin nombres
+de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing excluidos del ZIP.
+
+---
+
+## Checkpoints
+
+- `v3.12-dnda-docs` — expediente DNDA completo en `REGISTRO_OBRA_SOFTWARE/`, rutas locales
+  normalizadas (sin usuario de PC), privacidad auditada (junio 2026 — PR #112 mergeado a main)
 
 ---
 

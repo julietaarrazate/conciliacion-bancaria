@@ -24,12 +24,12 @@ Login con:
 
 1. **Cargar Extracto Bancario**:
    - Click "Conciliar" en sidebar
-   - Subí: `C:\Users\Tomas\Desktop\Extracto Macro\extracto macro abril.xlsx`
+   - Subí: `~/Desktop/Extracto Macro/extracto macro abril.xlsx`
 
 2. **Cliente**: escribir el nombre (ej: `Green`, `Alojando`)
 
 3. **Cargar Planilla**:
-   - Subí cualquier archivo de `C:\Users\Tomas\Desktop\INBOX\<cliente>\` o `INBOX\procesados\`
+   - Subí cualquier archivo de `~/Desktop/INBOX/<cliente>/` o `INBOX/procesados/`
    - El sistema reconcilia automáticamente
    - Ves stats: acreditadas / no encontradas / duplicadas / sin datos
 
@@ -153,8 +153,8 @@ Borra la BD y crea de cero los usuarios admin/operador.
 
 | Archivo | Ubicación |
 |---|---|
-| Extracto Abril | `C:\Users\Tomas\Desktop\Extracto Macro\extracto macro abril.xlsx` |
-| Planilla Alojando | `C:\Users\Tomas\Desktop\INBOX\procesados\alojando.xlsx` |
-| Planilla Green | `C:\Users\Tomas\Desktop\INBOX\procesados\Green 28.4.xlsx` |
+| Extracto Abril | `~/Desktop/Extracto Macro/extracto macro abril.xlsx` |
+| Planilla Alojando | `~/Desktop/INBOX/procesados/alojando.xlsx` |
+| Planilla Green | `~/Desktop/INBOX/procesados/Green 28.4.xlsx` |
 
 Probalas con esos. Si tenés más planillas en otras carpetas, también las podés usar.

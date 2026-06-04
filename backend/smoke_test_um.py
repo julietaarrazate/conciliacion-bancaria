@@ -10,7 +10,8 @@ import requests
 from pathlib import Path
 
 BASE_URL = os.getenv("API_URL", "http://localhost:8000")
-EXTRACTO = Path(r"C:\Users\Tomas\Desktop\Extracto Macro\extracto macro abril.xlsx")
+_DESKTOP = os.path.join(os.path.expanduser("~"), "Desktop")
+EXTRACTO = Path(os.getenv("SMOKE_EXTRACTO", os.path.join(_DESKTOP, "Extracto Macro", "extracto macro abril.xlsx")))
 
 
 def fail(m):
@@ -71,7 +72,7 @@ def main():
     ok(f"UM detecto correctamente {s['duplicados']} duplicados (no agrego nada)")
 
     # subir planilla y conciliar para tener cliente_acreditado
-    planilla_path = Path(r"C:\Users\Tomas\Desktop\INBOX\procesados\Green 28.4.xlsx")
+    planilla_path = Path(os.getenv("SMOKE_PLANILLA_2", os.path.join(_DESKTOP, "INBOX", "procesados", "Green 28.4.xlsx")))
     if planilla_path.exists():
         with open(planilla_path, "rb") as f:
             r = requests.post(

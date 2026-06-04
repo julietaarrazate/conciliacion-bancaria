@@ -136,15 +136,9 @@ La autora declara que:
 
 ## 9. INFORMACIÓN ADICIONAL — COMPLETADO POR LA AUTORA
 
-**Fecha de inicio del desarrollo:** 28 de abril de 2026. El primer commit del repositorio (c5ff8d1) corresponde al "Initial commit: Sistema de Conciliacion Bancaria moderno" en esa fecha. El historial de commits demuestra trabajo continuo desde entonces: 29/04, 30/04, 01/05, 02/05, etc., hasta junio de 2026 con la versión v3.12 registrada.
+**Fecha de inicio del desarrollo:** A partir de abril de 2026. Los primeros commits del repositorio datan del 2 de junio de 2026, pero el desarrollo conceptual y arquitectónico se inició en abril de 2026.
 
-**Evidencia de desarrollo previo:** Existe un cuaderno manuscrito fechado en **abril de 2026** (anterior al initial commit del 28 de abril) que contiene el brainstorming y diseño conceptual inicial del proyecto. El cuaderno documenta:
-  - Arquitectura de 3 capas (backend, frontend, móvil)
-  - Módulos principales: conciliación bancaria, caja, egresos
-  - Casos de uso del sistema
-  - Especificaciones funcionales preliminares
-
-Este material comprueba que el diseño arquitectónico y la especificación de funcionalidades preceden al código implementado.
+**Evidencia de desarrollo previo:** Existe un cuaderno escrito que contiene el brainstorming inicial del proyecto, diseños preliminares y especificaciones funcionales previas al repositorio git. Este material documenta la fase conceptual del sistema.
 
 **Contexto laboral y contractual:** La autora desarrolló la obra de forma **completamente independiente**, utilizando equipos propios, sin relación de dependencia laboral con terceros, y sin contrato de cesión de derechos. La obra fue desarrollada por iniciativa y financiamiento personal de la autora.
 
