@@ -4,36 +4,60 @@
 **Autora:** Julieta Arrazate  
 **Fecha:** Junio 2026  
 **Obra:** Sistema Integral de Gestión Financiera, Contable y Empresarial  
-**Versión:** v3.12
+**Versión:** v3.12  
+**Tipo de trámite DNDA:** Inscripción de obra publicada — Software
 
 ---
 
-## 0. DOS CANALES DE PRESENTACIÓN (IMPORTANTE)
+## 0. PROCESO OFICIAL — OPCIÓN DIGITAL (DOS PASOS)
 
-El trámite de registro de software ante la DNDA suele tener **dos vías
-distintas**, y conviene no mezclarlas:
+La opción **digital** seleccionada en el portal tiene **dos pasos distintos**:
 
-| Canal | Para qué sirve | Formato | Documento de referencia |
+### PASO 1 — Portal online (completar HOY)
+
+Subir en el portal:
+1. **Datos del trámite** (formulario online completo)
+2. **Comprobante de pago del trámite** — $3.800 (obligatorio)
+3. **Comprobante de pago de Tasa** — 0,2% del valor del ejemplar, mínimo $4,11 (obligatorio)
+4. **Documentación técnica** — PDFs de memoria, inventario, capturas, etc.
+
+Al finalizar el Paso 1, la DNDA genera automáticamente un **número de
+Expediente Electrónico (carátula)**.
+
+### PASO 2 — Carga digital del código (luego de recibir comunicación de DNDA)
+
+Una vez iniciado el expediente, la DNDA envía una **comunicación por email**
+detallando el procedimiento para la **carga digital de la obra** (el código
+fuente).
+
+> **La DNDA aceptó que el código fuente se suba de modo cifrado o encriptado**
+> (Disposición 2-E/2016). El titular es responsable de proveer las herramientas
+> de descifrado si una autoridad legitimada lo requiere.
+
+El **ZIP de `DNDA_ESTRUCTURA_ZIP.md`** está preparado para este Paso 2. Puede
+enviarse tal cual o cifrado con contraseña (`zip -e`).
+
+---
+
+| Paso | Cuándo | Qué se entrega | Formato |
 |---|---|---|---|
-| **A. Portal online** | Formulario + documentación + carátula + (opcional) código en PDF | Archivos sueltos ≤ 20 MB, extensiones permitidas (pdf, doc, xlsx, png, jpg, html…) | **Este documento** |
-| **B. Depósito del código fuente** | Entrega del código fuente completo de la obra | Suele admitir **ZIP** (en soporte físico CD/DVD/USB, o canal de depósito separado) | `DNDA_ESTRUCTURA_ZIP.md` |
-
-> La restricción de 20 MB y "sin ZIP" aplica al **Canal A (portal online)**. El
-> **ZIP del Canal B** sigue siendo válido para el depósito del código fuente por
-> el medio que indique la DNDA (a menudo soporte físico o un formulario de
-> depósito aparte). **Confirmar con la DNDA cuál es el medio del Canal B.**
-
-Por eso se conservan ambos documentos:
-- `DNDA_ESTRUCTURA_ZIP.md` → arma el ZIP del código (Canal B).
-- `DNDA_FORMATO_PRESENTACION.md` (este) → arma los archivos del portal (Canal A).
-
-Si finalmente la DNDA pidiera **todo por el portal** (Canal A únicamente),
-entonces el código fuente se sube como PDF según la sección 2/3 de este
-documento, y el ZIP queda como respaldo interno.
+| **1 — Portal** | Inmediatamente | Formulario + pagos + documentación | Archivos sueltos ≤ 20 MB, extensiones permitidas |
+| **2 — Código** | Tras comunicación DNDA | Código fuente completo | Según instrucciones DNDA (ZIP / plataforma / etc.) |
 
 ---
 
-## 1. RESTRICCIONES DEL PORTAL ONLINE — CANAL A (CONFIRMADAS)
+## 0.1 PAGOS OBLIGATORIOS (previos al inicio)
+
+| Pago | Monto | Cuándo |
+|---|---|---|
+| Arancel del trámite | **$3.800** | Antes de iniciar el expediente |
+| Tasa sobre el ejemplar | **0,2% del valor de la obra** (mínimo $4,11) | Antes de iniciar el expediente |
+
+> Guardar ambos comprobantes en PDF/JPG listos para subir al portal.
+
+---
+
+## 1. RESTRICCIONES DEL PORTAL ONLINE — PASO 1 (CONFIRMADAS)
 
 El sistema de carga online de la DNDA acepta:
 
@@ -59,9 +83,18 @@ El sistema de carga online de la DNDA acepta:
 
 ---
 
-## 2. LISTA FINAL DE ARCHIVOS A SUBIR
+## 2. LISTA FINAL DE ARCHIVOS A SUBIR — PASO 1 (portal)
 
 Todos los archivos cumplen extensión permitida y < 20 MB.
+
+### Grupo 0 — Comprobantes de pago (OBLIGATORIOS)
+
+| # | Archivo a subir | Descripción |
+|---|---|---|
+| 0a | `COMPROBANTE_PAGO_TRAMITE.pdf` o `.jpg` | Comprobante de pago del trámite ($3.800) |
+| 0b | `COMPROBANTE_PAGO_TASA.pdf` o `.jpg` | Comprobante de pago de la tasa (0,2% valor ejemplar, mín. $4,11) |
+
+> Sin estos dos comprobantes la DNDA no acepta el expediente.
 
 ### Grupo 1 — Documentación jurídica y técnica (PDF)
 
@@ -79,12 +112,27 @@ Todos los archivos cumplen extensión permitida y < 20 MB.
 > Estos 8 PDFs ya fueron generados (en español, con acentos correctos) y se
 > conservan en el repositorio separado de documentación.
 
-### Grupo 2 — Código fuente como PDF (lo que reemplaza al ZIP)
+### Grupo 2 — Código fuente (⚠️ va en el PASO 2, no en el portal inicial)
 
-| # | Archivo a subir | Contenido | Tamaño aprox. |
+> El código fuente **NO se sube junto con la documentación del Paso 1**. La DNDA
+> envía una comunicación separada indicando cómo cargarlo digitalmente. Ver
+> `DNDA_ESTRUCTURA_ZIP.md` para la estructura del paquete de código.
+
+**Para el Paso 2 (cuando DNDA lo solicite):**
+
+| Archivo | Contenido | Tamaño aprox. |
+|---|---|---|
+| `EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip` | Código completo (backend + frontend + mobile) | ~27-32 MB |
+
+> La DNDA acepta el código cifrado/encriptado (Disposición 2-E/2016). Opción:
+> `zip -e EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip [archivos]` (con contraseña).
+
+**Si la DNDA pide código en PDF** (alternativa al ZIP):
+
+| # | Archivo | Contenido | Tamaño aprox. |
 |---|---|---|---|
-| 9 | `CODIGO_FUENTE_BACKEND.pdf` | Todo `/backend/app` (modelos, routers, servicios) + migraciones | 5-12 MB |
-| 10 | `CODIGO_FUENTE_FRONTEND.pdf` | Todo `/frontend/src` (páginas, componentes, stores) | 5-12 MB |
+| 9 | `CODIGO_FUENTE_BACKEND.pdf` | Todo `/backend/app` + migraciones | 5-12 MB |
+| 10 | `CODIGO_FUENTE_FRONTEND.pdf` | Todo `/frontend/src` | 5-12 MB |
 | 11 | `CODIGO_FUENTE_MOBILE.pdf` | Todo `/mobile/src` | 1-3 MB |
 
 > Si alguno supera 20 MB, partirlo (ej. `CODIGO_FUENTE_BACKEND_1.pdf` y `_2.pdf`).
@@ -100,15 +148,19 @@ Todos los archivos cumplen extensión permitida y < 20 MB.
 > permitida). Se recomienda consolidarlas en **un solo PDF** para reducir la
 > cantidad de archivos y mantener el orden y los epígrafes.
 
-### Grupo 4 — Formulario y carátula (PDF/DOC)
+### Grupo 4 — Comprobantes de pago + DNI (OBLIGATORIOS)
 
 | # | Archivo a subir | Contenido |
 |---|---|---|
-| 13 | `FORMULARIO_DNDA.pdf` | Formulario oficial completado y firmado |
-| 14 | `EXPEDIENTE_FINAL.pdf` (carátula) | Portada e índice del expediente (EXPEDIENTE_FINAL.md → PDF) |
+| 13 | `COMPROBANTE_PAGO_TRAMITE.pdf`/`.jpg` | Pago del trámite ($3.800) |
+| 14 | `COMPROBANTE_PAGO_TASA.pdf`/`.jpg` | Pago de tasa (0,2%, mín. $4,11) |
 | 15 | `DNI_ARRAZATE.pdf` o `.jpg` | Copia/foto del DNI |
 
-**Total de archivos a subir:** ~15 (todos < 20 MB, extensiones permitidas).
+> Los datos del formulario se completan directamente en el portal (no es un
+> archivo adjunto); la carátula/índice del expediente la genera el portal al
+> asignar el número de expediente electrónico.
+
+**Total de archivos a subir en Paso 1:** ~15 (todos < 20 MB, extensiones permitidas).
 
 ---
 
@@ -189,56 +241,77 @@ total no es un problema mientras cada archivo cumpla el límite.
 
 ---
 
-## 6. ORDEN SUGERIDO DE CARGA EN EL PORTAL
+## 6. ORDEN SUGERIDO DE CARGA EN EL PORTAL — PASO 1
 
-1. `FORMULARIO_DNDA.pdf` (formulario oficial)
-2. `EXPEDIENTE_FINAL.pdf` (carátula/índice)
-3. `MEMORIA_DESCRIPTIVA.pdf`
-4. `EVIDENCIA_AUTORIA.pdf`
-5. `INVENTARIO_TECNICO.pdf`
-6. `DOCUMENTACION_TECNICA.pdf`
-7. `MANUAL_FUNCIONAL.pdf`
-8. `MODULOS_DEL_SISTEMA.pdf`
-9. `ACTIVOS_PI.pdf`
-10. `RESUMEN_EJECUTIVO.pdf`
-11. `CODIGO_FUENTE_BACKEND.pdf`
-12. `CODIGO_FUENTE_FRONTEND.pdf`
-13. `CODIGO_FUENTE_MOBILE.pdf`
-14. `CAPTURAS.pdf`
-15. `DNI_ARRAZATE.pdf`
+**Primero completar el formulario online, luego adjuntar:**
+
+1. `COMPROBANTE_PAGO_TRAMITE.pdf` (obligatorio)
+2. `COMPROBANTE_PAGO_TASA.pdf` (obligatorio)
+3. `DNI_ARRAZATE.pdf` o `.jpg`
+4. `MEMORIA_DESCRIPTIVA.pdf`
+5. `EVIDENCIA_AUTORIA.pdf`
+6. `INVENTARIO_TECNICO.pdf`
+7. `DOCUMENTACION_TECNICA.pdf`
+8. `MANUAL_FUNCIONAL.pdf`
+9. `MODULOS_DEL_SISTEMA.pdf`
+10. `ACTIVOS_PI.pdf`
+11. `RESUMEN_EJECUTIVO.pdf`
+12. `CAPTURAS.pdf`
+
+> El código (Paso 2) se carga **después** de recibir la comunicación de la DNDA.
+> Ver `DNDA_ESTRUCTURA_ZIP.md` para el paquete de código.
 
 ---
 
-## 7. RELACIÓN CON DNDA_ESTRUCTURA_ZIP.md
+## 7. RELACIÓN CON DNDA_ESTRUCTURA_ZIP.md — PASO 2
 
-`DNDA_ESTRUCTURA_ZIP.md` describe el **ZIP del Canal B** (depósito del código
-fuente completo). Ese ZIP **sigue siendo válido** para entregar el código por el
-medio que indique la DNDA (soporte físico CD/DVD/USB o canal de depósito
-aparte).
+`DNDA_ESTRUCTURA_ZIP.md` describe el **ZIP del código fuente completo**. Este
+ZIP **no se sube en el Paso 1** (portal de documentación). Se usa en el
+**Paso 2** cuando la DNDA comunica el procedimiento de carga digital.
 
-- **Canal A (portal online, ≤ 20 MB):** usar los archivos individuales de la
-  sección 2 de este documento. Aquí el código va como **PDF**, no como ZIP.
-- **Canal B (depósito de código):** usar el **ZIP** de `DNDA_ESTRUCTURA_ZIP.md`.
+Resumen del flujo completo:
 
-Ambos describen el mismo expediente; cambia el envoltorio según el canal.
-**Acción previa:** confirmar con la DNDA si el código se deposita por soporte
-físico (ZIP) o si debe ir todo por el portal (entonces, código en PDF).
+```
+HOY                             LUEGO (tras email DNDA)
+─────────────────────────────   ──────────────────────────────────
+Portal online                   Plataforma / canal indicado por DNDA
+  └── Formulario (datos obra)     └── ZIP con código fuente completo
+  └── Comprobante pago $3800           (puede ir cifrado si se prefiere)
+  └── Comprobante pago tasa
+  └── DNI
+  └── 8 PDFs documentación
+  └── CAPTURAS.pdf (27 pantallas)
+         ↓
+  Expediente electrónico generado
+         ↓
+  Email de DNDA con instrucciones
+```
+
+**Silencio positivo:** transcurridos 60 días hábiles desde que se acreditó el
+cumplimiento de todas las condiciones, sin respuesta de la DNDA, el registro
+se considera otorgado (Art. 10 inciso b, Ley 19.549).
 
 ---
 
 ## 8. CHECKLIST DE FORMATO
 
+### Paso 1 — Portal (hacer primero)
+- [ ] Pagar arancel del trámite ($3.800) y guardar comprobante
+- [ ] Pagar tasa (0,2% del valor declarado de la obra) y guardar comprobante
+- [ ] Comprobante de pago tramite en PDF/JPG listo
+- [ ] Comprobante de pago tasa en PDF/JPG listo
+- [ ] DNI en PDF/JPG listo
 - [ ] Los 8 PDFs de documentación están generados y en español
-- [ ] Generado `CODIGO_FUENTE_BACKEND.pdf` (< 20 MB, legible, con nombres de archivo)
-- [ ] Generado `CODIGO_FUENTE_FRONTEND.pdf` (< 20 MB)
-- [ ] Generado `CODIGO_FUENTE_MOBILE.pdf` (< 20 MB)
 - [ ] Consolidado `CAPTURAS.pdf` con las 27 capturas (< 20 MB) — o 27 PNG sueltos
-- [ ] `EXPEDIENTE_FINAL.pdf` (carátula) generado
-- [ ] `FORMULARIO_DNDA.pdf` completado y firmado
-- [ ] `DNI_ARRAZATE.pdf`/`.jpg` listo
 - [ ] Cada archivo verificado < 20 MB
 - [ ] Cada archivo con extensión permitida (pdf/png/jpg/html)
-- [ ] Ningún archivo `.zip`, `.py`, `.ts`, `.md`, `.txt` en la carga
+- [ ] Ningún archivo `.zip`, `.py`, `.ts`, `.md`, `.txt` en el Paso 1
+
+### Paso 2 — Código (esperar email de DNDA)
+- [ ] ZIP `EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip` preparado (ver `DNDA_ESTRUCTURA_ZIP.md`)
+- [ ] ZIP verificado sin archivos sensibles (`.env`, `node_modules`, `__pycache__`)
+- [ ] (Opcional) ZIP cifrado con contraseña si se prefiere privacidad del código
+- [ ] Clave de cifrado guardada de forma segura si se optó por cifrar
 
 ---
 

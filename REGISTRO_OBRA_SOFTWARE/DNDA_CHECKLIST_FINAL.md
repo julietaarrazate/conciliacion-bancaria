@@ -19,6 +19,22 @@ Antes de comenzar, verificar que tienes:
 - [ ] ✓ Acceso a crear diagramas (Excalidraw, Draw.io, Figma, PowerPoint)
 - [ ] ✓ Tiempo estimado: 3-4 horas
 
+### 0.1 Tipo de trámite — información oficial
+
+- **Trámite:** Inscripción de obra publicada — Software
+- **Opción elegida:** Digital (el código se sube DESPUÉS de email de DNDA)
+- **Pagos obligatorios previos al inicio:**
+  - Arancel del trámite: **$3.800**
+  - Tasa: **0,2% del valor declarado** de la obra (mínimo $4,11)
+- **Silencio positivo:** 60 días hábiles desde acreditación de condiciones
+
+### 0.2 Pagos previos (hacer antes del Paso 1)
+
+- [ ] Pagar arancel del trámite: $3.800 (site.dnda.gov.ar o PagoMisCuentas)
+- [ ] Guardar comprobante como PDF/JPG (`COMPROBANTE_PAGO_TRAMITE.pdf`)
+- [ ] Pagar tasa: 0,2% del valor declarado de la obra (mínimo $4,11)
+- [ ] Guardar comprobante como PDF/JPG (`COMPROBANTE_PAGO_TASA.pdf`)
+
 ---
 
 ## FASE 1: CAPTURAS DE PANTALLA — ✓ COMPLETADA
@@ -276,42 +292,61 @@ unzip -l EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip | grep -E "\.env|node_modules|__py
 
 ---
 
-## FASE 5: COMPLETAR FORMULARIO DNDA (0.5 horas)
+## FASE 5: INICIAR TRÁMITE ONLINE EN PORTAL DNDA (1 hora)
 
-### 5.1 Descargar formulario DNDA
+### 5.1 Ir al portal y completar formulario
 
-Visitar sitio oficial de la DNDA:
-- [ ] Ir a www.cultura.gob.ar/dnda/ (o dirección actual)
-- [ ] Descargar formulario de registro de obra de software
-- [ ] Guardar en `/home/user/formulario_dnda.pdf`
+- [ ] Ir a **tramites.argentina.gob.ar** → buscar "Inscripción de obra publicada - Software"
+- [ ] (Alternativa directa) **argentina.gob.ar/dnda** → trámites
+- [ ] Iniciar sesión con CUIL/CUIT en Mi Argentina (o crear cuenta si no tenés)
+- [ ] Seleccionar: "Inscripción de obra publicada — Software"
+- [ ] Seleccionar opción: **Digital** (ya elegida)
 
-**Alternativa:** Si no hay formulario digital, preparar documento Word con los campos:
+### 5.2 Completar los Datos del Trámite en el portal
 
-- [ ] Nombre de la obra: "Sistema Integral de Gestión Financiera, Contable y Empresarial"
-- [ ] Tipo de obra: "Programa de computación"
-- [ ] Autora: "Julieta Arrazate"
-- [ ] Email: "julietaarrazate@gmail.com"
-- [ ] DNI: 36316081
-- [ ] Nacionalidad: Argentina
-- [ ] Domicilio: [completar]
-- [ ] Teléfono: [completar]
-- [ ] Versión: v3.12
-- [ ] Fecha: Junio 2026
+- [ ] **Nombre de la obra:** "Sistema Integral de Gestión Financiera, Contable y Empresarial"
+- [ ] **Tipo de obra:** Programa de computación
+- [ ] **Autora:** Julieta Arrazate
+- [ ] **Email:** julietaarrazate@gmail.com
+- [ ] **DNI:** 36316081
+- [ ] **Nacionalidad:** Argentina
+- [ ] **Domicilio:** [completar con domicilio real]
+- [ ] **Teléfono:** [completar]
+- [ ] **Versión:** v3.12
+- [ ] **Año de publicación:** 2026
+- [ ] **Declarar** información de origen de la obra según Disposición 2-E/2016
 
-### 5.2 Completar campos del formulario
+### 5.3 Subir documentación obligatoria
 
-- [ ] Nombre completo de la obra
-- [ ] Tipo de obra: Programa de computación
-- [ ] Autora: Julieta Arrazate
-- [ ] Datos de contacto: Email, teléfono, domicilio
-- [ ] DNI: 36316081
-- [ ] Declaración: "Autorizo la presentación de esta obra para registro"
-- [ ] Firma: Julieta Arrazate
-- [ ] Fecha: Junio de 2026
+Subir en el portal (todos < 20 MB, extensiones permitidas):
 
-- [ ] Formulario completado y guardado
+- [ ] `COMPROBANTE_PAGO_TRAMITE.pdf` (obligatorio)
+- [ ] `COMPROBANTE_PAGO_TASA.pdf` (obligatorio)
+- [ ] `DNI_ARRAZATE.pdf` o `.jpg`
+- [ ] `MEMORIA_DESCRIPTIVA.pdf`
+- [ ] `EVIDENCIA_AUTORIA.pdf`
+- [ ] `INVENTARIO_TECNICO.pdf`
+- [ ] `DOCUMENTACION_TECNICA.pdf`
+- [ ] `MANUAL_FUNCIONAL.pdf`
+- [ ] `MODULOS_DEL_SISTEMA.pdf`
+- [ ] `ACTIVOS_PI.pdf`
+- [ ] `RESUMEN_EJECUTIVO.pdf`
+- [ ] `CAPTURAS.pdf` (las 27 capturas consolidadas)
 
-**Tiempo:** ~30 minutos
+### 5.4 Confirmar y guardar número de expediente
+
+- [ ] Confirmar presentación → el sistema genera **Expediente Electrónico**
+- [ ] Anotar número de expediente: ___________________________
+- [ ] Guardar carátula del expediente (PDF generado por DNDA)
+- [ ] Verificar que llegó email de confirmación
+
+### 5.5 Esperar comunicación de DNDA (código digital — Paso 2)
+
+- [ ] Aguardar email de DNDA con instrucciones para **carga digital del código**
+- [ ] Al recibirlo, subir el ZIP preparado en Fase 4 según las instrucciones
+- [ ] (Opcional) Si se prefiere privacidad: subir ZIP cifrado con contraseña
+
+**Tiempo:** ~60 minutos (formulario + subida de archivos)
 
 ---
 
@@ -394,41 +429,35 @@ Visitar sitio oficial de la DNDA:
 
 ---
 
-## FASE 7: PRESENTACIÓN ANTE DNDA
+## FASE 7: CARGA DIGITAL DEL CÓDIGO (Paso 2 — tras email DNDA)
 
-### 7.1 Preparar presentación
+### 7.1 Esperar comunicación oficial de la DNDA
 
-**Paquete a entregar:**
-- ZIP: `EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip` (~27-32 MB)
-- Formulario DNDA firmado (copia impresa + digital)
-- Copia del DNI (fotocopia legible)
-- Carta de presentación (opcional, 1-2 páginas)
+La DNDA envía por email las instrucciones de carga digital del código fuente
+después de recibir el expediente del Paso 1. Puede demorar algunos días hábiles.
 
-### 7.2 Opciones de entrega
+- [ ] Verificar bandeja de entrada (y carpeta Spam/No deseado)
+- [ ] Email confirmado: ___________________________
 
-**Opción A: Presentación presencial**
-- [ ] Contactar con la DNDA para agendar cita
-- [ ] Presentar personalmente con documentos impresos y copia digital en USB/CD
-- [ ] Obtener recibo de presentación
+### 7.2 Subir el código según instrucciones recibidas
 
-**Opción B: Presentación por correo electrónico**
-- [ ] Verificar dirección de email de DNDA (registro@dnda.gov.ar u otra)
-- [ ] Enviar ZIP, formulario PDF y DNI en correo
-- [ ] Solicitar confirmación de recepción
-- [ ] Guardar confirmación como comprobante
+- [ ] Seguir exactamente las instrucciones del email de DNDA
+- [ ] Subir ZIP: `EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip` (~27-32 MB) por el canal indicado
+- [ ] (Opcional) Si se prefiere privacidad del código: cifrar el ZIP con contraseña
+  ```bash
+  zip -e EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip [archivos]
+  # (ingresar contraseña cuando pida; guardarla en lugar seguro)
+  ```
+- [ ] Guardar confirmación de recepción del Paso 2
 
-**Opción C: Portal DNDA (si existe)**
-- [ ] Verificar si hay portal de presentaciones en línea
-- [ ] Crear cuenta con datos de autora
-- [ ] Subir ZIP y documentos
-- [ ] Obtener número de expediente
+### 7.3 Seguimiento del expediente
 
-### 7.3 Seguimiento
-
-- [ ] Guardar número de expediente DNDA
-- [ ] Anotar fecha de presentación
-- [ ] Guardar confirmación de recepción
-- [ ] Verificar plazo de respuesta (típicamente 30-60 días)
+- [ ] Número de expediente DNDA: ___________________________
+- [ ] Fecha de inicio (Paso 1): ___________________________
+- [ ] Fecha carga código (Paso 2): ___________________________
+- [ ] **Silencio positivo:** 60 días hábiles a partir de acreditación de condiciones
+  → Si no hay respuesta en ese plazo, el registro se considera otorgado (Ley 19.549 Art. 10 inc. b)
+- [ ] Guardar todos los comprobantes en carpeta segura
 
 ---
 
@@ -436,14 +465,15 @@ Visitar sitio oficial de la DNDA:
 
 | Fase | Duración | Día |
 |---|---|---|
-| Fase 1: Capturas | 1.5 horas | Día 1 (mañana) |
+| Pagos previos (0.1 y 0.2) | 0.5 horas | Día 1 (antes de empezar) |
+| Fase 1: Capturas | ✓ Completada | — |
 | Fase 2: Diagramas | 0.5 horas | Día 1 (tarde) |
 | Fase 3: PDFs | 0.5 horas | Día 1 (tarde) |
 | Fase 4: ZIP | 0.5 horas | Día 2 (mañana) |
-| Fase 5: Formulario | 0.5 horas | Día 2 (mañana) |
-| Fase 6: Checklist | 0.5 horas | Día 2 (tarde) |
-| Fase 7: Presentación | Variable | Día 3-5 |
-| **TOTAL** | **~4 horas** | **1-5 días según opción** |
+| Fase 5: Iniciar trámite online | 1 hora | Día 2 (tarde) |
+| Fase 6: Checklist pre-carga | 0.5 horas | Día 2 (tarde) |
+| Fase 7: Carga código (Paso 2) | Variable | Cuando llegue email DNDA |
+| **TOTAL activo** | **~3,5 horas** | **2 días + espera DNDA** |
 
 ---
 
@@ -451,26 +481,28 @@ Visitar sitio oficial de la DNDA:
 
 **Dirección Nacional del Derecho de Autor (Argentina)**
 
-- **Sitio:** www.cultura.gob.ar/dnda/ (o actualizado)
-- **Email:** Verificar en sitio oficial
-- **Teléfono:** Verificar en sitio oficial
-- **Domicilio:** Av. Córdoba 1515, CABA (verificar)
+- **Portal de trámites:** tramites.argentina.gob.ar (buscar "Inscripción obra Software")
+- **Sitio institucional:** argentina.gob.ar/dnda
+- **Domicilio (solo opción física):** **Moreno 1230**, Ciudad Autónoma de Buenos Aires
+  Horario: 9:30 a 14:30 hs (opción física NO elegida — optó por digital)
 
-**Documentación requerida (verificar en sitio):**
-1. Formulario de registro completo y firmado
-2. Copia del DNI del autor
-3. Expediente técnico (código fuente + documentación)
-4. Certificado de originalidad (si aplica)
-5. Constancia de pago de aranceles (si aplica)
+**Documentación obligatoria (opción digital):**
+1. Datos del trámite completados en el portal
+2. **Comprobante de pago del trámite** ($3.800) — obligatorio
+3. **Comprobante de pago de tasa** (0,2% del valor del ejemplar, mín. $4,11) — obligatorio
+4. Documentación técnica (PDFs: memoria, inventario, manual, capturas, etc.)
+5. DNI del autor
+6. Código fuente (Paso 2, canal digital indicado por DNDA después del expediente)
 
 ---
 
 ## NOTAS FINALES
 
-- **Tiempo total:** ~4 horas (fases 1-6) + tiempo de presentación
-- **Costo:** Verificar arancel actual en DNDA (típicamente $500-1500 ARS)
-- **Plazo de respuesta:** 30-60 días hábiles desde presentación
-- **Próximos pasos:** Una vez aprobado, registrar el número de expediente en la carpeta del proyecto
+- **Tiempo total activo:** ~3,5 horas (preparación + portal) + espera email DNDA (días)
+- **Costo confirmado:** $3.800 (trámite) + 0,2% del valor de la obra (tasa)
+- **Plazo de respuesta:** 60 días hábiles (silencio positivo — si no responden en ese plazo, el registro es otorgado)
+- **Código cifrado:** Opción válida (Disposición 2-E/2016). El titular debe poder proveer la clave si una autoridad lo requiere.
+- **Próximos pasos:** Guardar número de expediente y esperar email de DNDA para subir el código (Paso 2)
 
 ---
 

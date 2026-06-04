@@ -10,6 +10,19 @@
 
 ## 1. REQUISITOS DNDA VERIFICADOS
 
+### 1.0 Tipo de trámite y pagos obligatorios
+
+| Requisito | Cumple | Detalle |
+|---|---|---|
+| Tipo de trámite | ✓ | Inscripción de obra publicada — Software |
+| Opción elegida | ✓ | Digital (código se carga tras comunicación DNDA) |
+| Pago del trámite | Pendiente | $3.800 a pagar previo al inicio |
+| Pago de tasa | Pendiente | 0,2% del valor de la obra (mínimo $4,11) |
+| Comprobante pago tramite | Pendiente | Para adjuntar al Paso 1 (obligatorio) |
+| Comprobante pago tasa | Pendiente | Para adjuntar al Paso 1 (obligatorio) |
+
+> **Atención:** Sin ambos comprobantes de pago, el portal no acepta el expediente.
+
 ### 1.1 Requisitos de identificación
 
 | Requisito | Cumple | Verificación |
@@ -314,7 +327,7 @@ unzip -l EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip | grep "\.pdf"
 
 # 5. Verificar capturas existen
 unzip -l EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip | grep "CAPTURAS.*\.png"
-# Esperado: 24 archivos .png
+# Esperado: 27 archivos .png
 
 # 6. Verificar sin archivos sensibles
 unzip -l EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip | grep "\.env\|\.pem\|\.key\|node_modules\|__pycache__\|\.git"
@@ -337,10 +350,11 @@ unzip -l EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip | grep "INDICE_CONTENIDO.txt"
 | Documentación .pdf | 95% | 8 PDFs listos, 1 opcional (CODIGO_FUENTE_EXTRACTO) |
 | Capturas | 100% | 27 screenshots capturados (18/18 módulos cubiertos) |
 | Diagramas | 50% | Estructura definida, pendiente crear 3-4 diagramas |
-| Formulario DNDA | 0% | Pendiente usuario completar y presentar |
+| Pagos obligatorios | 0% | Pendiente: pagar $3.800 (trámite) + 0,2% (tasa) |
+| Formulario DNDA | 0% | Pendiente: completar en portal tramites.argentina.gob.ar |
 | ZIP final | 95% | Estructura definida, pendiente crear ZIP |
 
-**Completitud global:** 97% (falta: diagramas opcionales, ZIP final, formulario DNDA)
+**Completitud global:** 95% (falta: pagos, formulario portal, diagramas opcionales, ZIP final)
 
 ---
 
@@ -357,13 +371,15 @@ unzip -l EXPEDIENTE_DNDA_ARRAZATE_2026_06.zip | grep "INDICE_CONTENIDO.txt"
 - ✓ Tamaño dentro de límites (< 2 GB)
 - ✓ Estructura clara y organizada
 
-**Próximos pasos:**
+**Próximos pasos (proceso digital en 2 pasos):**
 1. ✓ Capturar screenshots — COMPLETADO (27 capturas)
-2. Crear 3-4 diagramas de arquitectura (responsabilidad usuario)
-3. Generar PDFs de CODIGO_FUENTE_EXTRACTO (opcional)
-4. Crear ZIP final (comando automatizable)
-5. Completar formulario oficial DNDA (responsabilidad usuario)
-6. Presentar ante organismo de copyright
+2. Pagar $3.800 (trámite) + 0,2% tasa — guardar comprobantes
+3. Crear 3-4 diagramas de arquitectura (opcional, recomendado)
+4. Generar CAPTURAS.pdf consolidado (27 imágenes → 1 PDF < 20 MB)
+5. **PASO 1** — Ir a tramites.argentina.gob.ar → completar formulario + subir PDFs + comprobantes de pago + DNI → obtener Expediente Electrónico
+6. Crear ZIP final con código fuente (para Paso 2)
+7. **PASO 2** — Esperar email de DNDA → subir ZIP según instrucciones recibidas
+8. Guardar número de expediente y esperar resolución (max. 60 días hábiles — silencio positivo)
 
 ---
 
