@@ -1,0 +1,41 @@
+EXPEDIENTE DE REGISTRO DE OBRA DE SOFTWARE
+==============================================
+
+CONTENIDO DEL PAQUETE:
+
+1. DOCUMENTOS PARA PRESENTAR (PDFs editables)
+   - EXPEDIENTE_FINAL.pdf ..................... Portada e índice formal
+   - MEMORIA_DESCRIPTIVA.pdf ................. Descripción central de la obra
+   - EVIDENCIA_AUTORIA.pdf ................... Acreditación de autoría (121 commits)
+   - INVENTARIO_TECNICO.pdf .................. Catálogo: 22 routers, 18 servicios, etc.
+   - DOCUMENTACION_TECNICA.pdf ............... Arquitectura, seguridad, APIs
+   - MANUAL_FUNCIONAL.pdf .................... 40 casos de uso, flujos operativos
+   - ACTIVOS_PI.pdf .......................... Algoritmos y componentes originales
+   - CODIGO_FUENTE_EXTRACTO.pdf .............. Componentes destacados (arquitectura, seguridad)
+
+2. MATERIAL COMPLEMENTARIO (A AGREGAR)
+   - CAPTURAS/ ........................... Capturas de pantalla del sistema (24 archivos)
+   - DIAGRAMAS/ .......................... Diagramas de arquitectura y ER (4 archivos)
+   - HISTORICO/ .......................... Historial git (export opcional)
+
+TAMAÑO TOTAL ACTUAL: 496K (sin capturas/diagramas)
+
+INSTRUCCIONES:
+1. Los PDFs están listos para imprimir/enviar
+2. Falta agregar las ~24 capturas de pantalla en CAPTURAS/
+3. Falta agregar diagramas en DIAGRAMAS/ (opcional pero recomendado)
+4. Una vez completado, se genera el ZIP final para presentación ante la DNDA
+
+ORDEN DE PRESENTACIÓN RECOMENDADO:
+1. Completar formulario del organismo
+2. Adjuntar: MEMORIA_DESCRIPTIVA.pdf (obligatorio)
+3. Adjuntar: EVIDENCIA_AUTORIA.pdf (obligatorio)
+4. Adjuntar: INVENTARIO_TECNICO.pdf (obligatorio)
+5. Adjuntar: CODIGO_FUENTE_EXTRACTO.pdf (obligatorio)
+6. Adjuntar: resto de PDFs como documentos de apoyo
+7. Adjuntar: capturas de pantalla como evidencia visual
+
+---
+Expediente preparado: Junio 2026
+Autora: Julieta Arrazate
+Versión registrada: v3.12
