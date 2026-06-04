@@ -141,4 +141,4 @@ eas build --platform ios
 
 ## Licencia
 
-Privado - Caneland SA
+Privado

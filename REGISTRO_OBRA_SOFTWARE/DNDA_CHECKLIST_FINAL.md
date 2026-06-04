@@ -39,8 +39,8 @@ Antes de comenzar, verificar que tienes:
 
 ## FASE 1: CAPTURAS DE PANTALLA — ✓ COMPLETADA
 
-Se capturaron **27 pantallas** del sistema en producción real (organización
-Caneland SA, usuario Superadmin Julieta Arrazate). El detalle completo, la
+Se capturaron **27 pantallas** del sistema en producción real (usuario
+Superadmin Julieta Arrazate). El detalle completo, la
 cobertura por módulo y el valor probatorio están en `DNDA_CAPTURAS.md`.
 
 ### 1.1 Capturas tomadas (27) — cobertura 18/18 módulos
@@ -52,7 +52,7 @@ cobertura por módulo y el valor probatorio están en `DNDA_CAPTURAS.md`.
 - [x] 05_movimientos_extracto.png — Movimientos del extracto (2.455 movs)
 - [x] 06_conciliaciones.png — Conciliaciones ($211.689.798)
 - [x] 07_historial.png — Historial (46 planillas, 96%)
-- [x] 08_clientes.png — Clientes (cartera Caneland SA)
+- [x] 08_clientes.png — Clientes (cartera de la organización de producción)
 - [x] 09_cheques_listado.png — Cheques (stats + tabs)
 - [x] 10_cheques_editar.png — Editar cheque (comisión auto + L/I)
 - [x] 11_pagos_nuevo.png — Nuevo pago

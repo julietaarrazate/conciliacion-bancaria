@@ -11,7 +11,7 @@
 ## 1. RESUMEN
 
 Se capturaron **27 pantallas** del sistema en funcionamiento real, con datos
-de producción (organización Caneland SA). Las capturas demuestran que la obra
+de producción (organización de producción). Las capturas demuestran que la obra
 está **completa, operativa y en uso productivo**, cubriendo la totalidad de los
 módulos principales.
 
@@ -21,7 +21,7 @@ módulos principales.
 | Modo de visualización | Claro (mayoría) + Oscuro (Resumen) |
 | Origen de datos | Producción real (https://conciliacion-bancaria-ten.vercel.app) |
 | Usuario | Julieta Arrazate (Superadmin) |
-| Organización | Caneland SA (14 clientes, 46 conciliaciones) |
+| Organización | organización de producción (14 clientes, 46 conciliaciones) |
 | Formato | PNG |
 
 ---
@@ -52,7 +52,7 @@ módulos principales.
 
 | Archivo sugerido | Pantalla | Contenido evidenciado |
 |---|---|---|
-| `08_clientes.png` | Clientes | Cartera Caneland SA (14 clientes, 46 conciliaciones), chips comisión 2%, botones Estado / Cta. cte. / Acreditar / editar / fusionar |
+| `08_clientes.png` | Clientes | Cartera organización de producción (14 clientes, 46 conciliaciones), chips comisión 2%, botones Estado / Cta. cte. / Acreditar / editar / fusionar |
 
 ### Grupo D — Módulo de cheques (ciclo contable completo)
 
@@ -157,11 +157,10 @@ Las capturas acreditan ante la DNDA que la obra:
 
 ## 5. NOTA SOBRE PRIVACIDAD EN LAS CAPTURAS
 
-Las capturas contienen datos operativos reales de la organización Caneland SA
-(nombres de clientes de trabajo: Green, Tucu, Alojando, etc., y montos). Estos
-datos:
+Las capturas contienen datos operativos reales del sistema en producción
+(nombres de clientes y montos de operatoria real). Estos datos:
 
-- Corresponden a la operatoria propia de la autora/organización, no a terceros ajenos.
+- Corresponden al uso productivo del sistema por parte de la autora, no exponen datos de terceros ajenos.
 - Los nombres de clientes son denominaciones de trabajo, no datos personales sensibles de individuos.
 - No se exponen CUIT/CBU completos identificables de personas físicas en forma destacada.
 - Para la presentación ante la DNDA, los datos refuerzan la prueba de uso productivo real.
