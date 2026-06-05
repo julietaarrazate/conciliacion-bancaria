@@ -389,6 +389,8 @@ def _init_db():
             # Cuentas cheques (pedido contador junio 2026)
             ("1-1-1-4",   "Banco 2",              "activo",    "1-1-1-0",  4),
             ("1-1-2-1",   "Cheques en cartera",   "activo",    "1-1-2-0",  4),
+            ("1-1-2-2-0", "Créditos socio",       "activo",    "1-1-2-0",  4),
+            ("1-1-2-2-1", "Socio 1",              "activo",    "1-1-2-2-0",5),
             ("2-1-3-0",   "Cheques",              "pasivo",    "2-1-0-0",  3),
             ("2-1-3-1",   "Cheques depositados",  "pasivo",    "2-1-3-0",  4),
             ("2-1-3-2",   "Cheques a depositar",  "pasivo",    "2-1-3-0",  4),
