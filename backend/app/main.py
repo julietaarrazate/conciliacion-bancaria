@@ -347,10 +347,10 @@ def _init_db():
             # (evento, descripcion, debe_codigo, haber_codigo)
             ("carga_extracto",          "Carga extracto bancario",          "1-1-1-3", "2-1-0-0"),
             ("carga_planilla",          "Acreditación planilla cliente",    "2-1-0-0", "2-1-2-0"),
-            ("carga_planilla_comision", "Comisión sobre planilla",          "2-1-0-0", "3-1-1-0"),
+            ("carga_planilla_comision", "Comisión sobre planilla",          "2-1-2-0", "3-1-1-0"),
             ("carga_efectivo",          "Carga cobro en efectivo",          "1-1-1-2", "1-1-1-3"),
-            ("carga_cheque",            "Carga cheque cliente",             "1-1-2-0", "2-1-2-0"),
-            ("carga_cheque_comision",   "Comisión sobre cheque",            "1-1-2-0", "3-1-1-0"),
+            ("carga_cheque",            "Carga cheque cliente",             "1-1-2-1", "2-1-2-0"),
+            ("carga_cheque_comision",   "Comisión sobre cheque",            "1-1-2-1", "3-1-3-0"),
             ("acred_rechazo_banco",     "Acred/rechazo cheque — banco",     "1-1-1-3", "1-1-2-0"),
             ("acred_rechazo_pasivo",    "Acred/rechazo cheque — cliente",   "2-1-2-0", "1-1-2-0"),
             ("pago_cliente_banco",      "Pago cliente por banco",           "2-1-2-0", "1-1-1-3"),

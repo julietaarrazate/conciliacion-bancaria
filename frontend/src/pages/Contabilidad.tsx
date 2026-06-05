@@ -991,7 +991,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                     <div>
                       <p className={`text-xs font-bold uppercase tracking-wider ${TIPO_TEXT[tipo]}`}>{tipo}</p>
                       <p className="text-2xl font-bold text-ml-text dark:text-white mt-1">
-                        $ {fmtNum(Math.abs(balance[tipo].saldo))}
+                        $ {fmtNum(tipo === 'resultado' ? -(balance[tipo].saldo) : Math.abs(balance[tipo].saldo))}
                       </p>
                     </div>
                     <div className="text-right text-xs text-gray-500 dark:text-gray-400 space-y-1">
@@ -1364,7 +1364,6 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Fecha</th>
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Tipo</th>
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Referencia</th>
-                          <th className="text-left px-3 py-2 font-medium text-gray-500">Cuenta</th>
                           <th className="text-left px-3 py-2 font-medium text-gray-500">Estado</th>
                           <th className="text-right px-3 py-2 font-medium text-blue-600 dark:text-blue-400">Débito</th>
                           <th className="text-right px-3 py-2 font-medium text-orange-600 dark:text-orange-400">Crédito</th>
@@ -1378,7 +1377,6 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                             <td className="px-3 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">{fmtDate(m.fecha)}</td>
                             <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{m.tipo_label}</td>
                             <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[150px] truncate" title={m.referencia}>{m.referencia}</td>
-                            <td className="px-3 py-2 font-mono text-[11px] text-gray-500 dark:text-gray-400 max-w-[140px] truncate" title={(m as any).cuenta_contraparte}>{(m as any).cuenta_contraparte || '—'}</td>
                             <td className="px-3 py-2">
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${ESTADO_BADGE[m.estado] || ''}`}>{m.estado}</span>
                             </td>
@@ -1390,7 +1388,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                                 <a href={`/movimientos?extracto=${m.origen.extracto_id}`} className="text-ml-blue hover:underline mr-2" title="Movimiento bancario">🏦</a>
                               )}
                               {m.origen.planilla_id && (
-                                <a href={`/historial?planilla=${m.origen.planilla_id}`} className="text-ml-blue hover:underline" title="Planilla origen">📄</a>
+                                <button onClick={async () => { try { await apiClient.downloadPlanillaConciliada(m.origen.planilla_id!) } catch { toast.error('No se pudo descargar') } }} className="text-ml-blue hover:underline" title="Descargar Excel planilla">📄</button>
                               )}
                             </td>
                           </tr>
@@ -1398,7 +1396,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                       </tbody>
                       <tfoot className="bg-gray-50 dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700">
                         <tr>
-                          <td colSpan={4} className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-400">Totales (todos los movimientos)</td>
+                          <td colSpan={3} className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-400">Totales (todos los movimientos)</td>
                           <td className="px-3 py-2 text-right font-mono font-semibold text-blue-700 dark:text-blue-300">{fmtNum(ctaCte.total_debito)}</td>
                           <td className="px-3 py-2 text-right font-mono font-semibold text-orange-700 dark:text-orange-300">{fmtNum(ctaCte.total_credito)}</td>
                           <td className="px-3 py-2 text-right font-mono font-semibold">{fmtNum(ctaCte.saldo_final)}</td>
