@@ -84,9 +84,15 @@ def _calcular_monto_y_comision(
     monto_total = Decimal("0")
     comision_total = Decimal("0")
 
+    # Batch-fetch de movimientos — evita N+1 (una query IN en lugar de una por fila)
+    mov_ids = {row.orden_movimiento_acreditado for row, _ in rows_q if row.orden_movimiento_acreditado}
+    movs_map: dict = {}
+    if mov_ids:
+        movs_map = {m.id: m for m in db.query(MB).filter(MB.id.in_(mov_ids)).all()}
+
     for row, planilla in rows_q:
         if row.orden_movimiento_acreditado:
-            mov = db.query(MB).filter(MB.id == row.orden_movimiento_acreditado).first()
+            mov = movs_map.get(row.orden_movimiento_acreditado)
             monto_fila = (mov.monto if mov else row.monto) or Decimal("0")
         else:
             monto_fila = row.monto or Decimal("0")

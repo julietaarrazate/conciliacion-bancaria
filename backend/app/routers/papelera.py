@@ -11,7 +11,7 @@ import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 
 from app.database import get_db
 from app.models.extracto import ExtractoBancario, MovimientoBanco
@@ -37,6 +37,26 @@ def listar_papelera(
         extractos_q = extractos_q.filter(ExtractoBancario.organizacion_id == org_id)
         planillas_q = planillas_q.filter(Planilla.organizacion_id == org_id)
 
+    extractos_list = extractos_q.order_by(desc(ExtractoBancario.deleted_at)).all()
+    planillas_list  = planillas_q.order_by(desc(Planilla.deleted_at)).all()
+
+    # Batch-count movimientos y filas — evita N+1 (una query GROUP BY por tabla)
+    ext_ids = [e.id for e in extractos_list]
+    mov_counts: dict[int, int] = {}
+    if ext_ids:
+        rows = db.query(MovimientoBanco.extracto_id, func.count(MovimientoBanco.id))\
+                 .filter(MovimientoBanco.extracto_id.in_(ext_ids))\
+                 .group_by(MovimientoBanco.extracto_id).all()
+        mov_counts = {eid: cnt for eid, cnt in rows}
+
+    plan_ids = [p.id for p in planillas_list]
+    row_counts: dict[int, int] = {}
+    if plan_ids:
+        rows2 = db.query(PlanillaRow.planilla_id, func.count(PlanillaRow.id))\
+                  .filter(PlanillaRow.planilla_id.in_(plan_ids))\
+                  .group_by(PlanillaRow.planilla_id).all()
+        row_counts = {pid: cnt for pid, cnt in rows2}
+
     extractos = [{
         "id": e.id,
         "tipo": "extracto",
@@ -44,8 +64,8 @@ def listar_papelera(
         "organizacion_id": e.organizacion_id,
         "fecha_creacion": e.fecha_creacion.isoformat() if e.fecha_creacion else None,
         "deleted_at": e.deleted_at.isoformat() if e.deleted_at else None,
-        "movimientos": db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id == e.id).count(),
-    } for e in extractos_q.order_by(desc(ExtractoBancario.deleted_at)).all()]
+        "movimientos": mov_counts.get(e.id, 0),
+    } for e in extractos_list]
 
     planillas = [{
         "id": p.id,
@@ -55,8 +75,8 @@ def listar_papelera(
         "organizacion_id": p.organizacion_id,
         "fecha_carga": p.fecha_carga.isoformat() if p.fecha_carga else None,
         "deleted_at": p.deleted_at.isoformat() if p.deleted_at else None,
-        "filas": db.query(PlanillaRow).filter(PlanillaRow.planilla_id == p.id).count(),
-    } for p in planillas_q.order_by(desc(Planilla.deleted_at)).all()]
+        "filas": row_counts.get(p.id, 0),
+    } for p in planillas_list]
 
     return {
         "extractos": extractos,

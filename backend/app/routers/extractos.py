@@ -713,7 +713,7 @@ def listar_conciliaciones(
     monto_min: Optional[float] = Query(None),
     monto_max: Optional[float] = Query(None),
     org_id: Optional[int] = Query(None),
-    skip: int = 0, limit: int = 500,
+    skip: int = 0, limit: int = 50,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -728,7 +728,7 @@ def listar_conciliaciones(
         q.order_by(MovimientoBanco.fecha_acred.desc().nulls_last(),
                    MovimientoBanco.fecha.desc().nulls_last(),
                    MovimientoBanco.id.desc())
-        .offset(skip).limit(limit if limit > 0 else 500).all()
+        .offset(skip).limit(limit if limit > 0 else 50).all()
     )
     items = [{
         "id": m.id,

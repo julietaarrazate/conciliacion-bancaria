@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
@@ -780,10 +780,11 @@ export const Cheques: React.FC = () => {
     finally { setExportandoDeposito(false) }
   }
 
-  const pendientes = cheques.filter(c => esRegistrado(c.estado) || c.estado === 'depositado')
-  const totalPend  = pendientes.reduce((s, c) => s + c.monto, 0)
-  const totalAcred = cheques.filter(c => c.estado === 'acreditado').reduce((s, c) => s + c.monto, 0)
-  const totalRech  = cheques.filter(c => c.estado === 'rechazado').reduce((s, c) => s + c.monto, 0)
+  const { totalPend, totalAcred, totalRech } = useMemo(() => ({
+    totalPend:  cheques.filter(c => esRegistrado(c.estado) || c.estado === 'depositado').reduce((s, c) => s + c.monto, 0),
+    totalAcred: cheques.filter(c => c.estado === 'acreditado').reduce((s, c) => s + c.monto, 0),
+    totalRech:  cheques.filter(c => c.estado === 'rechazado').reduce((s, c) => s + c.monto, 0),
+  }), [cheques])
 
   const handleBulkFileChange = async (files: FileList | null) => {
     if (!files || files.length === 0) return
