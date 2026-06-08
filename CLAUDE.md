@@ -132,7 +132,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ---
 
-## Features implementadas (estado actual — v3.12)
+## Features implementadas (estado actual — v3.12.1)
 
 - Conciliación bancaria multi-extracto con motor de scoring
 - Carga masiva con auto-conciliar al subir planillas
@@ -675,6 +675,38 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   dentro de los 20s de tomar una foto. Aplicado en Pagos.tsx y Cheques.tsx.
 - **BUGS.md**: registro permanente de bugs recurrentes con causa raíz y solución. Ver `/BUGS.md`.
 
+### v3.12.1 — Auditoría de performance (junio 2026 — PR #114)
+
+- **N+1 eliminado en Papelera** (`routers/papelera.py`): `listar_papelera()` hacía un `COUNT` por
+  item en loop. Reemplazado por 2 queries `GROUP BY` que cubren todos los items de una vez.
+- **N+1 eliminado en Liquidaciones** (`routers/liquidaciones.py`): `_calcular_monto_y_comision()`
+  hacía un query al `MovimientoBanco` por cada fila de planilla. Ahora pre-fetcha todos los IDs con
+  un único `WHERE id IN (...)` antes del loop.
+- **Migración 010** — índices faltantes: `clientes(organizacion_id)` (usado en 10+ queries sin
+  índice), `plan_cuentas(parent_id)` (queries recursivas del árbol), `plan_cuentas(organizacion_id)`,
+  `users(organizacion_id)`. Todos con `IF NOT EXISTS`. Los índices de `movimientos_banco`,
+  `planillas`, `planilla_rows`, `cheques` y `extractos` ya existían desde migración 004.
+- **Cache TTL 60s server-side** (`routers/analisis.py`): dict module-level `_cache` con
+  `time.monotonic()`. Cubre `/analisis/alertas` (key: `alertas:{org_id}`) y `/analisis/dashboard`
+  (key: `dashboard:{org_id}:{periodo}:{anio}:{mes}:{desde}:{hasta}`). Sin dependencias externas.
+  Reduce ~19 queries/request a 0 durante el TTL — el endpoint de alertas se llama en cada carga
+  de página. Por proceso: en Render free (1 worker) el hit rate es ~100%.
+- **Limit conciliaciones 500→50** (`routers/extractos.py`): el endpoint `GET /conciliaciones`
+  tenía `limit: int = 500` por defecto — devolvía 500 movimientos completos sin pedirlo.
+- **`useMemo` en Dashboard**: `bulkPendingCount/bulkOkCount/bulkTotalAcred/bulkTotalFilas` +
+  `totalMovimientos/totalAcreditadas/totalProcesadas/accuracy/montoConciliadoHoy` — 9 valores
+  derivados que se recalculaban en cada render del componente.
+- **`useMemo` en Cheques**: `totalPend/totalAcred/totalRech` — 3 filter+reduce sobre el array
+  completo que corrían en cada render, incluyendo al tipear en los filtros.
+- **Bug fix `refreshExtractos` sin `activeOrgId`** (`Dashboard.tsx:307`): `listExtractos()` se
+  llamaba sin pasar la org activa → podía mostrar extractos de otra organización tras borrar.
+- **`cargarAsientos()` en paralelo** (`Contabilidad.tsx`): antes se llamaba al final del `.then()`
+  del `Promise.all` de 4 requests. Ahora se dispara al inicio de `recargarTodo()` en paralelo.
+- **Fix dep array Historial** (`Historial.tsx`): `useEffect(() => { load() }, [])` no incluía
+  `activeOrgId` → el historial no se actualizaba al cambiar de organización en el sidebar.
+- **Pendiente deliberado**: paginación de rows en `GET /planillas/{id}` (retorna todas las filas
+  sin paginar). No implementado porque `PlanillaPanel` asume todas las filas juntas — requiere
+  refactor coordinado de frontend+backend+componente. Tarea para próxima sesión si el volumen crece.
 
 ### Pendiente para próximas sesiones
 
@@ -686,6 +718,9 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - **UI comisión L/I por cliente** — chip expandible en `/clientes` para editar `porcentaje_comision_local`
   e `porcentaje_comision_interior` directamente desde la lista (hoy solo edita el % general).
 - ~~**Expediente DNDA**~~ — resuelto en PR #112 (junio 2026). Ver sección abajo.
+- **Paginación rows en `/planillas/{id}`** — retorna todas las filas sin paginar (puede ser 1000+).
+  No implementado en v3.12.1 porque `PlanillaPanel` asume todas las filas juntas. Requiere refactor
+  coordinado frontend+backend. Abordar cuando el volumen de planillas crezca y se note la lentitud.
 
 ---
 
@@ -807,6 +842,12 @@ Checkpoints disponibles:
   OCR monto (BUG-03: type=number + formato argentino), compartir PDF (BUG-02: fire-and-forget),
   SVG icons en Pagos/Cheques (reemplaza emojis), fix suppress lock cámara 8s vs share 20s,
   BUGS.md (registro de bugs recurrentes) (junio 2026 — PRs #106-#108).
+- `v3.12.1` — auditoría de performance completa: N+1 eliminados (papelera GROUP BY, liquidaciones
+  IN batch), migración 010 con 4 índices faltantes (clientes/plan_cuentas/users.organizacion_id,
+  plan_cuentas.parent_id), cache TTL 60s server-side para /alertas y /dashboard, limit 500→50 en
+  conciliaciones, useMemo en Dashboard (9 derivados) y Cheques (3 totales), bug fix refreshExtractos
+  sin activeOrgId, cargarAsientos en paralelo en Contabilidad, fix dep array Historial
+  (junio 2026 — PR #114).
 
 ---
 
@@ -839,7 +880,9 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
 
 - `v3.12-dnda-docs` — expediente DNDA completo en `REGISTRO_OBRA_SOFTWARE/`, rutas locales
   normalizadas (sin usuario de PC), privacidad auditada (junio 2026 — PR #112 mergeado a main)
+- `v3.12.1-performance` — auditoría performance completa (N+1, índices, cache TTL, payload,
+  rendering). Ver sección v3.12.1 arriba. (junio 2026 — PR #114 mergeado a main)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.12
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.12.1
