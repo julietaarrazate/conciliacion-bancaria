@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FileUpload } from '@/components/FileUpload'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
@@ -280,10 +280,12 @@ export const Dashboard: React.FC = () => {
     apiClient.invalidateCache('/analisis')
     apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then(d => setPlanillas(d.items))
   }
-  const bulkPendingCount = bulkItems.filter(i => i.status === 'pending' || i.status === 'error').length
-  const bulkOkCount = bulkItems.filter(i => i.status === 'ok').length
-  const bulkTotalAcred = bulkItems.reduce((s, i) => s + (i.resultado?.acreditadas || 0), 0)
-  const bulkTotalFilas = bulkItems.reduce((s, i) => s + (i.resultado?.filas_procesadas || 0), 0)
+  const { bulkPendingCount, bulkOkCount, bulkTotalAcred, bulkTotalFilas } = useMemo(() => ({
+    bulkPendingCount: bulkItems.filter(i => i.status === 'pending' || i.status === 'error').length,
+    bulkOkCount:      bulkItems.filter(i => i.status === 'ok').length,
+    bulkTotalAcred:   bulkItems.reduce((s, i) => s + (i.resultado?.acreditadas || 0), 0),
+    bulkTotalFilas:   bulkItems.reduce((s, i) => s + (i.resultado?.filas_procesadas || 0), 0),
+  }), [bulkItems])
 
   useEffect(() => {
     setExtractoId(null)
@@ -304,7 +306,7 @@ export const Dashboard: React.FC = () => {
   }, [activeOrgId])
 
   const refreshExtractos = async () => {
-    const data = await apiClient.listExtractos()
+    const data = await apiClient.listExtractos(activeOrgId)
     setExtractos(data.items)
   }
 
@@ -433,18 +435,20 @@ export const Dashboard: React.FC = () => {
   }
 
   // Stats — usa solo el extracto activo para movimientos (no sumar duplicados)
-  const extractoActivo = extractos.find(e => e.id === extractoId)
-  const totalMovimientos = extractoActivo?.total_movimientos ?? 0
-  const totalAcreditadas = planillas.reduce((s, p) => s + p.acreditadas, 0)
-  const totalProcesadas = planillas.reduce((s, p) => s + p.total_filas, 0)
-  const accuracy = totalProcesadas > 0
-    ? Math.round((totalAcreditadas / totalProcesadas) * 100)
-    : 0
-
-  // Monto conciliado HOY (planillas cargadas hoy)
   const hoyStr = localIsoDate()
-  const planillasHoy = planillas.filter(p => p.fecha_carga.startsWith(hoyStr))
-  const montoConciliadoHoy = planillasHoy.reduce((s, p) => s + (p.monto_conciliado ?? 0), 0)
+  const { totalMovimientos, totalAcreditadas, totalProcesadas, accuracy, montoConciliadoHoy } = useMemo(() => {
+    const extractoActivo = extractos.find(e => e.id === extractoId)
+    const totalMovimientos = extractoActivo?.total_movimientos ?? 0
+    const totalAcreditadas = planillas.reduce((s, p) => s + p.acreditadas, 0)
+    const totalProcesadas = planillas.reduce((s, p) => s + p.total_filas, 0)
+    const accuracy = totalProcesadas > 0
+      ? Math.round((totalAcreditadas / totalProcesadas) * 100)
+      : 0
+    const montoConciliadoHoy = planillas
+      .filter(p => p.fecha_carga.startsWith(hoyStr))
+      .reduce((s, p) => s + (p.monto_conciliado ?? 0), 0)
+    return { totalMovimientos, totalAcreditadas, totalProcesadas, accuracy, montoConciliadoHoy }
+  }, [extractos, extractoId, planillas, hoyStr])
   const fmtMonto = (n: number) =>
     n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 

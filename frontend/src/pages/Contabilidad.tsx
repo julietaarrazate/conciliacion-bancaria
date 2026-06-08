@@ -258,6 +258,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
     if (modo === 'ctacte') return
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
     setLoading(true)
+    cargarAsientos()  // dispara en paralelo, no espera los otros 4
     Promise.all([
       canViewAccounting
         ? apiClient.client.get(`/contabilidad/plan-cuentas${q}`).then(r => r.data)
@@ -271,7 +272,6 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       setCuentas(c); setReglas(r)
       setSumasSaldo(ss); setBalance(b)
       setLoading(false)
-      cargarAsientos()
     }).catch(() => setLoading(false))
   }
 
