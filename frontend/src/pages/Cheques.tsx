@@ -780,11 +780,15 @@ export const Cheques: React.FC = () => {
     finally { setExportandoDeposito(false) }
   }
 
-  const { totalPend, totalAcred, totalRech } = useMemo(() => ({
-    totalPend:  cheques.filter(c => esRegistrado(c.estado) || c.estado === 'depositado').reduce((s, c) => s + c.monto, 0),
-    totalAcred: cheques.filter(c => c.estado === 'acreditado').reduce((s, c) => s + c.monto, 0),
-    totalRech:  cheques.filter(c => c.estado === 'rechazado').reduce((s, c) => s + c.monto, 0),
-  }), [cheques])
+  const { pendientes, totalPend, totalAcred, totalRech } = useMemo(() => {
+    const pendientes = cheques.filter(c => esRegistrado(c.estado) || c.estado === 'depositado')
+    return {
+      pendientes,
+      totalPend:  pendientes.reduce((s, c) => s + c.monto, 0),
+      totalAcred: cheques.filter(c => c.estado === 'acreditado').reduce((s, c) => s + c.monto, 0),
+      totalRech:  cheques.filter(c => c.estado === 'rechazado').reduce((s, c) => s + c.monto, 0),
+    }
+  }, [cheques])
 
   const handleBulkFileChange = async (files: FileList | null) => {
     if (!files || files.length === 0) return
