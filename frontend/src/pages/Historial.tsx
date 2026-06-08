@@ -39,7 +39,7 @@ export const Historial: React.FC = () => {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [activeOrgId])
 
   const handleDelete = async (id: number) => {
     if (!await confirmDialog({ title: 'Borrar planilla', message: '¿Borrar esta planilla?', confirmLabel: 'Borrar', danger: true })) return

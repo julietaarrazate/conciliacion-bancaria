@@ -15,6 +15,7 @@ Filosofia de los KPIs:
 """
 
 import logging
+import time
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -33,6 +34,21 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analisis", tags=["analisis"])
+
+# Cache en memoria por proceso — reduce queries en endpoints de alta frecuencia.
+# TTL corto (60s) para no mostrar datos muy viejos durante operaciones activas.
+_cache: dict[str, tuple[dict, float]] = {}
+_TTL = 60.0
+
+def _cache_get(key: str):
+    entry = _cache.get(key)
+    if entry and time.monotonic() < entry[1]:
+        return entry[0]
+    return None
+
+def _cache_set(key: str, value: dict) -> dict:
+    _cache[key] = (value, time.monotonic() + _TTL)
+    return value
 
 # Status de PlanillaRow considerados "conciliados con exito"
 _STATUS_OK = {"ok", "OK", "PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA"}
@@ -305,6 +321,11 @@ def dashboard(
     if periodo not in ("hoy", "semana", "mes", "rango"):
         periodo = "mes"
 
+    cache_key = f"dashboard:{organizacion_id}:{periodo}:{anio}:{mes}:{desde}:{hasta}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     desde_r, hasta_r, prev_desde, prev_hasta, label = _calcular_rango(periodo, anio, mes, desde, hasta)
     desde, hasta = desde_r, hasta_r
 
@@ -323,7 +344,7 @@ def dashboard(
     cheques_resumen = _cheques_estado(db, organizacion_id)
     cheques_vencen = _cheques_proximos_vencimiento(db, organizacion_id, dias=30)
 
-    return {
+    result = {
         "organizacion_id": organizacion_id,
         "periodo": periodo,
         "periodo_label": label,
@@ -336,6 +357,7 @@ def dashboard(
             "proximos_a_vencer": cheques_vencen,
         },
     }
+    return _cache_set(cache_key, result)
 
 
 @router.get("/alertas")
@@ -346,6 +368,12 @@ def alertas(
 ):
     """Alertas operativas del día: cheques urgentes/vencidos, filas atrasadas, movimientos sin asignar."""
     organizacion_id = _resolver_org(current_user, org_id)
+
+    cache_key = f"alertas:{organizacion_id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     from zoneinfo import ZoneInfo
     hoy = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date()
 
@@ -427,12 +455,13 @@ def alertas(
     # de movimientos pendientes informativos.
     total_badge = sum(1 for a in alertas_lista if a["urgencia"] in ("alta", "media"))
 
-    return {
+    result = {
         "organizacion_id": organizacion_id,
         "total": total_badge,
         "total_items": sum(a["cantidad"] for a in alertas_lista),
         "alertas": alertas_lista,
     }
+    return _cache_set(cache_key, result)
 
 
 def _calcular_aging_cliente(planilla_carga_date: date, hoy: date) -> str:
