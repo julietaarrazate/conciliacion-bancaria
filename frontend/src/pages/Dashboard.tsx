@@ -436,7 +436,7 @@ export const Dashboard: React.FC = () => {
 
   // Stats — usa solo el extracto activo para movimientos (no sumar duplicados)
   const hoyStr = localIsoDate()
-  const { totalMovimientos, totalAcreditadas, totalProcesadas, accuracy, montoConciliadoHoy } = useMemo(() => {
+  const { totalMovimientos, totalAcreditadas, totalProcesadas, accuracy, montoConciliadoHoy, planillasHoy } = useMemo(() => {
     const extractoActivo = extractos.find(e => e.id === extractoId)
     const totalMovimientos = extractoActivo?.total_movimientos ?? 0
     const totalAcreditadas = planillas.reduce((s, p) => s + p.acreditadas, 0)
@@ -444,10 +444,9 @@ export const Dashboard: React.FC = () => {
     const accuracy = totalProcesadas > 0
       ? Math.round((totalAcreditadas / totalProcesadas) * 100)
       : 0
-    const montoConciliadoHoy = planillas
-      .filter(p => p.fecha_carga.startsWith(hoyStr))
-      .reduce((s, p) => s + (p.monto_conciliado ?? 0), 0)
-    return { totalMovimientos, totalAcreditadas, totalProcesadas, accuracy, montoConciliadoHoy }
+    const planillasHoy = planillas.filter(p => p.fecha_carga.startsWith(hoyStr))
+    const montoConciliadoHoy = planillasHoy.reduce((s, p) => s + (p.monto_conciliado ?? 0), 0)
+    return { totalMovimientos, totalAcreditadas, totalProcesadas, accuracy, montoConciliadoHoy, planillasHoy }
   }, [extractos, extractoId, planillas, hoyStr])
   const fmtMonto = (n: number) =>
     n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
