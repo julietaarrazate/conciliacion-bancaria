@@ -393,6 +393,8 @@ def conciliar_planilla(
         "sin_datos": 0,
         "filas_procesadas": 0
     }
+    _um_total_monto = Decimal("0")
+    _um_fecha = None
 
     # Pre-cargar en procesados todos los movimientos ya asignados a filas "ok"
     # antes de iterar, sin importar el orden de las filas en la planilla.
@@ -480,22 +482,11 @@ def conciliar_planilla(
             procesados.add(mov.id)
             res["acreditadas"] += 1
 
-            # Asiento de reclasificación: solo para movimientos de UM y si conocemos el cliente
+            # Acumular para asiento agrupado por planilla (se crea al final del loop)
             if getattr(mov, "source", None) == "um" and cliente_id:
-                try:
-                    from app.services.motor_contable import registrar_reclasificacion_um
-                    registrar_reclasificacion_um(
-                        db=db,
-                        planilla_row_id=row.id,
-                        org_id=org_id,
-                        usuario_id=None,
-                        cliente_id=cliente_id,
-                        cliente_nombre=cliente_nombre,
-                        monto=row.monto,
-                        fecha=mov.fecha_acred or mov.fecha,
-                    )
-                except Exception:
-                    pass
+                _um_total_monto += abs(Decimal(str(row.monto or 0)))
+                if _um_fecha is None:
+                    _um_fecha = mov.fecha_acred or mov.fecha
         else:
             if status == "no está":
                 res["no_encontradas"] += 1
@@ -503,6 +494,33 @@ def conciliar_planilla(
                 res["duplicadas"] += 1
             else:
                 res["sin_datos"] += 1
+
+    # Asiento agrupado: un solo asiento por planilla (reemplaza el per-fila anterior)
+    if _um_total_monto > 0 and cliente_id and planilla_rows:
+        try:
+            from app.services.motor_contable import registrar_reclasificacion_planilla
+            planilla_id = planilla_rows[0].planilla_id
+            nombre_archivo = ""
+            try:
+                if hasattr(planilla_rows[0], "planilla") and planilla_rows[0].planilla:
+                    nombre_archivo = planilla_rows[0].planilla.nombre_archivo or ""
+            except Exception:
+                pass
+            from app.services.tz import hoy_art as _hoy_art
+            registrar_reclasificacion_planilla(
+                db=db,
+                planilla_id=planilla_id,
+                org_id=org_id,
+                usuario_id=None,
+                cliente_id=cliente_id,
+                cliente_nombre=cliente_nombre,
+                total_monto=_um_total_monto,
+                fecha=_um_fecha or _hoy_art(),
+                nombre_archivo=nombre_archivo,
+            )
+        except Exception as _ex:
+            import logging
+            logging.getLogger(__name__).warning("Error asiento agrupado planilla: %s", _ex)
 
     db.commit()
     return res

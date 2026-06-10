@@ -801,6 +801,126 @@ def registrar_reclasificacion_um(
         logger.warning("Error asiento reclasif. row %s: %s", planilla_row_id, ex)
 
 
+def registrar_reclasificacion_planilla(
+    db: Session,
+    planilla_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    cliente_id: int,
+    cliente_nombre: str,
+    total_monto: Decimal,
+    fecha: date,
+    nombre_archivo: str = "",
+) -> None:
+    """Asiento agrupado por planilla: No identificado (D) / Cliente X (H).
+    Un solo asiento por planilla con el total conciliado (en lugar de uno por fila).
+    Upsert: si ya existe un asiento previo para esta planilla, actualiza el monto
+    (para re-conciliaciones que acreditan filas adicionales en una segunda pasada)."""
+    try:
+        total_monto = abs(round(_monto(total_monto), 2))
+        if total_monto <= 0:
+            return
+        no_id = _get_cuenta_por_codigo(db, "2-1-1-1", org_id)
+        cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_id, org_id) if cliente_id else None
+        if not no_id or not cuenta_cliente:
+            logger.warning("Cuentas reclasificación planilla no encontradas org %s (cliente_id=%s)", org_id, cliente_id)
+            return
+        fecha_asiento = fecha if isinstance(fecha, date) else hoy_art()
+        desc = f"TT {cliente_nombre}"
+        if nombre_archivo:
+            desc += f" — {nombre_archivo}"
+
+        existente = (
+            db.query(Asiento)
+            .filter(
+                Asiento.modulo == "um_reclass_planilla",
+                Asiento.referencia_id == planilla_id,
+                Asiento.organizacion_id == org_id,
+            )
+            .first()
+        )
+        if existente:
+            for linea in existente.lineas:
+                if linea.cuenta_id == no_id.id:
+                    linea.debe = total_monto
+                    linea.haber = Decimal("0")
+                else:
+                    linea.haber = total_monto
+                    linea.debe = Decimal("0")
+            existente.fecha = fecha_asiento
+        else:
+            a = Asiento(
+                fecha=fecha_asiento,
+                descripcion=desc,
+                modulo="um_reclass_planilla",
+                referencia_id=planilla_id,
+                organizacion_id=org_id,
+                usuario_id=usuario_id,
+                numero_asiento=_next_numero_asiento(db, org_id),
+            )
+            db.add(a)
+            db.flush()
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id,            debe=total_monto,    haber=Decimal("0")))
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cliente.id,   debe=Decimal("0"),   haber=total_monto))
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        logger.warning("Error asiento reclasif. planilla %s: %s", planilla_id, ex)
+
+
+def registrar_liquidacion_aprobacion(
+    db: Session,
+    liquidacion_id: int,
+    detalle_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    cliente_id: int,
+    cliente_nombre: str,
+    monto_conciliado: Decimal,
+    monto_neto: Decimal,
+    monto_comision: Decimal,
+    fecha: date,
+) -> None:
+    """Asiento al aprobar una liquidación, por cada detalle (cliente):
+    Cliente (2-1-2-X) D monto_conciliado / Banco Macro (1-1-1-3-1) H monto_neto
+    + Comisiones ganadas (3-1-1-0) H monto_comision (si > 0).
+    Cancela la deuda con el cliente y reconoce la comisión como ingreso."""
+    try:
+        if _ya_existe(db, "liquidacion_aprobacion", detalle_id, org_id):
+            return
+        monto_conciliado = round(_monto(monto_conciliado), 2)
+        monto_neto       = round(_monto(monto_neto), 2)
+        monto_comision   = round(_monto(monto_comision), 2)
+        if monto_conciliado <= 0:
+            return
+        cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_id, org_id) if cliente_id else None
+        banco          = _get_cuenta_por_codigo(db, "1-1-1-3-1", org_id)
+        comisiones     = _get_cuenta_por_codigo(db, "3-1-1-0", org_id)
+        if not cuenta_cliente or not banco:
+            logger.warning("Cuentas liquidación no encontradas org %s (cliente_id=%s)", org_id, cliente_id)
+            return
+        lineas = [
+            (cuenta_cliente.id, monto_conciliado, Decimal("0")),
+            (banco.id,          Decimal("0"),     monto_neto),
+        ]
+        if monto_comision > 0 and comisiones:
+            lineas.append((comisiones.id, Decimal("0"), monto_comision))
+        _crear_asiento_multilinea(
+            db=db,
+            fecha=fecha if isinstance(fecha, date) else hoy_art(),
+            descripcion=f"Liquidación #{liquidacion_id} — {cliente_nombre}",
+            modulo="liquidacion_aprobacion",
+            referencia_id=detalle_id,
+            org_id=org_id,
+            usuario_id=usuario_id,
+            lineas=lineas,
+        )
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        logger.warning("Error asiento liquidacion aprobacion detalle %s: %s", detalle_id, ex)
+
+
 def registrar_cc_inicial(
     db: Session,
     planilla_row_id: int,

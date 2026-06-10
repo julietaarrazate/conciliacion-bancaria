@@ -257,6 +257,31 @@ def aprobar_liquidacion(
         liq.notas = payload["notas"]
     db.commit()
 
+    # Asientos contables al aprobar: Cliente D / Banco H + Comisiones H
+    try:
+        from app.services.motor_contable import registrar_liquidacion_aprobacion
+        from app.services.tz import hoy_art
+        org_id = liq.organizacion_id
+        fecha_liq = hoy_art()
+        for d in liq.detalles:
+            if (d.monto_conciliado or 0) > 0:
+                registrar_liquidacion_aprobacion(
+                    db=db,
+                    liquidacion_id=liq.id,
+                    detalle_id=d.id,
+                    org_id=org_id,
+                    usuario_id=current_user.id,
+                    cliente_id=d.cliente_id,
+                    cliente_nombre=d.cliente_nombre,
+                    monto_conciliado=d.monto_conciliado,
+                    monto_neto=d.monto_neto,
+                    monto_comision=d.monto_comision,
+                    fecha=fecha_liq,
+                )
+    except Exception as _ex:
+        import logging
+        logging.getLogger(__name__).warning("Error asientos liquidacion %s: %s", liq_id, _ex)
+
     registrar_log(db, current_user.id, "liquidaciones", liq.id, "UPDATE",
                   {"estado": "aprobada", "periodo": f"{liq.periodo_inicio} → {liq.periodo_fin}"})
 

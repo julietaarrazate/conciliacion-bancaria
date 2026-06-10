@@ -528,3 +528,81 @@ def cierre_mensual_pdf(
     deco = _page_decorator(generado_por)
     doc.build(story, onFirstPage=deco, onLaterPages=deco)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Cuenta corriente por cliente
+# ---------------------------------------------------------------------------
+def cuenta_corriente_pdf(data: dict, generado_por: str = "Julieta Arrazate") -> bytes:
+    """Recibe el dict que devuelve GET /contabilidad/cuenta-corriente."""
+    s = _styles()
+    buf = io.BytesIO()
+    cliente = data.get("cliente") or {}
+    cuenta  = data.get("cuenta") or {}
+    movs    = data.get("movimientos") or []
+
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=_ML * mm, rightMargin=_MR * mm,
+        topMargin=_MT * mm, bottomMargin=_MB * mm,
+        title=f"Cuenta corriente - {cliente.get('nombre', '')}",
+        author=generado_por,
+    )
+
+    story: list = []
+    story.append(_header_band(
+        "Cuenta corriente",
+        "Cuenta",
+        f"{cuenta.get('codigo', '')} {cuenta.get('nombre', '')}".strip() or "—",
+    ))
+    story.append(Paragraph(f"<b>{cliente.get('nombre', '—')}</b>", s["subtitle"]))
+    story.append(Spacer(1, 4))
+
+    total_debito  = data.get("total_debito",  0)
+    total_credito = data.get("total_credito", 0)
+    saldo_final   = data.get("saldo_final",   0)
+    story.append(_kpi_cards([
+        ("Total Débito",  _fmt_ars(total_debito),  _BRAND_DARK),
+        ("Total Crédito", _fmt_ars(total_credito), None),
+        ("Saldo Final",   _fmt_ars(saldo_final),   _GREEN if saldo_final >= 0 else _RED),
+    ]))
+    story.append(Spacer(1, 6))
+
+    if not movs:
+        story.append(_empty_note("Sin movimientos para los filtros seleccionados."))
+    else:
+        rows = []
+        for m in reversed(movs):  # cronológico ascendente en PDF
+            fecha  = str(m.get("fecha") or "")[:10]
+            tipo   = m.get("tipo_label") or "—"
+            ref    = m.get("referencia") or "—"
+            estado = m.get("estado") or ""
+            deb    = m.get("debito",  0) or 0
+            cre    = m.get("credito", 0) or 0
+            sal    = m.get("saldo",   0) or 0
+            rows.append([
+                fecha,
+                Paragraph(tipo[:30], s["cell"]),
+                Paragraph(ref[:45], s["cell"]),
+                estado,
+                _fmt_ars(deb) if deb else "",
+                _fmt_ars(cre) if cre else "",
+                _fmt_ars(sal),
+            ])
+        story.append(_tabla(
+            ["Fecha", "Tipo", "Referencia", "Estado", "Débito", "Crédito", "Saldo"],
+            rows,
+            [22 * mm, 32 * mm, 52 * mm, 20 * mm, 28 * mm, 28 * mm, 28 * mm],
+            aligns={3: "CENTER", 4: "RIGHT", 5: "RIGHT", 6: "RIGHT"},
+            money_cols=[4, 5, 6],
+        ))
+        story.append(Spacer(1, 4))
+        story.append(_totales_box([
+            ("Débito total",  _fmt_ars(total_debito),  total_debito,  False),
+            ("Crédito total", _fmt_ars(total_credito), total_credito, False),
+            ("Saldo final",   _fmt_ars(saldo_final),   saldo_final,   True),
+        ]))
+
+    deco = _page_decorator(generado_por)
+    doc.build(story, onFirstPage=deco, onLaterPages=deco)
+    return buf.getvalue()

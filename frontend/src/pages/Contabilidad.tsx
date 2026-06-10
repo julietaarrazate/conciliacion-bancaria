@@ -173,8 +173,8 @@ const ExcelFilterCtb: React.FC<{ label: string; active: boolean; align?: 'left'|
 
 type Tab = 'plan' | 'reglas' | 'diario' | 'sumas' | 'balance' | 'mayor' | 'clientes' | 'ctacte'
 
-const CAT_LABEL: Record<string, string> = { banco: 'Banco (UM)', tt: 'TT', cheques: 'Cheques', ajustes: 'Ajustes' }
-const CAT_KEYS = ['banco', 'tt', 'cheques', 'ajustes'] as const
+const CAT_LABEL: Record<string, string> = { banco: 'TT', cheques: 'Cheques', ajustes: 'Ajustes' }
+const CAT_KEYS = ['banco', 'cheques', 'ajustes'] as const
 
 const ESTADO_BADGE: Record<string, string> = {
   Conciliado: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800',
@@ -1322,6 +1322,16 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
                 </label>
               ))}
             </div>
+            {ctaCteClienteId && (
+              <button
+                onClick={() => apiClient.downloadCtaCtePdf(Number(ctaCteClienteId), activeOrgId ?? undefined)}
+                className="ml-auto text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-ml-dark-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-1"
+                title="Exportar PDF cuenta corriente"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                PDF
+              </button>
+            )}
           </div>
 
           {loadingCtaCte ? (
