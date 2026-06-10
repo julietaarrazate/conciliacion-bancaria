@@ -4,7 +4,6 @@ import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
 import { toast } from '@/store/toast'
-import { confirmDialog } from '@/store/confirm'
 import { localIsoDate } from '@/utils/fecha'
 
 interface CarteraItem {
@@ -389,36 +388,6 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   }
 
   const [backfilling, setBackfilling] = useState(false)
-  const reconstruirCtaCte = async () => {
-    setBackfilling(true)
-    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
-    try {
-      const prev = await apiClient.client.post(`/contabilidad/backfill-cuentas-corrientes?dry_run=true${orgQ}`, {})
-      const { pendientes, clientes, ya_cubiertas, total_filas_ok, sin_cuenta_cliente } = prev.data
-      if (!pendientes) {
-        if (ya_cubiertas > 0) {
-          const extra = sin_cuenta_cliente > 0 ? ` · ${sin_cuenta_cliente} fila(s) sin cuenta de cliente` : ''
-          toast.success(`Cuentas corrientes al día — ${ya_cubiertas} de ${total_filas_ok} fila(s) cubiertas${extra}`)
-        } else {
-          toast.success('No hay conciliaciones para reconstruir')
-        }
-        return
-      }
-      const ok = await confirmDialog({
-        title: 'Reconstruir cuentas corrientes',
-        message: `Se generarán ${pendientes} acreditación(es) de ${clientes} cliente(s) a partir de las conciliaciones ya cargadas (Banco D / Cliente H). Es idempotente: no duplica lo ya registrado.${sin_cuenta_cliente > 0 ? ` Nota: ${sin_cuenta_cliente} fila(s) sin cuenta de cliente serán ignoradas.` : ''}`,
-        confirmLabel: 'Reconstruir',
-      })
-      if (!ok) return
-      const r = await apiClient.client.post(`/contabilidad/backfill-cuentas-corrientes?${orgQ.slice(1)}`, {})
-      toast.success(`${r.data.creados} acreditación(es) agregada(s) en ${r.data.clientes} cliente(s)`)
-      cargarCartera()
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || 'No se pudo reconstruir')
-    } finally {
-      setBackfilling(false)
-    }
-  }
 
   const [creandoFaltantes, setCreandoFaltantes] = useState(false)
   const crearCuentasFaltantes = async () => {
@@ -437,16 +406,20 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
   const resetYRebuild = async () => {
     const orgQ = activeOrgId ? `?org_id=${activeOrgId}` : ''
     try {
+      setBackfilling(true)
       // dry_run primero — muestra qué haría
       const prev = await apiClient.client.post(`/contabilidad/reset-y-rebuild?dry_run=true${orgQ ? '&' + orgQ.slice(1) : ''}`, {})
       const { a_borrar, a_crear } = prev.data
       const confirmar = window.confirm(
-        `⚠️ RESET LIBRO DIARIO\n\n` +
+        `🧹 EMPEZAR LIMPIO — Libro Diario\n\n` +
+        `Borra TODOS los asientos y reconstruye desde cero, prolijo y numerado desde 1, ` +
+        `usando solo las fuentes confiables: importaciones del banco (UM) y conciliaciones agrupadas por planilla. ` +
+        `Vincula la cuenta de cada cliente automáticamente.\n\n` +
         `Se van a BORRAR: ${a_borrar.asientos} asientos (${a_borrar.detalles} líneas)\n` +
-        `Se van a CREAR: ${a_crear.total_asientos_nuevos} asientos nuevos\n` +
-        `  · ${a_crear.um_lotes} lote(s) UM\n` +
-        `  · ${a_crear.cc_iniciales} acreditaciones de clientes\n\n` +
-        `¿Confirmar el reset?`
+        `Se van a CREAR: ${a_crear.total_asientos_nuevos} asientos limpios\n` +
+        `  · ${a_crear.um_lotes} lote(s) de banco (UM)\n` +
+        `  · ${a_crear.um_reclass_planilla} transferencia(s) conciliada(s) (TT)\n\n` +
+        `¿Confirmás empezar limpio?`
       )
       if (!confirmar) return
       const r = await apiClient.client.post(`/contabilidad/reset-y-rebuild?dry_run=false${orgQ ? '&' + orgQ.slice(1) : ''}`, {}, { timeout: 300000 })
@@ -455,7 +428,9 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       cargarCartera()
     } catch (e: any) {
       const detail = e.response?.data?.detail || e.message || 'Error desconocido'
-      alert(`❌ Error en el reset:\n\n${detail}`)
+      alert(`❌ Error al empezar limpio:\n\n${detail}`)
+    } finally {
+      setBackfilling(false)
     }
   }
 
@@ -1183,23 +1158,15 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
             </p>
             {canAdminAccounting && (
               <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-                <button
-                  onClick={reconstruirCtaCte}
-                  disabled={backfilling}
-                  className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark disabled:opacity-50"
-                  title="Genera las acreditaciones históricas en cada cuenta corriente a partir de las conciliaciones ya cargadas"
-                >
-                  {backfilling ? 'Reconstruyendo…' : '↻ Reconstruir desde conciliaciones'}
-                </button>
                 {user?.is_superadmin && (
                   <>
                     <button
                       onClick={resetYRebuild}
                       disabled={backfilling}
-                      className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-medium hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
-                      title="Borra TODOS los asientos y los reconstruye limpio desde los datos reales"
+                      className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+                      title="Borra TODOS los asientos y reconstruye el Libro Diario limpio desde cero (banco UM + conciliaciones agrupadas), numerado desde 1. Vincula cuentas de clientes automáticamente."
                     >
-                      ⚠️ Reset Libro Diario
+                      {backfilling ? 'Empezando…' : '🧹 Empezar limpio'}
                     </button>
                     <button
                       onClick={fixFechasUtc}

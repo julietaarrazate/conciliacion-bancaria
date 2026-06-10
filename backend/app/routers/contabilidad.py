@@ -1103,7 +1103,10 @@ def reset_y_rebuild_asientos(
         lotes.setdefault(lote_key, []).append(m)
     n_um_lotes = len(lotes)
 
-    # ── Planillas conciliadas (agrupadas) con cuenta contable ────
+    # ── Planillas conciliadas (agrupadas) ────────────────────────
+    # No exigimos cuenta_contable_id: el loop de rebuild crea/vincula la cuenta
+    # de cada cliente (_get_o_crear_cuenta_cliente), así el arranque limpio es
+    # un one-shot — no hace falta correr "crear cuentas faltantes" antes.
     filas_ok = (
         db.query(PlanillaRow, Planilla, Cliente)
         .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
@@ -1112,7 +1115,6 @@ def reset_y_rebuild_asientos(
             Planilla.organizacion_id == oid,
             Planilla.deleted_at.is_(None),
             PlanillaRow.status.in_(["ok", "OK", "PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA"]),
-            Cliente.cuenta_contable_id.isnot(None),
         )
         .all()
     )
