@@ -308,146 +308,29 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error seed org: %s", ex)
 
-    # 6. Seed contabilidad (plan de cuentas + reglas)
-    # Checks plan_cuentas and reglas_contables INDEPENDENTLY so a partial
-    # seed from a previous failed deploy is always completed on the next boot.
+    # 6. Seed contabilidad (plan de cuentas + reglas) — POR ORGANIZACIÓN
+    # Siembra/completa el plan + reglas de TODAS las orgs (no solo la id=1), así
+    # las orgs de prueba también llevan contabilidad. Idempotente: completa
+    # parciales de deploys fallidos y agrega cuentas nuevas del patch en cada boot.
     try:
         from app.database import SessionLocal as SL
-        from app.models.contabilidad import PlanCuenta, ReglaContable
-
-        PLAN = [
-            # (codigo, nombre, tipo, parent_codigo, nivel)
-            ("1-0-0-0", "Activo",               "activo",    None,      1),
-            ("2-0-0-0", "Pasivo",               "pasivo",    None,      1),
-            ("3-0-0-0", "Resultado",            "resultado", None,      1),
-            ("1-1-0-0", "Activo Corriente",     "activo",   "1-0-0-0",  2),
-            ("1-2-0-0", "Activo no corriente",  "activo",   "1-0-0-0",  2),
-            ("2-1-0-0", "Pasivo Corriente",     "pasivo",   "2-0-0-0",  2),
-            ("3-1-0-0", "Ingresos",             "resultado","3-0-0-0",  2),
-            ("3-2-0-0", "Gastos",               "resultado","3-0-0-0",  2),
-            ("1-1-1-0", "Disponibilidades",     "activo",   "1-1-0-0",  3),
-            ("1-1-2-0", "Créditos",             "activo",   "1-1-0-0",  3),
-            ("1-2-1-0", "Bienes de Uso",        "activo",   "1-2-0-0",  3),
-            ("2-1-1-0", "Pasivo a Confirmar",   "pasivo",   "2-1-0-0",  3),
-            ("2-1-2-0", "Cliente",              "pasivo",   "2-1-0-0",  3),
-            ("3-1-1-0", "Comisiones",           "resultado","3-1-0-0",  3),
-            ("3-1-2-0", "Operaciones de cambio","resultado","3-1-0-0",  3),
-            ("3-2-1-0", "Impuesto déb y créd",  "resultado","3-2-0-0",  3),
-            ("3-2-2-0", "Gastos bancarios",     "resultado","3-2-0-0",  3),
-            ("1-1-1-1", "Caja chica",           "activo",   "1-1-1-0",  4),
-            ("1-1-1-2", "Efectivo",             "activo",   "1-1-1-0",  4),
-            ("1-1-1-3", "Banco",                "activo",   "1-1-1-0",  4),
-            ("1-1-1-3-1", "Banco Macro",        "activo",   "1-1-1-3",  5),
-            ("2-1-1-1", "No identificado",      "pasivo",   "2-1-1-0",  4),
-            ("2-1-2-1", "Green",                "pasivo",   "2-1-2-0",  4),
-            ("2-1-2-2", "Tucu",                 "pasivo",   "2-1-2-0",  4),
-            ("2-1-2-3", "Alojando",             "pasivo",   "2-1-2-0",  4),
-        ]
-        REGLAS = [
-            # (evento, descripcion, debe_codigo, haber_codigo)
-            ("carga_extracto",          "Carga extracto bancario",          "1-1-1-3", "2-1-0-0"),
-            ("carga_planilla",          "Acreditación planilla cliente",    "2-1-0-0", "2-1-2-0"),
-            ("carga_planilla_comision", "Comisión sobre planilla",          "2-1-2-0", "3-1-1-0"),
-            ("carga_efectivo",          "Carga cobro en efectivo",          "1-1-1-2", "1-1-1-3"),
-            ("carga_cheque",            "Carga cheque cliente",             "1-1-2-1", "2-1-2-0"),
-            ("carga_cheque_comision",   "Comisión sobre cheque",            "1-1-2-1", "3-1-3-0"),
-            ("acred_rechazo_banco",     "Acred/rechazo cheque — banco",     "1-1-1-3", "1-1-2-0"),
-            ("acred_rechazo_pasivo",    "Acred/rechazo cheque — cliente",   "2-1-2-0", "1-1-2-0"),
-            ("pago_cliente_banco",      "Pago cliente por banco",           "2-1-2-0", "1-1-1-3"),
-            ("pago_cliente_efectivo",   "Pago cliente en efectivo",         "2-1-2-0", "1-1-1-2"),
-            ("asig_gasto_banco",        "Gasto pagado por banco",           "3-2-0-0", "1-1-1-3"),
-            ("asig_gasto_efectivo",     "Gasto pagado en efectivo",         "3-2-0-0", "1-1-1-2"),
-        ]
+        from app.models.organizacion import Organizacion
+        from app.services.seed_contable import seed_contabilidad_org, seed_categorias_egreso_org
 
         db = SL()
-        n_cuentas = db.query(PlanCuenta).filter(PlanCuenta.organizacion_id == 1).count()
-        n_reglas  = db.query(ReglaContable).filter(ReglaContable.organizacion_id == 1).count()
-
-        # Seed plan de cuentas if missing
-        if n_cuentas == 0:
-            code_to_id = {}
-            for codigo, nombre, tipo, parent_codigo, nivel in PLAN:
-                parent_id = code_to_id.get(parent_codigo) if parent_codigo else None
-                c = PlanCuenta(
-                    codigo=codigo, nombre=nombre, tipo=tipo,
-                    parent_id=parent_id, nivel=nivel,
-                    activo=True, organizacion_id=1
-                )
-                db.add(c)
-                db.flush()
-                code_to_id[codigo] = c.id
-            db.commit()
-            n_cuentas = len(PLAN)
-            logger.info("Plan de cuentas sembrado (%d cuentas)", n_cuentas)
-        else:
-            # Build code→id map from existing rows (needed for reglas seed below)
-            code_to_id = {c.codigo: c.id for c in db.query(PlanCuenta).filter(PlanCuenta.organizacion_id == 1).all()}
-
-        # Patch: add new accounts to existing seeds (runs every boot, idempotent)
-        PLAN_PATCH = [
-            ("1-1-1-3-1", "Banco Macro",          "activo",    "1-1-1-3",  5),
-            # Cuentas cheques (pedido contador junio 2026)
-            ("1-1-1-4",   "Banco 2",              "activo",    "1-1-1-0",  4),
-            ("1-1-2-1",   "Cheques en cartera",   "activo",    "1-1-2-0",  4),
-            ("1-1-2-2-0", "Créditos socio",       "activo",    "1-1-2-0",  4),
-            ("1-1-2-2-1", "Socio 1",              "activo",    "1-1-2-2-0",5),
-            ("2-1-3-0",   "Cheques",              "pasivo",    "2-1-0-0",  3),
-            ("2-1-3-1",   "Cheques depositados",  "pasivo",    "2-1-3-0",  4),
-            ("2-1-3-2",   "Cheques a depositar",  "pasivo",    "2-1-3-0",  4),
-            ("3-1-3-0",   "Comisiones cheques",   "resultado", "3-1-0-0",  3),
-            ("3-2-2-1",   "Gastos de rechazos",   "resultado", "3-2-2-0",  4),
-        ]
-        patch_added = 0
-        for codigo, nombre, tipo, parent_codigo, nivel in PLAN_PATCH:
-            if codigo not in code_to_id:
-                parent_id = code_to_id.get(parent_codigo)
-                c = PlanCuenta(
-                    codigo=codigo, nombre=nombre, tipo=tipo,
-                    parent_id=parent_id, nivel=nivel,
-                    activo=True, organizacion_id=1
-                )
-                db.add(c)
-                db.flush()
-                code_to_id[codigo] = c.id
-                patch_added += 1
-        if patch_added:
-            db.commit()
-            logger.info("Plan patch: %d cuentas nuevas agregadas", patch_added)
-
-        # Seed reglas if missing (independent of cuentas seed)
-        if n_reglas == 0 and code_to_id:
-            for evento, descripcion, debe_codigo, haber_codigo in REGLAS:
-                if debe_codigo not in code_to_id or haber_codigo not in code_to_id:
-                    logger.warning("Cuenta %s o %s no encontrada para regla %s", debe_codigo, haber_codigo, evento)
-                    continue
-                db.add(ReglaContable(
-                    evento=evento, descripcion=descripcion,
-                    cuenta_debe_id=code_to_id[debe_codigo],
-                    cuenta_haber_id=code_to_id[haber_codigo],
-                    activo=True, organizacion_id=1
-                ))
-            db.commit()
-            logger.info("Reglas contables sembradas (%d reglas)", len(REGLAS))
-
-        logger.info("Contabilidad: %d cuentas, %d reglas", n_cuentas, db.query(ReglaContable).filter(ReglaContable.organizacion_id==1).count())
+        org_ids = [o.id for o in db.query(Organizacion.id).all()]
+        if 1 not in org_ids:
+            org_ids = [1] + org_ids  # garantiza org A aunque la query falle
+        for oid in org_ids:
+            try:
+                seed_contabilidad_org(db, oid)
+                seed_categorias_egreso_org(db, oid)
+            except Exception as ex_org:
+                db.rollback()
+                logger.warning("Error seed contabilidad org %s: %s", oid, ex_org)
         db.close()
     except Exception as ex:
         logger.warning("Error seed contabilidad: %s", ex)
-
-    # 6b. Seed categorías de egreso por defecto (idempotente, solo org 1)
-    try:
-        from app.database import SessionLocal as SL
-        from app.models.egreso import CategoriaEgreso
-
-        db = SL()
-        if db.query(CategoriaEgreso).filter(CategoriaEgreso.organizacion_id == 1).count() == 0:
-            for nombre in ["Impuestos", "Bancarios", "Proveedores", "Alquiler", "Sueldos", "Otros"]:
-                db.add(CategoriaEgreso(organizacion_id=1, nombre=nombre, activo=True))
-            db.commit()
-            logger.info("Categorías de egreso sembradas")
-        db.close()
-    except Exception as ex:
-        logger.warning("Error seed categorías egreso: %s", ex)
 
     # 7. Backfill contabilidad — genera asientos para extractos/planillas existentes
     try:

@@ -51,6 +51,17 @@ def create_organizacion(
     db.commit()
     db.refresh(org)
 
+    # Sembrar plan de cuentas + reglas + categorías para la nueva org, así puede
+    # llevar contabilidad (asientos automáticos) desde el primer movimiento.
+    try:
+        from app.services.seed_contable import seed_contabilidad_org, seed_categorias_egreso_org
+        seed_contabilidad_org(db, org.id)
+        seed_categorias_egreso_org(db, org.id)
+    except Exception as ex:
+        db.rollback()
+        import logging
+        logging.getLogger(__name__).warning("No se pudo sembrar contabilidad para org %s: %s", org.id, ex)
+
     registrar_log(db, current_user.id, "organizaciones", org.id, "INSERT",
                   {"nombre": org.nombre, "plan": org.plan})
     return org
