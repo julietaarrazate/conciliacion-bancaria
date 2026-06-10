@@ -393,8 +393,6 @@ def conciliar_planilla(
         "sin_datos": 0,
         "filas_procesadas": 0
     }
-    _um_total_monto = Decimal("0")
-    _um_fecha = None
 
     # Pre-cargar en procesados todos los movimientos ya asignados a filas "ok"
     # antes de iterar, sin importar el orden de las filas en la planilla.
@@ -481,12 +479,6 @@ def conciliar_planilla(
             row.orden_movimiento_acreditado = mov.id
             procesados.add(mov.id)
             res["acreditadas"] += 1
-
-            # Acumular para asiento agrupado por planilla (se crea al final del loop)
-            if getattr(mov, "source", None) == "um" and cliente_id:
-                _um_total_monto += abs(Decimal(str(row.monto or 0)))
-                if _um_fecha is None:
-                    _um_fecha = mov.fecha_acred or mov.fecha
         else:
             if status == "no está":
                 res["no_encontradas"] += 1
@@ -495,29 +487,42 @@ def conciliar_planilla(
             else:
                 res["sin_datos"] += 1
 
-    # Asiento agrupado: un solo asiento por planilla (reemplaza el per-fila anterior)
-    if _um_total_monto > 0 and cliente_id and planilla_rows:
+    # Asiento agrupado por planilla: se recomputa el total sobre TODAS las filas
+    # ya conciliadas contra movimientos UM (no solo las de esta pasada). Así el
+    # upsert refleja el total real en re-conciliaciones y es idempotente —
+    # mismo criterio que usa "Empezar limpio" (reset-y-rebuild).
+    if cliente_id and planilla_rows:
         try:
-            from app.services.motor_contable import registrar_reclasificacion_planilla
-            planilla_id = planilla_rows[0].planilla_id
-            nombre_archivo = ""
-            try:
-                if hasattr(planilla_rows[0], "planilla") and planilla_rows[0].planilla:
-                    nombre_archivo = planilla_rows[0].planilla.nombre_archivo or ""
-            except Exception:
-                pass
-            from app.services.tz import hoy_art as _hoy_art
-            registrar_reclasificacion_planilla(
-                db=db,
-                planilla_id=planilla_id,
-                org_id=org_id,
-                usuario_id=None,
-                cliente_id=cliente_id,
-                cliente_nombre=cliente_nombre,
-                total_monto=_um_total_monto,
-                fecha=_um_fecha or _hoy_art(),
-                nombre_archivo=nombre_archivo,
-            )
+            um_mov_ids = {m.id for m in movimientos if getattr(m, "source", None) == "um"}
+            total_um = Decimal("0")
+            fecha_ref = None
+            for r in planilla_rows:
+                if (r.status or "") == "ok" and getattr(r, "orden_movimiento_acreditado", None) in um_mov_ids:
+                    total_um += abs(Decimal(str(r.monto or 0)))
+                    rf = getattr(r, "fecha_acred", None)
+                    if rf and (fecha_ref is None or rf > fecha_ref):
+                        fecha_ref = rf
+            if total_um > 0:
+                from app.services.motor_contable import registrar_reclasificacion_planilla
+                from app.services.tz import hoy_art as _hoy_art
+                planilla_id = planilla_rows[0].planilla_id
+                nombre_archivo = ""
+                try:
+                    if getattr(planilla_rows[0], "planilla", None):
+                        nombre_archivo = planilla_rows[0].planilla.nombre_archivo or ""
+                except Exception:
+                    pass
+                registrar_reclasificacion_planilla(
+                    db=db,
+                    planilla_id=planilla_id,
+                    org_id=org_id,
+                    usuario_id=None,
+                    cliente_id=cliente_id,
+                    cliente_nombre=cliente_nombre,
+                    total_monto=total_um,
+                    fecha=fecha_ref or _hoy_art(),
+                    nombre_archivo=nombre_archivo,
+                )
         except Exception as _ex:
             import logging
             logging.getLogger(__name__).warning("Error asiento agrupado planilla: %s", _ex)

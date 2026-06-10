@@ -598,9 +598,9 @@ def cuenta_corriente_pdf(data: dict, generado_por: str = "Julieta Arrazate") -> 
         ))
         story.append(Spacer(1, 4))
         story.append(_totales_box([
-            ("Débito total",  _fmt_ars(total_debito),  total_debito,  False),
-            ("Crédito total", _fmt_ars(total_credito), total_credito, False),
-            ("Saldo final",   _fmt_ars(saldo_final),   saldo_final,   True),
+            ("Débito total",  _fmt_ars(total_debito),  None, False),
+            ("Crédito total", _fmt_ars(total_credito), None, False),
+            ("Saldo final",   _fmt_ars(saldo_final),   _GREEN if saldo_final >= 0 else _RED, True),
         ]))
 
     deco = _page_decorator(generado_por)

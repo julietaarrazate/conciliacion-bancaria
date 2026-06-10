@@ -1118,9 +1118,16 @@ def reset_y_rebuild_asientos(
         )
         .all()
     )
-    # Agrupar por planilla → un asiento por planilla
+    # Agrupar por planilla → un asiento por planilla.
+    # Solo filas conciliadas contra movimientos UM: el asiento reclasifica
+    # "No identificado" (creado por um_lote) → Cliente. Las filas conciliadas
+    # contra el extracto mensual NO tienen contrapartida en No identificado,
+    # así que se excluyen (mismo criterio que el flujo live en conciliacion.py).
+    um_mov_ids = {m.id for m in um_movs}
     planillas_map: dict = {}
     for row, planilla, cliente in filas_ok:
+        if row.orden_movimiento_acreditado not in um_mov_ids:
+            continue
         key = planilla.id
         if key not in planillas_map:
             planillas_map[key] = {"planilla": planilla, "cliente": cliente, "rows": []}

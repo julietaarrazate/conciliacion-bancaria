@@ -141,3 +141,83 @@ def test_buscar_match_monto_duplicado_con_cuit_correcto_acredita():
     assert resultado is not None
     assert resultado.id == 2
     assert status == "ok"
+
+
+# ─── Regresión: asiento agrupado en re-conciliación (v3.13) ───────────────────
+# Verifica que re-conciliar una planilla (solo_pendientes=True) deje el asiento
+# um_reclass_planilla con el TOTAL de todas las filas ok, no solo el delta nuevo.
+
+import pytest as _pytest
+from decimal import Decimal as _Dec
+from sqlalchemy import create_engine as _ce
+from sqlalchemy.orm import sessionmaker as _sm
+from app.database import Base as _Base
+from app.models.organizacion import Organizacion as _Org
+from app.models.cliente import Cliente as _Cli
+from app.models.contabilidad import PlanCuenta as _PC, Asiento as _As
+from app.models.planilla import Planilla as _Pl, PlanillaRow as _PR
+from app.services.conciliacion import conciliar_planilla as _conciliar
+
+
+@_pytest.fixture
+def _db_cc():
+    eng = _ce("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    _Base.metadata.create_all(bind=eng)
+    s = _sm(bind=eng, autoflush=False, autocommit=False)()
+    s.add(_Org(id=1, nombre="Test", plan="pro", activo=True))
+    s.flush()
+    # Plan mínimo: No identificado + padre cliente + cuenta del cliente
+    s.add(_PC(id=1, codigo="2-1-1-1", nombre="No identificado", tipo="pasivo", nivel=4, activo=True, organizacion_id=1))
+    padre = _PC(id=2, codigo="2-1-2-0", nombre="Clientes", tipo="pasivo", nivel=3, activo=True, organizacion_id=1)
+    s.add(padre); s.flush()
+    cuenta_cli = _PC(id=3, codigo="2-1-2-1", nombre="Green", tipo="pasivo", nivel=4, activo=True, organizacion_id=1, parent_id=2)
+    s.add(cuenta_cli); s.flush()
+    cli = _Cli(id=1, nombre="Green", organizacion_id=1, cuenta_contable_id=3)
+    s.add(cli)
+    s.add(_Pl(id=1, cliente_id=1, usuario_id=1, organizacion_id=1, nombre_archivo="green.xlsx"))
+    s.flush()
+    yield s
+    s.close()
+
+
+def _mov_um(s, id, monto, titular="GREEN SA 20111111119"):
+    m = MovimientoBanco(id=id, extracto_id=1, monto=monto, titular=titular,
+                        source="um", um_lote=1, fecha=date(2026, 5, 20))
+    s.add(m); s.flush()
+    return m
+
+
+def _row_pl(s, id, monto):
+    r = _PR(id=id, planilla_id=1, organizacion_id=1, monto=monto,
+            cuit="20111111119", titular="GREEN SA", status="pendiente")
+    s.add(r); s.flush()
+    return r
+
+
+def _total_asiento_planilla(s):
+    a = s.query(_As).filter(_As.modulo == "um_reclass_planilla", _As.referencia_id == 1).all()
+    assert len(a) == 1, f"esperaba 1 asiento agrupado, hay {len(a)}"
+    return sum(l.debe for l in a[0].lineas)
+
+
+def test_reconciliacion_asiento_agrupado_suma_total(_db_cc):
+    """Bug v3.13: re-conciliar debe dejar el asiento con el total acumulado."""
+    s = _db_cc
+    r1 = _row_pl(s, 1, _Dec("1000"))
+    r2 = _row_pl(s, 2, _Dec("2000"))
+    m1 = _mov_um(s, 101, _Dec("1000"))
+
+    # 1ª conciliación: solo está m1 → r1 ok, r2 queda pendiente
+    _conciliar(s, planilla_rows=[r1, r2], movimientos=[m1],
+               cliente_nombre="Green", fecha_acred_str="hoy", org_id=1, cliente_id=1)
+    assert r1.status == "ok"
+    assert _total_asiento_planilla(s) == _Dec("1000")
+
+    # 2ª conciliación (re-conciliar): aparece m2 → r2 ok. El asiento debe
+    # reflejar 1000 + 2000 = 3000, NO solo el delta (2000).
+    m2 = _mov_um(s, 102, _Dec("2000"))
+    _conciliar(s, planilla_rows=[r1, r2], movimientos=[m1, m2],
+               cliente_nombre="Green", fecha_acred_str="hoy", org_id=1,
+               cliente_id=1, solo_pendientes=True)
+    assert r2.status == "ok"
+    assert _total_asiento_planilla(s) == _Dec("3000")
