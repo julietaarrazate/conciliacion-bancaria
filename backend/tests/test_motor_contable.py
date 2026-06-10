@@ -41,7 +41,7 @@ REGLAS_TEST = [
 
 CUENTAS_TEST = [
     "1-1-1-2", "1-1-1-3", "1-1-1-3-1", "1-1-2-0", "2-1-0-0",
-    "2-1-2-0", "3-1-1-0", "3-2-0-0",
+    "2-1-1-1", "2-1-2-0", "3-1-1-0", "3-2-0-0",
     # Cuentas cheques v2 (regla contador junio 2026)
     "1-1-2-1", "2-1-3-1", "3-1-3-0", "3-2-2-1",
 ]
@@ -444,3 +444,141 @@ def test_reverso_referencia_al_asiento_original(db):
 
     assert reverso.referencia_id == original.id
     assert "REVERSO" in (reverso.descripcion or "")
+
+
+# ─── Reclasificación agrupada por planilla (v3.13) ────────────────────────────
+
+def _cliente_con_cuenta(db, nombre="Green"):
+    """Crea un Cliente con su cuenta contable (2-1-2-X) ya vinculada."""
+    from app.models.cliente import Cliente
+    padre = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-2-0", PlanCuenta.organizacion_id == ORG_ID).first()
+    cuenta = PlanCuenta(codigo="2-1-2-1", nombre=nombre, tipo="pasivo", nivel=5,
+                        activo=True, organizacion_id=ORG_ID, parent_id=padre.id)
+    db.add(cuenta)
+    db.flush()
+    cli = Cliente(nombre=nombre, organizacion_id=ORG_ID, cuenta_contable_id=cuenta.id)
+    db.add(cli)
+    db.flush()
+    return cli, cuenta
+
+
+def test_reclasificacion_planilla_un_asiento_agrupado(db):
+    """Un solo asiento por planilla: No identificado (2-1-1-1) D / Cliente H."""
+    cli, cuenta_cli = _cliente_con_cuenta(db)
+    mc.registrar_reclasificacion_planilla(
+        db, planilla_id=10, org_id=ORG_ID, usuario_id=1,
+        cliente_id=cli.id, cliente_nombre=cli.nombre,
+        total_monto=Decimal("3000"), fecha=date(2026, 5, 23),
+        nombre_archivo="green.xlsx",
+    )
+    asientos = _asientos_de(db, "um_reclass_planilla", 10)
+    assert len(asientos) == 1
+    a = asientos[0]
+    assert len(a.lineas) == 2
+    no_id = next(l for l in a.lineas if l.debe > 0)
+    cli_l = next(l for l in a.lineas if l.haber > 0)
+    assert no_id.debe == Decimal("3000")
+    assert cli_l.haber == Decimal("3000")
+    assert cli_l.cuenta_id == cuenta_cli.id
+
+
+def test_reclasificacion_planilla_upsert_actualiza_monto(db):
+    """Re-conciliar la misma planilla actualiza el monto, no crea otro asiento."""
+    cli, _ = _cliente_con_cuenta(db)
+    mc.registrar_reclasificacion_planilla(
+        db, 10, ORG_ID, 1, cli.id, cli.nombre, Decimal("1000"), date(2026, 5, 23))
+    mc.registrar_reclasificacion_planilla(
+        db, 10, ORG_ID, 1, cli.id, cli.nombre, Decimal("1500"), date(2026, 5, 24))
+    asientos = _asientos_de(db, "um_reclass_planilla", 10)
+    assert len(asientos) == 1
+    assert sum(l.debe for l in asientos[0].lineas) == Decimal("1500")
+
+
+def test_reclasificacion_planilla_monto_cero_no_crea(db):
+    cli, _ = _cliente_con_cuenta(db)
+    mc.registrar_reclasificacion_planilla(
+        db, 10, ORG_ID, 1, cli.id, cli.nombre, Decimal("0"), date(2026, 5, 23))
+    assert len(_asientos_de(db, "um_reclass_planilla", 10)) == 0
+
+
+# ─── Asiento al aprobar liquidación (v3.13) ───────────────────────────────────
+
+def test_liquidacion_aprobacion_partida_doble(db):
+    """Cliente D (bruto) / Banco H (neto) + Comisiones H (comisión), balanceado."""
+    cli, cuenta_cli = _cliente_con_cuenta(db)
+    mc.registrar_liquidacion_aprobacion(
+        db, liquidacion_id=5, detalle_id=50, org_id=ORG_ID, usuario_id=1,
+        cliente_id=cli.id, cliente_nombre=cli.nombre,
+        monto_conciliado=Decimal("10000"), monto_neto=Decimal("9800"),
+        monto_comision=Decimal("200"), fecha=date(2026, 5, 31),
+    )
+    asientos = _asientos_de(db, "liquidacion_aprobacion", 50)
+    assert len(asientos) == 1
+    a = asientos[0]
+    total_debe  = sum(l.debe for l in a.lineas)
+    total_haber = sum(l.haber for l in a.lineas)
+    assert total_debe == Decimal("10000")
+    assert total_haber == Decimal("10000")
+    # Cliente debitado por el bruto
+    cli_l = next(l for l in a.lineas if l.cuenta_id == cuenta_cli.id)
+    assert cli_l.debe == Decimal("10000")
+
+
+def test_liquidacion_aprobacion_sin_comision(db):
+    """Sin comisión: solo Cliente D / Banco H (2 líneas)."""
+    cli, _ = _cliente_con_cuenta(db)
+    mc.registrar_liquidacion_aprobacion(
+        db, 5, 50, ORG_ID, 1, cli.id, cli.nombre,
+        Decimal("10000"), Decimal("10000"), Decimal("0"), date(2026, 5, 31))
+    a = _asientos_de(db, "liquidacion_aprobacion", 50)[0]
+    assert len(a.lineas) == 2
+
+
+def test_liquidacion_aprobacion_idempotente(db):
+    cli, _ = _cliente_con_cuenta(db)
+    for _ in range(2):
+        mc.registrar_liquidacion_aprobacion(
+            db, 5, 50, ORG_ID, 1, cli.id, cli.nombre,
+            Decimal("10000"), Decimal("9800"), Decimal("200"), date(2026, 5, 31))
+    assert len(_asientos_de(db, "liquidacion_aprobacion", 50)) == 1
+
+
+# ─── Invariante: partida doble en todo el libro (v3.13) ───────────────────────
+
+def test_partida_doble_invariante_libro_completo(db):
+    """Tras generar asientos de cada tipo, cada asiento balancea y el libro cuadra."""
+    cli, _ = _cliente_con_cuenta(db)
+    # Reclasificación agrupada (conciliación)
+    mc.registrar_reclasificacion_planilla(
+        db, 1, ORG_ID, 1, cli.id, cli.nombre, Decimal("10000"), date(2026, 5, 20), "g.xlsx")
+    # Liquidación aprobada (Cliente D / Banco H / Comisión H)
+    mc.registrar_liquidacion_aprobacion(
+        db, 1, 100, ORG_ID, 1, cli.id, cli.nombre,
+        Decimal("10000"), Decimal("9800"), Decimal("200"), date(2026, 5, 31))
+    # Cheque (3 líneas)
+    mc.registrar_cheque(db, 1, ORG_ID, 1, cli.nombre, Decimal("5000"), Decimal("100"), date(2026, 5, 22))
+
+    asientos = db.query(Asiento).filter(Asiento.organizacion_id == ORG_ID).all()
+    assert len(asientos) >= 3
+    for a in asientos:
+        debe  = sum(l.debe  for l in a.lineas)
+        haber = sum(l.haber for l in a.lineas)
+        assert abs(debe - haber) < Decimal("0.01"), f"Asiento {a.modulo} no balancea: {debe} vs {haber}"
+
+    # Invariante global del libro: Σdebe == Σhaber
+    detalles = db.query(AsientoDetalle).join(Asiento).filter(Asiento.organizacion_id == ORG_ID).all()
+    total_debe  = sum(l.debe  for l in detalles)
+    total_haber = sum(l.haber for l in detalles)
+    assert abs(total_debe - total_haber) < Decimal("0.01")
+
+
+def test_crear_asiento_multilinea_rechaza_desbalanceado(db):
+    """Red de seguridad: un asiento que no cuadra NO se postea."""
+    c1 = _cuenta_id(db, "1-1-1-3-1")
+    c2 = _cuenta_id(db, "2-1-2-0")
+    mc._crear_asiento_multilinea(
+        db, fecha=date(2026, 5, 20), descripcion="malo", modulo="test_bad",
+        referencia_id=999, org_id=ORG_ID, usuario_id=1,
+        lineas=[(c1, Decimal("100"), Decimal("0")), (c2, Decimal("0"), Decimal("80"))],  # 100 != 80
+    )
+    assert len(_asientos_de(db, "test_bad", 999)) == 0

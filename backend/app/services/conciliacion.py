@@ -479,23 +479,6 @@ def conciliar_planilla(
             row.orden_movimiento_acreditado = mov.id
             procesados.add(mov.id)
             res["acreditadas"] += 1
-
-            # Asiento de reclasificación: solo para movimientos de UM y si conocemos el cliente
-            if getattr(mov, "source", None) == "um" and cliente_id:
-                try:
-                    from app.services.motor_contable import registrar_reclasificacion_um
-                    registrar_reclasificacion_um(
-                        db=db,
-                        planilla_row_id=row.id,
-                        org_id=org_id,
-                        usuario_id=None,
-                        cliente_id=cliente_id,
-                        cliente_nombre=cliente_nombre,
-                        monto=row.monto,
-                        fecha=mov.fecha_acred or mov.fecha,
-                    )
-                except Exception:
-                    pass
         else:
             if status == "no está":
                 res["no_encontradas"] += 1
@@ -503,6 +486,46 @@ def conciliar_planilla(
                 res["duplicadas"] += 1
             else:
                 res["sin_datos"] += 1
+
+    # Asiento agrupado por planilla: se recomputa el total sobre TODAS las filas
+    # ya conciliadas contra movimientos UM (no solo las de esta pasada). Así el
+    # upsert refleja el total real en re-conciliaciones y es idempotente —
+    # mismo criterio que usa "Empezar limpio" (reset-y-rebuild).
+    if cliente_id and planilla_rows:
+        try:
+            um_mov_ids = {m.id for m in movimientos if getattr(m, "source", None) == "um"}
+            total_um = Decimal("0")
+            fecha_ref = None
+            for r in planilla_rows:
+                if (r.status or "") == "ok" and getattr(r, "orden_movimiento_acreditado", None) in um_mov_ids:
+                    total_um += abs(Decimal(str(r.monto or 0)))
+                    rf = getattr(r, "fecha_acred", None)
+                    if rf and (fecha_ref is None or rf > fecha_ref):
+                        fecha_ref = rf
+            if total_um > 0:
+                from app.services.motor_contable import registrar_reclasificacion_planilla
+                from app.services.tz import hoy_art as _hoy_art
+                planilla_id = planilla_rows[0].planilla_id
+                nombre_archivo = ""
+                try:
+                    if getattr(planilla_rows[0], "planilla", None):
+                        nombre_archivo = planilla_rows[0].planilla.nombre_archivo or ""
+                except Exception:
+                    pass
+                registrar_reclasificacion_planilla(
+                    db=db,
+                    planilla_id=planilla_id,
+                    org_id=org_id,
+                    usuario_id=None,
+                    cliente_id=cliente_id,
+                    cliente_nombre=cliente_nombre,
+                    total_monto=total_um,
+                    fecha=fecha_ref or _hoy_art(),
+                    nombre_archivo=nombre_archivo,
+                )
+        except Exception as _ex:
+            import logging
+            logging.getLogger(__name__).warning("Error asiento agrupado planilla: %s", _ex)
 
     db.commit()
     return res

@@ -708,10 +708,39 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   sin paginar). No implementado porque `PlanillaPanel` asume todas las filas juntas — requiere
   refactor coordinado de frontend+backend+componente. Tarea para próxima sesión si el volumen crece.
 
+### v3.13 — Asientos agrupados por planilla + liquidación con asientos + arranque limpio (junio 2026 — PR #119)
+
+- **Asientos agrupados por planilla**: al conciliar, en vez de un asiento `um_reclass` por cada fila,
+  se crea **un solo asiento `um_reclass_planilla` por planilla** (No identificado 2-1-1-1 D / Cliente
+  2-1-2-X H, con el total conciliado). `registrar_reclasificacion_planilla()` en `motor_contable.py`
+  hace **upsert**: re-conciliaciones que acreditan filas adicionales actualizan el monto del mismo
+  asiento (no duplican). `conciliacion.py` acumula el total UM durante el loop y llama una vez al final.
+- **Asiento al aprobar liquidación**: `registrar_liquidacion_aprobacion()` — por cada detalle de la
+  liquidación genera Cliente (2-1-2-X) **D** monto bruto / Banco Macro (1-1-1-3-1) **H** neto +
+  Comisiones ganadas (3-1-1-0) **H** comisión (si > 0). Módulo `liquidacion_aprobacion`. Se dispara en
+  `aprobar_liquidacion()`. Cancela la deuda del cliente y reconoce la comisión como ingreso. Idempotente.
+- **Arranque limpio (un solo botón)**: el flujo de reparación contable se consolidó en **"🧹 Empezar
+  limpio"** (`/contabilidad` → tab Cuentas Corrientes, solo superadmin). Es el `reset-y-rebuild`
+  mejorado: borra TODOS los asientos y reconstruye desde cero usando solo las 2 fuentes confiables —
+  `um_lote` (importaciones del banco) + `um_reclass_planilla` (conciliaciones agrupadas), numerado
+  desde 1, fechado cronológicamente. **Ahora es one-shot**: ya no exige correr "crear cuentas faltantes"
+  antes — el loop crea/vincula la cuenta de cada cliente automáticamente (`_get_o_crear_cuenta_cliente`).
+  Se **eliminó el botón "↻ Reconstruir desde conciliaciones"** (generaba `cc_inicial` por fila = los
+  asientos erróneos/duplicados). El endpoint `backfill-cuentas-corrientes` queda en el backend pero sin
+  UI. Quedan como diagnósticos secundarios (superadmin): "🕐 Fix fechas UTC" y "🔍 Ver gaps".
+- **Cta. cte. — chips y PDF**: chip "Banco (UM)" renombrado a **"TT"**; chip "TT" (vacío desde v3.9)
+  eliminado. `_MODULO_TIPO` mapea `um_reclass_planilla` → (banco, "Transferencia (TT)") y
+  `liquidacion_aprobacion` → (ajustes, "Liquidación aprobada"). `get_cuenta_corriente` maneja
+  `um_reclass_planilla` con `referencia_id` = planilla_id directo. Nuevo **export PDF** de la cuenta
+  corriente del cliente: `GET /contabilidad/cuenta-corriente/exportar-pdf` + botón "PDF" en la toolbar +
+  `cuenta_corriente_pdf()` en `pdf_export.py` + `apiClient.downloadCtaCtePdf()`.
+- **ORDEN DE USO (actualizado)**: ya NO hay ritual de 2 pasos. Para dejar el Libro Diario prolijo:
+  un solo click en **"🧹 Empezar limpio"** (muestra dry_run en el confirm antes de ejecutar).
+- Tests: 212 passing (6 nuevos en `test_motor_contable.py` — reclasif. agrupada + liquidación).
+
 ### Pendiente para próximas sesiones
 
-- **Liquidaciones con asientos** — consultar con contador si las liquidaciones deben generar
-  entradas contables al aprobar/pagar.
+- ~~**Liquidaciones con asientos**~~ — resuelto en v3.13 (Cliente D / Banco H / Comisión H al aprobar).
 - ~~**Botones de borrar ocultos**~~ — resuelto en v3.11.4.
 - ~~**Sentry monitoreo**~~ — resuelto en v3.11.4 (opt-in via SENTRY_DSN / VITE_SENTRY_DSN).
 - ~~**Validación extracto post-parse**~~ — resuelto en v3.11.4.

@@ -797,19 +797,21 @@ def backfill_cuentas_corrientes(
 
 # modulo del asiento → (categoría de filtro, etiqueta legible)
 _MODULO_TIPO = {
-    "um_reclass":        ("banco",   "Conciliación bancaria (UM)"),
-    "cc_inicial":        ("banco",   "Acreditación (histórico)"),
-    "planilla":          ("tt",      "Transferencia (TT)"),
-    "planilla_comision": ("tt",      "Comisión TT"),
-    "cheque_carga":          ("cheques", "Cheque"),           # legacy
-    "cheque_rechazo":        ("cheques", "Cheque rechazado"),  # legacy
+    "um_reclass":            ("banco",   "Conciliación (TT)"),       # legacy per-fila
+    "um_reclass_planilla":   ("banco",   "Transferencia (TT)"),      # agrupado por planilla
+    "cc_inicial":            ("banco",   "Acreditación (histórico)"),
+    "planilla":              ("banco",   "Planilla (legacy)"),        # desactivado en v3.9
+    "planilla_comision":     ("banco",   "Comisión planilla (legacy)"),
+    "cheque_carga":          ("cheques", "Cheque"),                   # legacy
+    "cheque_rechazo":        ("cheques", "Cheque rechazado"),         # legacy
     "cheque_registro":       ("cheques", "Cheque registrado"),
     "cheque_acred_banco":    ("cheques", "Cheque acreditado (banco)"),
     "cheque_acred_cliente":  ("cheques", "Cheque acreditado"),
     "cheque_rechazo_banco":  ("cheques", "Cheque rechazado (reversión)"),
     "cheque_rechazo_cliente":("cheques", "Gastos rechazo cheque"),
     "cheque_rechazo_gasto":  ("cheques", "Débito bancario rechazo"),
-    "egreso":            ("ajustes", "Pago / Egreso"),
+    "egreso":                ("ajustes", "Pago / Egreso"),
+    "liquidacion_aprobacion":("ajustes", "Liquidación aprobada"),
 }
 
 
@@ -867,8 +869,16 @@ def get_cuenta_corriente(
         ):
             reversados.add(ref)
 
-    # Batch: PlanillaRow para um_reclass / cc_inicial (referencia_id = planilla_row_id)
-    row_ids = [a.referencia_id for _, a in filas if (a.modulo or "").startswith(("um_reclass", "cc_inicial")) and a.referencia_id]
+    # um_reclass_planilla: referencia_id = planilla_id directamente
+    reclass_planilla_ids = {
+        a.referencia_id for _, a in filas
+        if a.modulo == "um_reclass_planilla" and a.referencia_id
+    }
+    # um_reclass (legacy per-fila) / cc_inicial: referencia_id = planilla_row_id
+    row_ids = [
+        a.referencia_id for _, a in filas
+        if a.modulo in ("um_reclass", "cc_inicial") and a.referencia_id
+    ]
     row_map = {}
     if row_ids:
         from app.models.planilla import PlanillaRow
@@ -913,15 +923,17 @@ def get_cuenta_corriente(
         estado = "Conciliado"
         if es_reverso or a.id in reversados:
             estado = "Revertido"
-        elif modulo.startswith(("um_reclass", "cc_inicial")):
+        elif modulo == "um_reclass_planilla":
+            # referencia_id es directamente el planilla_id
+            origen["planilla_id"] = a.referencia_id
+        elif modulo in ("um_reclass", "cc_inicial"):
             info = row_map.get(a.referencia_id)
             if info:
                 origen["planilla_id"] = info["planilla_id"]
                 if info.get("movimiento_id"):
                     origen["movimiento_id"] = info["movimiento_id"]
                     origen["extracto_id"] = mov_map.get(info["movimiento_id"])
-                elif modulo.startswith("um_reclass"):
-                    # Trazabilidad rota en el flujo normal → validación/log, NO estado operativo
+                elif modulo == "um_reclass":
                     logger.warning(
                         "Cta.cte. cliente %s: asiento %s (um_reclass) sin movimiento bancario vinculado",
                         cliente_id, a.id,
@@ -1038,7 +1050,7 @@ def reset_y_rebuild_asientos(
 ):
     """Borra TODOS los asientos de la org y los reconstruye desde los datos reales:
     - um_lote: un asiento por cada lote de UM importado en el extracto
-    - cc_inicial: un asiento por cada fila de planilla conciliada con cliente vinculado
+    - um_reclass_planilla: un asiento por cada planilla conciliada con cliente vinculado (agrupado)
     Sólo superadmin puede ejecutarlo (dry_run=false).
     """
     if not current_user.is_superadmin:
@@ -1091,7 +1103,10 @@ def reset_y_rebuild_asientos(
         lotes.setdefault(lote_key, []).append(m)
     n_um_lotes = len(lotes)
 
-    # ── Filas conciliadas con cuenta contable ────────────────────
+    # ── Planillas conciliadas (agrupadas) ────────────────────────
+    # No exigimos cuenta_contable_id: el loop de rebuild crea/vincula la cuenta
+    # de cada cliente (_get_o_crear_cuenta_cliente), así el arranque limpio es
+    # un one-shot — no hace falta correr "crear cuentas faltantes" antes.
     filas_ok = (
         db.query(PlanillaRow, Planilla, Cliente)
         .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
@@ -1100,11 +1115,24 @@ def reset_y_rebuild_asientos(
             Planilla.organizacion_id == oid,
             Planilla.deleted_at.is_(None),
             PlanillaRow.status.in_(["ok", "OK", "PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA"]),
-            Cliente.cuenta_contable_id.isnot(None),
         )
         .all()
     )
-    n_filas_ok = len(filas_ok)
+    # Agrupar por planilla → un asiento por planilla.
+    # Solo filas conciliadas contra movimientos UM: el asiento reclasifica
+    # "No identificado" (creado por um_lote) → Cliente. Las filas conciliadas
+    # contra el extracto mensual NO tienen contrapartida en No identificado,
+    # así que se excluyen (mismo criterio que el flujo live en conciliacion.py).
+    um_mov_ids = {m.id for m in um_movs}
+    planillas_map: dict = {}
+    for row, planilla, cliente in filas_ok:
+        if row.orden_movimiento_acreditado not in um_mov_ids:
+            continue
+        key = planilla.id
+        if key not in planillas_map:
+            planillas_map[key] = {"planilla": planilla, "cliente": cliente, "rows": []}
+        planillas_map[key]["rows"].append(row)
+    n_planillas = len(planillas_map)
 
     if dry_run:
         return {
@@ -1112,8 +1140,8 @@ def reset_y_rebuild_asientos(
             "a_borrar": {"asientos": n_asientos, "detalles": n_detalles},
             "a_crear": {
                 "um_lotes": n_um_lotes,
-                "cc_iniciales": n_filas_ok,
-                "total_asientos_nuevos": n_um_lotes + n_filas_ok,
+                "um_reclass_planilla": n_planillas,
+                "total_asientos_nuevos": n_um_lotes + n_planillas,
             },
             "msg": "Ejecutá con dry_run=false para aplicar los cambios.",
         }
@@ -1166,41 +1194,45 @@ def reset_y_rebuild_asientos(
                 db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=_D("0"), haber=total_neg))
         contador += len(pending_um)
 
-        # ── Reconstruir cc_inicial ────────────────────────────────
-        # Cache de cuentas por cliente + flush único al final del lote
+        # ── Reconstruir um_reclass_planilla (agrupado por planilla) ──────────
         _cuenta_cache: dict = {}
-        pending_cc: list = []
-        for row, planilla, cliente in filas_ok:
+        pending_rp: list = []
+        from datetime import datetime as _dt
+        for planilla_id, grupo in planillas_map.items():
+            planilla = grupo["planilla"]
+            cliente  = grupo["cliente"]
+            rows     = grupo["rows"]
             if cliente.id not in _cuenta_cache:
                 _cuenta_cache[cliente.id] = _get_o_crear_cuenta_cliente(db, cliente.id, oid)
             cuenta_cli = _cuenta_cache[cliente.id]
             if not cuenta_cli:
                 continue
-            monto = abs(_monto(row.monto))  # planilla rows son siempre ingresos (positivos)
-            if monto <= 0:
+            total_monto = sum(abs(_monto(r.monto)) for r in rows)
+            if total_monto <= 0:
                 continue
-            fecha = (row.fecha_acred or planilla.fecha_carga or hoy_art())
+            # Fecha: la más reciente de las filas, o fecha_carga de la planilla
+            fechas = [r.fecha_acred for r in rows if r.fecha_acred]
+            fecha = max(fechas) if fechas else (planilla.fecha_carga or hoy_art())
             if not isinstance(fecha, _date):
                 try:
-                    from datetime import datetime as _dt
                     fecha = _dt.strptime(str(fecha)[:10], "%Y-%m-%d").date()
                 except Exception:
                     fecha = hoy_art()
             a = Asiento(
                 fecha=fecha,
-                descripcion=f"Acreditación {cliente.nombre} — {planilla.nombre_archivo}",
-                modulo="cc_inicial",
-                referencia_id=row.id,
+                descripcion=f"TT {cliente.nombre} — {planilla.nombre_archivo}",
+                modulo="um_reclass_planilla",
+                referencia_id=planilla_id,
                 organizacion_id=oid,
                 usuario_id=current_user.id,
             )
             db.add(a)
-            pending_cc.append((a, monto, cuenta_cli.id))
+            pending_rp.append((a, total_monto, cuenta_cli.id))
         db.flush()
-        for a, monto, cuenta_cli_id in pending_cc:
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=monto, haber=_D("0")))
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cli_id, debe=_D("0"), haber=monto))
-        contador += len(pending_cc)
+        for a, monto, cuenta_cli_id in pending_rp:
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id,        debe=monto,    haber=_D("0")))
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cli_id,   debe=_D("0"),  haber=monto))
+        contador += len(pending_rp)
 
         # ── Renumerar correlativamente ────────────────────────────
         nuevos = (
@@ -1226,6 +1258,37 @@ def reset_y_rebuild_asientos(
         db.rollback()
         logger.error("reset-y-rebuild error: %s", ex)
         raise HTTPException(status_code=500, detail=str(ex))
+
+
+# ── Export PDF cuenta corriente ─────────────────────────────────────────────
+
+@router.get("/cuenta-corriente/exportar-pdf")
+def exportar_cta_cte_pdf(
+    cliente_id: int = Query(...),
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_finance")),
+):
+    """Exporta la cuenta corriente del cliente como PDF."""
+    from fastapi.responses import StreamingResponse
+    import io
+    # Reutiliza la misma lógica que get_cuenta_corriente
+    data = get_cuenta_corriente(
+        cliente_id=cliente_id, desde=desde, hasta=hasta,
+        org_id=org_id, db=db, current_user=current_user,
+    )
+    from app.services.pdf_export import cuenta_corriente_pdf
+    pdf_bytes = cuenta_corriente_pdf(data)
+    nombre = (data.get("cliente") or {}).get("nombre", "cliente")
+    nombre_safe = "".join(c for c in nombre if c.isalnum() or c in " _-").strip().replace(" ", "_")
+    fname = f"cta_cte_{nombre_safe}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 # ── Ajuste manual del Libro Diario ──────────────────────────────────────────

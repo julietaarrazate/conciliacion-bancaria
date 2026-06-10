@@ -551,6 +551,19 @@ class ApiClient {
     return res.data
   }
 
+  async downloadCtaCtePdf(clienteId: number, orgId?: number): Promise<void> {
+    _suppressLockForDownload()
+    const params: Record<string, string | number> = { cliente_id: clienteId }
+    if (orgId) params.org_id = orgId
+    const res = await this.client.get('/contabilidad/cuenta-corriente/exportar-pdf', { params, responseType: 'blob' })
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `cta_cte_${clienteId}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // Exportar Excel
   async downloadPlanillaConciliada(planillaId: number): Promise<void> {
     _suppressLockForDownload()
