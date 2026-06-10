@@ -541,3 +541,44 @@ def test_liquidacion_aprobacion_idempotente(db):
             db, 5, 50, ORG_ID, 1, cli.id, cli.nombre,
             Decimal("10000"), Decimal("9800"), Decimal("200"), date(2026, 5, 31))
     assert len(_asientos_de(db, "liquidacion_aprobacion", 50)) == 1
+
+
+# ─── Invariante: partida doble en todo el libro (v3.13) ───────────────────────
+
+def test_partida_doble_invariante_libro_completo(db):
+    """Tras generar asientos de cada tipo, cada asiento balancea y el libro cuadra."""
+    cli, _ = _cliente_con_cuenta(db)
+    # Reclasificación agrupada (conciliación)
+    mc.registrar_reclasificacion_planilla(
+        db, 1, ORG_ID, 1, cli.id, cli.nombre, Decimal("10000"), date(2026, 5, 20), "g.xlsx")
+    # Liquidación aprobada (Cliente D / Banco H / Comisión H)
+    mc.registrar_liquidacion_aprobacion(
+        db, 1, 100, ORG_ID, 1, cli.id, cli.nombre,
+        Decimal("10000"), Decimal("9800"), Decimal("200"), date(2026, 5, 31))
+    # Cheque (3 líneas)
+    mc.registrar_cheque(db, 1, ORG_ID, 1, cli.nombre, Decimal("5000"), Decimal("100"), date(2026, 5, 22))
+
+    asientos = db.query(Asiento).filter(Asiento.organizacion_id == ORG_ID).all()
+    assert len(asientos) >= 3
+    for a in asientos:
+        debe  = sum(l.debe  for l in a.lineas)
+        haber = sum(l.haber for l in a.lineas)
+        assert abs(debe - haber) < Decimal("0.01"), f"Asiento {a.modulo} no balancea: {debe} vs {haber}"
+
+    # Invariante global del libro: Σdebe == Σhaber
+    detalles = db.query(AsientoDetalle).join(Asiento).filter(Asiento.organizacion_id == ORG_ID).all()
+    total_debe  = sum(l.debe  for l in detalles)
+    total_haber = sum(l.haber for l in detalles)
+    assert abs(total_debe - total_haber) < Decimal("0.01")
+
+
+def test_crear_asiento_multilinea_rechaza_desbalanceado(db):
+    """Red de seguridad: un asiento que no cuadra NO se postea."""
+    c1 = _cuenta_id(db, "1-1-1-3-1")
+    c2 = _cuenta_id(db, "2-1-2-0")
+    mc._crear_asiento_multilinea(
+        db, fecha=date(2026, 5, 20), descripcion="malo", modulo="test_bad",
+        referencia_id=999, org_id=ORG_ID, usuario_id=1,
+        lineas=[(c1, Decimal("100"), Decimal("0")), (c2, Decimal("0"), Decimal("80"))],  # 100 != 80
+    )
+    assert len(_asientos_de(db, "test_bad", 999)) == 0

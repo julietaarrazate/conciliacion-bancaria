@@ -136,7 +136,17 @@ def _crear_asiento_multilinea(
     usuario_id: Optional[int],
     lineas: list,  # [(cuenta_id, debe, haber), ...]
 ) -> None:
-    """Crea un asiento con N líneas de detalle. lineas = [(cuenta_id, debe, haber)]."""
+    """Crea un asiento con N líneas de detalle. lineas = [(cuenta_id, debe, haber)].
+    Red de seguridad: si las líneas no cuadran en partida doble (Σdebe ≠ Σhaber)
+    NO se postea el asiento — evita corromper el balance silenciosamente."""
+    total_debe  = sum(_monto(d) for _, d, _h in lineas)
+    total_haber = sum(_monto(h) for _, _d, h in lineas)
+    if abs(total_debe - total_haber) > Decimal("0.01"):
+        logger.error(
+            "Asiento %s ref %s NO balancea (debe=%s haber=%s) — no se postea",
+            modulo, referencia_id, total_debe, total_haber,
+        )
+        return
     a = Asiento(
         fecha=fecha,
         descripcion=descripcion,
@@ -896,14 +906,16 @@ def registrar_liquidacion_aprobacion(
         cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_id, org_id) if cliente_id else None
         banco          = _get_cuenta_por_codigo(db, "1-1-1-3-1", org_id)
         comisiones     = _get_cuenta_por_codigo(db, "3-1-1-0", org_id)
-        if not cuenta_cliente or not banco:
-            logger.warning("Cuentas liquidación no encontradas org %s (cliente_id=%s)", org_id, cliente_id)
+        # Exigir la cuenta de comisiones cuando hay comisión: sin ella el asiento
+        # quedaría desbalanceado (Cliente D conciliado / Banco H neto, con neto < conciliado).
+        if not cuenta_cliente or not banco or (monto_comision > 0 and not comisiones):
+            logger.warning("Cuentas liquidación incompletas org %s (cliente_id=%s) — no se postea", org_id, cliente_id)
             return
         lineas = [
             (cuenta_cliente.id, monto_conciliado, Decimal("0")),
             (banco.id,          Decimal("0"),     monto_neto),
         ]
-        if monto_comision > 0 and comisiones:
+        if monto_comision > 0:
             lineas.append((comisiones.id, Decimal("0"), monto_comision))
         _crear_asiento_multilinea(
             db=db,
