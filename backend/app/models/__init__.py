@@ -11,6 +11,7 @@ from .egreso import Egreso, CategoriaEgreso
 from .contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
 from .cheque import Cheque
 from .portador import Portador
+from .liquidacion_tarjeta import LiquidacionTarjeta, MarcaTarjeta, EstadoTarjeta
 from .password_reset import PasswordResetToken
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "Egreso", "CategoriaEgreso",
     "PlanCuenta", "ReglaContable", "Asiento", "AsientoDetalle",
     "Cheque", "Portador",
+    "LiquidacionTarjeta", "MarcaTarjeta", "EstadoTarjeta",
     "PasswordResetToken",
 ]

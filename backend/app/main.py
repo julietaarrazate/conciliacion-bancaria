@@ -29,6 +29,7 @@ from app.routers import search as search_router
 from app.routers import public_router
 from app.routers import push_router
 from app.routers import agente
+from app.routers import tarjetas
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.egreso import Egreso, CategoriaEgreso  # noqa: F401
 from app.models.caja import ArqueoDiario  # noqa: F401
@@ -131,6 +132,29 @@ def _run_alembic():
         "CREATE INDEX IF NOT EXISTS ix_egresos_forma_pago ON egresos (forma_pago)",
         "CREATE INDEX IF NOT EXISTS ix_egresos_cliente_id ON egresos (cliente_id)",
         "CREATE INDEX IF NOT EXISTS ix_egresos_org_fecha ON egresos (organizacion_id, fecha DESC)",
+        # TAREA 3 — liquidaciones de tarjetas (Visa / Mastercard / Amex)
+        "CREATE TABLE IF NOT EXISTS liquidaciones_tarjeta ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "marca VARCHAR NOT NULL, "
+        "periodo VARCHAR(7) NOT NULL, "
+        "fecha_acreditacion DATE NOT NULL, "
+        "monto_bruto NUMERIC(12,2) NOT NULL, "
+        "aranceles NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "iva_df NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "percepciones_iibb NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "retenciones NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "neto NUMERIC(12,2) NOT NULL, "
+        "estado VARCHAR(20) DEFAULT 'pendiente', "
+        "extracto_movimiento_id INTEGER REFERENCES movimientos_banco(id), "
+        "archivo_original VARCHAR(255), "
+        "asiento_id INTEGER REFERENCES asientos(id), "
+        "notas TEXT, "
+        "usuario_id INTEGER REFERENCES users(id), "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "deleted_at TIMESTAMP)",
+        "CREATE INDEX IF NOT EXISTS ix_liq_tarjeta_org ON liquidaciones_tarjeta (organizacion_id)",
+        "CREATE INDEX IF NOT EXISTS ix_liq_tarjeta_org_fecha ON liquidaciones_tarjeta (organizacion_id, fecha_acreditacion DESC)",
     ]
     try:
         from sqlalchemy import text as _text
@@ -705,6 +729,7 @@ app.include_router(search_router.router)
 app.include_router(public_router.router)
 app.include_router(push_router.router)
 app.include_router(agente.router)
+app.include_router(tarjetas.router)
 
 
 @app.get("/")

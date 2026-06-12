@@ -56,6 +56,16 @@ PLAN_PATCH = [
     ("2-1-3-2",   "Cheques a depositar",  "pasivo",    "2-1-3-0",  4),
     ("3-1-3-0",   "Comisiones cheques",   "resultado", "3-1-0-0",  3),
     ("3-2-2-1",   "Gastos de rechazos",   "resultado", "3-2-2-0",  4),
+    # Liquidaciones de tarjetas de crédito (Visa / Mastercard / Amex)
+    ("1-1-2-3",   "Tarjetas a acreditar",          "activo",    "1-1-2-0", 4),
+    ("1-1-2-4",   "IVA Crédito Fiscal",            "activo",    "1-1-2-0", 4),
+    ("1-1-2-5",   "Percepciones IIBB",             "activo",    "1-1-2-0", 4),
+    ("1-1-2-6",   "Retenciones de impuestos",      "activo",    "1-1-2-0", 4),
+    ("3-1-4-0",   "Ingresos por tarjetas",         "resultado", "3-1-0-0", 3),
+    ("3-2-3-0",   "Comisiones tarjetas",           "resultado", "3-2-0-0", 3),
+    ("3-2-3-1",   "Aranceles Visa",                "resultado", "3-2-3-0", 4),
+    ("3-2-3-2",   "Aranceles Mastercard",          "resultado", "3-2-3-0", 4),
+    ("3-2-3-3",   "Aranceles Amex",                "resultado", "3-2-3-0", 4),
 ]
 
 # (evento, descripcion, debe_codigo, haber_codigo)

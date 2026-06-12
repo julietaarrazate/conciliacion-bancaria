@@ -1089,3 +1089,118 @@ def registrar_ajuste_manual(
     db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_debe_id, debe=monto, haber=Decimal("0")))
     db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_haber_id, debe=Decimal("0"), haber=monto))
     return a.id
+
+
+# ─── Liquidaciones de tarjetas de crédito (Visa / Mastercard / Amex) ──────────
+
+# Cuenta de aranceles por marca de tarjeta.
+_ARANCEL_CUENTA_POR_MARCA = {
+    "visa":       "3-2-3-1",
+    "mastercard": "3-2-3-2",
+    "amex":       "3-2-3-3",
+}
+
+
+def registrar_liquidacion_tarjeta(
+    db: Session,
+    liquidacion_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    marca: str,
+    monto_bruto: Decimal,
+    aranceles: Decimal,
+    iva_df: Decimal,
+    percepciones_iibb: Decimal,
+    retenciones: Decimal,
+    neto: Decimal,
+    fecha: date,
+    descripcion: str = "",
+) -> Optional[int]:
+    """Asiento mensual agrupado de liquidación de tarjeta (módulo `tarjeta_liq`).
+
+        Banco Macro (1-1-1-3-1)               D: neto
+        Aranceles tarjeta (3-2-3-X por marca) D: aranceles
+        IVA Crédito Fiscal (1-1-2-4)          D: iva_df
+        Percepciones IIBB (1-1-2-5)           D: percepciones_iibb
+        Retenciones de impuestos (1-1-2-6)    D: retenciones
+            Ingresos por tarjetas (3-1-4-0)   H: monto_bruto
+
+    Devuelve el ID del asiento creado (o None si no se pudo crear). Idempotente:
+    no crea un segundo asiento para la misma (tarjeta_liq, liquidacion_id, org)."""
+    try:
+        if _ya_existe(db, "tarjeta_liq", liquidacion_id, org_id):
+            existente = (
+                db.query(Asiento)
+                .filter(
+                    Asiento.modulo == "tarjeta_liq",
+                    Asiento.referencia_id == liquidacion_id,
+                    Asiento.organizacion_id == org_id,
+                )
+                .first()
+            )
+            return existente.id if existente else None
+
+        monto_bruto       = round(_monto(monto_bruto), 2)
+        aranceles         = round(_monto(aranceles), 2)
+        iva_df            = round(_monto(iva_df), 2)
+        percepciones_iibb = round(_monto(percepciones_iibb), 2)
+        retenciones       = round(_monto(retenciones), 2)
+        neto              = round(_monto(neto), 2)
+
+        banco         = _get_cuenta_por_codigo(db, "1-1-1-3-1", org_id)
+        ingresos      = _get_cuenta_por_codigo(db, "3-1-4-0", org_id)
+        cta_iva       = _get_cuenta_por_codigo(db, "1-1-2-4", org_id)
+        cta_iibb      = _get_cuenta_por_codigo(db, "1-1-2-5", org_id)
+        cta_ret       = _get_cuenta_por_codigo(db, "1-1-2-6", org_id)
+        cod_arancel   = _ARANCEL_CUENTA_POR_MARCA.get(str(marca).lower(), "3-2-3-0")
+        cta_arancel   = _get_cuenta_por_codigo(db, cod_arancel, org_id)
+
+        if not (banco and ingresos and cta_iva and cta_iibb and cta_ret and cta_arancel):
+            logger.warning(
+                "Cuentas tarjeta incompletas org %s liq %s — no se postea", org_id, liquidacion_id
+            )
+            return None
+
+        lineas = [(banco.id, neto, Decimal("0"))]
+        if aranceles > 0:
+            lineas.append((cta_arancel.id, aranceles, Decimal("0")))
+        if iva_df > 0:
+            lineas.append((cta_iva.id, iva_df, Decimal("0")))
+        if percepciones_iibb > 0:
+            lineas.append((cta_iibb.id, percepciones_iibb, Decimal("0")))
+        if retenciones > 0:
+            lineas.append((cta_ret.id, retenciones, Decimal("0")))
+        lineas.append((ingresos.id, Decimal("0"), monto_bruto))
+
+        a = Asiento(
+            fecha=fecha if isinstance(fecha, date) else hoy_art(),
+            descripcion=descripcion or f"Liquidación tarjeta {str(marca).capitalize()}",
+            modulo="tarjeta_liq",
+            referencia_id=liquidacion_id,
+            organizacion_id=org_id,
+            usuario_id=usuario_id,
+            numero_asiento=_next_numero_asiento(db, org_id),
+        )
+        # Red de seguridad: rechazar si no cuadra en partida doble
+        total_debe  = sum(d for _c, d, _h in lineas)
+        total_haber = sum(h for _c, _d, h in lineas)
+        if abs(total_debe - total_haber) > Decimal("0.01"):
+            logger.error(
+                "Asiento tarjeta_liq liq %s NO balancea (debe=%s haber=%s) — no se postea",
+                liquidacion_id, total_debe, total_haber,
+            )
+            return None
+        db.add(a)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            return None
+        for cuenta_id, debe, haber in lineas:
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_id, debe=debe, haber=haber))
+        db.commit()
+        return a.id
+    except Exception as ex:
+        db.rollback()
+        logger.warning("Error asiento tarjeta_liq %s: %s", liquidacion_id, ex)
+        return None
