@@ -91,29 +91,74 @@ def preparar_archivo(filepath: str) -> Tuple[str, bool]:
     return filepath, False
 
 INDICADORES_BANCO = {
-    "macro":     ["macro", "banco macro"],
-    "bbva":      ["bbva", "frances", "banco frances"],
-    "santander": ["santander", "rio", "santander rio"],
-    "galicia":   ["galicia", "banco galicia"],
-    "icbc":      ["icbc", "industrial"],
-    "nacion":    ["nacion", "banco de la nacion"],
-    "provincia": ["provincia", "bapro"],
-    "ciudad":    ["ciudad", "banco ciudad"],
-    "hsbc":      ["hsbc"],
+    "macro":       ["macro", "banco macro"],
+    "bbva":        ["bbva", "frances", "banco frances"],
+    "santander":   ["santander", "rio", "santander rio"],
+    "galicia":     ["galicia", "banco galicia"],
+    "icbc":        ["icbc", "industrial"],
+    "nacion":      ["nacion", "banco de la nacion"],
+    "provincia":   ["provincia", "bapro"],
+    "ciudad":      ["ciudad", "banco ciudad"],
+    "hsbc":        ["hsbc"],
+    # ── Bancos agregados (v3.13+): Mercado Pago + 6 bancos regionales ──────
+    "mercadopago": ["mercado pago", "mercadopago", "mercado libre",
+                    "mercadolibre", "money_release", "dineromp"],
+    "credicoop":   ["credicoop", "banco credicoop"],
+    "supervielle": ["supervielle", "banco supervielle"],
+    "patagonia":   ["patagonia", "banco patagonia"],
+    "bancor":      ["bancor", "banco de cordoba",
+                    "banco de la provincia de cordoba"],
+    "rioja":       ["banco rioja", "banco de la rioja",
+                    "nuevo banco de la rioja"],
+    "lapampa":     ["banco de la pampa", "bancodelapampa", "banco la pampa"],
 }
 
 def detectar_banco(ws) -> str:
     texto = ""
-    for r in range(1, min(6, ws.max_row + 1)):
-        for c in range(1, min(8, ws.max_column + 1)):
+    # Escanea más filas/columnas: algunos formatos (Credicoop, Supervielle,
+    # Patagonia) ponen el nombre del banco recién en la fila 3-8.
+    for r in range(1, min(10, ws.max_row + 1)):
+        for c in range(1, min(12, ws.max_column + 1)):
             v = ws.cell(r, c).value
             if v:
                 texto += " " + str(v).lower()
+    texto = _normalizar(texto)
+    # Matchear primero las keywords MÁS LARGAS/específicas para evitar que un
+    # token corto y goloso (ej. "rio" de Santander) capture a otro banco
+    # (ej. "Banco de La Rioja"). Se ordena (banco, keyword) por longitud desc.
+    candidatos = []
     for banco, palabras in INDICADORES_BANCO.items():
         for p in palabras:
-            if p in texto:
-                return banco
+            candidatos.append((banco, _normalizar(p)))
+    candidatos.sort(key=lambda bp: len(bp[1]), reverse=True)
+    for banco, p in candidatos:
+        # "rio" suelto no debe matchear "rioja" / "prioritario" / etc.
+        if p == "rio" and ("rioja" in texto or "prio" in texto):
+            continue
+        if p in texto:
+            return banco
+    # Mercado Pago por estructura: el CSV de liberaciones no siempre
+    # contiene el texto "Mercado Pago", pero sí columnas características.
+    if _es_mercadopago_por_headers(ws):
+        return "mercadopago"
     return "generico"
+
+
+def _es_mercadopago_por_headers(ws) -> bool:
+    """True si la planilla tiene 2+ cabeceras típicas del reporte MP."""
+    hits = set()
+    for r in range(1, min(6, ws.max_row + 1)):
+        for c in range(1, min(40, ws.max_column + 1)):
+            v = ws.cell(r, c).value
+            if not v:
+                continue
+            h = _normalizar(str(v).lower().strip())
+            for kw in KEYWORDS_MP_HEADER:
+                if kw in h:
+                    hits.add(kw)
+        if len(hits) >= 2:
+            return True
+    return len(hits) >= 2
 
 def _parse_fecha(v):
     if v is None:
@@ -148,14 +193,22 @@ def _parse_monto(v):
             return None
     return None
 
-KEYWORDS_MONTO   = ["importe","monto","amount"]
+KEYWORDS_MONTO   = ["importe","monto","amount","transaction_amount","net_amount"]
 KEYWORDS_CREDITO = ["credito","haber","credit"]
 KEYWORDS_DEBITO  = ["debito","debe","debit","cargo"]
-KEYWORDS_FECHA   = ["fecha","date","vencimiento"]
-KEYWORDS_TITULAR = ["titular","concepto","descripcion","glosa","detalle","nombre","beneficiario","ordenante"]
-KEYWORDS_ORDEN   = ["orden","nro. de referencia","nro","numero","secuencia","referencia"]
-KEYWORDS_SALDO   = ["saldo","balance"]
+KEYWORDS_FECHA   = ["fecha","date","vencimiento","release_date","date_created","money_release_date"]
+KEYWORDS_TITULAR = ["titular","concepto","descripcion","glosa","detalle","nombre","beneficiario","ordenante",
+                    "transaction_type","payer_name","description"]
+KEYWORDS_ORDEN   = ["orden","nro. de referencia","nro","numero","secuencia","referencia",
+                    "operation_id","source_id","external_reference","payment_id"]
+KEYWORDS_SALDO   = ["saldo","balance","balance_amount"]
 KEYWORDS_MES     = ["mes","period","periodo"]
+
+# Cabeceras características del CSV de liberaciones/settlement de Mercado Pago.
+# Si aparecen 2+ de estas, es un reporte MP aunque no diga "Mercado Pago".
+KEYWORDS_MP_HEADER = ["transaction_amount", "transaction_type", "balance_amount",
+                      "source_id", "release_date", "money_release_date",
+                      "external_reference", "payment_method_type"]
 KEYWORDS_CLIENTE_ACRED = ["cliente acreditado", "cliente acredit"]
 KEYWORDS_FECHA_ACRED   = ["fecha acred", "fecha de acred"]
 
