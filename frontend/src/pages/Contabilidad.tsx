@@ -9,7 +9,7 @@ import { ContabilidadSumas, ContabilidadBalance } from '@/components/contabilida
 import { ContabilidadMayor } from '@/components/contabilidad/ContabilidadMayor'
 import { ContabilidadClientes } from '@/components/contabilidad/ContabilidadClientes'
 import { ContabilidadCtaCteLista, ContabilidadCtaCteDetalle } from '@/components/contabilidad/ContabilidadCtaCte'
-import { RecuperarClientesModal, AjusteManualModal, FixFechasModal } from '@/components/contabilidad/ContabilidadModales'
+import { RecuperarClientesModal, AjusteManualModal, FixFechasModal, ExportContableModal } from '@/components/contabilidad/ContabilidadModales'
 
 export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'full' }) => {
   const c = useContabilidad(modo)
@@ -80,6 +80,7 @@ export const Contabilidad: React.FC<{ modo?: 'full' | 'ctacte' }> = ({ modo = 'f
       <RecuperarClientesModal c={c} />
       <AjusteManualModal c={c} />
       <FixFechasModal c={c} />
+      <ExportContableModal c={c} />
     </div>
   )
 }

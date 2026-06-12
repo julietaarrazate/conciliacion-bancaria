@@ -6,16 +6,25 @@ export const ContabilidadLibroDiario: React.FC<{ c: ContabilidadCtx }> = ({ c })
   const { canAdminAccounting, user } = c
   return (
     <>
-      {canAdminAccounting && (
-        <div className="flex justify-end mb-3">
+      <div className="flex justify-end mb-3 gap-2">
+        <button
+          onClick={() => { c.setExportWarn([]); c.setExportModalOpen(true) }}
+          className="text-xs px-3 py-2 rounded-lg bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-200 dark:hover:bg-slate-600 flex items-center gap-1.5 border border-gray-200 dark:border-slate-600"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+          Exportar contable
+        </button>
+        {canAdminAccounting && (
           <button
             onClick={() => { c.setAjusteError(''); c.setAjusteModalOpen(true) }}
             className="text-xs px-3 py-2 rounded-lg bg-ml-blue text-white font-medium hover:bg-ml-blue-dark flex items-center gap-1.5"
           >
             <span>✏️</span> Ajuste manual
           </button>
-        </div>
-      )}
+        )}
+      </div>
       <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {c.asientos.length === 0 && !c.diarioDesde && !c.diarioHasta && !c.diarioModulo && !c.diarioCuentaId ? (
           <div className="py-16 text-center text-gray-400">

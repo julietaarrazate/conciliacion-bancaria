@@ -292,6 +292,37 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
 
   const fixFechasUtc = () => { setFixFechasOpen(true); setFixPreview(null); setFixMsg('') }
 
+  // ── Export Contable ─────────────────────────────────────────────────────────
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [exportFormato, setExportFormato] = useState<'csv' | 'tango' | 'holistor' | 'regisoft'>('csv')
+  const [exportDesde, setExportDesde] = useState('')
+  const [exportHasta, setExportHasta] = useState('')
+  const [exportLoading, setExportLoading] = useState(false)
+  const [exportWarn, setExportWarn] = useState<string[]>([])
+
+  const handleExportContable = async () => {
+    setExportLoading(true)
+    setExportWarn([])
+    try {
+      await apiClient.downloadAsientosContable(
+        exportFormato,
+        exportDesde || undefined,
+        exportHasta || undefined,
+        activeOrgId || undefined,
+      )
+      setExportModalOpen(false)
+    } catch (e: any) {
+      if (e.message === 'cuentas_sin_mapeo' && e.cuentas) {
+        setExportWarn(e.cuentas)
+        // Archivo igual se descargó; solo mostramos el warning
+      } else {
+        toast.error(e.response?.data?.detail || 'Error al exportar')
+      }
+    } finally {
+      setExportLoading(false)
+    }
+  }
+
   // ── Ajuste manual ───────────────────────────────────────────────────────────
   const [ajusteModalOpen, setAjusteModalOpen] = useState(false)
   const [ajusteGuardando, setAjusteGuardando] = useState(false)
@@ -456,6 +487,10 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
     fixFechasOpen, setFixFechasOpen, fixDesde, setFixDesde, fixHasta, setFixHasta,
     fixDir, setFixDir, fixSoloEgresos, setFixSoloEgresos, fixPreview, setFixPreview,
     fixLoading, fixMsg, fixFechasDryRun, fixFechasEjecutar, fixFechasUtc,
+    // export contable
+    exportModalOpen, setExportModalOpen, exportFormato, setExportFormato,
+    exportDesde, setExportDesde, exportHasta, setExportHasta,
+    exportLoading, exportWarn, setExportWarn, handleExportContable,
     // ajuste manual
     ajusteModalOpen, setAjusteModalOpen, ajusteGuardando, ajusteError, setAjusteError,
     ajusteDebeId, setAjusteDebeId, ajusteHaberId, setAjusteHaberId,
