@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios'
+import axios, { AxiosInstance, AxiosResponse } from 'axios'
 import { localIsoDate } from '@/utils/fecha'
 import {
   User,
@@ -18,7 +18,11 @@ import {
   ExtractoListItem,
   MovimientoFiltrado,
   MergeUMResult,
-  MovimientosFiltros
+  MovimientosFiltros,
+  ConciliacionItem,
+  TarjetaUploadPreview,
+  TarjetaCreatePayload,
+  LiquidacionTarjeta,
 } from '@/types'
 import { useLockStore } from '@/store/lock'
 
@@ -60,39 +64,47 @@ const API_BASE_URL = detectApiUrl()
 // - Sin respuesta (error de red / timeout): solo reintentar GET, para no arriesgar
 //   duplicar una escritura (POST/PUT/DELETE) que sí pudo haber llegado al servidor.
 const _MAX_RETRIES = 3
-function _shouldRetry(err: any, cfg: any): boolean {
+
+interface AxiosRetryConfig {
+  __retryCount?: number
+  method?: string
+}
+
+// err is typed as unknown because the axios interceptor receives Error | AxiosError
+function _shouldRetry(err: unknown, cfg: AxiosRetryConfig): boolean {
   if ((cfg.__retryCount || 0) >= _MAX_RETRIES) return false
-  const status = err?.response?.status
+  const e = err as { response?: { status?: number }; code?: string; message?: string }
+  const status = e?.response?.status
   if (status === 502 || status === 503 || status === 504) return true
-  const noResponse = !err?.response
+  const noResponse = !e?.response
   const transientCode =
-    err?.code === 'ERR_NETWORK' ||
-    err?.code === 'ECONNABORTED' ||
-    /network error|timeout/i.test(err?.message || '')
+    e?.code === 'ERR_NETWORK' ||
+    e?.code === 'ECONNABORTED' ||
+    /network error|timeout/i.test(e?.message || '')
   const method = (cfg.method || 'get').toLowerCase()
   return noResponse && transientCode && method === 'get'
 }
 
 // Cache entry shape
-interface CacheEntry { data: any; at: number }
+interface CacheEntry { data: unknown; at: number }
 
 class ApiClient {
   client: AxiosInstance   // público para endpoints puntuales
   private token: string | null = null
   private _cache = new Map<string, CacheEntry>()
 
-  private _cacheKey(url: string, params?: any): string {
+  private _cacheKey(url: string, params?: Record<string, unknown>): string {
     return params ? `${url}?${JSON.stringify(params)}` : url
   }
 
-  private _getCached(key: string, ttlMs: number): any | null {
+  private _getCached(key: string, ttlMs: number): unknown {
     const e = this._cache.get(key)
     if (!e) return null
     if (Date.now() - e.at > ttlMs) { this._cache.delete(key); return null }
     return e.data
   }
 
-  private _setCached(key: string, data: any): void {
+  private _setCached(key: string, data: unknown): void {
     if (this._cache.size >= 60) {
       // evict oldest
       let oldestKey = ''
@@ -169,10 +181,10 @@ class ApiClient {
         const d = err.response?.data?.detail
         if (Array.isArray(d)) {
           err.response.data.detail = d
-            .map((e: any) => (typeof e === 'string' ? e : e?.msg || 'Dato inválido'))
+            .map((e: { msg?: string } | string) => (typeof e === 'string' ? e : e?.msg || 'Dato inválido'))
             .join(' · ')
         } else if (d && typeof d === 'object') {
-          err.response.data.detail = (d as any).msg || JSON.stringify(d)
+          err.response.data.detail = (d as { msg?: string }).msg || JSON.stringify(d)
         }
         return Promise.reject(err)
       }
@@ -297,7 +309,7 @@ class ApiClient {
 
   async downloadCierreMensualXlsx(anio: number, mes: number, orgId?: number): Promise<void> {
     _suppressLockForDownload()
-    const params: any = {}
+    const params: Record<string, number> = {}
     if (orgId) params.org_id = orgId
     const res = await this.client.get(`/analisis/cierre/${anio}/${mes}/export-xlsx`, {
       params,
@@ -392,7 +404,7 @@ class ApiClient {
     soloPendientes = false,
     comisionPct = 0
   ): Promise<ConciliacionResultado> {
-    const params: Record<string, any> = { fecha_acred: fechaAcred, solo_pendientes: soloPendientes }
+    const params: Record<string, string | number | boolean> = { fecha_acred: fechaAcred, solo_pendientes: soloPendientes }
     if (comisionPct > 0) params.comision_pct = comisionPct
     const res = await this.client.post(`/planillas/${planillaId}/conciliar`, {}, { params })
     return res.data
@@ -595,16 +607,17 @@ class ApiClient {
 
   async exportExtractoContador(extractoId: number): Promise<void> {
     _suppressLockForDownload()
-    let res: any
+    let res: AxiosResponse<Blob>
     try {
       res = await this.client.get(`/extractos/${extractoId}/export-contador`, { responseType: 'blob' })
-    } catch (err: any) {
+    } catch (err) {
       // Blob error response: read text to surface backend message
-      if (err.response?.data instanceof Blob) {
-        const text = await err.response.data.text()
+      const e = err as { response?: { data?: Blob | unknown } }
+      if (e.response?.data instanceof Blob) {
+        const text = await (e.response.data as Blob).text()
         try {
           const parsed = JSON.parse(text)
-          err.response.data = parsed
+          ;(e.response as { data: unknown }).data = parsed
         } catch { /* not JSON, leave as-is */ }
       }
       throw err
@@ -637,7 +650,7 @@ class ApiClient {
     monto_min?: number; monto_max?: number;
     limit?: number; skip?: number;
     org_id?: number | null;
-  } = {}): Promise<{ total: number; items: any[]; suma: number }> {
+  } = {}): Promise<{ total: number; items: ConciliacionItem[]; suma: number }> {
     const params: Record<string, string | number> = {}
     Object.entries(filters).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') params[k] = v as string | number
@@ -713,7 +726,7 @@ class ApiClient {
   }
 
   // ── Liquidaciones de tarjetas (Visa / Mastercard / Amex) ──────────────────
-  async uploadTarjeta(file: File, marca: string): Promise<any> {
+  async uploadTarjeta(file: File, marca: string): Promise<TarjetaUploadPreview> {
     const formData = new FormData()
     formData.append('file', file)
     const res = await this.client.post('/tarjetas/upload', formData, {
@@ -723,7 +736,7 @@ class ApiClient {
     return res.data
   }
 
-  async createTarjeta(payload: any, orgId?: number): Promise<any> {
+  async createTarjeta(payload: TarjetaCreatePayload, orgId?: number): Promise<LiquidacionTarjeta> {
     const res = await this.client.post('/tarjetas', payload, {
       params: orgId ? { org_id: orgId } : {},
     })
@@ -732,8 +745,8 @@ class ApiClient {
 
   async listTarjetas(params: {
     orgId?: number; marca?: string; estado?: string; periodo?: string; skip?: number; limit?: number
-  } = {}): Promise<{ total: number; items: any[] }> {
-    const q: any = {}
+  } = {}): Promise<{ total: number; items: LiquidacionTarjeta[] }> {
+    const q: Record<string, string | number> = {}
     if (params.orgId) q.org_id = params.orgId
     if (params.marca) q.marca = params.marca
     if (params.estado) q.estado = params.estado
@@ -784,8 +797,9 @@ class ApiClient {
     const sinMapeo: string = res.headers['x-cuentas-sin-mapeo'] || ''
     if (sinMapeo) {
       // Lanzar un error especial para que el llamador muestre warning
-      const err = new Error('cuentas_sin_mapeo')
-      ;(err as any).cuentas = sinMapeo.split(',').filter(Boolean)
+      const err = Object.assign(new Error('cuentas_sin_mapeo'), {
+        cuentas: sinMapeo.split(',').filter(Boolean),
+      })
       throw err
     }
   }
