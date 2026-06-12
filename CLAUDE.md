@@ -738,6 +738,54 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   un solo click en **"🧹 Empezar limpio"** (muestra dry_run en el confirm antes de ejecutar).
 - Tests: 212 passing (6 nuevos en `test_motor_contable.py` — reclasif. agrupada + liquidación).
 
+### v3.14 — Legales actualizadas (junio 2026 — PR #120)
+
+- **Política de Privacidad**: Art. 12 Ley 25.326 reemplaza Privacy Shield (obsoleto 2020); tabla de
+  subprocesadores (Neon, Render, Vercel, Gemini, Resend); sección IA (Gemini API externa, sin
+  entrenamiento con datos de usuarios); derechos de oposición y portabilidad; cláusulas datos de
+  terceros y datos sensibles; retención granular (backups 30d, logs 90d, auditoría 2 años).
+- **Términos**: cláusula de indemnidad; datos de terceros (usuario responsable de la base legal de
+  los datos de sus clientes); PI menciona registro DNDA. Identidad: "Cuadra, desarrollado y operado
+  por Julieta Arrazate" (marca primero, respaldo legal después; cambiar a razón social cuando exista).
+
+### v3.15 — Expansión: 16 bancos + export contable + tarjetas + split frontend (junio 2026 — PRs #121-#124)
+
+- **Parsers 9 → 16 bancos** (PR #121): Mercado Pago (CSV liberaciones con headers en inglés
+  `TRANSACTION_AMOUNT`/`RELEASE_DATE`/etc. y "Detalle de movimientos"; detección por estructura vía
+  `_es_mercadopago_por_headers()` cuando no dice "Mercado Pago"), Credicoop, Supervielle, Patagonia,
+  Bancor, Banco Rioja, La Pampa. **Fix bug preexistente**: keyword `"rio"` (Santander) capturaba
+  "Banco de La Rioja" — ahora las keywords se ordenan por longitud desc (la más específica gana) +
+  guard `rio`/`rioja`. `detectar_banco` escanea filas 1-9 / cols 1-11 con normalización de acentos.
+- **Export contable configurable** (PR #122): `services/export_contable.py` — formatos `csv`
+  (separador/encoding/fecha configurables), `tango` (tab + coma decimal + latin-1), `holistor`
+  (punto-y-coma + coma decimal), `regisoft` (CSV con headers). Mapeo de cuentas por org en
+  `Organizacion.config["mapeo_cuentas_export"]` ({"1-1-1-3-1": "11030001"}); cuentas sin mapeo →
+  header `X-Cuentas-Sin-Mapeo` + warning amarillo en UI. Endpoints: `GET /contabilidad/asientos/
+  exportar-contable?formato=&desde=&hasta=` (view_accounting), `GET/PUT /contabilidad/export-config`
+  (PUT requiere admin_accounting). Botón "Exportar contable" + modal en tab Libro Diario.
+- **Módulo Tarjetas** (PR #123): `/tarjetas` (nav con permiso manage_finance). Modelo
+  `LiquidacionTarjeta` (tabla `liquidaciones_tarjeta`, Numeric 12,2, soft delete, FK movimiento+asiento).
+  Parser best-effort `tarjeta_parser.py` (Excel/CSV por keywords por marca; PDF vía pdfminer si está,
+  degrada con `parse_warnings`; el usuario confirma/corrige en UI). **Asiento mensual agrupado**
+  (módulo `tarjeta_liq`, 6 líneas): Banco D neto / Aranceles 3-2-3-X D / IVA CF 1-1-2-4 D /
+  Percepciones IIBB 1-1-2-5 D / Retenciones 1-1-2-6 D / Ingresos por tarjetas 3-1-4-0 H bruto.
+  **Invariante**: neto+aranceles+iva+percepciones+retenciones == bruto (tolerancia 0.01) → 422 si no.
+  9 cuentas nuevas en PLAN_PATCH. Flujo: upload (preview) → crear (asiento) → conciliar (vincula
+  mov del extracto) → soft delete (reverso). UI 3 tabs: Resumen (cards por marca), Cargar, Historial.
+- **Split frontend** (PR #124): `Cheques.tsx` 1747→189 líneas, `Contabilidad.tsx` 1590→85.
+  Patrón: hook con todo el estado (`useCheques.ts` / `useContabilidad.ts` con tipo `ContabilidadCtx`)
+  + subcomponentes que reciben el bag (`components/cheques/` 9 archivos, `components/contabilidad/`
+  10 archivos). Comportamiento idéntico verificado (tsc sin errores nuevos). El modal de export
+  contable vive en `ContabilidadModales.tsx` (porteado en la resolución del merge con #122).
+- Tests: **266 passing** (220 base + 11 parsers + 27 export + 8 tarjetas).
+- Pendientes del plan de expansión (tareas 5-8): split router contabilidad.py, tipar `any` en TS,
+  paginación en 5 endpoints (plan-cuentas, reglas, clientes-cuentas, clientes-aging, papelera),
+  tests para cheques/contabilidad/planillas.
+- Deuda anotada por auditoría de agentes: `_parse_monto` devuelve float por contrato (conversión
+  Decimal la hace SQLAlchemy en DB — mover al parser requiere tocar el merger); `_convertir_csv_a_xlsx`
+  frágil con montos "1.234,56" (separador de miles); pdfminer no está en requirements (parser de
+  tarjetas degrada a manual para PDFs).
+
 ### Pendiente para próximas sesiones
 
 - ~~**Liquidaciones con asientos**~~ — resuelto en v3.13 (Cliente D / Banco H / Comisión H al aprobar).
@@ -911,7 +959,13 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
   normalizadas (sin usuario de PC), privacidad auditada (junio 2026 — PR #112 mergeado a main)
 - `v3.12.1-performance` — auditoría performance completa (N+1, índices, cache TTL, payload,
   rendering). Ver sección v3.12.1 arriba. (junio 2026 — PR #114 mergeado a main)
+- `v3.14-stable-checkpoint` — RAMA de checkpoint pre-expansión: legales v3.14 + contabilidad v3.13.
+  Punto de retorno si la expansión v3.15 falla en producción (junio 2026 — commit 44ed85d)
+- `v3.15` — expansión mayor: 16 bancos (Mercado Pago + 6 regionales), export contable
+  (Tango/Holistor/Regisoft/CSV con mapeo por org), módulo Tarjetas (asiento mensual agrupado
+  6 líneas + invariante 422), split frontend (Cheques 189L / Contabilidad 85L). 266 tests.
+  (junio 2026 — PRs #121-#124 mergeados a main)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.12.1
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.15
