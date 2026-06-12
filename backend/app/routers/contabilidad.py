@@ -181,6 +181,139 @@ def get_asientos(
     }
 
 
+@router.get("/asientos/exportar-contable")
+def exportar_asientos_contable(
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    formato: str = Query("csv", description="csv | tango | holistor | regisoft"),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("view_accounting")),
+):
+    """Exporta el libro diario en formato importable por software contable argentino."""
+    from fastapi.responses import Response
+    from app.services.export_contable import exportar_asientos
+
+    if formato not in ("csv", "tango", "holistor", "regisoft"):
+        raise HTTPException(400, f"Formato inválido: '{formato}'. Use csv, tango, holistor o regisoft.")
+
+    oid = _org_id(current_user, org_id)
+    # Leer config de export de la org
+    from app.models.organizacion import Organizacion
+    org = db.query(Organizacion).filter(Organizacion.id == oid).first()
+    export_cfg: dict = {}
+    if org and isinstance(org.configuracion, dict):
+        export_cfg = {
+            "separador": org.configuracion.get("export_separador", ","),
+            "encoding": org.configuracion.get("export_encoding", "utf-8"),
+            "formato_fecha": org.configuracion.get("export_formato_fecha", "DD/MM/YYYY"),
+            "mapeo_cuentas_export": org.configuracion.get("mapeo_cuentas_export", {}),
+        }
+
+    try:
+        content, filename, content_type, cuentas_sin_mapeo = exportar_asientos(
+            db=db, org_id=oid, desde=desde, hasta=hasta,
+            formato=formato, config=export_cfg,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error("exportar-asientos-contable error: %s", e)
+        raise HTTPException(500, "Error al generar el archivo de exportación")
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Access-Control-Expose-Headers": "Content-Disposition, X-Cuentas-Sin-Mapeo",
+    }
+    if cuentas_sin_mapeo:
+        headers["X-Cuentas-Sin-Mapeo"] = ",".join(cuentas_sin_mapeo)
+
+    return Response(content=content, media_type=content_type, headers=headers)
+
+
+@router.get("/export-config")
+def get_export_config(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("view_accounting")),
+):
+    """Lee la configuración de export contable de la organización."""
+    from app.models.organizacion import Organizacion
+
+    oid = _org_id(current_user, org_id)
+    org = db.query(Organizacion).filter(Organizacion.id == oid).first()
+    cfg: dict = {}
+    if org and isinstance(org.configuracion, dict):
+        cfg = org.configuracion
+
+    return {
+        "separador": cfg.get("export_separador", ","),
+        "encoding": cfg.get("export_encoding", "utf-8"),
+        "formato_fecha": cfg.get("export_formato_fecha", "DD/MM/YYYY"),
+        "formato_default": cfg.get("export_formato_default", "csv"),
+        "mapeo_cuentas_export": cfg.get("mapeo_cuentas_export", {}),
+    }
+
+
+class ExportConfigBody(BaseModel):
+    separador: Optional[str] = None
+    encoding: Optional[str] = None
+    formato_fecha: Optional[str] = None
+    formato_default: Optional[str] = None
+    mapeo_cuentas_export: Optional[dict] = None
+
+
+@router.put("/export-config")
+def put_export_config(
+    body: ExportConfigBody,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    """Guarda preferencias de export contable en Organizacion.configuracion."""
+    from app.models.organizacion import Organizacion
+
+    oid = _org_id(current_user, org_id)
+    org = db.query(Organizacion).filter(Organizacion.id == oid).first()
+    if not org:
+        raise HTTPException(404, "Organización no encontrada")
+
+    cfg = dict(org.configuracion or {})
+
+    if body.separador is not None:
+        if body.separador not in (",", ";", "\t"):
+            raise HTTPException(400, "Separador inválido. Use ',', ';' o '\\t'.")
+        cfg["export_separador"] = body.separador
+    if body.encoding is not None:
+        if body.encoding not in ("utf-8", "latin-1"):
+            raise HTTPException(400, "Encoding inválido. Use 'utf-8' o 'latin-1'.")
+        cfg["export_encoding"] = body.encoding
+    if body.formato_fecha is not None:
+        if body.formato_fecha not in ("DD/MM/YYYY", "YYYY-MM-DD"):
+            raise HTTPException(400, "Formato de fecha inválido. Use 'DD/MM/YYYY' o 'YYYY-MM-DD'.")
+        cfg["export_formato_fecha"] = body.formato_fecha
+    if body.formato_default is not None:
+        if body.formato_default not in ("csv", "tango", "holistor", "regisoft"):
+            raise HTTPException(400, "Formato inválido.")
+        cfg["export_formato_default"] = body.formato_default
+    if body.mapeo_cuentas_export is not None:
+        # Validar que sea dict de str→str
+        for k, v in body.mapeo_cuentas_export.items():
+            if not isinstance(k, str) or not isinstance(v, str):
+                raise HTTPException(400, "mapeo_cuentas_export debe ser un objeto con claves y valores de tipo texto.")
+        cfg["mapeo_cuentas_export"] = body.mapeo_cuentas_export
+
+    org.configuracion = cfg
+    db.commit()
+    return {"ok": True, "config": {
+        "separador": cfg.get("export_separador", ","),
+        "encoding": cfg.get("export_encoding", "utf-8"),
+        "formato_fecha": cfg.get("export_formato_fecha", "DD/MM/YYYY"),
+        "formato_default": cfg.get("export_formato_default", "csv"),
+        "mapeo_cuentas_export": cfg.get("mapeo_cuentas_export", {}),
+    }}
+
+
 @router.get("/asientos/{asiento_id}")
 def get_asiento_detalle(
     asiento_id: int,

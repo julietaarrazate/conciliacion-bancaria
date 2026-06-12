@@ -754,6 +754,51 @@ class ApiClient {
   async deleteTarjeta(liqId: number): Promise<void> {
     await this.client.delete(`/tarjetas/${liqId}`)
   }
+
+  // ─── Export Contable ──────────────────────────────────────────
+  async downloadAsientosContable(
+    formato: string,
+    desde?: string,
+    hasta?: string,
+    orgId?: number,
+  ): Promise<void> {
+    _suppressLockForDownload()
+    const params: Record<string, string | number> = { formato }
+    if (desde) params.desde = desde
+    if (hasta) params.hasta = hasta
+    if (orgId) params.org_id = orgId
+    const res = await this.client.get('/contabilidad/asientos/exportar-contable', {
+      params,
+      responseType: 'blob',
+    })
+    const cd: string = res.headers['content-disposition'] || ''
+    const m = /filename="?([^"]+)"?/.exec(cd)
+    const filename = m ? m[1] : `libro_diario_${localIsoDate()}.${formato === 'csv' || formato === 'regisoft' ? 'csv' : 'txt'}`
+    const url = URL.createObjectURL(new Blob([res.data]))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+    // Devolver advertencias de cuentas sin mapeo al llamador
+    const sinMapeo: string = res.headers['x-cuentas-sin-mapeo'] || ''
+    if (sinMapeo) {
+      // Lanzar un error especial para que el llamador muestre warning
+      const err = new Error('cuentas_sin_mapeo')
+      ;(err as any).cuentas = sinMapeo.split(',').filter(Boolean)
+      throw err
+    }
+  }
+
+  async getExportConfig(orgId?: number): Promise<{
+    separador: string; encoding: string; formato_fecha: string;
+    formato_default: string; mapeo_cuentas_export: Record<string, string>
+  }> {
+    const params: Record<string, number> = {}
+    if (orgId) params.org_id = orgId
+    const res = await this.client.get('/contabilidad/export-config', { params })
+    return res.data
+  }
 }
 
 export const apiClient = new ApiClient()
