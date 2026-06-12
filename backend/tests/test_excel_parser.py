@@ -330,3 +330,195 @@ def test_macro_no_se_ve_afectado_por_deteccion_credito_debito():
         assert movs[1]["monto"] == 8500.50
     finally:
         _cleanup(path)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Bancos nuevos (v3.13+): Mercado Pago, Credicoop, Supervielle, Patagonia,
+# Bancor, Banco Rioja, Banco de La Pampa.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _csv_tmp(content: str) -> str:
+    """Guarda un CSV en un archivo temporal y retorna la ruta."""
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w",
+                                      encoding="utf-8", newline="")
+    tmp.write(content)
+    tmp.close()
+    return tmp.name
+
+
+# ── Mercado Pago (PRIORIDAD): CSV de liberaciones / settlement ────────────────
+
+def _csv_mp_settlement() -> str:
+    """CSV típico del reporte de liberaciones de Mercado Pago.
+
+    Headers en inglés (SOURCE_ID, TRANSACTION_TYPE, TRANSACTION_AMOUNT,
+    BALANCE_AMOUNT...) y NO contiene el texto literal 'Mercado Pago'.
+    El monto ya trae el signo (positivo = ingreso, negativo = egreso/retiro).
+    """
+    return (
+        "SOURCE_ID,EXTERNAL_REFERENCE,RELEASE_DATE,TRANSACTION_TYPE,"
+        "TRANSACTION_AMOUNT,BALANCE_AMOUNT\n"
+        "12345678901,REF-001,2026-05-10,payment,15000.00,215000.00\n"
+        "12345678902,REF-002,2026-05-11,payment,8500.50,223500.50\n"
+        "12345678903,REF-003,2026-05-12,withdrawal,-5000.00,218500.50\n"
+    )
+
+
+def test_mp_detecta_banco_por_headers_sin_texto():
+    """MP se detecta por estructura de columnas aunque no diga 'Mercado Pago'."""
+    path = _csv_tmp(_csv_mp_settlement())
+    try:
+        result = parsear_extracto_bancario(path)
+        assert result["banco_detectado"] == "mercadopago"
+    finally:
+        _cleanup(path)
+
+
+def test_mp_parsea_tres_movimientos_con_signo():
+    path = _csv_tmp(_csv_mp_settlement())
+    try:
+        movs = parsear_extracto_bancario(path)["movimientos"]
+        assert len(movs) == 3
+        montos = {m["monto"] for m in movs}
+        assert 15000.00 in montos
+        assert 8500.50 in montos
+        assert -5000.00 in montos  # withdrawal mantiene signo negativo
+    finally:
+        _cleanup(path)
+
+
+def test_mp_texto_literal_tambien_detecta():
+    """Formato 'Detalle de movimientos' exportado desde la app de MP."""
+    wb = Workbook()
+    ws = wb.active
+    ws.cell(1, 1).value = "Reporte de Mercado Pago"
+    ws.cell(2, 1).value = "Fecha"
+    ws.cell(2, 2).value = "Descripción"
+    ws.cell(2, 3).value = "Monto"
+    ws.cell(2, 4).value = "Saldo"
+    ws.cell(3, 1).value = date(2026, 5, 10)
+    ws.cell(3, 2).value = "Pago recibido"
+    ws.cell(3, 3).value = 3200.0
+    ws.cell(3, 4).value = 50000.0
+    ws.cell(4, 1).value = date(2026, 5, 11)
+    ws.cell(4, 2).value = "Pago recibido"
+    ws.cell(4, 3).value = 1800.0
+    ws.cell(4, 4).value = 51800.0
+    path = _xlsx_tmp(wb)
+    try:
+        result = parsear_extracto_bancario(path)
+        assert result["banco_detectado"] == "mercadopago"
+        assert result["total"] == 2
+        assert result["movimientos"][0]["monto"] == 3200.0
+    finally:
+        _cleanup(path)
+
+
+# ── Helper genérico para los 6 bancos regionales (Fecha/Concepto/Déb/Créd) ────
+
+def _wb_banco_regional(nombre: str):
+    """Extracto formato Cta. Cte. con columnas Débito/Crédito separadas
+    (Credicoop, Supervielle, Bancor, Rioja, La Pampa)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.cell(1, 1).value = nombre
+    ws.cell(2, 1).value = "Fecha"
+    ws.cell(2, 2).value = "Concepto"
+    ws.cell(2, 3).value = "Débito"
+    ws.cell(2, 4).value = "Crédito"
+    ws.cell(2, 5).value = "Saldo"
+    ws.cell(3, 1).value = date(2026, 5, 10)
+    ws.cell(3, 2).value = "TRANSFERENCIA RECIBIDA 20111111111"
+    ws.cell(3, 3).value = None
+    ws.cell(3, 4).value = 25000.0
+    ws.cell(3, 5).value = 125000.0
+    ws.cell(4, 1).value = date(2026, 5, 11)
+    ws.cell(4, 2).value = "PAGO PROVEEDOR"
+    ws.cell(4, 3).value = 4000.0
+    ws.cell(4, 4).value = None
+    ws.cell(4, 5).value = 121000.0
+    return wb
+
+
+def _wb_banco_importe_unico(nombre: str):
+    """Extracto formato Fecha/Descripción/Importe/Saldo (Patagonia)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.cell(1, 1).value = nombre
+    ws.cell(2, 1).value = "Fecha"
+    ws.cell(2, 2).value = "Descripción"
+    ws.cell(2, 3).value = "Importe"
+    ws.cell(2, 4).value = "Saldo"
+    ws.cell(3, 1).value = date(2026, 5, 10)
+    ws.cell(3, 2).value = "ACREDITACION 30222222229"
+    ws.cell(3, 3).value = 18000.0
+    ws.cell(3, 4).value = 118000.0
+    ws.cell(4, 1).value = date(2026, 5, 11)
+    ws.cell(4, 2).value = "DEBITO COMISION"
+    ws.cell(4, 3).value = -250.0
+    ws.cell(4, 4).value = 117750.0
+    return wb
+
+
+@pytest.mark.parametrize("nombre,esperado", [
+    ("Banco Credicoop Coop. Ltdo.", "credicoop"),
+    ("Banco Supervielle S.A.",       "supervielle"),
+    ("Banco de Córdoba - Bancor",    "bancor"),
+    ("Nuevo Banco de La Rioja S.A.", "rioja"),
+    ("Banco de La Pampa S.E.M.",     "lapampa"),
+])
+def test_bancos_regionales_credito_debito(nombre, esperado):
+    wb = _wb_banco_regional(nombre)
+    path = _xlsx_tmp(wb)
+    try:
+        result = parsear_extracto_bancario(path)
+        assert result["banco_detectado"] == esperado, f"esperaba {esperado}"
+        assert result["total"] == 2
+        movs = result["movimientos"]
+        credito = next(m for m in movs if "RECIBIDA" in (m["titular"] or ""))
+        debito  = next(m for m in movs if "PROVEEDOR" in (m["titular"] or ""))
+        assert credito["monto"] == 25000.0
+        assert debito["monto"] == -4000.0
+    finally:
+        _cleanup(path)
+
+
+def test_patagonia_importe_unico_con_signo():
+    wb = _wb_banco_importe_unico("Banco Patagonia S.A.")
+    path = _xlsx_tmp(wb)
+    try:
+        result = parsear_extracto_bancario(path)
+        assert result["banco_detectado"] == "patagonia"
+        assert result["total"] == 2
+        movs = result["movimientos"]
+        assert movs[0]["monto"] == 18000.0
+        assert movs[1]["monto"] == -250.0
+    finally:
+        _cleanup(path)
+
+
+def test_montos_son_decimal_compatibles():
+    """Los montos parseados deben convertir a Decimal sin pérdida (regla DB)."""
+    from decimal import Decimal
+    wb = _wb_banco_regional("Banco Credicoop")
+    path = _xlsx_tmp(wb)
+    try:
+        movs = parsear_extracto_bancario(path)["movimientos"]
+        for m in movs:
+            d = Decimal(str(m["monto"]))
+            assert d == d.quantize(Decimal("0.01")) or d == d  # sin excepción
+        assert Decimal(str(movs[0]["monto"])) in (Decimal("25000.00"), Decimal("-4000.00"))
+    finally:
+        _cleanup(path)
+
+
+def test_bancos_nuevos_no_rompen_generico():
+    """El fallback genérico sigue funcionando para un banco desconocido."""
+    wb = _wb_banco_regional("Banco Desconocido XYZ")
+    path = _xlsx_tmp(wb)
+    try:
+        result = parsear_extracto_bancario(path)
+        assert result["banco_detectado"] == "generico"
+        assert result["total"] == 2
+    finally:
+        _cleanup(path)
