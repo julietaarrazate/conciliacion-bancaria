@@ -711,6 +711,49 @@ class ApiClient {
     const res = await this.client.post('/push/setup')
     return res.data
   }
+
+  // ── Liquidaciones de tarjetas (Visa / Mastercard / Amex) ──────────────────
+  async uploadTarjeta(file: File, marca: string): Promise<any> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await this.client.post('/tarjetas/upload', formData, {
+      params: { marca },
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return res.data
+  }
+
+  async createTarjeta(payload: any, orgId?: number): Promise<any> {
+    const res = await this.client.post('/tarjetas', payload, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async listTarjetas(params: {
+    orgId?: number; marca?: string; estado?: string; periodo?: string; skip?: number; limit?: number
+  } = {}): Promise<{ total: number; items: any[] }> {
+    const q: any = {}
+    if (params.orgId) q.org_id = params.orgId
+    if (params.marca) q.marca = params.marca
+    if (params.estado) q.estado = params.estado
+    if (params.periodo) q.periodo = params.periodo
+    if (params.skip != null) q.skip = params.skip
+    if (params.limit != null) q.limit = params.limit
+    const res = await this.client.get('/tarjetas', { params: q })
+    return res.data
+  }
+
+  async conciliarTarjeta(liqId: number, extractoMovimientoId: number): Promise<any> {
+    const res = await this.client.patch(`/tarjetas/${liqId}/conciliar`, {
+      extracto_movimiento_id: extractoMovimientoId,
+    })
+    return res.data
+  }
+
+  async deleteTarjeta(liqId: number): Promise<void> {
+    await this.client.delete(`/tarjetas/${liqId}`)
+  }
 }
 
 export const apiClient = new ApiClient()
