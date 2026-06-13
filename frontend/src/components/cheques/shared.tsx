@@ -201,8 +201,8 @@ export const shareChequePdf = async (c: Cheque, fotoB64: string): Promise<boolea
       await navigator.share({ title: `Cheque ${c.numero || ''}`, files: [file] })
       return true
     }
-  } catch (e: any) {
-    if (e?.name === 'AbortError') return true  // el usuario cerró el menú de compartir
+  } catch (e) {
+    if ((e as { name?: string })?.name === 'AbortError') return true
   }
   return false
 }

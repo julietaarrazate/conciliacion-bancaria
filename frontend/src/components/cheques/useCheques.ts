@@ -1,4 +1,13 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+
+/** Extract .response?.data?.detail from an axios-style error */
+function apiDetail(e: unknown, fallback: string): string {
+  const err = e as { response?: { data?: { detail?: string } }; message?: string }
+  return err?.response?.data?.detail || err?.message || fallback
+}
+function isAbortError(e: unknown): boolean {
+  return (e as { name?: string })?.name === 'AbortError'
+}
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
@@ -339,7 +348,7 @@ export function useCheques() {
           await apiClient.client.post(`/cheques/${id}/foto`, { foto_base64: formFoto })
       }
       setShowForm(false); setEditId(null); setFormData(emptyForm()); setFormFoto(null); load()
-    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al guardar') }
+    } catch (e) { setMsg(apiDetail(e, 'Error al guardar')) }
     finally { setSaving(false) }
   }
 
@@ -370,7 +379,7 @@ export function useCheques() {
       })
       setAcreditarId(null); setAcreditarFecha(''); setAcreditarBancoId('')
       load()
-    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error') }
+    } catch (e) { setMsg(apiDetail(e, 'Error')) }
     finally { setActioning(false) }
   }
 
@@ -395,7 +404,7 @@ export function useCheques() {
         if (activeOrgId) p.org_id = activeOrgId
         apiClient.client.get('/cheques/deposito', { params: p }).then(r => setDepositoData(r.data)).catch(() => {})
       }
-    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al acreditar') }
+    } catch (e) { setMsg(apiDetail(e, 'Error al acreditar')) }
     finally { setAcreditandoMasivo(false) }
   }
 
@@ -416,14 +425,14 @@ export function useCheques() {
         if (activeOrgId) params.org_id = activeOrgId
         apiClient.client.get('/cheques', { params }).then(r => setRechazadosList(r.data.items)).catch(() => {})
       }
-    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error') }
+    } catch (e) { setMsg(apiDetail(e, 'Error')) }
     finally { setActioning(false) }
   }
 
   const handleDelete = async (id: number) => {
     if (!await confirmDialog({ title: 'Eliminar cheque', message: '¿Eliminar este cheque?', confirmLabel: 'Eliminar', danger: true })) return
     try { await apiClient.client.delete(`/cheques/${id}`); load() }
-    catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al eliminar') }
+    catch (e) { setMsg(apiDetail(e, 'Error al eliminar')) }
   }
 
   const handleVerFoto = async (id: number) => {
@@ -458,11 +467,11 @@ export function useCheques() {
                 suppressLockForShare()
                 await navigator.share({ title: `Cheque - ${nombre} - ${fmt(c.monto)}`, files: [file] }); return
               }
-            } catch (imgErr: any) { if (imgErr?.name === 'AbortError') return }
+            } catch (imgErr) { if (isAbortError(imgErr)) return }
           }
         }
-      } catch (e: any) {
-        if (e?.name === 'AbortError') return  // el usuario cerró el menú de compartir
+      } catch (e) {
+        if (isAbortError(e)) return  // el usuario cerró el menú de compartir
       }
     }
     if (navigator.share) {
@@ -480,7 +489,7 @@ export function useCheques() {
       const { importados, errores } = res.data
       setMsg(`✓ ${importados} cheque${importados !== 1 ? 's' : ''} importado${importados !== 1 ? 's' : ''}${errores.length ? ` · ${errores.length} error(es)` : ''}`)
       load()
-    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Error al importar') }
+    } catch (e) { setMsg(apiDetail(e, 'Error al importar')) }
     finally { setImportando(false); if (importRef.current) importRef.current.value = '' }
   }
 
@@ -556,7 +565,7 @@ export function useCheques() {
         error:               item.error ?? false,
         error_msg:           item.error_msg ?? '',
       })))
-    } catch (e: any) { setBulkMsg(e?.response?.data?.detail || 'Error al procesar OCR') }
+    } catch (e) { setBulkMsg(apiDetail(e, 'Error al procesar OCR')) }
     finally { setBulkProcessing(false) }
   }
 
@@ -615,7 +624,7 @@ export function useCheques() {
         const errMsgs = errores.map(e => `Fila ${e.index + 1}: ${e.msg}`).join(' | ')
         setBulkMsg(`${m} — ${errMsgs}`)
       }
-    } catch (e: any) { setBulkMsg(e?.response?.data?.detail || 'Error al guardar') }
+    } catch (e) { setBulkMsg(apiDetail(e, 'Error al guardar')) }
     finally { setBulkSaving(false) }
   }
 

@@ -50,7 +50,7 @@ export const Revision: React.FC = () => {
       const histRes = await apiClient.client.get('/historial/planillas', {
         params: { limit: 100, org_id: oid }
       })
-      const planillaIds: number[] = histRes.data.items.map((p: any) => p.id)
+      const planillaIds: number[] = histRes.data.items.map((p: { id: number }) => p.id)
 
       // Para cada planilla verificar si tiene EN_REVISION
       const conRevision: PlanillaConRevision[] = []
@@ -58,7 +58,7 @@ export const Revision: React.FC = () => {
         try {
           const res = await apiClient.client.get(`/planillas/${id}/revision`)
           if (res.data.total_en_revision > 0) {
-            const histItem = histRes.data.items.find((p: any) => p.id === id)
+            const histItem = histRes.data.items.find((p: { id: number; nombre_archivo?: string; cliente_nombre?: string }) => p.id === id)
             conRevision.push({
               planilla_id: id,
               nombre_archivo: histItem?.nombre_archivo || `Planilla #${id}`,

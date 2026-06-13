@@ -170,6 +170,7 @@ export interface MergeUMResult {
   total_recibido: number
   corte_metodo?: string
   corte_saldo_detectado?: number
+  duplicados_internos?: number
 }
 
 export interface MovimientosFiltros {
