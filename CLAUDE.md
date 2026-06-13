@@ -851,6 +851,26 @@ git commit --allow-empty --author="Julieta Arrazate <julietaarrazate@gmail.com>"
 **Keys/tokens:** NUNCA en este archivo. Están en Render, Vercel y GitHub de Julieta.
 **Org A:** NUNCA modificar datos existentes — solo cambios aditivos.
 
+### Protocolo de orquestación ultracode (definido por Julieta, junio 2026)
+
+El modelo orquestador (Fable) se reserva SOLO para: diseño y descomposición en tareas atómicas,
+detección de dependencias (archivos compartidos → secuenciar), resolución de conflictos de merge
+y auditoría de resultados cuando se requiera. Todo lo demás se delega para no gastar de más:
+- **Opus** — implementación compleja (motor contable, parsers, migraciones, lógica financiera).
+- **Sonnet** — implementación estándar (CRUD, UI, refactors mecánicos, tipado).
+- **Haiku** — tareas simples (renombres, docs menores, búsquedas).
+
+Reglas del bucle (cuanto más corta y verificable cada unidad, más robusto el bucle):
+1. Unidad de trabajo atómica (~30-45 min por agente); módulos grandes se parten en 2-3 agentes.
+2. Prompt por agente: reglas del repo destiladas (~5 líneas: author git, Decimal, safety nets,
+   Org A) + tarea puntual + comando de verificación exacto. Sin contexto de más.
+3. Commit por sub-paso, no al final — una muerte de sesión pierde minutos, no horas.
+4. Mapear qué archivos toca cada tarea ANTES de paralelizar; si dos tocan el mismo, van en serie.
+5. Orden de merge planificado de antemano (backend → frontend → splits/docs).
+6. Criterio de terminado verificable en el prompt: pytest + tsc --noEmit + build.
+7. Si un agente muere: auditar el worktree (`git log` + `git status`) y relanzar uno nuevo que
+   continúe desde el estado exacto, con instrucción de no terminar sin pushear.
+
 Checkpoints disponibles:
 - `v3.1-stable-checkpoint` — antes de las 5 features de mayo 2026
 - `v3.2-stable-checkpoint` — después de seguridad hardening + Numeric migration + legal pages (mayo 2026)
