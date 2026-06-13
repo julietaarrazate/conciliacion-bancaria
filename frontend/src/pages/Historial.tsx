@@ -16,7 +16,6 @@ export const Historial: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
-  const [downloadingId, setDownloadingId] = useState<number | null>(null)
   const [savingId, setSavingId] = useState<number | null>(null)
   const [panelId, setPanelId] = useState<number | null>(null)
   const [msg, setMsg] = useState('')
@@ -67,12 +66,6 @@ export const Historial: React.FC = () => {
       }
     } catch { setMsg('✗ Error al guardar') }
     finally { setSavingId(null) }
-  }
-
-  const handleDownload = async (id: number) => {
-    setDownloadingId(id)
-    try { await apiClient.downloadPlanillaConciliada(id) }
-    finally { setDownloadingId(null) }
   }
 
   const handleGuardarComision = async (planillaId: number) => {

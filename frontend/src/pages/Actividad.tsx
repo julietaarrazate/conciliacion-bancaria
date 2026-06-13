@@ -19,9 +19,6 @@ interface OrgActividad {
   alerta: boolean
 }
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
-
 const fmtFecha = (s: string | null) => {
   if (!s) return '—'
   const d = new Date(s + (s.includes('T') ? '' : 'T00:00:00'))
@@ -54,8 +51,6 @@ export const Actividad: React.FC = () => {
   const alertas = items.filter(i => i.alerta).length
   const totalPlanillas = items.reduce((s, i) => s + i.planillas_mes, 0)
   const totalOk = items.reduce((s, i) => s + i.ok_mes, 0)
-  const totalFilas = items.reduce((s, i) => s + i.filas_mes, 0)
-
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       {/* Header */}

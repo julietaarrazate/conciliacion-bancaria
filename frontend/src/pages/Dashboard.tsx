@@ -203,9 +203,9 @@ export const Dashboard: React.FC = () => {
     try { setOnboardingVisible(localStorage.getItem(onboardingKey) !== '1') } catch {}
   }, [onboardingKey])
   const [extractoId, setExtractoId] = useState<number | null>(null)
-  const [extractoNombre, setExtractoNombre] = useState<string>('')
+  const [_extractoNombre, setExtractoNombre] = useState<string>('')
   const [clienteNombre, setClienteNombre] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [_loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [resultado, setResultado] = useState<ConciliacionResultado | null>(null)
@@ -229,18 +229,6 @@ export const Dashboard: React.FC = () => {
   const [bulkFecha, setBulkFecha] = useState(localIsoDate())
   const [autoRun, setAutoRun] = useState(true)
   const justAddedRef = useRef(false)
-
-  const handleBulkFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    setBulkItems(prev => [...prev, ...files.map(f => ({
-      id: `${f.name}-${Date.now()}-${Math.random()}`,
-      file: f,
-      clienteNombre: f.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').trim(),
-      status: 'pending' as const
-    }))])
-    justAddedRef.current = true
-    e.target.value = ''
-  }
 
   const handleBulkFilesArray = (files: File[]) => {
     setBulkItems(prev => [...prev, ...files.map(f => ({
@@ -436,7 +424,7 @@ export const Dashboard: React.FC = () => {
 
   // Stats — usa solo el extracto activo para movimientos (no sumar duplicados)
   const hoyStr = localIsoDate()
-  const { totalMovimientos, totalAcreditadas, totalProcesadas, accuracy, montoConciliadoHoy, planillasHoy } = useMemo(() => {
+  const { totalMovimientos, totalAcreditadas, totalProcesadas: _totalProcesadas, accuracy, montoConciliadoHoy, planillasHoy } = useMemo(() => {
     const extractoActivo = extractos.find(e => e.id === extractoId)
     const totalMovimientos = extractoActivo?.total_movimientos ?? 0
     const totalAcreditadas = planillas.reduce((s, p) => s + p.acreditadas, 0)
