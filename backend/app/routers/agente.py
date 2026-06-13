@@ -5,7 +5,7 @@ import logging
 import time
 from datetime import date
 from threading import Lock
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -465,6 +465,41 @@ def ocr_transferencia(
         logger.warning("OCR transferencia error: %s", ex)
         _, msg = _classify_gemini_error(ex)
         raise HTTPException(500, msg)
+
+
+@router.post("/transcribir")
+async def transcribir_audio(
+    audio: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Transcribe un audio (webm/mp4/etc) a texto con Gemini. Devuelve {texto}."""
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(503, "Transcripción no configurada (falta GEMINI_API_KEY)")
+
+    raw = await audio.read()
+    if not raw:
+        raise HTTPException(400, "Audio vacío")
+    mime = audio.content_type or "audio/webm"
+
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name=_GEMINI_MODEL)
+        prompt = (
+            "Transcribí este audio en español. Devolvé únicamente el texto exacto "
+            "de lo que se dice, sin comillas ni comentarios."
+        )
+        audio_part = genai.protos.Part(
+            inline_data=genai.protos.Blob(mime_type=mime, data=raw)
+        )
+        response = model.generate_content([audio_part, prompt])
+        texto = (response.text or "").strip()
+        return {"texto": texto}
+    except Exception as ex:
+        logger.warning("Transcripción audio error: %s", ex)
+        status, msg = _classify_gemini_error(ex)
+        raise HTTPException(status, msg)
 
 
 @router.get("/ocr-usage")
