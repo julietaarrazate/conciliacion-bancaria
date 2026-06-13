@@ -152,7 +152,7 @@ export const FixFechasModal: React.FC<{ c: ContabilidadCtx }> = ({ c }) => {
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Dirección</label>
-            <select value={c.fixDir} onChange={e => { c.setFixDir(e.target.value as any); c.setFixPreview(null) }}
+            <select value={c.fixDir} onChange={e => { c.setFixDir(e.target.value as 'adelantar' | 'atrasar'); c.setFixPreview(null) }}
               className="input-field w-full text-sm">
               <option value="adelantar">Adelantar +1 día (muestran 1 día antes de lo correcto)</option>
               <option value="atrasar">Atrasar −1 día (muestran 1 día después de lo correcto)</option>
@@ -168,7 +168,7 @@ export const FixFechasModal: React.FC<{ c: ContabilidadCtx }> = ({ c }) => {
               <p className="font-semibold text-orange-800 dark:text-orange-300">
                 Afectados: {c.fixPreview.asientos_afectados} asientos + {c.fixPreview.egresos_afectados} egresos
               </p>
-              {[...c.fixPreview.detalle_asientos, ...c.fixPreview.detalle_egresos].slice(0, 5).map((a: any, i) => (
+              {[...c.fixPreview.detalle_asientos, ...c.fixPreview.detalle_egresos].slice(0, 5).map((a, i) => (
                 <p key={i} className="text-orange-700 dark:text-orange-400 truncate">
                   #{a.id} · {a.fecha_actual} → {a.fecha_nueva} · {a.descripcion}
                 </p>
@@ -219,7 +219,7 @@ export const ExportContableModal: React.FC<{ c: ContabilidadCtx }> = ({ c }) => 
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Formato</label>
             <select
               value={c.exportFormato}
-              onChange={e => c.setExportFormato(e.target.value as any)}
+              onChange={e => c.setExportFormato(e.target.value as 'csv' | 'tango' | 'holistor' | 'regisoft')}
               className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100"
             >
               <option value="csv">CSV genérico (Excel, Google Sheets)</option>
