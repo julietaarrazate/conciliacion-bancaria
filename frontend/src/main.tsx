@@ -63,4 +63,4 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 )
 
 // Marca a la app como booteada para el watchdog en index.html
-;(window as any).__appBooted = true
+;window.__appBooted = true
