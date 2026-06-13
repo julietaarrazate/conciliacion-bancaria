@@ -91,8 +91,6 @@ export const Movimientos: React.FC = () => {
   const [umMsg, setUmMsg] = useState('')
   const [exporting, setExporting] = useState(false)
   const [tab, setTab] = useState<'todos' | 'um'>('todos')
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editValues, setEditValues] = useState<Record<string, string>>({})
   const [editModal, setEditModal] = useState<MovimientoFiltrado | null>(null)
   const [modalValues, setModalValues] = useState<Record<string, string>>({})
   const [modalSaving, setModalSaving] = useState(false)
@@ -146,26 +144,6 @@ export const Movimientos: React.FC = () => {
     }
     return m
   }, [movimientos, debouncedFilters.importe, tab])
-
-  const startEdit = (m: MovimientoFiltrado) => {
-    setEditingId(m.id)
-    setEditValues({ titular: m.titular || '', monto: String(m.monto) })
-  }
-
-  const saveEdit = async (m: MovimientoFiltrado) => {
-    if (!extractoId) return
-    try {
-      await apiClient.updateMovimiento(extractoId, m.id, {
-        titular: editValues.titular,
-        monto: parseFloat(editValues.monto)
-      })
-      setMovimientos(prev => prev.map(x => x.id === m.id
-        ? { ...x, titular: editValues.titular, monto: parseFloat(editValues.monto) }
-        : x
-      ))
-    } catch { /* silencioso */ }
-    setEditingId(null)
-  }
 
   const openModal = (m: MovimientoFiltrado) => {
     setModalError('')
