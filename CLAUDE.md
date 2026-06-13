@@ -786,18 +786,50 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   frágil con montos "1.234,56" (separador de miles); pdfminer no está en requirements (parser de
   tarjetas degrada a manual para PDFs).
 
+### v3.16 — Deuda técnica v3.15 + UI comisión L/I + tsc limpio + paginación (junio 2026 — PRs #126-#133)
+
+- **Split router `contabilidad.py`** (PR #127): monolito 1628 líneas → agregador delgado 38 líneas +
+  4 sub-módulos: `ctb_common.py` (helpers compartidos), `ctb_plan.py` (/stats, /plan-cuentas, /reglas),
+  `ctb_libro.py` (/asientos, /libro-mayor, /sumas-saldo, /balance, /export-config, /asiento-manual,
+  /fix-fechas-utc, /reset-y-rebuild), `ctb_clientes.py` (/clientes-cuentas, vincular, crear-faltantes),
+  `ctb_ctas_corrientes.py` (/cuentas-corrientes, /cuenta-corriente, exportar-pdf, backfill). Sin cambios
+  funcionales, `main.py` sin tocar. Comportamiento idéntico verificado con tsc + pytest.
+- **Deuda técnica v3.15** (PR #128): `pdfminer.six>=20221105` agregado a `requirements.txt` (antes el
+  tarjeta parser degradaba silenciosamente en PDFs). `_normalizar_numero()` en `excel_parser.py`
+  detecta formato argentino `"1.234,56"` antes de `float()`. Doc de `_parse_monto` sobre contrato float.
+- **50 tests de integración** (PR #130): `test_cheques_integration.py` (13 tests), `test_contabilidad_integration.py`
+  (15 tests), `test_planillas_integration.py` (22 tests). Suite total: 316 tests pasando.
+- **Tipado `any` eliminado — frontend** (PR #131): `api.ts`, componentes de contabilidad, cheques y páginas.
+  Tipos nuevos: `ConciliacionItem`, `TarjetaUploadPreview`, `TarjetaCreatePayload`, `LiquidacionTarjeta` en
+  `types/index.ts`. `AxiosResponse` en métodos de descarga.
+- **UI comisión L/I por cliente** (PR #129): chip expandible en `/clientes` con 3 inputs inline:
+  `% General`, `% Local (CP < 2000)`, `% Interior (CP ≥ 2000)`. Llama a `PUT /clientes/{id}/comision`
+  con los 3 campos (null si vacío). Click-outside cierra; chip ámbar si algún campo tiene valor.
+- **Fix tsc TS6133** (PR #129 + #132): eliminados imports y variables no usadas en 7 archivos:
+  `AgenteChat.tsx` (React import), `Layout.tsx` (useCallback + ThemeToggle), `Actividad.tsx` (fmt + totalFilas),
+  `Caja.tsx` (useRef), `Dashboard.tsx` (extractoNombre, loading, handleBulkFiles), `Historial.tsx`
+  (downloadingId, handleDownload), `Movimientos.tsx` (editingId, editValues, _startEdit, _saveEdit).
+  `tsc --noEmit` → 0 errores.
+- **Paginación limit/offset en 5 endpoints** (PR #133): `GET /contabilidad/plan-cuentas`, `GET /contabilidad/reglas`,
+  `GET /contabilidad/clientes-cuentas`, `GET /admin/papelera`, `GET /analisis/clientes-aging` — todos agregan
+  `limit`/`offset` query params y retornan `{"items": [...], "total": N}`. Backward-compat: `clientes`/
+  `cuentas_disponibles`/`extractos`/`planillas` se mantienen como aliases. Frontend (`useContabilidad.ts`,
+  `useCheques.ts`) usa `r.data?.items ?? r.data` para tolerar ambos shapes. 316 tests pasando.
+
 ### Pendiente para próximas sesiones
 
-- ~~**Liquidaciones con asientos**~~ — resuelto en v3.13 (Cliente D / Banco H / Comisión H al aprobar).
+- ~~**Liquidaciones con asientos**~~ — resuelto en v3.13.
 - ~~**Botones de borrar ocultos**~~ — resuelto en v3.11.4.
-- ~~**Sentry monitoreo**~~ — resuelto en v3.11.4 (opt-in via SENTRY_DSN / VITE_SENTRY_DSN).
+- ~~**Sentry monitoreo**~~ — resuelto en v3.11.4.
 - ~~**Validación extracto post-parse**~~ — resuelto en v3.11.4.
-- **UI comisión L/I por cliente** — chip expandible en `/clientes` para editar `porcentaje_comision_local`
-  e `porcentaje_comision_interior` directamente desde la lista (hoy solo edita el % general).
+- ~~**UI comisión L/I por cliente**~~ — resuelto en v3.16 (PR #129).
 - ~~**Expediente DNDA**~~ — resuelto en PR #112 (junio 2026). Ver sección abajo.
+- ~~**Split router contabilidad.py**~~ — resuelto en v3.16 (PR #127).
+- ~~**Tipado `any` frontend**~~ — resuelto en v3.16 (PR #131).
+- ~~**Paginación 5 endpoints**~~ — resuelto en v3.16 (PR #133).
 - **Paginación rows en `/planillas/{id}`** — retorna todas las filas sin paginar (puede ser 1000+).
-  No implementado en v3.12.1 porque `PlanillaPanel` asume todas las filas juntas. Requiere refactor
-  coordinado frontend+backend. Abordar cuando el volumen de planillas crezca y se note la lentitud.
+  No implementado porque `PlanillaPanel` asume todas las filas juntas. Requiere refactor coordinado
+  frontend+backend. Abordar cuando el volumen de planillas crezca y se note la lentitud.
 
 ---
 
@@ -985,7 +1017,12 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
   (Tango/Holistor/Regisoft/CSV con mapeo por org), módulo Tarjetas (asiento mensual agrupado
   6 líneas + invariante 422), split frontend (Cheques 189L / Contabilidad 85L). 266 tests.
   (junio 2026 — PRs #121-#124 mergeados a main)
+- `v3.16` — deuda técnica v3.15 completada: split contabilidad.py (5 sub-módulos), pdfminer.six,
+  CSV "1.234,56", 316 tests (+50 integración), tipado `any` eliminado en frontend, UI comisión
+  L/I chip expandible en /clientes, tsc TS6133 limpio (0 errores), paginación limit/offset en
+  5 endpoints (plan-cuentas, reglas, clientes-cuentas, papelera, clientes-aging).
+  (junio 2026 — PRs #126-#133 mergeados a main)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.15
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.16
