@@ -100,9 +100,11 @@ export const Clientes: React.FC = () => {
   const [nuevoCuit, setNuevoCuit] = useState('')
   const [creandoLoading, setCreandoLoading] = useState(false)
 
-  // Editor comision por cliente (% general / TT)
+  // Editor comision por cliente (% general / Local / Interior)
   const [editComisionId, setEditComisionId] = useState<number | null>(null)
   const [editComisionVal, setEditComisionVal] = useState('')
+  const [editComisionLocal, setEditComisionLocal] = useState('')
+  const [editComisionInterior, setEditComisionInterior] = useState('')
   const [savingComision, setSavingComision] = useState(false)
 
   // Renombrar cliente
@@ -203,6 +205,14 @@ export const Clientes: React.FC = () => {
   }
 
   useEffect(() => { cargar() }, [activeOrgId])
+
+  // Cerrar popover de comisión al hacer click fuera
+  useEffect(() => {
+    if (editComisionId === null) return
+    const handler = () => setEditComisionId(null)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [editComisionId])
 
   // Detectar comprobante compartido desde /compartir
   useEffect(() => {
@@ -324,14 +334,25 @@ export const Clientes: React.FC = () => {
   const handleGuardarComision = async (clienteId: number) => {
     setSavingComision(true)
     try {
-      const pct = editComisionVal.trim() === '' ? null : parseFloat(editComisionVal.replace(',', '.'))
-      await apiClient.client.put(`/clientes/${clienteId}/comision`, { porcentaje_comision: pct })
+      const parsePct = (v: string) => v.trim() === '' ? null : parseFloat(v.replace(',', '.'))
+      await apiClient.client.put(`/clientes/${clienteId}/comision`, {
+        porcentaje_comision: parsePct(editComisionVal),
+        porcentaje_comision_local: parsePct(editComisionLocal),
+        porcentaje_comision_interior: parsePct(editComisionInterior),
+      })
       apiClient.invalidateCache(activeOrgId ? `/clientes/archivos?org_id=${activeOrgId}` : '/clientes/archivos')
       cargar()
       setEditComisionId(null)
     } catch (e: any) {
       setMsg(`✗ ${e.response?.data?.detail || 'Error al guardar comisión'}`)
     } finally { setSavingComision(false) }
+  }
+
+  const abrirEditorComision = (cliente: ClienteData) => {
+    setEditComisionId(cliente.id)
+    setEditComisionVal(cliente.porcentaje_comision != null ? String(cliente.porcentaje_comision) : '')
+    setEditComisionLocal(cliente.porcentaje_comision_local != null ? String(cliente.porcentaje_comision_local) : '')
+    setEditComisionInterior(cliente.porcentaje_comision_interior != null ? String(cliente.porcentaje_comision_interior) : '')
   }
 
   return (
@@ -502,34 +523,76 @@ export const Clientes: React.FC = () => {
                                 </p>
                               </div>
                             </button>
-                            {/* Chip comisión (% general / TT) */}
-                            {editComisionId === cliente.id ? (
-                              <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                                <input
-                                  type="number" step="0.1" min="0" max="100"
-                                  placeholder="%"
-                                  className="input-field text-xs w-16 py-0.5 px-1.5"
-                                  value={editComisionVal}
-                                  onChange={e => setEditComisionVal(e.target.value)}
-                                  onKeyDown={e => { if (e.key === 'Enter') handleGuardarComision(cliente.id); if (e.key === 'Escape') setEditComisionId(null) }}
-                                  autoFocus
-                                />
-                                <button onClick={() => handleGuardarComision(cliente.id)} disabled={savingComision}
-                                  className="px-1.5 py-0.5 text-[10px] bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-30">
-                                  {savingComision ? '⏳' : '✓'}
-                                </button>
-                                <button onClick={() => setEditComisionId(null)}
-                                  className="text-[10px] text-gray-400 hover:text-gray-600 px-0.5">✕</button>
-                              </div>
-                            ) : (
+                            {/* Chip comisión (% general / Local / Interior) */}
+                            <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
                               <button
-                                onClick={(e) => { e.stopPropagation(); setEditComisionId(cliente.id); setEditComisionVal(cliente.porcentaje_comision != null ? String(cliente.porcentaje_comision) : '') }}
-                                className={`px-2 py-1 text-[11px] rounded font-medium flex-shrink-0 transition-colors ${cliente.porcentaje_comision != null ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60' : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-600'}`}
-                                title="% comisión cheques (solo para cheques, no planillas) — click para editar"
+                                onClick={() => editComisionId === cliente.id ? setEditComisionId(null) : abrirEditorComision(cliente)}
+                                className={`px-2 py-1 text-[11px] rounded font-medium transition-colors ${cliente.porcentaje_comision != null || cliente.porcentaje_comision_local != null || cliente.porcentaje_comision_interior != null ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60' : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-600'}`}
+                                title="% comisiones (general / local / interior) — click para editar"
                               >
-                                {cliente.porcentaje_comision != null ? `${cliente.porcentaje_comision}% 🏦` : '% 🏦'}
+                                {cliente.porcentaje_comision != null ? `${cliente.porcentaje_comision}%` : '%'}&nbsp;
+                                <svg className="inline w-3 h-3 -mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
                               </button>
-                            )}
+                              {editComisionId === cliente.id && (
+                                <div
+                                  className="absolute right-0 top-full mt-1 z-50 w-52 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-lg p-3"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Comisiones cheques</p>
+                                  <div className="space-y-2">
+                                    <div>
+                                      <label className="text-[11px] text-gray-600 dark:text-gray-300 block mb-0.5">% General</label>
+                                      <input
+                                        type="number" step="0.1" min="0" max="100"
+                                        placeholder="—"
+                                        className="input-field text-xs w-full py-1 px-2"
+                                        value={editComisionVal}
+                                        onChange={e => setEditComisionVal(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Escape') setEditComisionId(null) }}
+                                        autoFocus
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[11px] text-gray-600 dark:text-gray-300 block mb-0.5">% Local (CP &lt; 2000)</label>
+                                      <input
+                                        type="number" step="0.1" min="0" max="100"
+                                        placeholder="—"
+                                        className="input-field text-xs w-full py-1 px-2"
+                                        value={editComisionLocal}
+                                        onChange={e => setEditComisionLocal(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Escape') setEditComisionId(null) }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[11px] text-gray-600 dark:text-gray-300 block mb-0.5">% Interior (CP &ge; 2000)</label>
+                                      <input
+                                        type="number" step="0.1" min="0" max="100"
+                                        placeholder="—"
+                                        className="input-field text-xs w-full py-1 px-2"
+                                        value={editComisionInterior}
+                                        onChange={e => setEditComisionInterior(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Escape') setEditComisionId(null) }}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-1.5 mt-3">
+                                    <button
+                                      onClick={() => handleGuardarComision(cliente.id)}
+                                      disabled={savingComision}
+                                      className="flex-1 py-1 text-[11px] bg-ml-blue text-white rounded hover:opacity-90 disabled:opacity-30 font-medium"
+                                    >
+                                      {savingComision ? 'Guardando...' : 'Guardar'}
+                                    </button>
+                                    <button
+                                      onClick={() => setEditComisionId(null)}
+                                      className="px-2 py-1 text-[11px] bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-slate-600"
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                             <a
                               href={`/clientes/${cliente.id}/estado-cuenta`}
                               onClick={(e) => e.stopPropagation()}
