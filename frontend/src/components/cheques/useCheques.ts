@@ -225,7 +225,7 @@ export function useCheques() {
     if (activeOrgId) params.org_id = activeOrgId
     apiClient.client.get('/contabilidad/plan-cuentas', { params })
       .then(r => {
-        const all: CuentaItem[] = Array.isArray(r.data) ? r.data : (r.data?.cuentas || [])
+        const all: CuentaItem[] = Array.isArray(r.data) ? r.data : (r.data?.items ?? r.data?.cuentas ?? [])
         // IDs que son cuenta madre (tienen hijos) → no se imputan
         const parentIds = new Set(all.map(c => c.parent_id).filter(Boolean))
         const bancos = all.filter(c =>

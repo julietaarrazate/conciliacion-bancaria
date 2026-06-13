@@ -28,11 +28,14 @@ logger = logging.getLogger(__name__)
 @router.get("/clientes-cuentas")
 def get_clientes_cuentas(
     org_id: Optional[int] = Query(None),
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Lista clientes con su cuenta contable vinculada (o NULL) + las cuentas
-    disponibles bajo 2-1-2-0 para asignación manual."""
+    disponibles bajo 2-1-2-0 para asignación manual.
+    Soporta paginación via limit/offset (default: todos)."""
     oid = _org_id(current_user, org_id)
     padre = _cuenta_parent_cliente(db, oid)
     cuentas_cliente = []
@@ -45,12 +48,14 @@ def get_clientes_cuentas(
         )
     cuentas_by_id = {c.id: c for c in cuentas_cliente}
 
-    clientes = (
+    clientes_q = (
         db.query(Cliente)
         .filter(Cliente.organizacion_id == oid)
         .order_by(Cliente.nombre)
-        .all()
     )
+    total = clientes_q.count()
+    clientes = clientes_q.offset(offset).limit(limit).all()
+
     items = []
     for cli in clientes:
         cuenta = cuentas_by_id.get(cli.cuenta_contable_id)
@@ -63,7 +68,9 @@ def get_clientes_cuentas(
         })
 
     return {
-        "clientes": items,
+        "items": items,
+        "total": total,
+        "clientes": items,  # backward-compat alias
         "cuentas_disponibles": [
             {"id": c.id, "codigo": c.codigo, "nombre": c.nombre} for c in cuentas_cliente
         ],

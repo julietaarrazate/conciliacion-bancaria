@@ -479,6 +479,8 @@ def _calcular_aging_cliente(planilla_carga_date: date, hoy: date) -> str:
 @router.get("/clientes-aging")
 def clientes_aging(
     org_id: Optional[int] = Query(None),
+    limit: int = Query(200, ge=1, le=2000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -587,11 +589,16 @@ def clientes_aging(
         "clientes_con_pendiente": len([d for d in salida if d["total_operativo"] > 0]),
     }
 
+    total = len(salida)
+    items = salida[offset:offset + limit]
+
     return {
         "organizacion_id": organizacion_id,
         "generado_en": datetime.utcnow().isoformat(),
         "totales": totales,
-        "clientes": salida,
+        "clientes": items,  # backward-compat
+        "items": items,
+        "total": total,
     }
 
 
