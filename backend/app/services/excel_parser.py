@@ -63,12 +63,22 @@ def _convertir_csv_a_xlsx(filepath: str) -> str:
             content = f.read()
 
     delimiter = ';' if content.count(';') > content.count(',') else ','
+    # Patrón para montos argentinos: "1.234,56" o "-1.234,56"
+    _ARG_MONTO_RE = re.compile(r'^-?\d{1,3}(\.\d{3})*(,\d+)?$')
+
+    def _normalizar_numero(s: str) -> str:
+        """Convierte "1.234,56" → "1234.56"; deja otros strings intactos."""
+        if _ARG_MONTO_RE.match(s):
+            # Quitar punto separador de miles y cambiar coma decimal por punto
+            return re.sub(r'\.(?=\d{3}([,\s]|$))', '', s).replace(',', '.')
+        return s
+
     reader = csv.reader(content.splitlines(), delimiter=delimiter)
     for row_idx, row in enumerate(reader, 1):
         for col_idx, val in enumerate(row, 1):
             val = val.strip()
             try:
-                ws.cell(row=row_idx, column=col_idx, value=float(val.replace(',', '.')))
+                ws.cell(row=row_idx, column=col_idx, value=float(_normalizar_numero(val)))
             except ValueError:
                 ws.cell(row=row_idx, column=col_idx, value=val)
 
