@@ -62,7 +62,7 @@ const ClienteAvatar: React.FC<{ nombre: string; size?: 'sm' | 'md' }> = ({ nombr
   return (
     <span
       className={`${dim} rounded-xl flex items-center justify-center font-bold text-white shrink-0 select-none shadow-md`}
-      style={{ background: GRADIENTS[idx] } as any}
+      style={{ background: GRADIENTS[idx] }}
     >
       {letter}
     </span>
@@ -144,7 +144,7 @@ export const Clientes: React.FC = () => {
     }
     setAcrLoading(true); setMsg('')
     try {
-      const body: any = { referencia: acrRef, origen: acrOrigen }
+      const body: { referencia: string; origen: string; monto?: number; fecha?: string } = { referencia: acrRef, origen: acrOrigen }
       if (acrMonto) body.monto = parseFloat(acrMonto.replace(/\./g, '').replace(',', '.'))
       if (acrFecha) body.fecha = acrFecha
       const r = await apiClient.client.post(`/clientes/${acreditarCli.id}/buscar-movimiento`, body)
@@ -175,17 +175,17 @@ export const Clientes: React.FC = () => {
   const cargar = () => {
     setLoading(true)
     apiClient.getClientesArchivos(activeOrgId)
-      .then((r: any) => {
+      .then((r: { organizaciones?: OrgData[]; clientes?: { nombre: string; meses?: MesArchivos[] }[] }) => {
         // Soporta dos formatos:
         // 1) Nuevo: { organizaciones: [{id, nombre, clientes: [...]}] }
         // 2) Viejo (fallback por SW cacheado): { clientes: [{nombre, meses: [...]}] }
         let data: OrgData[] = r.organizaciones || []
         if (data.length === 0 && Array.isArray(r.clientes)) {
-          const clientesViejos = r.clientes.map((c: any, idx: number) => ({
+          const clientesViejos: ClienteData[] = r.clientes.map((c, idx) => ({
             id: idx + 1,
             nombre: c.nombre,
             cuit: null,
-            total_archivos: c.meses?.reduce((s: number, m: any) => s + m.archivos.length, 0) || 0,
+            total_archivos: c.meses?.reduce((s, m) => s + m.archivos.length, 0) || 0,
             meses: c.meses || [],
           }))
           data = [{

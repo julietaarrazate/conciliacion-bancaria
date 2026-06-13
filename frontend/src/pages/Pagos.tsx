@@ -23,7 +23,7 @@ const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 
 // Parse monto from OCR: handles number OR string (incl. Argentine "15.000,00" / US "15,000.00")
-const parseMonto = (raw: any): number | null => {
+const parseMonto = (raw: unknown): number | null => {
   if (raw == null) return null
   if (typeof raw === 'number') return isNaN(raw) ? null : raw
   // quitar símbolo $ y espacios, luego analizar formato
@@ -339,12 +339,13 @@ export const Pagos: React.FC = () => {
     apiClient.client.get('/clientes/archivos', { params }).then(r => {
       // r.data.clientes solo incluye clientes con planillas; usar organizaciones[0].clientes
       // que incluye TODOS los clientes de la org (incluso los recién creados sin planillas)
-      const orgs: any[] = r.data.organizaciones || []
-      const todos = orgs.flatMap((o: any) => o.clientes || [])
-      const lista = todos.length
-        ? todos.map((c: any) => ({ id: c.id, nombre: c.nombre }))
-        : (r.data.clientes?.map((c: any) => ({ id: c.id || 0, nombre: c.nombre })) || [])
-      setClientes(lista.sort((a: any, b: any) => a.nombre.localeCompare(b.nombre)))
+      interface OrgRaw { clientes?: { id: number; nombre: string }[] }
+      const orgs: OrgRaw[] = r.data.organizaciones || []
+      const todos = orgs.flatMap(o => o.clientes || [])
+      const lista: { id: number; nombre: string }[] = todos.length
+        ? todos.map(c => ({ id: c.id, nombre: c.nombre }))
+        : (r.data.clientes?.map((c: { id?: number; nombre: string }) => ({ id: c.id || 0, nombre: c.nombre })) || [])
+      setClientes(lista.sort((a, b) => a.nombre.localeCompare(b.nombre)))
     }).catch(() => {})
     apiClient.client.get('/pagos/categorias', { params }).then(r => {
       setCategorias(r.data || [])
