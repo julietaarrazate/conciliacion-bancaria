@@ -113,6 +113,14 @@ async def upload_extracto(file: UploadFile = File(...),
         content = await file.read()
         if len(content) > settings.max_file_size:
             raise HTTPException(413, f"El archivo supera el límite de {settings.max_file_size // (1024 * 1024)} MB.")
+        # Validación de magic bytes: evita que archivos renombrados pasen la validación de extensión
+        _XLSX_MAGIC = b'PK\x03\x04'       # ZIP (XLSX internamente es ZIP)
+        _XLS_MAGIC  = b'\xd0\xcf\x11\xe0'  # OLE2 (formato binario .xls)
+        header = content[:8]
+        if ext == '.xlsx' and not header.startswith(_XLSX_MAGIC):
+            raise HTTPException(400, "El archivo no es un Excel válido (.xlsx debe ser un archivo ZIP/OOXML)")
+        if ext == '.xls' and not header.startswith(_XLS_MAGIC):
+            raise HTTPException(400, "El archivo no es un Excel válido (.xls debe ser formato OLE2)")
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
@@ -376,6 +384,14 @@ async def agregar_ultimos_movimientos(
         content = await file.read()
         if len(content) > settings.max_file_size:
             raise HTTPException(413, f"El archivo supera el límite de {settings.max_file_size // (1024 * 1024)} MB.")
+        # Validación de magic bytes
+        _XLSX_MAGIC = b'PK\x03\x04'
+        _XLS_MAGIC  = b'\xd0\xcf\x11\xe0'
+        header = content[:8]
+        if ext == '.xlsx' and not header.startswith(_XLSX_MAGIC):
+            raise HTTPException(400, "El archivo no es un Excel válido (.xlsx debe ser un archivo ZIP/OOXML)")
+        if ext == '.xls' and not header.startswith(_XLS_MAGIC):
+            raise HTTPException(400, "El archivo no es un Excel válido (.xls debe ser formato OLE2)")
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
