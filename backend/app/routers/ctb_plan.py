@@ -38,58 +38,70 @@ def get_stats(
 @router.get("/plan-cuentas")
 def get_plan_cuentas(
     org_id: Optional[int] = Query(None),
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     oid = _org_id(current_user, org_id)
-    cuentas = (
+    q = (
         db.query(PlanCuenta)
         .filter(PlanCuenta.organizacion_id == oid, PlanCuenta.activo == True)
         .order_by(PlanCuenta.codigo)
-        .all()
     )
-    return [
-        {
-            "id": c.id,
-            "codigo": c.codigo,
-            "nombre": c.nombre,
-            "tipo": c.tipo,
-            "parent_id": c.parent_id,
-            "nivel": c.nivel,
-            "activo": c.activo,
-        }
-        for c in cuentas
-    ]
+    total = q.count()
+    cuentas = q.offset(offset).limit(limit).all()
+    return {
+        "items": [
+            {
+                "id": c.id,
+                "codigo": c.codigo,
+                "nombre": c.nombre,
+                "tipo": c.tipo,
+                "parent_id": c.parent_id,
+                "nivel": c.nivel,
+                "activo": c.activo,
+            }
+            for c in cuentas
+        ],
+        "total": total,
+    }
 
 
 @router.get("/reglas")
 def get_reglas(
     org_id: Optional[int] = Query(None),
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     oid = _org_id(current_user, org_id)
-    reglas = (
+    q = (
         db.query(ReglaContable)
         .filter(ReglaContable.organizacion_id == oid, ReglaContable.activo == True)
         .order_by(ReglaContable.evento)
-        .all()
     )
-    return [
-        {
-            "id": r.id,
-            "evento": r.evento,
-            "descripcion": r.descripcion,
-            "debe": {
-                "id": r.cuenta_debe.id,
-                "codigo": r.cuenta_debe.codigo,
-                "nombre": r.cuenta_debe.nombre,
-            },
-            "haber": {
-                "id": r.cuenta_haber.id,
-                "codigo": r.cuenta_haber.codigo,
-                "nombre": r.cuenta_haber.nombre,
-            },
-        }
-        for r in reglas
-    ]
+    total = q.count()
+    reglas = q.offset(offset).limit(limit).all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "evento": r.evento,
+                "descripcion": r.descripcion,
+                "debe": {
+                    "id": r.cuenta_debe.id,
+                    "codigo": r.cuenta_debe.codigo,
+                    "nombre": r.cuenta_debe.nombre,
+                },
+                "haber": {
+                    "id": r.cuenta_haber.id,
+                    "codigo": r.cuenta_haber.codigo,
+                    "nombre": r.cuenta_haber.nombre,
+                },
+            }
+            for r in reglas
+        ],
+        "total": total,
+    }

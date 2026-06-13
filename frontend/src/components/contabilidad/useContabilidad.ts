@@ -75,10 +75,10 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
     cargarAsientos()  // dispara en paralelo, no espera los otros 4
     Promise.all([
       canViewAccounting
-        ? apiClient.client.get(`/contabilidad/plan-cuentas${q}`).then(r => r.data)
+        ? apiClient.client.get(`/contabilidad/plan-cuentas${q}`).then(r => r.data?.items ?? r.data)
         : Promise.resolve([]),
       canViewAccounting
-        ? apiClient.client.get(`/contabilidad/reglas${q}`).then(r => r.data)
+        ? apiClient.client.get(`/contabilidad/reglas${q}`).then(r => r.data?.items ?? r.data)
         : Promise.resolve([]),
       apiClient.client.get(`/contabilidad/sumas-saldo${q}`).then(r => r.data),
       apiClient.client.get(`/contabilidad/balance${q}`).then(r => r.data),

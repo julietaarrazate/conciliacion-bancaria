@@ -109,19 +109,22 @@ def _cuentas_hoja(db):
 class TestPlanCuentas:
 
     def test_get_plan_cuentas_retorna_200_lista_no_vacia(self, client, db):
-        """GET /contabilidad/plan-cuentas → 200 y lista con cuentas semilleadas."""
+        """GET /contabilidad/plan-cuentas → 200 y lista paginada con cuentas semilleadas."""
         token = _token(db, "admin@ctb.test")
         r = client.get("/contabilidad/plan-cuentas", headers=_auth(token))
         assert r.status_code == 200
         data = r.json()
-        assert isinstance(data, list)
-        assert len(data) > 0
+        assert "items" in data, "La respuesta debe tener clave 'items'"
+        assert "total" in data, "La respuesta debe tener clave 'total'"
+        assert isinstance(data["items"], list)
+        assert len(data["items"]) > 0
+        assert data["total"] > 0
 
     def test_plan_cuentas_contiene_campos_esperados(self, client, db):
         token = _token(db, "admin@ctb.test")
         r = client.get("/contabilidad/plan-cuentas", headers=_auth(token))
         assert r.status_code == 200
-        item = r.json()[0]
+        item = r.json()["items"][0]
         for campo in ("id", "codigo", "nombre", "tipo", "nivel"):
             assert campo in item, f"Campo '{campo}' faltante en la respuesta"
 

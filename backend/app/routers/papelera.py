@@ -27,18 +27,24 @@ router = APIRouter(prefix="/admin/papelera", tags=["papelera"])
 @router.get("")
 def listar_papelera(
     org_id: Optional[int] = None,
+    limit: int = 200,
+    offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin),
 ):
-    """Lista todos los registros borrados (soft) agrupados por tipo."""
+    """Lista todos los registros borrados (soft) agrupados por tipo.
+    Soporta paginación via limit/offset (default: 200)."""
     extractos_q = db.query(ExtractoBancario).filter(ExtractoBancario.deleted_at.isnot(None))
     planillas_q = db.query(Planilla).filter(Planilla.deleted_at.isnot(None))
     if org_id:
         extractos_q = extractos_q.filter(ExtractoBancario.organizacion_id == org_id)
         planillas_q = planillas_q.filter(Planilla.organizacion_id == org_id)
 
-    extractos_list = extractos_q.order_by(desc(ExtractoBancario.deleted_at)).all()
-    planillas_list  = planillas_q.order_by(desc(Planilla.deleted_at)).all()
+    total_extractos = extractos_q.count()
+    total_planillas = planillas_q.count()
+
+    extractos_list = extractos_q.order_by(desc(ExtractoBancario.deleted_at)).offset(offset).limit(limit).all()
+    planillas_list  = planillas_q.order_by(desc(Planilla.deleted_at)).offset(offset).limit(limit).all()
 
     # Batch-count movimientos y filas — evita N+1 (una query GROUP BY por tabla)
     ext_ids = [e.id for e in extractos_list]
@@ -78,10 +84,12 @@ def listar_papelera(
         "filas": row_counts.get(p.id, 0),
     } for p in planillas_list]
 
+    items = extractos + planillas
     return {
         "extractos": extractos,
         "planillas": planillas,
-        "total": len(extractos) + len(planillas),
+        "items": items,
+        "total": total_extractos + total_planillas,
     }
 
 
