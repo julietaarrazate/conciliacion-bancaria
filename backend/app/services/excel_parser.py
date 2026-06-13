@@ -184,6 +184,7 @@ def _parse_fecha(v):
     return None
 
 def _parse_monto(v):
+    # Devuelve float; la conversión a Decimal la hace SQLAlchemy en columnas Numeric(12,2).
     if isinstance(v, (int, float)):
         return round(float(v), 2)
     if isinstance(v, str):
