@@ -201,6 +201,8 @@ def _init_db():
         "CREATE INDEX IF NOT EXISTS idx_audit_accion ON auditoria(accion)",
         # Clientes
         "CREATE INDEX IF NOT EXISTS idx_clientes_org ON clientes(organizacion_id, nombre)",
+        # Asientos — numero_asiento se usa en ordenamiento y numeración correlativa
+        "CREATE INDEX IF NOT EXISTS idx_asientos_numero ON asientos(numero_asiento DESC)",
     ]
     for sql in indexes:
         try:
