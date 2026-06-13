@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { apiClient } from '@/services/api'
 import { CuadraLogo } from '@/components/CuadraLogo'
+import { toast } from '@/store/toast'
 
 interface Mensaje {
   rol: 'user' | 'agente'
@@ -32,18 +33,35 @@ const SUGERENCIAS = [
   'Resumen financiero de mayo',
 ]
 
+// Elige el mejor mimeType soportado por el browser para MediaRecorder
+function elegirMimeType(): string | undefined {
+  const candidatos = ['audio/webm', 'audio/mp4', 'audio/ogg']
+  for (const t of candidatos) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t
+  }
+  return undefined // deja que el browser elija el default
+}
+
 export function AgenteChat() {
-  const [abierto, setAbierto]       = useState(false)
-  const [mensajes, setMensajes]     = useState<Mensaje[]>([])
-  const [input, setInput]           = useState('')
-  const [cargando, setCargando]     = useState(false)
-  const [escuchando, setEscuchando] = useState(false)
-  const [visible, setVisible]       = useState(true)
-  const bottomRef                   = useRef<HTMLDivElement>(null)
-  const inputRef                    = useRef<HTMLInputElement>(null)
-  const recognitionRef              = useRef<{ stop(): void } | null>(null)
-  const lastScrollY                 = useRef(0)
-  const hideTimer                   = useRef<number | null>(null)
+  const [abierto, setAbierto]           = useState(false)
+  const [mensajes, setMensajes]         = useState<Mensaje[]>([])
+  const [input, setInput]               = useState('')
+  const [cargando, setCargando]         = useState(false)
+  const [escuchando, setEscuchando]     = useState(false)
+  const [transcribiendo, setTranscribiendo] = useState(false)
+  const [visible, setVisible]           = useState(true)
+  const bottomRef                       = useRef<HTMLDivElement>(null)
+  const inputRef                        = useRef<HTMLInputElement>(null)
+  const recognitionRef                  = useRef<{ stop(): void } | null>(null)
+  const mediaRecorderRef                = useRef<MediaRecorder | null>(null)
+  const chunksRef                       = useRef<Blob[]>([])
+  const lastScrollY                     = useRef(0)
+  const hideTimer                       = useRef<number | null>(null)
+
+  // true si SpeechRecognition nativa está disponible (Chrome Android / desktop)
+  const hasSpeech = typeof window !== 'undefined' && (
+    !!(window.SpeechRecognition) || !!(window.webkitSpeechRecognition)
+  )
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -93,12 +111,9 @@ export function AgenteChat() {
     }
   }
 
-  const toggleMic = () => {
+  // Parte A: SpeechRecognition con feedback de errores
+  const toggleSpeechRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      alert('Tu navegador no soporta dictado por voz. Usá Chrome en Android.')
-      return
-    }
     if (escuchando) {
       recognitionRef.current?.stop()
       setEscuchando(false)
@@ -113,16 +128,110 @@ export function AgenteChat() {
       setInput(texto)
       setEscuchando(false)
     }
-    r.onerror = () => setEscuchando(false)
+    r.onerror = (e: SpeechRecognitionErrorEvent) => {
+      setEscuchando(false)
+      switch (e.error) {
+        case 'not-allowed':
+        case 'service-not-allowed':
+          toast.error('Permiso de micrófono denegado. Activalo en los ajustes del navegador.')
+          break
+        case 'no-speech':
+          toast.warn('No se detectó voz. Intentá de nuevo.')
+          break
+        case 'audio-capture':
+          toast.error('No se encontró micrófono.')
+          break
+        default:
+          toast.error('No se pudo usar el micrófono.')
+      }
+    }
     r.onend = () => setEscuchando(false)
     recognitionRef.current = r
     r.start()
     setEscuchando(true)
   }
 
-  const hasSpeech = typeof window !== 'undefined' && (
-    !!(window.SpeechRecognition) || !!(window.webkitSpeechRecognition)
-  )
+  // Parte B: MediaRecorder (fallback para iOS y cualquier browser sin SpeechRecognition)
+  const toggleMediaRecorder = async () => {
+    // Si ya está grabando, detener y subir
+    if (escuchando && mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop()
+      return
+    }
+
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      toast.error('Permiso de micrófono denegado. Activalo en los ajustes del navegador.')
+      return
+    }
+
+    const mimeType = elegirMimeType()
+    const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    chunksRef.current = []
+
+    rec.ondataavailable = (e: BlobEvent) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data)
+    }
+
+    rec.onstop = async () => {
+      // Cortar el stream de inmediato para apagar el indicador de micrófono del sistema
+      stream.getTracks().forEach(t => t.stop())
+      setEscuchando(false)
+
+      const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' })
+      chunksRef.current = []
+
+      if (blob.size === 0) {
+        toast.warn('No se grabó audio. Intentá de nuevo.')
+        return
+      }
+
+      setTranscribiendo(true)
+      try {
+        const fd = new FormData()
+        // Extender la extensión según el mimeType real
+        const ext = (rec.mimeType || 'audio/webm').includes('mp4') ? 'mp4'
+          : (rec.mimeType || '').includes('ogg') ? 'ogg'
+          : 'webm'
+        fd.append('audio', blob, `audio.${ext}`)
+        // NO setear Content-Type manualmente — axios lo maneja con el boundary correcto
+        const res = await apiClient.client.post('/agente/transcribir', fd)
+        const texto: string = res.data?.texto ?? ''
+        if (texto.trim()) {
+          setInput(texto)
+        } else {
+          toast.warn('No se entendió el audio, probá de nuevo.')
+        }
+      } catch (e) {
+        const err = e as { response?: { data?: { detail?: string } } }
+        toast.error(err.response?.data?.detail || 'No se pudo transcribir el audio.')
+      } finally {
+        setTranscribiendo(false)
+      }
+    }
+
+    mediaRecorderRef.current = rec
+    rec.start()
+    setEscuchando(true)
+  }
+
+  // Decide qué flujo usar al tocar el botón de micrófono
+  const toggleMic = () => {
+    if (hasSpeech) {
+      toggleSpeechRecognition()
+    } else {
+      void toggleMediaRecorder()
+    }
+  }
+
+  // Placeholder dinámico según estado
+  const placeholder = transcribiendo
+    ? 'Transcribiendo…'
+    : escuchando
+      ? 'Escuchando…'
+      : 'Preguntá algo…'
 
   return (
     <>
@@ -199,19 +308,26 @@ export function AgenteChat() {
 
           {/* Input */}
           <div className="border-t border-white/10 p-3 flex gap-2">
-            {hasSpeech && (
-              <button onClick={toggleMic}
-                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${escuchando ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-white/5 hover:bg-white/10 text-gray-400'}`}
-                title="Dictado por voz">
-                <MicIcon />
-              </button>
-            )}
+            {/* Botón de micrófono: SIEMPRE visible (funciona en iOS via MediaRecorder) */}
+            <button
+              onClick={toggleMic}
+              disabled={transcribiendo}
+              className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
+                transcribiendo
+                  ? 'bg-[#5E6AD2]/20 text-[#5E6AD2] opacity-60 cursor-not-allowed'
+                  : escuchando
+                    ? 'bg-red-500/20 text-red-400 animate-pulse'
+                    : 'bg-white/5 hover:bg-white/10 text-gray-400'
+              }`}
+              title={transcribiendo ? 'Transcribiendo…' : escuchando ? 'Detener grabación' : 'Grabar audio'}>
+              <MicIcon />
+            </button>
             <input
               ref={inputRef}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && enviar(input)}
-              placeholder={escuchando ? 'Escuchando…' : 'Preguntá algo…'}
+              placeholder={placeholder}
               className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-[#5E6AD2]/50 min-w-0"
             />
             <button
