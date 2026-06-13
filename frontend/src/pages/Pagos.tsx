@@ -19,6 +19,8 @@ function suppressLockForCamera() {
   try { useLockStore.getState().suppressLock(8000) } catch { /* noop */ }
 }
 
+interface EgresoResultado { id: number }
+
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 
@@ -300,7 +302,7 @@ export const Pagos: React.FC = () => {
     fecha: localIsoDate(),
   })
   const [saving, setSaving] = useState(false)
-  const [resultado, setResultado] = useState<any>(null)
+  const [resultado, setResultado] = useState<EgresoResultado | null>(null)
   const [msg, setMsg] = useState('')
   const [nuevaCat, setNuevaCat] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
