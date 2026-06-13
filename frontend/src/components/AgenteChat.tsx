@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { apiClient } from '@/services/api'
 import { CuadraLogo } from '@/components/CuadraLogo'
 
