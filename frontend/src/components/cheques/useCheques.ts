@@ -10,6 +10,41 @@ import {
   toBase64, compressScanner, shareChequePdf, suppressLockForShare,
 } from './shared'
 import { BulkOcrRow } from './ChequesTabMasiva'
+import type { CuentaItem } from '@/components/contabilidad/shared'
+
+// Shape returned by /cheques/bulk-ocr for each item
+interface BulkOcrItemRaw {
+  index?: number
+  filename?: string
+  numero?: string | number | null
+  banco_origen?: string | null
+  librador?: string | null
+  monto?: number | null
+  fecha_emision?: string | null
+  fecha_deposito?: string | null
+  codigo_postal?: string | null
+  local_interior?: string | null
+  error?: boolean
+  error_msg?: string
+}
+
+// Shape returned by POST /cheques/acreditar detalle[]
+interface AcreditarDetalleItem { ok: boolean; id?: number; error?: string }
+
+// Shape returned by POST /cheques/bulk-crear errores[]
+interface BulkCrearErrorItem { index: number; msg: string }
+
+// Response shape for /clientes/archivos
+interface OrgClientesRaw {
+  clientes?: Array<{
+    id: number
+    nombre: string
+    porcentaje_comision?: number | null
+    porcentaje_comision_local?: number | null
+    porcentaje_comision_interior?: number | null
+    cuenta_contable_id?: number | null
+  }>
+}
 
 const LIMIT = 50
 
@@ -181,15 +216,15 @@ export function useCheques() {
     if (activeOrgId) params.org_id = activeOrgId
     apiClient.client.get('/contabilidad/plan-cuentas', { params })
       .then(r => {
-        const all: any[] = Array.isArray(r.data) ? r.data : (r.data?.cuentas || [])
+        const all: CuentaItem[] = Array.isArray(r.data) ? r.data : (r.data?.cuentas || [])
         // IDs que son cuenta madre (tienen hijos) → no se imputan
-        const parentIds = new Set(all.map((c: any) => c.parent_id).filter(Boolean))
-        const bancos = all.filter((c: any) =>
+        const parentIds = new Set(all.map(c => c.parent_id).filter(Boolean))
+        const bancos = all.filter(c =>
           typeof c.nombre === 'string' &&
           c.nombre.toLowerCase().startsWith('banco') &&
           !parentIds.has(c.id)  // solo cuentas hoja
         )
-        setBancoCuentas(bancos.map((c: any) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre })))
+        setBancoCuentas(bancos.map(c => ({ id: c.id, codigo: c.codigo, nombre: c.nombre })))
       })
       .catch(() => {})
   }, [activeOrgId])
@@ -199,9 +234,9 @@ export function useCheques() {
     const params: Record<string, number> = {}
     if (activeOrgId) params.org_id = activeOrgId
     apiClient.client.get('/clientes/archivos', { params }).then(r => {
-      const orgs: any[] = r.data?.organizaciones || []
+      const orgs: OrgClientesRaw[] = r.data?.organizaciones || []
       const list: ClienteOpt[] = []
-      orgs.forEach(org => (org.clientes || []).forEach((c: any) =>
+      orgs.forEach(org => (org.clientes || []).forEach(c =>
         list.push({ id: c.id, nombre: c.nombre, porcentaje_comision: c.porcentaje_comision ?? null, porcentaje_comision_local: c.porcentaje_comision_local ?? null, porcentaje_comision_interior: c.porcentaje_comision_interior ?? null, cuenta_contable_id: c.cuenta_contable_id ?? null })))
       setClientes(list)
     }).catch(() => {})
@@ -350,8 +385,8 @@ export function useCheques() {
         banco_cuenta_id: acredMasivoBanco,
         fecha_acred:     acredMasivoFecha || null,
       }, { params })
-      const { acreditados, total, detalle } = res.data
-      const errores = detalle.filter((d: any) => !d.ok)
+      const { acreditados, total, detalle } = res.data as { acreditados: number; total: number; detalle: AcreditarDetalleItem[] }
+      const errores = detalle.filter(d => !d.ok)
       setMsg(`✓ ${acreditados}/${total} acreditados${errores.length ? ` · ${errores.length} error(es)` : ''}`)
       setSelectedCheques(new Set()); setAcredMasivoBanco(''); setAcredMasivoFecha('')
       // reload deposito data
@@ -502,12 +537,12 @@ export function useCheques() {
         headers: { 'Content-Type': 'multipart/form-data' },
         params,
       })
-      const items: any[] = res.data.items || []
-      setBulkRows(items.map((item: any, i: number) => ({
+      const items: BulkOcrItemRaw[] = res.data.items || []
+      setBulkRows(items.map((item, i) => ({
         index:               item.index ?? i,
         filename:            item.filename ?? bulkFiles[i]?.name ?? `foto_${i}`,
         previewUrl:          bulkPreviews[item.index ?? i] ?? '',
-        numero:              item.numero ?? '',
+        numero:              item.numero != null ? String(item.numero) : '',
         banco_origen:        item.banco_origen ?? '',
         librador:            item.librador ?? '',
         monto:               item.monto != null ? String(item.monto) : '',
@@ -528,7 +563,7 @@ export function useCheques() {
   const handleBulkUpdateRow = (idx: number, field: string, value: string | number | null) => {
     setBulkRows(prev => prev.map((r, i) => {
       if (i !== idx) return r
-      const updated: any = { ...r, [field]: value }
+      const updated: BulkOcrRow = { ...r, [field]: value }
       if (field === 'codigo_postal') updated.local_interior = computeLI(String(value ?? ''))
       if (field === 'cliente_id') {
         const cli = clientes.find(c => c.id === (value as number)) ?? null
@@ -569,7 +604,7 @@ export function useCheques() {
       const params: Record<string, string | number> = {}
       if (activeOrgId) params.org_id = activeOrgId
       const res = await apiClient.client.post('/cheques/bulk-crear', { items, org_id: activeOrgId || null }, { params })
-      const { creados, errores } = res.data
+      const { creados, errores } = res.data as { creados: number; errores: BulkCrearErrorItem[] }
       const m = `✓ ${creados} cheque${creados !== 1 ? 's' : ''} guardado${creados !== 1 ? 's' : ''}${errores.length ? ` · ${errores.length} error(es)` : ''}`
       setBulkMsg(m)
       if (creados > 0) {
@@ -577,7 +612,7 @@ export function useCheques() {
         load()
       }
       if (errores.length > 0) {
-        const errMsgs = errores.map((e: any) => `Fila ${e.index + 1}: ${e.msg}`).join(' | ')
+        const errMsgs = errores.map(e => `Fila ${e.index + 1}: ${e.msg}`).join(' | ')
         setBulkMsg(`${m} — ${errMsgs}`)
       }
     } catch (e: any) { setBulkMsg(e?.response?.data?.detail || 'Error al guardar') }
