@@ -166,7 +166,7 @@ export const Login: React.FC = () => {
             Cuadra
           </h1>
           <p className="text-[11px] text-ml-text-soft dark:text-zinc-500 mt-2 font-mono tracking-[0.2em] uppercase">
-            Conciliación bancaria
+            Gestión financiera con IA
           </p>
         </div>
 
