@@ -41,7 +41,7 @@ export function AgenteChat() {
   const [visible, setVisible]       = useState(true)
   const bottomRef                   = useRef<HTMLDivElement>(null)
   const inputRef                    = useRef<HTMLInputElement>(null)
-  const recognitionRef              = useRef<SpeechRecognition | null>(null)
+  const recognitionRef              = useRef<{ stop(): void } | null>(null)
   const lastScrollY                 = useRef(0)
   const hideTimer                   = useRef<number | null>(null)
 
