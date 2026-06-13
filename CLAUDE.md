@@ -360,7 +360,8 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - **Asistente IA Gemini Flash** (PR #77): botón ✨ flotante en todas las páginas. Consultas en
   lenguaje natural sobre datos reales de la DB vía function calling. Funciones disponibles:
   `consultar_pagos_cliente`, `consultar_cheques`, `consultar_saldo_caja`, `buscar_cliente`,
-  `resumen_financiero`. Dictado por voz (SpeechRecognition API nativa, Chrome/Android, gratis).
+  `resumen_financiero`. Dictado por voz: SpeechRecognition (Chrome/Android, instantáneo) con fallback a
+  MediaRecorder + `POST /agente/transcribir` (Gemini) en iOS — ver v3.17.
   Backend: `routers/agente.py` + `google-generativeai==0.8.3`. Activado con `GEMINI_API_KEY` en
   Render (AI Studio — capa gratuita). Modelo: `gemini-2.5-flash` (configurable via `GEMINI_MODEL`).
 
@@ -816,6 +817,29 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   `cuentas_disponibles`/`extractos`/`planillas` se mantienen como aliases. Frontend (`useContabilidad.ts`,
   `useCheques.ts`) usa `r.data?.items ?? r.data` para tolerar ambos shapes. 316 tests pasando.
 
+### v3.17 — Audit pre-lanzamiento + audio real en el asistente IA (junio 2026 — PRs #135-#138)
+
+- **Audit de seguridad/performance** (PR #135): índice `idx_asientos_numero ON asientos(numero_asiento
+  DESC)` (migración 011 + safety net en `main.py`) para acelerar el orden del Libro Diario; validación de
+  **magic bytes** en upload de extractos (`POST /extractos/upload` y `/{id}/agregar-um` verifican firma ZIP
+  `PK\x03\x04` para .xlsx, OLE2 `\xD0\xCF\x11\xE0` para .xls antes de parsear). El audit confirmó que 2FA
+  brute-force (3 intentos → bloqueo) y `/conciliaciones` paginado (`{items, total}`) **ya estaban**
+  implementados. Sin hallazgos CRÍTICOS — sistema listo para producción.
+- **Copy de posicionamiento** (PR #136): landing badge → "Software financiero con IA para estudios
+  argentinos", hero sub agrega "contabilidad" + "con IA integrada", Login y página pública → "Gestión
+  financiera con IA" (antes "Conciliación bancaria" — ya no describía el alcance del sistema).
+- **Transcripción de audio con Gemini** (PR #137 backend): nuevo `POST /agente/transcribir` —
+  `multipart/form-data` campo `audio` (UploadFile), pasa el `content_type` real a Gemini via
+  `inline_data` (mismo patrón que los OCR), retorna `{"texto": "..."}`. 503 si falta `GEMINI_API_KEY`,
+  400 si audio vacío, `_classify_gemini_error` para formatos no soportados. Sin transcodificación ffmpeg.
+- **Audio recording en el asistente** (PR #138 frontend): `AgenteChat.tsx` — el botón de micrófono ahora
+  es **siempre visible**. Si el browser tiene `SpeechRecognition` (Chrome/Android) usa ese flujo rápido;
+  si no (iOS Safari/Chrome iOS, que NO soporta SpeechRecognition) graba con **MediaRecorder**
+  (`audio/webm → mp4 → ogg → default`) y sube a `/agente/transcribir`, poniendo el texto en el input para
+  revisar antes de enviar. **Fix feedback**: el `onerror` de SpeechRecognition ahora muestra toasts
+  diferenciados (permiso denegado, sin voz, sin micrófono) en vez de fallar en silencio. Estados visuales:
+  rojo pulsante grabando, azul tenue transcribiendo.
+
 ### Pendiente para próximas sesiones
 
 - ~~**Liquidaciones con asientos**~~ — resuelto en v3.13.
@@ -1022,7 +1046,11 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
   L/I chip expandible en /clientes, tsc TS6133 limpio (0 errores), paginación limit/offset en
   5 endpoints (plan-cuentas, reglas, clientes-cuentas, papelera, clientes-aging).
   (junio 2026 — PRs #126-#133 mergeados a main)
+- `v3.17` — audit pre-lanzamiento (índice asientos.numero_asiento, magic bytes en upload de extractos)
+  + copy de posicionamiento (software financiero con IA) + audio real en el asistente IA: endpoint
+  `POST /agente/transcribir` (Gemini) y MediaRecorder en `AgenteChat.tsx` para que el dictado funcione
+  en iPhone, con feedback de errores de micrófono. (junio 2026 — PRs #135-#138 mergeados a main)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.16
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.17
