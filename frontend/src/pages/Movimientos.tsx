@@ -275,7 +275,7 @@ export const Movimientos: React.FC = () => {
       const r = await apiClient.appendUM(extractoId, file, undefined, modoAsiento)
       let msg = `✓ ${r.agregados} nuevos agregados`
       if (r.duplicados > 0) msg += ` · ${r.duplicados} ya existían (ignorados)`
-      if ((r as any).duplicados_internos > 0) msg += ` · ⚠️ ${(r as any).duplicados_internos} duplicado(s) en el archivo del banco eliminados automáticamente`
+      if ((r.duplicados_internos ?? 0) > 0) msg += ` · ⚠️ ${r.duplicados_internos} duplicado(s) en el archivo del banco eliminados automáticamente`
       setUmMsg(msg)
       // Refrescar extracto y movimientos
       const data = await apiClient.listExtractos()

@@ -73,8 +73,8 @@ export const Organizaciones: React.FC = () => {
     setSaving(true)
     setMsg('')
     try {
-      let config: any
-      try { config = JSON.parse(form.configuracion) } catch {
+      let config: Record<string, unknown>
+      try { config = JSON.parse(form.configuracion) as Record<string, unknown> } catch {
         setMsg('El JSON de configuración no es válido')
         setSaving(false)
         return

@@ -53,7 +53,7 @@ export const Conciliaciones: React.FC = () => {
   const dMontoMax = useDebounce(montoMax, 800)
 
   const filtros = useMemo(() => {
-    const f: any = {}
+    const f: Record<string, string | number> = {}
     if (dCliente) f.cliente = dCliente
     if (dTitular) f.titular = dTitular
     if (desde) f.desde = desde

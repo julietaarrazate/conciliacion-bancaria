@@ -11,6 +11,12 @@ import {
   Tab, CcFiltro, TAB_PERM, CAT_KEYS,
 } from './shared'
 
+/** Type-safe helper to extract .response?.data?.detail from an axios-style error */
+function apiDetail(e: unknown, fallback: string): string {
+  const err = e as { response?: { data?: { detail?: string } }; message?: string }
+  return err?.response?.data?.detail || err?.message || fallback
+}
+
 export function useContabilidad(modo: 'full' | 'ctacte') {
   const { activeOrgId } = useOrgStore()
   const { hasPermission, user } = useAuthStore()
@@ -176,8 +182,8 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       await apiClient.client.put(`/contabilidad/clientes/${clienteId}/cuenta${qOrg}`, { cuenta_id: cuentaId })
       toast.success(cuentaId ? 'Cuenta vinculada' : 'Cuenta desvinculada')
       cargarClientesCuentas()
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || 'No se pudo vincular')
+    } catch (e) {
+      toast.error(apiDetail(e, 'No se pudo vincular'))
     } finally {
       setSavingCli(null)
     }
@@ -189,8 +195,8 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       const r = await apiClient.client.post(`/contabilidad/clientes/${clienteId}/cuenta/crear${qOrg}`, {})
       toast.success(`Cuenta ${r.data.cuenta.codigo} creada y vinculada`)
       cargarClientesCuentas()
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || 'No se pudo crear la cuenta')
+    } catch (e) {
+      toast.error(apiDetail(e, 'No se pudo crear la cuenta'))
     } finally {
       setSavingCli(null)
     }
@@ -205,8 +211,8 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       const r = await apiClient.client.post(`/contabilidad/clientes/cuentas/crear-faltantes${qOrg}`, {})
       toast.success(r.data.total > 0 ? `${r.data.total} cuenta(s) creada(s) y vinculada(s)` : 'Todos los clientes ya tienen cuenta')
       cargarClientesCuentas()
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || 'No se pudieron crear las cuentas')
+    } catch (e) {
+      toast.error(apiDetail(e, 'No se pudieron crear las cuentas'))
     } finally {
       setCreandoFaltantes(false)
     }
@@ -235,9 +241,8 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       toast.success(r.data.msg)
       recargarTodo()
       cargarCartera()
-    } catch (e: any) {
-      const detail = e.response?.data?.detail || e.message || 'Error desconocido'
-      alert(`❌ Error al empezar limpio:\n\n${detail}`)
+    } catch (e) {
+      alert(`❌ Error al empezar limpio:\n\n${apiDetail(e, 'Error desconocido')}`)
     } finally {
       setBackfilling(false)
     }
@@ -271,8 +276,8 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
     try {
       const r = await apiClient.client.post(`/contabilidad/fix-fechas-utc?dry_run=true&desde=${fixDesde}&hasta=${fixHasta}&direccion=${fixDir}${orgQ}${moduloQ}`)
       setFixPreview(r.data)
-    } catch (e: any) {
-      setFixMsg(`❌ ${e.response?.data?.detail || e.message}`)
+    } catch (e) {
+      setFixMsg(`❌ ${apiDetail(e, 'Error')}`)
     } finally { setFixLoading(false) }
   }
 
@@ -285,8 +290,8 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       setFixMsg(`✓ ${r.data.mensaje}`)
       setFixPreview(null)
       recargarTodo()
-    } catch (e: any) {
-      setFixMsg(`❌ ${e.response?.data?.detail || e.message}`)
+    } catch (e) {
+      setFixMsg(`❌ ${apiDetail(e, 'Error')}`)
     } finally { setFixLoading(false) }
   }
 
@@ -311,12 +316,13 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
         activeOrgId || undefined,
       )
       setExportModalOpen(false)
-    } catch (e: any) {
-      if (e.message === 'cuentas_sin_mapeo' && e.cuentas) {
-        setExportWarn(e.cuentas)
+    } catch (e) {
+      const err = e as { message?: string; cuentas?: string[]; response?: { data?: { detail?: string } } }
+      if (err.message === 'cuentas_sin_mapeo' && err.cuentas) {
+        setExportWarn(err.cuentas)
         // Archivo igual se descargó; solo mostramos el warning
       } else {
-        toast.error(e.response?.data?.detail || 'Error al exportar')
+        toast.error(err?.response?.data?.detail || 'Error al exportar')
       }
     } finally {
       setExportLoading(false)
@@ -355,8 +361,8 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       setAjusteDebeId(''); setAjusteHaberId(''); setAjusteMonto(''); setAjusteDesc('')
       setAjusteDebeBusq(''); setAjusteHaberBusq('')
       recargarTodo()
-    } catch (e: any) {
-      setAjusteError(e.response?.data?.detail || 'Error al guardar')
+    } catch (e) {
+      setAjusteError(apiDetail(e, 'Error al guardar'))
     } finally {
       setAjusteGuardando(false)
     }
@@ -367,8 +373,8 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
     try {
       await apiClient.client.delete(`/contabilidad/asientos/${asientoId}${orgQ}`)
       recargarTodo()
-    } catch (e: any) {
-      alert(e.response?.data?.detail || 'No se pudo revertir el asiento')
+    } catch (e) {
+      alert(apiDetail(e, 'No se pudo revertir el asiento'))
     }
   }
 
@@ -382,8 +388,8 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       const nuevaFecha = r.data.fecha  // "YYYY-MM-DD" confirmado por el backend
       setAsientos(prev => prev.map(a => a.id === asientoId ? { ...a, fecha: nuevaFecha } : a))
       setEditFechaId(null)
-    } catch (e: any) {
-      alert(e.response?.data?.detail || 'No se pudo guardar')
+    } catch (e) {
+      alert(apiDetail(e, 'No se pudo guardar'))
     }
   }
 
@@ -406,8 +412,8 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       setRecCandidatos(nombres as string[])
       setRecSeleccion(new Set())  // nada tildado por defecto → no recrear basura sin querer
       setRecModalOpen(true)
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || 'No se pudieron buscar los clientes')
+    } catch (e) {
+      toast.error(apiDetail(e, 'No se pudieron buscar los clientes'))
     } finally {
       setRecuperandoCli(false)
     }
@@ -433,8 +439,8 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       toast.success(`${r.data.recreados} cliente(s) recuperado(s) con su cuenta`)
       setRecModalOpen(false)
       cargarClientesCuentas()
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || 'No se pudieron recuperar los clientes')
+    } catch (e) {
+      toast.error(apiDetail(e, 'No se pudieron recuperar los clientes'))
     } finally {
       setRecGuardando(false)
     }

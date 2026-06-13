@@ -63,10 +63,11 @@ export const AppLockGuard: React.FC = () => {
       idleTimer.current = window.setTimeout(() => lock(), IDLE_MS)
     }
     const events: (keyof DocumentEventMap)[] = ['mousemove', 'keydown', 'touchstart', 'scroll']
-    events.forEach(e => document.addEventListener(e, reset, { passive: true } as any))
+    const opts: AddEventListenerOptions = { passive: true }
+    events.forEach(e => document.addEventListener(e, reset, opts))
     reset()
     return () => {
-      events.forEach(e => document.removeEventListener(e, reset as any))
+      events.forEach(e => document.removeEventListener(e, reset))
       if (idleTimer.current) window.clearTimeout(idleTimer.current)
     }
   }, [active, isLocked, lock])

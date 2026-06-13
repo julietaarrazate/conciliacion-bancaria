@@ -41,7 +41,7 @@ export function AgenteChat() {
   const [visible, setVisible]       = useState(true)
   const bottomRef                   = useRef<HTMLDivElement>(null)
   const inputRef                    = useRef<HTMLInputElement>(null)
-  const recognitionRef              = useRef<any>(null)
+  const recognitionRef              = useRef<{ stop(): void } | null>(null)
   const lastScrollY                 = useRef(0)
   const hideTimer                   = useRef<number | null>(null)
 
@@ -84,8 +84,9 @@ export function AgenteChat() {
     try {
       const res = await apiClient.client.post('/agente/chat', { mensaje: msg })
       setMensajes(m => [...m, { rol: 'agente', texto: res.data.respuesta }])
-    } catch (e: any) {
-      const detalle = e?.response?.data?.detail || 'Error al conectar con el agente'
+    } catch (e) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      const detalle = err?.response?.data?.detail || 'Error al conectar con el agente'
       setMensajes(m => [...m, { rol: 'agente', texto: `⚠️ ${detalle}` }])
     } finally {
       setCargando(false)
@@ -93,7 +94,7 @@ export function AgenteChat() {
   }
 
   const toggleMic = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SpeechRecognition) {
       alert('Tu navegador no soporta dictado por voz. Usá Chrome en Android.')
       return
@@ -107,7 +108,7 @@ export function AgenteChat() {
     r.lang = 'es-AR'
     r.continuous = false
     r.interimResults = false
-    r.onresult = (e: any) => {
+    r.onresult = (e: SpeechRecognitionEvent) => {
       const texto = e.results[0][0].transcript
       setInput(texto)
       setEscuchando(false)
@@ -120,7 +121,7 @@ export function AgenteChat() {
   }
 
   const hasSpeech = typeof window !== 'undefined' && (
-    !!(window as any).SpeechRecognition || !!(window as any).webkitSpeechRecognition
+    !!(window.SpeechRecognition) || !!(window.webkitSpeechRecognition)
   )
 
   return (

@@ -70,6 +70,8 @@ export interface AsientoItem {
   descripcion: string | null
   modulo: string | null
   referencia_id: number | null
+  numero_asiento?: number
+  cuentas?: string[]
 }
 
 export interface AsientoLinea {
@@ -106,11 +108,18 @@ export interface LibroMayorData {
   saldo_final: number
 }
 
+export interface FixPreviewItem {
+  id: number
+  fecha_actual: string
+  fecha_nueva: string
+  descripcion: string | null
+}
+
 export interface FixPreview {
   asientos_afectados: number
   egresos_afectados: number
-  detalle_asientos: any[]
-  detalle_egresos: any[]
+  detalle_asientos: FixPreviewItem[]
+  detalle_egresos: FixPreviewItem[]
 }
 
 export type Tab = 'plan' | 'reglas' | 'diario' | 'sumas' | 'balance' | 'mayor' | 'clientes' | 'ctacte'

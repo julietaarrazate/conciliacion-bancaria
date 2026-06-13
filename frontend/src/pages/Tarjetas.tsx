@@ -125,7 +125,7 @@ export const Tarjetas: React.FC = () => {
     setLoading(true)
     try {
       const data = await apiClient.listTarjetas({ orgId: activeOrgId || undefined, limit: 200 })
-      setItems(data.items || [])
+      setItems((data.items || []) as LiqTarjeta[])
     } catch {
       setMsg({ type: 'error', text: 'No se pudieron cargar las liquidaciones.' })
     } finally {

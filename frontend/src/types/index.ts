@@ -170,6 +170,7 @@ export interface MergeUMResult {
   total_recibido: number
   corte_metodo?: string
   corte_saldo_detectado?: number
+  duplicados_internos?: number
 }
 
 export interface MovimientosFiltros {
@@ -183,4 +184,64 @@ export interface MovimientosFiltros {
   sin_acreditar?: boolean
   skip?: number
   limit?: number
+}
+
+export interface ConciliacionItem {
+  id: number
+  extracto_id: number
+  orden: number | null
+  fecha: string | null
+  titular: string | null
+  monto: number
+  saldo: number | null
+  cliente_acreditado: string
+  fecha_acred: string | null
+}
+
+export interface TarjetaUploadPreview {
+  marca?: string
+  periodo?: string | null
+  fecha_acreditacion?: string | null
+  monto_bruto?: number | null
+  aranceles?: number | null
+  iva_df?: number | null
+  percepciones_iibb?: number | null
+  retenciones?: number | null
+  neto?: number | null
+  archivo_original?: string
+  parse_warnings?: string[]
+}
+
+export interface TarjetaCreatePayload {
+  marca: string
+  periodo: string
+  fecha_acreditacion: string
+  monto_bruto: number
+  aranceles: number
+  iva_df: number
+  percepciones_iibb: number
+  retenciones: number
+  neto: number
+  notas?: string | null
+  archivo_original?: string | null
+}
+
+export interface LiquidacionTarjeta {
+  id: number
+  organizacion_id: number
+  marca: string
+  periodo: string
+  fecha_acreditacion: string
+  monto_bruto: number
+  aranceles: number
+  iva_df: number
+  percepciones_iibb: number
+  retenciones: number
+  neto: number
+  estado: 'pendiente' | 'conciliada' | 'anulada'
+  extracto_movimiento_id: number | null
+  archivo_original: string | null
+  asiento_id: number | null
+  notas: string | null
+  created_at: string
 }

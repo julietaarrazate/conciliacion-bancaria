@@ -82,7 +82,7 @@ export const Resumen: React.FC = () => {
     let activo = true
     setLoading(true)
     setError('')
-    const params: any = { periodo }
+    const params: Record<string, string | number> = { periodo }
     if (periodo === 'mes') { params.anio = anio; params.mes = mes }
     if (periodo === 'rango') { params.desde = rangoDesde; params.hasta = rangoHasta }
     if (activeOrgId) params.org_id = activeOrgId

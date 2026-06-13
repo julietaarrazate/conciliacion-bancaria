@@ -92,15 +92,17 @@ export const Login: React.FC = () => {
     try {
       const response = await apiClient.login(formData.email, formData.password)
       if ('requires_2fa' in response) {
-        setTwofa({ email: (response as any).email })
+        setTwofa({ email: (response as import('@/types').TwofaChallenge).email })
         return
       }
       if ('pending_approval' in response) {
-        setPending({ id: (response as any).approval_id, secret: (response as any).poll_secret })
+        const pa = response as import('@/types').PendingApproval
+        setPending({ id: pa.approval_id, secret: pa.poll_secret })
         return
       }
-      setUser((response as any).user)
-      setToken((response as any).access_token)
+      const auth = response as import('@/types').AuthResponse
+      setUser(auth.user)
+      setToken(auth.access_token)
       forceUnlock()
       navigate('/dashboard')
     } catch (err: any) {
@@ -117,16 +119,18 @@ export const Login: React.FC = () => {
             const response2 = await apiClient.login(formData.email, formData.password)
             if ('requires_2fa' in response2) {
               setWaking(false)
-              setTwofa({ email: (response2 as any).email })
+              setTwofa({ email: (response2 as import('@/types').TwofaChallenge).email })
               return
             }
             if ('pending_approval' in response2) {
               setWaking(false)
-              setPending({ id: (response2 as any).approval_id, secret: (response2 as any).poll_secret })
+              const pa2 = response2 as import('@/types').PendingApproval
+              setPending({ id: pa2.approval_id, secret: pa2.poll_secret })
               return
             }
-            setUser((response2 as any).user)
-            setToken((response2 as any).access_token)
+            const auth2 = response2 as import('@/types').AuthResponse
+            setUser(auth2.user)
+            setToken(auth2.access_token)
             forceUnlock()
             setWaking(false)
             navigate('/dashboard')

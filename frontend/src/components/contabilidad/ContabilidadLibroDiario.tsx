@@ -120,7 +120,7 @@ export const ContabilidadLibroDiario: React.FC<{ c: ContabilidadCtx }> = ({ c })
                       onClick={() => c.toggleAsiento(a.id)}
                     >
                       <td className="px-2 py-2 text-gray-400 text-center">{isOpen ? '▾' : '▸'}</td>
-                      <td className="px-3 py-2 text-gray-400 font-mono">{(a as any).numero_asiento ?? a.id}</td>
+                      <td className="px-3 py-2 text-gray-400 font-mono">{a.numero_asiento ?? a.id}</td>
                       <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                         {user?.is_superadmin && c.editFechaId === a.id ? (
                           <div className="flex flex-col gap-1 min-w-[130px]">
@@ -149,7 +149,7 @@ export const ContabilidadLibroDiario: React.FC<{ c: ContabilidadCtx }> = ({ c })
                         </span>
                       </td>
                       <td className="px-3 py-2 max-w-[180px]">
-                        {((a as any).cuentas as string[] || []).map((cu, i) => (
+                        {(a.cuentas || []).map((cu, i) => (
                           <span key={i} className="block font-mono text-[10px] text-gray-500 dark:text-gray-400 truncate" title={cu}>{cu}</span>
                         ))}
                       </td>
