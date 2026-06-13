@@ -148,7 +148,7 @@ export const PaginaPublica: React.FC = () => {
           </div>
         )}
 
-        <p className="text-center text-xs text-gray-600 mt-8">Cuadra · Conciliación bancaria</p>
+        <p className="text-center text-xs text-gray-600 mt-8">Cuadra · Gestión financiera con IA</p>
       </div>
     </div>
   )

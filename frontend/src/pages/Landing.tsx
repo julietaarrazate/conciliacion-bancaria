@@ -663,7 +663,7 @@ export const Landing: React.FC = () => {
 
         <div className="live-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 999, background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', color: 'var(--accent)', fontSize: 12, fontWeight: 600, marginBottom: 24 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
-          Gestión bancaria para empresas argentinas
+          Software financiero con IA para estudios argentinos
         </div>
 
         <h1 className="hero-title">
@@ -672,7 +672,7 @@ export const Landing: React.FC = () => {
         </h1>
 
         <p className="hero-sub">
-          Conciliación bancaria automática, cheques, caja y pagos.
+          Conciliación bancaria automática, cheques, caja, pagos y contabilidad — con IA integrada.
           Para vos y tu equipo, desde el celular o la web.
         </p>
 
