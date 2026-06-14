@@ -648,6 +648,9 @@ def reset_y_rebuild_asientos(
             a.numero_asiento = i
 
         db.commit()
+        # Invalidar cache de cartera global (los asientos cambiaron)
+        from app.routers.ctb_ctas_corrientes import _cartera_cache
+        _cartera_cache.pop(oid, None)
         return {
             "dry_run": False,
             "borrados": {"asientos": n_asientos, "detalles": n_detalles},

@@ -156,6 +156,15 @@ def _run_alembic():
         "deleted_at TIMESTAMP)",
         "CREATE INDEX IF NOT EXISTS ix_liq_tarjeta_org ON liquidaciones_tarjeta (organizacion_id)",
         "CREATE INDEX IF NOT EXISTS ix_liq_tarjeta_org_fecha ON liquidaciones_tarjeta (organizacion_id, fecha_acreditacion DESC)",
+        # migración 012 — índices críticos para módulo contabilidad (Libro Diario, Cuentas Corrientes)
+        # asientos.organizacion_id aparece en TODOS los filtros contables; sin índice → full scan
+        "CREATE INDEX IF NOT EXISTS idx_asiento_org ON asientos(organizacion_id)",
+        "CREATE INDEX IF NOT EXISTS idx_asiento_org_fecha ON asientos(organizacion_id, fecha)",
+        "CREATE INDEX IF NOT EXISTS idx_asiento_modulo ON asientos(modulo)",
+        # asiento_detalle: asiento_id y cuenta_id son FK de JOIN críticos sin índice
+        "CREATE INDEX IF NOT EXISTS idx_asdet_asiento ON asiento_detalle(asiento_id)",
+        "CREATE INDEX IF NOT EXISTS idx_asdet_cuenta ON asiento_detalle(cuenta_id)",
+        "CREATE INDEX IF NOT EXISTS idx_asdet_cuenta_asiento ON asiento_detalle(cuenta_id, asiento_id)",
     ]
     try:
         from sqlalchemy import text as _text
