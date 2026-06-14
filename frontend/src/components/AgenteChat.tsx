@@ -113,13 +113,14 @@ export function AgenteChat() {
 
   // Parte A: SpeechRecognition con feedback de errores
   const toggleSpeechRecognition = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     if (escuchando) {
       recognitionRef.current?.stop()
       setEscuchando(false)
       return
     }
-    const r = new SpeechRecognition()
+    if (!SR) return
+    const r = new SR()
     r.lang = 'es-AR'
     r.continuous = false
     r.interimResults = false
@@ -128,7 +129,8 @@ export function AgenteChat() {
       setInput(texto)
       setEscuchando(false)
     }
-    r.onerror = (e: SpeechRecognitionErrorEvent) => {
+    // onerror type varies between browsers; cast to accept the error event
+    ;(r as unknown as { onerror: (e: { error?: string }) => void }).onerror = (e) => {
       setEscuchando(false)
       switch (e.error) {
         case 'not-allowed':

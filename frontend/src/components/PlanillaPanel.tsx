@@ -14,15 +14,15 @@ interface Row {
   mov_fecha_acred?: string
 }
 
-interface Detalle {
+interface MetaDetalle {
   id: number
   nombre_archivo: string
   cliente_nombre: string
   extracto_nombre: string
   fecha_carga: string
   usuario_nombre: string
-  rows: Row[]
   total: number
+  total_filtered: number
   acreditadas: number
   no_encontradas: number
   duplicadas: number
@@ -78,9 +78,12 @@ const ESTADOS_DISPONIBLES = [
 ]
 
 export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }) => {
-  const [detalle, setDetalle] = useState<Detalle | null>(null)
+  const [meta, setMeta] = useState<MetaDetalle | null>(null)
+  const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(false)
   const [fetchError, setFetchError] = useState('')
+  // Two-state filter: draft (immediate UI) + applied (triggers server fetch after debounce)
+  const [filtersDraft, setFiltersDraft] = useState<Filters>(EMPTY_FILTERS)
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [showFilters, setShowFilters] = useState(false)
   const [editingRowId, setEditingRowId] = useState<number | null>(null)
@@ -91,50 +94,80 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
   const [bulkStatus, setBulkStatus] = useState('')
   const [page, setPage] = useState(0)
 
+  // Debounce text filter inputs → apply after 350ms of no changes
   useEffect(() => {
-    if (!planillaId) { setDetalle(null); setFetchError(''); setFilters(EMPTY_FILTERS); setSelectedRows(new Set()); return }
+    const t = setTimeout(() => {
+      setFilters(filtersDraft)
+      setPage(0)
+    }, 350)
+    return () => clearTimeout(t)
+  }, [filtersDraft])
+
+  // Fetch from server on planillaId, page, or applied filters change
+  useEffect(() => {
+    if (!planillaId) {
+      setMeta(null)
+      setRows([])
+      setFetchError('')
+      setFiltersDraft(EMPTY_FILTERS)
+      setFilters(EMPTY_FILTERS)
+      setSelectedRows(new Set())
+      return
+    }
     setLoading(true)
     setFetchError('')
+    setSelectedRows(new Set())
+
+    const params: Record<string, string | number> = {
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    }
+    if (filters.status) params.status = filters.status
+    if (filters.importe) params.importe = filters.importe
+    if (filters.cuit) params.cuit = filters.cuit
+    if (filters.titular) params.titular = filters.titular
+    if (filters.mov_titular) params.mov_titular = filters.mov_titular
+    if (filters.mov_fecha) params.mov_fecha = filters.mov_fecha
+    if (filters.mov_fecha_acred) params.mov_fecha_acred = filters.mov_fecha_acred
+
     apiClient.client
-      .get(`/planillas/${planillaId}/detalle`)
-      .then(r => setDetalle(r.data))
-      .catch((err: any) => {
-        setDetalle(null)
+      .get(`/planillas/${planillaId}/detalle`, { params })
+      .then(r => {
+        const { rows: fetchedRows, ...rest } = r.data as { rows: Row[] } & MetaDetalle
+        setMeta(rest)
+        setRows(fetchedRows)
+      })
+      .catch((err: { response?: { data?: { detail?: string } } }) => {
+        setMeta(null)
+        setRows([])
         setFetchError(err.response?.data?.detail || `Error al cargar planilla #${planillaId}`)
       })
       .finally(() => setLoading(false))
-  }, [planillaId])
+  }, [planillaId, page, filters])
 
-  const filteredRows = useMemo(() => {
-    if (!detalle) return []
-    return detalle.rows.filter(row => {
-      const f = filters
-      if (f.importe && !String(row.monto).includes(f.importe.replace(/\./g, '').replace(/,/g, '.'))) return false
-      if (f.cuit && !(row.cuit || '').toLowerCase().includes(f.cuit.toLowerCase())) return false
-      if (f.titular && !(row.titular || '').toLowerCase().includes(f.titular.toLowerCase())) return false
-      if (f.mov_titular && !(row.mov_titular || '').toLowerCase().includes(f.mov_titular.toLowerCase())) return false
-      if (f.mov_fecha && !(row.mov_fecha || '').includes(f.mov_fecha)) return false
-      if (f.mov_fecha_acred && !(row.mov_fecha_acred || '').includes(f.mov_fecha_acred)) return false
-      if (f.status && row.status !== f.status) return false
-      return true
-    })
-  }, [detalle, filters])
+  const totalPages = meta ? Math.ceil(meta.total_filtered / PAGE_SIZE) : 0
 
-  const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE)
-  const pageRows = filteredRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const hasFilters = Object.values(filtersDraft).some(v => v !== '')
 
-  const hasFilters = Object.values(filters).some(v => v !== '')
-  const clearFilters = () => { setFilters(EMPTY_FILTERS); setPage(0) }
-
-  const setFilter = (k: keyof Filters, v: string) => {
-    setFilters(prev => ({ ...prev, [k]: v }))
+  const clearFilters = () => {
+    setFiltersDraft(EMPTY_FILTERS)
+    setFilters(EMPTY_FILTERS)
     setPage(0)
   }
 
-  const uniqueStatuses = useMemo(() => {
-    if (!detalle) return []
-    return [...new Set(detalle.rows.map(r => r.status))].sort()
-  }, [detalle])
+  // For text inputs: update draft (debounce will apply)
+  const setFilter = (k: keyof Filters, v: string) => {
+    setFiltersDraft(prev => ({ ...prev, [k]: v }))
+  }
+
+  // For stat buttons: apply immediately (bypasses debounce)
+  const applyStatusFilter = (statusVal: string) => {
+    const newStatus = filtersDraft.status === statusVal ? '' : statusVal
+    const updated = { ...filtersDraft, status: newStatus }
+    setFiltersDraft(updated)
+    setFilters(updated)
+    setPage(0)
+  }
 
   const startEdit = (row: Row) => {
     setEditingRowId(row.id)
@@ -146,12 +179,9 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     setSavingRow(true)
     try {
       await apiClient.patchRowStatus(rowId, editStatus, undefined, editFecha || undefined)
-      setDetalle(prev => prev ? {
-        ...prev,
-        rows: prev.rows.map(r => r.id === rowId
-          ? { ...r, status: editStatus, mov_fecha_acred: editFecha || r.mov_fecha_acred }
-          : r)
-      } : prev)
+      setRows(prev => prev.map(r => r.id === rowId
+        ? { ...r, status: editStatus, mov_fecha_acred: editFecha || r.mov_fecha_acred }
+        : r))
       setEditingRowId(null)
     } finally { setSavingRow(false) }
   }
@@ -160,12 +190,13 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     if (!await confirmDialog({ title: 'Eliminar fila', message: '¿Eliminar esta fila?', confirmLabel: 'Eliminar', danger: true })) return
     try {
       await apiClient.deleteRow(rowId)
-      setDetalle(prev => prev ? {
-        ...prev,
-        rows: prev.rows.filter(r => r.id !== rowId),
-        total: prev.total - 1
-      } : prev)
+      setRows(prev => prev.filter(r => r.id !== rowId))
       setSelectedRows(prev => { const n = new Set(prev); n.delete(rowId); return n })
+      setMeta(prev => prev ? {
+        ...prev,
+        total: prev.total - 1,
+        total_filtered: prev.total_filtered - 1,
+      } : prev)
     } catch { /* silently fail */ }
   }, [])
 
@@ -177,11 +208,11 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     })
   }
 
-  const selectAllFiltered = () => {
-    if (selectedRows.size === filteredRows.length) {
+  const selectAllPage = () => {
+    if (selectedRows.size === rows.length && rows.length > 0) {
       setSelectedRows(new Set())
     } else {
-      setSelectedRows(new Set(filteredRows.map(r => r.id)))
+      setSelectedRows(new Set(rows.map(r => r.id)))
     }
   }
 
@@ -189,14 +220,8 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     if (!bulkStatus || selectedRows.size === 0) return
     setSavingRow(true)
     try {
-      const promises = Array.from(selectedRows).map(id =>
-        apiClient.patchRowStatus(id, bulkStatus)
-      )
-      await Promise.all(promises)
-      setDetalle(prev => prev ? {
-        ...prev,
-        rows: prev.rows.map(r => selectedRows.has(r.id) ? { ...r, status: bulkStatus } : r)
-      } : prev)
+      await Promise.all(Array.from(selectedRows).map(id => apiClient.patchRowStatus(id, bulkStatus)))
+      setRows(prev => prev.map(r => selectedRows.has(r.id) ? { ...r, status: bulkStatus } : r))
       setSelectedRows(new Set())
       setBulkStatus('')
     } finally { setSavingRow(false) }
@@ -208,14 +233,22 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     setSavingRow(true)
     try {
       await Promise.all(Array.from(selectedRows).map(id => apiClient.deleteRow(id)))
-      setDetalle(prev => prev ? {
+      const deletedCount = selectedRows.size
+      setRows(prev => prev.filter(r => !selectedRows.has(r.id)))
+      setMeta(prev => prev ? {
         ...prev,
-        rows: prev.rows.filter(r => !selectedRows.has(r.id)),
-        total: prev.total - selectedRows.size
+        total: prev.total - deletedCount,
+        total_filtered: prev.total_filtered - deletedCount,
       } : prev)
       setSelectedRows(new Set())
     } finally { setSavingRow(false) }
   }
+
+  // Derived values
+  const allPageSelected = useMemo(
+    () => rows.length > 0 && selectedRows.size === rows.length,
+    [rows, selectedRows]
+  )
 
   if (!planillaId) return null
 
@@ -223,7 +256,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     <input
       className="w-full px-1.5 py-0.5 text-xs border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-gray-200 focus:outline-none focus:border-ml-blue"
       placeholder={placeholder}
-      value={filters[field]}
+      value={filtersDraft[field]}
       onChange={e => setFilter(field, e.target.value)}
     />
   )
@@ -238,8 +271,8 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
         {/* Header */}
         <div className="flex items-start justify-between px-4 py-3 bg-ml-yellow dark:bg-ml-dark-card border-b border-ml-yellow-dark dark:border-ml-dark-border shrink-0">
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-ml-text text-sm truncate">{detalle?.cliente_nombre ?? '...'}</p>
-            <p className="text-xs text-ml-text-soft truncate">{detalle?.nombre_archivo}</p>
+            <p className="font-bold text-ml-text text-sm truncate">{meta?.cliente_nombre ?? '...'}</p>
+            <p className="text-xs text-ml-text-soft truncate">{meta?.nombre_archivo}</p>
           </div>
           <div className="flex items-center gap-1 ml-2 shrink-0">
             <button
@@ -247,16 +280,16 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
               className={`px-2 py-1 text-xs rounded font-medium ${showFilters || hasFilters ? 'bg-ml-blue text-white' : 'bg-white/70 text-ml-text hover:bg-white'}`}
               title="Filtros por columna"
             >
-              {hasFilters ? `Filtros (${Object.values(filters).filter(Boolean).length})` : 'Filtrar'}
+              {hasFilters ? `Filtros (${Object.values(filtersDraft).filter(Boolean).length})` : 'Filtrar'}
             </button>
             {hasFilters && (
               <button onClick={clearFilters} className="px-2 py-1 text-xs bg-white/70 text-red-600 rounded hover:bg-white">
                 Limpiar
               </button>
             )}
-            {detalle && onDelete && (
+            {meta && onDelete && (
               <button
-                onClick={() => { onDelete(detalle.id); onClose() }}
+                onClick={() => { onDelete(meta.id); onClose() }}
                 className="px-2 py-1 text-red-700 hover:bg-red-100 rounded text-sm"
                 title="Eliminar planilla"
               >Borrar</button>
@@ -266,17 +299,17 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
         </div>
 
         {/* Stats */}
-        {detalle && (
+        {meta && (
           <div className="grid grid-cols-4 gap-px bg-gray-100 dark:bg-slate-700 shrink-0">
             {[
-              { label: 'OK', val: detalle.acreditadas, cls: 'text-green-600 dark:text-green-400', filter: 'ok' },
-              { label: 'No esta', val: detalle.no_encontradas, cls: 'text-red-600 dark:text-red-400', filter: 'no está' },
-              { label: 'Duplicadas', val: detalle.duplicadas, cls: 'text-yellow-600 dark:text-yellow-400', filter: 'duplicado' },
-              { label: 'Sin datos', val: detalle.sin_datos, cls: 'text-blue-600 dark:text-blue-400', filter: 'faltan datos' },
+              { label: 'OK', val: meta.acreditadas, cls: 'text-green-600 dark:text-green-400', filter: 'ok' },
+              { label: 'No esta', val: meta.no_encontradas, cls: 'text-red-600 dark:text-red-400', filter: 'no está' },
+              { label: 'Duplicadas', val: meta.duplicadas, cls: 'text-yellow-600 dark:text-yellow-400', filter: 'duplicado' },
+              { label: 'Sin datos', val: meta.sin_datos, cls: 'text-blue-600 dark:text-blue-400', filter: 'faltan datos' },
             ].map(s => (
               <button
                 key={s.label}
-                onClick={() => setFilter('status', filters.status === s.filter ? '' : s.filter)}
+                onClick={() => applyStatusFilter(s.filter)}
                 className={`bg-white dark:bg-slate-800 p-2.5 text-center hover:bg-ml-gray-bg dark:hover:bg-slate-700 transition-colors ${filters.status === s.filter ? 'ring-2 ring-inset ring-ml-blue' : ''}`}
                 title={`Filtrar por ${s.label}`}
               >
@@ -288,11 +321,16 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
         )}
 
         {/* Meta + bulk actions */}
-        {detalle && (
+        {meta && (
           <div className="px-4 py-1.5 text-xs text-ml-text-soft dark:text-gray-400 flex flex-wrap items-center gap-2 border-b dark:border-slate-700 bg-ml-gray-bg dark:bg-slate-900 shrink-0">
-            <span>{fmtDate(detalle.fecha_carga)}</span>
-            <span>{detalle.usuario_nombre}</span>
-            <span>{filteredRows.length}/{detalle.total} filas{hasFilters ? ' (filtrado)' : ''}{totalPages > 1 ? ` · p.${page + 1}/${totalPages}` : ''}</span>
+            <span>{fmtDate(meta.fecha_carga)}</span>
+            <span>{meta.usuario_nombre}</span>
+            <span>
+              {hasFilters
+                ? `${meta.total_filtered} de ${meta.total} filas (filtrado)${totalPages > 1 ? ` · p.${page + 1}/${totalPages}` : ''}`
+                : `${meta.total} filas${totalPages > 1 ? ` · p.${page + 1}/${totalPages}` : ''}`
+              }
+            </span>
 
             {selectedRows.size > 0 && (
               <div className="flex items-center gap-1 ml-auto">
@@ -329,7 +367,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
           </div>
         )}
 
-        {detalle && (
+        {meta && (
           <div className="flex-1 overflow-auto min-h-0">
             <table className="w-full text-xs min-w-[780px]">
               <thead className="sticky top-0 z-10">
@@ -337,9 +375,10 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                   <th className="px-1 py-2.5 text-left font-bold text-white bg-ml-blue border-r border-blue-400 w-8">
                     <input
                       type="checkbox"
-                      checked={selectedRows.size > 0 && selectedRows.size === filteredRows.length}
-                      onChange={selectAllFiltered}
+                      checked={allPageSelected}
+                      onChange={selectAllPage}
                       className="w-3 h-3"
+                      title="Seleccionar página actual"
                     />
                   </th>
                   {['#','Importe','CUIT','Titular planilla','Titular extracto','Fecha mov.','Saldo','Cliente acred.','Fecha acred.','Estado',''].map(h => (
@@ -363,9 +402,16 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                     <td className="px-1 py-1"><FilterInput field="mov_fecha_acred" placeholder="acred." /></td>
                     <td className="px-1 py-1">
                       <select className="w-full px-1.5 py-0.5 text-xs border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-gray-200"
-                        value={filters.status} onChange={e => setFilter('status', e.target.value)}>
+                        value={filtersDraft.status}
+                        onChange={e => {
+                          const v = e.target.value
+                          const updated = { ...filtersDraft, status: v }
+                          setFiltersDraft(updated)
+                          setFilters(updated)
+                          setPage(0)
+                        }}>
                         <option value="">Todos</option>
-                        {uniqueStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                        {ESTADOS_DISPONIBLES.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </td>
                     <td className="px-1 py-1"></td>
@@ -374,14 +420,14 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
               </thead>
 
               <tbody className="divide-y dark:divide-slate-700">
-                {filteredRows.length === 0 ? (
+                {rows.length === 0 && !loading ? (
                   <tr>
                     <td colSpan={12} className="px-4 py-6 text-center text-ml-text-soft">
-                      Sin resultados para los filtros aplicados
+                      {hasFilters ? 'Sin resultados para los filtros aplicados' : 'Sin filas'}
                     </td>
                   </tr>
                 ) : (
-                  pageRows.map((row, i) => (
+                  rows.map((row, i) => (
                     <tr key={row.id} className="hover:bg-ml-gray-bg dark:hover:bg-slate-700/50 divide-x divide-gray-100 dark:divide-slate-700">
                       <td className="px-1 py-px text-center">
                         <input
@@ -460,7 +506,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                   disabled={page === 0}
                   className="px-2.5 py-1 rounded border border-gray-200 dark:border-slate-600 disabled:opacity-40 hover:bg-ml-gray-bg dark:hover:bg-slate-700"
                 >← Anterior</button>
-                <span>Página {page + 1} / {totalPages} · {filteredRows.length} filas</span>
+                <span>Página {page + 1} / {totalPages} · {meta?.total_filtered ?? 0} filas{hasFilters ? ' (filtrado)' : ''}</span>
                 <button
                   onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                   disabled={page === totalPages - 1}

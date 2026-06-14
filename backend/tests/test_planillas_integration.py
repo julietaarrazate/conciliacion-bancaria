@@ -242,6 +242,42 @@ class TestDetallePlanilla:
         r = client.get("/planillas/1/detalle")
         assert r.status_code in (401, 403)
 
+    def test_detalle_incluye_total_filtered(self, client, db):
+        """total_filtered == total cuando no hay filtros."""
+        extracto = _seed_extracto_con_movimientos(db)
+        planilla, _ = _seed_planilla_con_filas(db, extracto.id)
+        token = _token(db, "admin@plan.test")
+        r = client.get(f"/planillas/{planilla.id}/detalle", headers=_auth(token))
+        data = r.json()
+        assert "total_filtered" in data
+        assert data["total_filtered"] == data["total"]
+
+    def test_detalle_filtro_status(self, client, db):
+        """?status=pendiente devuelve solo filas en pendiente."""
+        extracto = _seed_extracto_con_movimientos(db)
+        planilla, _ = _seed_planilla_con_filas(db, extracto.id)
+        token = _token(db, "admin@plan.test")
+        r = client.get(f"/planillas/{planilla.id}/detalle?status=pendiente", headers=_auth(token))
+        assert r.status_code == 200
+        data = r.json()
+        assert all(row["status"] == "pendiente" for row in data["rows"])
+
+    def test_detalle_paginacion_limit_offset(self, client, db):
+        """limit=1 devuelve solo 1 fila; offset=1 devuelve la siguiente."""
+        extracto = _seed_extracto_con_movimientos(db)
+        planilla, _ = _seed_planilla_con_filas(db, extracto.id)
+        token = _token(db, "admin@plan.test")
+
+        r1 = client.get(f"/planillas/{planilla.id}/detalle?limit=1&offset=0", headers=_auth(token))
+        r2 = client.get(f"/planillas/{planilla.id}/detalle?limit=1&offset=1", headers=_auth(token))
+        assert r1.status_code == 200 and r2.status_code == 200
+        assert len(r1.json()["rows"]) == 1
+        assert len(r2.json()["rows"]) == 1
+        # Different rows
+        assert r1.json()["rows"][0]["id"] != r2.json()["rows"][0]["id"]
+        # total_filtered reflects ALL rows, not just this page
+        assert r1.json()["total_filtered"] == 2
+
 
 # ── Tests: soft delete ────────────────────────────────────────────────────────
 
