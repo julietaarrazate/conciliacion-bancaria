@@ -46,14 +46,14 @@ export const CuadraLogo: React.FC<CuadraLogoProps> = ({
     >
       <rect width="128" height="128" rx="28" fill={surfaceColor} />
       <path
-        d="M90 36 A42 42 0 1 0 90 92"
+        d="M95 36 A42 42 0 1 0 95 92"
         stroke={trackColor}
         strokeWidth="14"
         strokeLinecap="round"
         fill="none"
       />
       <path
-        d="M90 36 A42 42 0 1 0 90 92"
+        d="M95 36 A42 42 0 1 0 95 92"
         stroke={fillColor}
         strokeWidth="14"
         strokeLinecap="round"
@@ -63,13 +63,13 @@ export const CuadraLogo: React.FC<CuadraLogoProps> = ({
         style={{ transition: 'stroke-dashoffset 700ms cubic-bezier(0.4, 0, 0.2, 1)' }}
       />
       <circle
-        cx="90"
+        cx="95"
         cy="92"
         r="8"
         fill={dotColor}
         style={{
           transition: 'transform 400ms cubic-bezier(0.4, 0, 0.2, 1)',
-          transformOrigin: '90px 92px',
+          transformOrigin: '95px 92px',
           transform: hover ? 'scale(1.25)' : 'scale(1)',
         }}
       />

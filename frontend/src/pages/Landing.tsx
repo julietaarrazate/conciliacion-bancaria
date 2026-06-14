@@ -214,19 +214,25 @@ const OCRMockup: React.FC = () => {
       <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', background: 'var(--topbar-bg)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ color: 'var(--accent)' }}><Logo size={16} /></span>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Cargar cheque</span>
-        <span style={{ marginLeft: 'auto', fontSize: 10, padding: '2px 8px', borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', fontWeight: 700 }}>✨ OCR IA</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10, padding: '2px 8px', borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', fontWeight: 700 }}>OCR IA</span>
       </div>
       <div style={{ padding: 16 }}>
         <div style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 14, position: 'relative', background: 'var(--bg-2)', border: `2px dashed ${phase === 'scanning' ? 'var(--accent)' : 'var(--border)'}`, height: 86, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'border-color 0.3s' }}>
-          {phase === 'idle' && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 22 }}>📸</div><div style={{ fontSize: 11, color: 'var(--muted-2)', marginTop: 4 }}>Adjuntar foto del cheque</div></div>}
+          {phase === 'idle' && <div style={{ textAlign: 'center' }}>
+            <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{ color: 'var(--muted-2)', margin: '0 auto' }}><path d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z"/></svg>
+            <div style={{ fontSize: 11, color: 'var(--muted-2)', marginTop: 4 }}>Adjuntar foto del cheque</div>
+          </div>}
           {phase === 'scanning' && (
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 22 }}>🔍</div>
+              <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{ color: 'var(--accent)', margin: '0 auto' }}><path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803a7.5 7.5 0 0010.607 10.607z"/></svg>
               <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4, fontWeight: 600 }}>Escaneando con IA…</div>
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', animation: 'scanLine 0.9s ease-in-out infinite' }} />
             </div>
           )}
-          {phase === 'done' && <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>Datos extraídos</span></div>}
+          {phase === 'done' && <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{ color: 'var(--accent)', flexShrink: 0 }}><path d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>Datos extraídos</span>
+          </div>}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {OCR_FIELDS.map((f, i) => (
@@ -270,7 +276,9 @@ const AlertaMockup: React.FC = () => {
   return (
     <div ref={ref} style={{ background: 'var(--card)', borderRadius: 18, border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--mock-shadow)' }}>
       <div style={{ padding: '11px 14px', borderBottom: '1px solid var(--border)', background: 'var(--bg-2)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🔔</div>
+        <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{ color: 'var(--accent)' }}><path d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/></svg>
+        </div>
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>Cuadra · Alerta automática</div>
           <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>2 cheques vencen mañana — Comercial Norte ($124.500) y Logística Central ($98.400)</div>
@@ -278,7 +286,7 @@ const AlertaMockup: React.FC = () => {
       </div>
       <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 148 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>✨ Asistente IA Cuadra</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>Asistente IA Cuadra</span>
           <span style={{ fontSize: 9, color: 'var(--muted-2)', padding: '1px 6px', borderRadius: 99, border: '1px solid var(--border)' }}>en línea</span>
         </div>
         {chatStep >= 1 && (
@@ -295,7 +303,7 @@ const AlertaMockup: React.FC = () => {
         )}
         {chatStep >= 3 && (
           <div style={{ alignSelf: 'flex-end', background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', borderRadius: '10px 10px 2px 10px', padding: '7px 11px', maxWidth: '70%' }}>
-            <span style={{ fontSize: 12, color: 'var(--text)' }}>Perfecto, generá la liquidación 🙌</span>
+            <span style={{ fontSize: 12, color: 'var(--text)' }}>Perfecto, generá la liquidación</span>
           </div>
         )}
       </div>
@@ -367,13 +375,19 @@ const MOCKUP_ROWS = [
   { cliente: 'Comercial Oeste',    importe: '$98.400',  ok: true  },
 ]
 
+const SecIcon: React.FC<{ d: string | string[] }> = ({ d }) => (
+  <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{ color: 'var(--accent)' }}>
+    {(Array.isArray(d) ? d : [d]).map((path, i) => <path key={i} d={path} />)}
+  </svg>
+)
+
 const SECURITY = [
-  { icon: '🔐', title: 'Acceso protegido siempre', desc: 'Las sesiones se cierran automáticamente por inactividad. Sin tu clave no puede entrar nadie más, aunque tengan el dispositivo.' },
-  { icon: '🏢', title: 'Datos separados por empresa', desc: 'Cada empresa ve solo sus propios datos. Imposible que un usuario de una empresa vea información de otra.' },
-  { icon: '🔑', title: 'Contraseñas cifradas', desc: 'Las contraseñas se guardan cifradas. Aunque alguien accediera a la base de datos, no podría leerlas.' },
-  { icon: '💾', title: 'Backup diario automático', desc: 'Copia completa de todos los datos cada noche. Si algo falla, recuperamos todo sin perder información.' },
-  { icon: '📋', title: 'Registro de actividad completo', desc: 'Cada acción queda registrada: quién hizo qué, cuándo y desde dónde. Ideal para auditorías internas.' },
-  { icon: '🇦🇷', title: 'Ley de protección de datos', desc: 'Cumplimos la Ley 25.326 argentina. Tus datos y los de tus clientes son tuyos — no se usan para nada más.' },
+  { icon: <SecIcon d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />, title: 'Acceso protegido siempre', desc: 'Las sesiones se cierran automáticamente por inactividad. Sin tu clave no puede entrar nadie más, aunque tengan el dispositivo.' },
+  { icon: <SecIcon d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />, title: 'Datos separados por empresa', desc: 'Cada empresa ve solo sus propios datos. Imposible que un usuario de una empresa vea información de otra.' },
+  { icon: <SecIcon d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />, title: 'Contraseñas cifradas', desc: 'Las contraseñas se guardan cifradas. Aunque alguien accediera a la base de datos, no podría leerlas.' },
+  { icon: <SecIcon d={['M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125']} />, title: 'Backup diario automático', desc: 'Copia completa de todos los datos cada noche. Si algo falla, recuperamos todo sin perder información.' },
+  { icon: <SecIcon d={['M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', 'M9 12l2 2 4-4']} />, title: 'Registro de actividad completo', desc: 'Cada acción queda registrada: quién hizo qué, cuándo y desde dónde. Ideal para auditorías internas.' },
+  { icon: <SecIcon d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />, title: 'Ley de protección de datos', desc: 'Cumplimos la Ley 25.326 argentina. Tus datos y los de tus clientes son tuyos — no se usan para nada más.' },
 ]
 
 const FAQ = [
@@ -751,14 +765,14 @@ export const Landing: React.FC = () => {
           </R>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
             {[
-              { icon: '🕐', text: 'Pasás horas cruzando el extracto bancario contra las planillas de cada cliente.' },
-              { icon: '😤', text: 'Un cliente pagó, el banco lo registró diferente, y no sabés si cuadra o no.' },
-              { icon: '📧', text: 'El contador pide el cierre y todavía estás buscando el movimiento que falta.' },
-              { icon: '📋', text: 'Cada mes es lo mismo: el Excel crece, los errores se multiplican, el tiempo se va.' },
+              { icon: <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{ color: 'var(--muted)', flexShrink: 0 }}><path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>, text: 'Pasás horas cruzando el extracto bancario contra las planillas de cada cliente.' },
+              { icon: <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{ color: 'var(--muted)', flexShrink: 0 }}><path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>, text: 'Un cliente pagó, el banco lo registró diferente, y no sabés si cuadra o no.' },
+              { icon: <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{ color: 'var(--muted)', flexShrink: 0 }}><path d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>, text: 'El contador pide el cierre y todavía estás buscando el movimiento que falta.' },
+              { icon: <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{ color: 'var(--muted)', flexShrink: 0 }}><path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>, text: 'Cada mes es lo mismo: el Excel crece, los errores se multiplican, el tiempo se va.' },
             ].map((item, i) => (
               <R key={i} delay={i * 70}>
                 <div style={{ padding: '20px 22px', borderRadius: 14, background: 'var(--card)', border: '1px solid var(--border)', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: 22, flexShrink: 0, marginTop: 2 }}>{item.icon}</span>
+                  <span style={{ marginTop: 2 }}>{item.icon}</span>
                   <span style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.65 }}>{item.text}</span>
                 </div>
               </R>
@@ -947,7 +961,7 @@ export const Landing: React.FC = () => {
             {SECURITY.map((s, i) => (
               <R key={s.title} delay={i * 60}>
                 <div className="grad-border" style={{ padding: 24, height: '100%', boxSizing: 'border-box' }}>
-                  <div style={{ fontSize: 24, marginBottom: 10 }}>{s.icon}</div>
+                  <div style={{ marginBottom: 10 }}>{s.icon}</div>
                   <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 7, color: 'var(--text)' }}>{s.title}</div>
                   <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.65 }}>{s.desc}</div>
                 </div>

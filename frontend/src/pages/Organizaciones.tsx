@@ -170,43 +170,45 @@ export const Organizaciones: React.FC = () => {
             return (
               <div key={org.id}
                 className={`card p-0 overflow-hidden transition-all ${isActive ? 'ring-2 ring-ml-green dark:ring-ml-green' : ''}`}>
-                <div className="flex items-center gap-3 px-4 py-3">
-                  {/* Indicador plan */}
-                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${org.activo ? 'bg-green-400' : 'bg-gray-300'}`} />
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {/* Indicador plan */}
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${org.activo ? 'bg-green-400' : 'bg-gray-300'}`} />
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold dark:text-white">{org.nombre}</p>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono uppercase ${org.plan === 'pro' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-gray-400'}`}>
-                        {org.plan}
-                      </span>
-                      {!org.activo && <span className="text-[10px] text-red-500">inactiva</span>}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold dark:text-white">{org.nombre}</p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono uppercase ${org.plan === 'pro' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-gray-400'}`}>
+                          {org.plan}
+                        </span>
+                        {!org.activo && <span className="text-[10px] text-red-500">inactiva</span>}
+                      </div>
+                      <p className="text-xs text-gray-400 dark:text-zinc-500 font-mono mt-0.5">
+                        match: {(org.configuracion?.match_rules || []).join(' + ')} ·
+                        tol: ${org.configuracion?.tolerancia_monto ?? 0.01}
+                      </p>
                     </div>
-                    <p className="text-xs text-gray-400 dark:text-zinc-500 font-mono mt-0.5">
-                      match: {(org.configuracion?.match_rules || []).join(' + ')} ·
-                      tol: ${org.configuracion?.tolerancia_monto ?? 0.01}
-                    </p>
                   </div>
 
-                  <div className="flex gap-2 shrink-0 flex-wrap">
+                  <div className="flex gap-2 flex-wrap sm:ml-auto sm:shrink-0">
                     <button
                       onClick={() => isActive ? clearActiveOrg() : setActiveOrg(org.id, org.nombre)}
                       className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${isActive
                         ? 'bg-ml-green text-black'
                         : 'bg-gray-100 dark:bg-ml-dark-card text-gray-600 dark:text-gray-300 hover:bg-ml-green/10'}`}
                     >
-                      {isActive ? '✓ Viendo' : '👁 Ver'}
+                      {isActive ? 'Viendo' : 'Ver'}
                     </button>
                     <button onClick={() => openEdit(org)}
                       className="px-3 py-1.5 text-xs rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100">
-                      ✏️ Config
+                      Config
                     </button>
                     <button
                       onClick={() => { apiClient.client.get(`/admin/organizaciones/${org.id}/backup`, { responseType: 'blob' }).then(r => { const url = URL.createObjectURL(r.data); const a = document.createElement('a'); a.href = url; a.download = `backup_${org.nombre}.xlsx`; a.click(); URL.revokeObjectURL(url) }) }}
                       className="px-3 py-1.5 text-xs rounded-lg bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100"
                       title="Descargar backup Excel"
                     >
-                      ⬇ Backup
+                      Excel
                     </button>
                     <button
                       onClick={() => { setShowUserForm(org.id); setUserForm({ full_name: '', email: '', password: '' }) }}
