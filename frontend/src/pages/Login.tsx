@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { GoogleLogin } from '@react-oauth/google'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
 import { useLockStore } from '@/store/lock'
@@ -148,6 +149,28 @@ export const Login: React.FC = () => {
       } else {
         setError(detail || 'Error en autenticación')
       }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGoogleSuccess = async (credentialResponse: { credential?: string }) => {
+    if (!credentialResponse.credential) return
+    setLoading(true)
+    setError('')
+    try {
+      const res = await apiClient.client.post('/auth/google', {
+        credential: credentialResponse.credential,
+      })
+      const data = res.data as { access_token: string; user: import('@/types').User }
+      apiClient.setToken(data.access_token)
+      setUser(data.user)
+      setToken(data.access_token)
+      forceUnlock()
+      navigate('/dashboard')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } }
+      setError(e.response?.data?.detail || 'Error al iniciar sesión con Google')
     } finally {
       setLoading(false)
     }
@@ -333,6 +356,31 @@ export const Login: React.FC = () => {
               </Link>
             </div>
           </form>
+
+          {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+            <>
+              <div className="relative my-5">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200 dark:border-zinc-700" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="px-2 bg-white dark:bg-ml-dark-surface text-gray-400 dark:text-zinc-500">
+                    o continuá con
+                  </span>
+                </div>
+              </div>
+              <div className="flex justify-center">
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError('Error al iniciar sesión con Google')}
+                  useOneTap={false}
+                  text="signin_with"
+                  shape="rectangular"
+                  theme="outline"
+                />
+              </div>
+            </>
+          )}
           </>
           )}
         </div>

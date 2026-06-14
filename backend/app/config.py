@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     push_enabled: bool = True
     admin_email: str = "julietaarrazate@gmail.com"
 
+    # Google OAuth (opt-in) — setear GOOGLE_CLIENT_ID en Render para activar
+    # Obtener en console.cloud.google.com → APIs & Services → Credentials
+    google_client_id: str = ""
+
     # S3/R2 Storage — almacenamiento externo de fotos (opt-in)
     # Si S3_ENDPOINT está vacío, las fotos se guardan como base64 en DB (fallback).
     # Necesarias todas: S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY, S3_SECRET_KEY, S3_PUBLIC_URL, S3_REGION

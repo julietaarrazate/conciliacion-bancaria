@@ -40,6 +40,7 @@ class PlanillaDetalleResponse(BaseModel):
     usuario_nombre: str
     rows: List[PlanillaRowResponse]
     total: int
+    total_filtered: int
     acreditadas: int
     no_encontradas: int
     duplicadas: int

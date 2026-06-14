@@ -1,6 +1,8 @@
 import logging
 from decimal import Decimal
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from sqlalchemy import func, cast, String, or_
 from sqlalchemy.orm import Session
 import tempfile
 import os
@@ -628,6 +630,15 @@ def delete_planilla(
 @router.get("/{planilla_id}/detalle", response_model=PlanillaDetalleResponse)
 def get_planilla_detalle(
     planilla_id: int,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = None,
+    importe: Optional[str] = None,
+    cuit: Optional[str] = None,
+    titular: Optional[str] = None,
+    mov_titular: Optional[str] = None,
+    mov_fecha: Optional[str] = None,
+    mov_fecha_acred: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -635,14 +646,63 @@ def get_planilla_detalle(
 
     p = _planilla_for_user(db, planilla_id, current_user, include_deleted=True)
 
-    mov_ids = [r.orden_movimiento_acreditado for r in p.rows if r.orden_movimiento_acreditado]
-    movs_map = {}
+    # Stats from ALL rows (unfiltered) — single GROUP BY query
+    stats_rows = (
+        db.query(PlanillaRow.status, func.count(PlanillaRow.id))
+        .filter(PlanillaRow.planilla_id == p.id)
+        .group_by(PlanillaRow.status)
+        .all()
+    )
+    stats: dict[str, int] = {s: c for s, c in stats_rows}
+    total = sum(stats.values())
+    acreditadas = stats.get("ok", 0)
+    no_encontradas = stats.get("no está", 0)
+    sin_datos = stats.get("faltan datos", 0)
+    duplicadas = sum(c for s, c in stats.items() if s == "duplicado" or (isinstance(s, str) and s.startswith("acreditado")))
+
+    # Filtered query
+    rows_q = db.query(PlanillaRow).filter(PlanillaRow.planilla_id == p.id)
+
+    if status:
+        rows_q = rows_q.filter(PlanillaRow.status == status)
+    if cuit:
+        rows_q = rows_q.filter(PlanillaRow.cuit.ilike(f"%{cuit}%"))
+    if titular:
+        rows_q = rows_q.filter(PlanillaRow.titular.ilike(f"%{titular}%"))
+    if importe:
+        importe_clean = importe.replace(".", "").replace(",", ".")
+        rows_q = rows_q.filter(cast(PlanillaRow.monto, String).contains(importe_clean))
+    if mov_titular:
+        matching = db.query(MovimientoBanco.id).filter(
+            MovimientoBanco.titular.ilike(f"%{mov_titular}%")
+        ).subquery()
+        rows_q = rows_q.filter(PlanillaRow.orden_movimiento_acreditado.in_(matching))
+    if mov_fecha:
+        matching = db.query(MovimientoBanco.id).filter(
+            cast(MovimientoBanco.fecha, String).contains(mov_fecha)
+        ).subquery()
+        rows_q = rows_q.filter(PlanillaRow.orden_movimiento_acreditado.in_(matching))
+    if mov_fecha_acred:
+        matching_mov = db.query(MovimientoBanco.id).filter(
+            cast(MovimientoBanco.fecha_acred, String).contains(mov_fecha_acred)
+        ).subquery()
+        rows_q = rows_q.filter(or_(
+            cast(PlanillaRow.fecha_acred, String).contains(mov_fecha_acred),
+            PlanillaRow.orden_movimiento_acreditado.in_(matching_mov)
+        ))
+
+    total_filtered = rows_q.count()
+    fetched_rows = rows_q.order_by(PlanillaRow.id).offset(offset).limit(limit).all()
+
+    # Enrich with movement data
+    mov_ids = [r.orden_movimiento_acreditado for r in fetched_rows if r.orden_movimiento_acreditado]
+    movs_map: dict[int, MovimientoBanco] = {}
     if mov_ids:
         movs = db.query(MovimientoBanco).filter(MovimientoBanco.id.in_(mov_ids)).all()
         movs_map = {m.id: m for m in movs}
 
     rows_enriched = []
-    for r in p.rows:
+    for r in fetched_rows:
         mov = movs_map.get(r.orden_movimiento_acreditado) if r.orden_movimiento_acreditado else None
         rows_enriched.append({
             "id": r.id,
@@ -656,7 +716,6 @@ def get_planilla_detalle(
             "mov_fecha_acred": (mov.fecha_acred if mov else None) or r.fecha_acred,
         })
 
-    statuses = [r.status for r in p.rows]
     return {
         "id": p.id,
         "nombre_archivo": p.nombre_archivo,
@@ -665,11 +724,12 @@ def get_planilla_detalle(
         "fecha_carga": p.fecha_carga,
         "usuario_nombre": p.usuario.full_name if p.usuario else "—",
         "rows": rows_enriched,
-        "total": len(statuses),
-        "acreditadas": sum(1 for s in statuses if s == "ok"),
-        "no_encontradas": sum(1 for s in statuses if s == "no está"),
-        "duplicadas": sum(1 for s in statuses if s == "duplicado" or (isinstance(s, str) and s.startswith("acreditado"))),
-        "sin_datos": sum(1 for s in statuses if s == "faltan datos"),
+        "total": total,
+        "total_filtered": total_filtered,
+        "acreditadas": acreditadas,
+        "no_encontradas": no_encontradas,
+        "duplicadas": duplicadas,
+        "sin_datos": sin_datos,
     }
 
 

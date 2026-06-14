@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import * as Sentry from '@sentry/react'
+import { GoogleOAuthProvider } from '@react-oauth/google'
 import { App } from './App'
 
 if (import.meta.env.VITE_SENTRY_DSN) {
@@ -54,10 +55,14 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <GoogleOAuthProvider clientId={googleClientId}>
+        <App />
+      </GoogleOAuthProvider>
     </ErrorBoundary>
   </React.StrictMode>,
 )

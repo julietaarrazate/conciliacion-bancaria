@@ -30,6 +30,7 @@ from app.routers import public_router
 from app.routers import push_router
 from app.routers import agente
 from app.routers import tarjetas
+from app.routers import google_auth
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.egreso import Egreso, CategoriaEgreso  # noqa: F401
 from app.models.caja import ArqueoDiario  # noqa: F401
@@ -732,6 +733,7 @@ app.include_router(public_router.router)
 app.include_router(push_router.router)
 app.include_router(agente.router)
 app.include_router(tarjetas.router)
+app.include_router(google_auth.router)
 
 
 @app.get("/")
