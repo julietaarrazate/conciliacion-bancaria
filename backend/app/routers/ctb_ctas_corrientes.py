@@ -7,6 +7,7 @@ Rutas expuestas (bajo el prefix /contabilidad del router padre):
   POST  /backfill-cuentas-corrientes
 """
 import logging
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -24,6 +25,10 @@ from .ctb_common import _org_id, _STATUS_CONCILIADO, _tipo_de_modulo
 router = APIRouter(tags=["contabilidad"])
 logger = logging.getLogger(__name__)
 
+# TTL cache para cartera global — operación pesada que rara vez cambia en < 60 s
+_cartera_cache: dict[int, tuple[float, dict]] = {}  # org_id → (timestamp, payload)
+_CARTERA_TTL = 60  # segundos
+
 
 @router.get("/cuentas-corrientes")
 def get_cuentas_corrientes(
@@ -34,6 +39,11 @@ def get_cuentas_corrientes(
     """Vista global de cartera: saldo, último movimiento y estado por cliente.
     Vista derivada de los asientos sobre cada cuenta 2-1-2-X. No genera asientos."""
     oid = _org_id(current_user, org_id)
+
+    cached = _cartera_cache.get(oid)
+    if cached and time.monotonic() - cached[0] < _CARTERA_TTL:
+        return cached[1]
+
     clientes = (
         db.query(Cliente)
         .filter(Cliente.organizacion_id == oid, Cliente.cuenta_contable_id.isnot(None))
@@ -90,11 +100,13 @@ def get_cuentas_corrientes(
             "conciliacion": "sin_actividad" if not tiene_actividad else "conciliado",
         })
 
-    return {
+    result = {
         "items": items,
         "total_deudor": round(sum(i["saldo"] for i in items if i["saldo"] > 0), 2),
         "total_acreedor": round(sum(-i["saldo"] for i in items if i["saldo"] < 0), 2),
     }
+    _cartera_cache[oid] = (time.monotonic(), result)
+    return result
 
 
 @router.get("/cuenta-corriente")
