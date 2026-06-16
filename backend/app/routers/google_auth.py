@@ -17,7 +17,7 @@ settings = get_settings()
 
 
 class GoogleCredentialPayload(BaseModel):
-    credential: str
+    access_token: str
 
 
 def _serialize_user(user: User) -> dict:
@@ -26,18 +26,18 @@ def _serialize_user(user: User) -> dict:
 
 @router.post("/google")
 def google_login(payload: GoogleCredentialPayload, db: Session = Depends(get_db)):
-    """Verifica un Google ID token y devuelve un JWT de sesión.
+    """Verifica un Google access token y devuelve un JWT de sesión.
     Solo funciona para usuarios ya registrados en el sistema.
     Activar seteando GOOGLE_CLIENT_ID en Render.
     """
     if not settings.google_client_id:
         raise HTTPException(503, "Google OAuth no está configurado en este servidor")
 
-    # Verify the ID token with Google's tokeninfo endpoint
+    # Verify the access token with Google's tokeninfo endpoint
     try:
         resp = http_requests.get(
             "https://oauth2.googleapis.com/tokeninfo",
-            params={"id_token": payload.credential},
+            params={"access_token": payload.access_token},
             timeout=10,
         )
     except Exception:
@@ -48,8 +48,8 @@ def google_login(payload: GoogleCredentialPayload, db: Session = Depends(get_db)
 
     info = resp.json()
 
-    # Validate audience matches our client ID
-    if info.get("aud") != settings.google_client_id:
+    # azp = authorized party (client_id que emitió el token en implicit flow)
+    if info.get("azp") != settings.google_client_id:
         raise HTTPException(401, "Token de Google no pertenece a esta aplicación")
 
     email = info.get("email", "").lower().strip()
