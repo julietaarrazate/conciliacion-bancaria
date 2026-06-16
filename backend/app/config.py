@@ -44,9 +44,11 @@ class Settings(BaseSettings):
     push_enabled: bool = True
     admin_email: str = "julietaarrazate@gmail.com"
 
-    # Google OAuth (opt-in) — setear GOOGLE_CLIENT_ID en Render para activar
+    # Google OAuth (opt-in) — setear GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en Render
     # Obtener en console.cloud.google.com → APIs & Services → Credentials
+    # El flujo auth-code (redirect) intercambia el código en el backend con el secret.
     google_client_id: str = ""
+    google_client_secret: str = ""
 
     # S3/R2 Storage — almacenamiento externo de fotos (opt-in)
     # Si S3_ENDPOINT está vacío, las fotos se guardan como base64 en DB (fallback).

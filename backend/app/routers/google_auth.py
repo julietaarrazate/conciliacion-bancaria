@@ -16,8 +16,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
 
 
-class GoogleCredentialPayload(BaseModel):
-    credential: str
+class GoogleCodePayload(BaseModel):
+    code: str
+    redirect_uri: str
 
 
 def _serialize_user(user: User) -> dict:
@@ -25,19 +26,44 @@ def _serialize_user(user: User) -> dict:
 
 
 @router.post("/google")
-def google_login(payload: GoogleCredentialPayload, db: Session = Depends(get_db)):
-    """Verifica un Google ID token y devuelve un JWT de sesión.
+def google_login(payload: GoogleCodePayload, db: Session = Depends(get_db)):
+    """Intercambia un Google authorization code y devuelve un JWT de sesión.
+    Flujo auth-code (redirect) — funciona en mobile sin popups.
     Solo funciona para usuarios ya registrados en el sistema.
-    Activar seteando GOOGLE_CLIENT_ID en Render.
+    Activar seteando GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en Render.
     """
-    if not settings.google_client_id:
+    if not settings.google_client_id or not settings.google_client_secret:
         raise HTTPException(503, "Google OAuth no está configurado en este servidor")
 
-    # Verify the ID token with Google's tokeninfo endpoint
+    # 1) Intercambiar el authorization code por tokens
+    try:
+        token_resp = http_requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": payload.code,
+                "client_id": settings.google_client_id,
+                "client_secret": settings.google_client_secret,
+                "redirect_uri": payload.redirect_uri,
+                "grant_type": "authorization_code",
+            },
+            timeout=10,
+        )
+    except Exception:
+        raise HTTPException(503, "No se pudo contactar a Google")
+
+    if token_resp.status_code != 200:
+        logger.warning("Google token exchange falló: %s", token_resp.text[:300])
+        raise HTTPException(401, "No se pudo validar el código de Google")
+
+    id_token = token_resp.json().get("id_token")
+    if not id_token:
+        raise HTTPException(401, "Google no devolvió un id_token")
+
+    # 2) Verificar el id_token y extraer el email
     try:
         resp = http_requests.get(
             "https://oauth2.googleapis.com/tokeninfo",
-            params={"id_token": payload.credential},
+            params={"id_token": id_token},
             timeout=10,
         )
     except Exception:
@@ -48,7 +74,6 @@ def google_login(payload: GoogleCredentialPayload, db: Session = Depends(get_db)
 
     info = resp.json()
 
-    # Validate audience matches our client ID
     if info.get("aud") != settings.google_client_id:
         raise HTTPException(401, "Token de Google no pertenece a esta aplicación")
 

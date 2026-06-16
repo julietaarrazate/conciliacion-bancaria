@@ -289,7 +289,7 @@ export const Layout: React.FC = () => {
             <Icon.Search />
           </button>
           <button
-            onClick={() => { setAlertasCount(0); navigate('/resumen') }}
+            onClick={() => { setAlertasCount(0); navigate('/') }}
             className="relative p-1.5 rounded-lg text-ml-green/80 dark:text-gray-400 hover:bg-white/10 dark:hover:bg-ml-dark-hover transition-colors"
           >
             <Icon.Bell />
@@ -353,7 +353,7 @@ export const Layout: React.FC = () => {
             <Icon.Search />
           </button>
           <button
-            onClick={() => { setAlertasCount(0); navigate('/resumen') }}
+            onClick={() => { setAlertasCount(0); navigate('/') }}
             className="relative p-1.5 rounded-lg text-ml-green/80 dark:text-gray-400 hover:bg-white/10 dark:hover:bg-ml-dark-hover transition-colors shrink-0"
           >
             <Icon.Bell />
