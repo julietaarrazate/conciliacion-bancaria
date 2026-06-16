@@ -27,6 +27,29 @@ export const Login: React.FC = () => {
   const [twofaCode, setTwofaCode] = useState('')
   const [twofaLoading, setTwofaLoading] = useState(false)
 
+  // Maneja el redirect de Google OAuth (mobile): lee el access_token del hash de la URL
+  useEffect(() => {
+    const hash = window.location.hash
+    if (!hash.includes('access_token=')) return
+    const params = new URLSearchParams(hash.slice(1))
+    const token = params.get('access_token')
+    if (!token) return
+    window.history.replaceState(null, '', window.location.pathname)
+    apiClient.client.post('/auth/google', { access_token: token })
+      .then((res) => {
+        const data = res.data as { access_token: string; user: import('@/types').User }
+        apiClient.setToken(data.access_token)
+        setUser(data.user)
+        setToken(data.access_token)
+        forceUnlock()
+        navigate('/')
+      })
+      .catch((err: unknown) => {
+        const e = err as { response?: { data?: { detail?: string } } }
+        setError(e.response?.data?.detail || 'Error al iniciar sesión con Google')
+      })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Polling del estado de aprobación mientras esperamos al superadmin
   useEffect(() => {
     if (!pending) return
@@ -167,7 +190,7 @@ export const Login: React.FC = () => {
         setUser(data.user)
         setToken(data.access_token)
         forceUnlock()
-        navigate('/dashboard')
+        navigate('/')
       } catch (err: unknown) {
         const e = err as { response?: { data?: { detail?: string } } }
         setError(e.response?.data?.detail || 'Error al iniciar sesión con Google')
@@ -177,6 +200,8 @@ export const Login: React.FC = () => {
     },
     onError: () => setError('Error al iniciar sesión con Google'),
     flow: 'implicit',
+    ux_mode: 'redirect',
+    redirect_uri: `${window.location.origin}/login`,
   })
 
   return (
