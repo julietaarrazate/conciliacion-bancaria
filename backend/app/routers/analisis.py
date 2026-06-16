@@ -437,7 +437,7 @@ def alertas(
             "tipo": "filas_atrasadas",
             "cantidad": filas_atrasadas,
             "label": "Filas pendientes +30 días",
-            "urgencia": "media",
+            "urgencia": "baja",
             "link": "/historial",
         })
     if movimientos_sin_asignar:
