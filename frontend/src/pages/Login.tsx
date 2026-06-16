@@ -27,15 +27,15 @@ export const Login: React.FC = () => {
   const [twofaCode, setTwofaCode] = useState('')
   const [twofaLoading, setTwofaLoading] = useState(false)
 
-  // Maneja el redirect de Google OAuth (mobile): lee el access_token del hash de la URL
+  // Maneja el redirect de Google OAuth: Google vuelve a /login con ?code=...
+  // Funciona igual en desktop y mobile (sin popups).
   useEffect(() => {
-    const hash = window.location.hash
-    if (!hash.includes('access_token=')) return
-    const params = new URLSearchParams(hash.slice(1))
-    const token = params.get('access_token')
-    if (!token) return
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    if (!code) return
     window.history.replaceState(null, '', window.location.pathname)
-    apiClient.client.post('/auth/google', { access_token: token })
+    setLoading(true)
+    apiClient.client.post('/auth/google', { code, redirect_uri: `${window.location.origin}/login` })
       .then((res) => {
         const data = res.data as { access_token: string; user: import('@/types').User }
         apiClient.setToken(data.access_token)
@@ -48,6 +48,7 @@ export const Login: React.FC = () => {
         const e = err as { response?: { data?: { detail?: string } } }
         setError(e.response?.data?.detail || 'Error al iniciar sesión con Google')
       })
+      .finally(() => setLoading(false))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Polling del estado de aprobación mientras esperamos al superadmin
@@ -178,30 +179,10 @@ export const Login: React.FC = () => {
   }
 
   const googleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      setLoading(true)
-      setError('')
-      try {
-        const res = await apiClient.client.post('/auth/google', {
-          access_token: tokenResponse.access_token,
-        })
-        const data = res.data as { access_token: string; user: import('@/types').User }
-        apiClient.setToken(data.access_token)
-        setUser(data.user)
-        setToken(data.access_token)
-        forceUnlock()
-        navigate('/')
-      } catch (err: unknown) {
-        const e = err as { response?: { data?: { detail?: string } } }
-        setError(e.response?.data?.detail || 'Error al iniciar sesión con Google')
-      } finally {
-        setLoading(false)
-      }
-    },
-    onError: () => setError('Error al iniciar sesión con Google'),
-    flow: 'implicit',
+    flow: 'auth-code',
     ux_mode: 'redirect',
     redirect_uri: `${window.location.origin}/login`,
+    onError: () => setError('Error al iniciar sesión con Google'),
   })
 
   return (
