@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useGoogleLogin } from '@react-oauth/google'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
 import { useLockStore } from '@/store/lock'
@@ -178,12 +177,23 @@ export const Login: React.FC = () => {
     }
   }
 
-  const googleLogin = useGoogleLogin({
-    flow: 'auth-code',
-    ux_mode: 'redirect',
-    redirect_uri: `${window.location.origin}/login`,
-    onError: () => setError('Error al iniciar sesión con Google'),
-  })
+  // Redirige a Google con el flujo auth-code (sin librería, sin popups).
+  // Google vuelve a /login con ?code=... que maneja el useEffect de arriba.
+  const googleLogin = () => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
+    if (!clientId) {
+      setError('Google OAuth no está configurado')
+      return
+    }
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: `${window.location.origin}/login`,
+      response_type: 'code',
+      scope: 'openid email profile',
+      prompt: 'select_account',
+    })
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
+  }
 
   return (
     <div className="min-h-screen bg-ml-gray-bg dark:bg-ml-dark-bg flex items-center justify-center p-4">
