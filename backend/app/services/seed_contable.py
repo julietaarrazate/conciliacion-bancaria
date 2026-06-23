@@ -66,6 +66,9 @@ PLAN_PATCH = [
     ("3-2-3-1",   "Aranceles Visa",                "resultado", "3-2-3-0", 4),
     ("3-2-3-2",   "Aranceles Mastercard",          "resultado", "3-2-3-0", 4),
     ("3-2-3-3",   "Aranceles Amex",                "resultado", "3-2-3-0", 4),
+    # IVA Débito Fiscal — módulo IVA Proyección y DDJJ (junio 2026)
+    ("2-2-0-0",   "Impuestos a pagar",             "pasivo",    "2-0-0-0", 2),
+    ("2-2-1-0",   "IVA Débito Fiscal",             "pasivo",    "2-2-0-0", 3),
 ]
 
 # (evento, descripcion, debe_codigo, haber_codigo)

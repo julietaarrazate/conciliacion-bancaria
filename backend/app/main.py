@@ -30,6 +30,7 @@ from app.routers import public_router
 from app.routers import push_router
 from app.routers import agente
 from app.routers import tarjetas
+from app.routers import iva
 from app.routers import google_auth
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.egreso import Egreso, CategoriaEgreso  # noqa: F401
@@ -165,6 +166,22 @@ def _run_alembic():
         "CREATE INDEX IF NOT EXISTS idx_asdet_asiento ON asiento_detalle(asiento_id)",
         "CREATE INDEX IF NOT EXISTS idx_asdet_cuenta ON asiento_detalle(cuenta_id)",
         "CREATE INDEX IF NOT EXISTS idx_asdet_cuenta_asiento ON asiento_detalle(cuenta_id, asiento_id)",
+        # módulo IVA Proyección y DDJJ — tasa de IVA por cuenta + snapshot por período
+        "ALTER TABLE plan_cuentas ADD COLUMN IF NOT EXISTS tasa_iva NUMERIC(5,4)",
+        "CREATE TABLE IF NOT EXISTS proyecciones_iva ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "periodo VARCHAR(7) NOT NULL, "
+        "debito_fiscal NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "credito_fiscal NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "saldo NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "estado VARCHAR(20) NOT NULL DEFAULT 'proyectado', "
+        "fecha_presentacion TIMESTAMP, "
+        "detalle JSONB, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_proyeccion_iva_org_periodo UNIQUE (organizacion_id, periodo))",
+        "CREATE INDEX IF NOT EXISTS ix_proyeccion_iva_org ON proyecciones_iva (organizacion_id)",
     ]
     try:
         from sqlalchemy import text as _text
@@ -742,6 +759,7 @@ app.include_router(public_router.router)
 app.include_router(push_router.router)
 app.include_router(agente.router)
 app.include_router(tarjetas.router)
+app.include_router(iva.router)
 app.include_router(google_auth.router)
 
 

@@ -14,6 +14,7 @@ class PlanCuenta(Base):
     parent_id     = Column(Integer, ForeignKey("plan_cuentas.id"), nullable=True)
     nivel         = Column(Integer, nullable=False, default=1)
     activo        = Column(Boolean, default=True)
+    tasa_iva      = Column(Numeric(5, 4), nullable=True)  # % IVA de la cuenta: 0.21, 0.105, 0=exento, NULL=no aplica
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
     created_at    = Column(DateTime, default=datetime.utcnow)
 
