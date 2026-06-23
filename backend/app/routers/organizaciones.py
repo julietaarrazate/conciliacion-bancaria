@@ -55,8 +55,10 @@ def create_organizacion(
     # llevar contabilidad (asientos automáticos) desde el primer movimiento.
     try:
         from app.services.seed_contable import seed_contabilidad_org, seed_categorias_egreso_org
+        from app.services.monotributo_service import seed_monotributo_categorias
         seed_contabilidad_org(db, org.id)
         seed_categorias_egreso_org(db, org.id)
+        seed_monotributo_categorias(db, org.id)
     except Exception as ex:
         db.rollback()
         import logging
