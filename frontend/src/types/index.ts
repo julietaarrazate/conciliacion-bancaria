@@ -245,3 +245,47 @@ export interface LiquidacionTarjeta {
   notas: string | null
   created_at: string
 }
+
+// ── IVA Proyección y DDJJ ───────────────────────────────────────────────────
+export interface IvaConfigCuenta {
+  id: number
+  codigo: string
+  nombre: string
+  tipo: string
+  es_ingreso: boolean
+  tasa_iva: number | null
+}
+
+export interface IvaProyeccionDetalleItem {
+  cuenta_id: number
+  codigo: string
+  nombre: string
+  tipo: 'ingreso' | 'gasto'
+  tasa_iva: number
+  base_imponible: number
+  iva: number
+}
+
+export interface IvaProyeccionPreview {
+  periodo: string
+  debito_fiscal: number
+  credito_fiscal: number
+  credito_fiscal_real: number
+  credito_fiscal_proyectado: number
+  saldo: number
+  detalle: IvaProyeccionDetalleItem[]
+}
+
+export interface ProyeccionIva {
+  id: number
+  organizacion_id: number
+  periodo: string
+  debito_fiscal: number
+  credito_fiscal: number
+  saldo: number
+  estado: 'proyectado' | 'presentado'
+  fecha_presentacion: string | null
+  detalle: IvaProyeccionDetalleItem[] | null
+  created_at: string
+  updated_at: string
+}
