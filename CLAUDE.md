@@ -883,8 +883,15 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - ~~**Paginación 5 endpoints**~~ — resuelto en v3.16 (PR #133).
 - ~~**Paginación rows en `/planillas/{id}`**~~ — resuelto en v3.18 (server-side limit/offset + filtros).
 - **Próximos módulos del plan de liquidación de impuestos** (ver sección abajo): orden a decidir
-  con Julieta por valor — candidatos: Control Semestral Monotributo, Ingresos Brutos y Convenio
-  Multilateral, Liquidador Sueldos y F931, Intake Exportador de Servicios.
+  con Julieta por valor — candidatos: Ingresos Brutos y Convenio Multilateral, Liquidador Sueldos
+  y F931, Intake Exportador de Servicios.
+- **⏰ RECORDATORIO SEMESTRAL — actualizar escala de Monotributo**: ARCA actualiza los límites de
+  facturación anual por categoría cada semestre (ajuste por IPC, próxima actualización
+  julio/agosto 2026). Los valores sembrados en `monotributo_service.py` (`_LIMITES_VIGENTES`)
+  vencen con esa actualización. Cuando se abra una sesión después de esa fecha: ir a
+  arca.gob.ar/monotributo/categorias.asp (el fetch directo devuelve 403 por anti-bot — usar
+  WebSearch cruzando 2-3 medios especializados como Ámbito/iProfesional, o pedirle el dato a
+  Julieta) y actualizar la escala vía `PUT /monotributo/categorias/{id}` o re-sembrando el array.
 
 ---
 

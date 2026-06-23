@@ -31,9 +31,11 @@ from app.routers import push_router
 from app.routers import agente
 from app.routers import tarjetas
 from app.routers import iva
+from app.routers import monotributo
 from app.routers import google_auth
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.egreso import Egreso, CategoriaEgreso  # noqa: F401
+from app.models.monotributo import CategoriaMonotributo, MonotributoConfig, ControlMonotributo  # noqa: F401
 from app.models.caja import ArqueoDiario  # noqa: F401
 from app.models.push_subscription import PushSubscription  # noqa: F401
 from app.models.revoked_token import RevokedToken  # noqa: F401
@@ -182,6 +184,46 @@ def _run_alembic():
         "updated_at TIMESTAMP DEFAULT NOW(), "
         "CONSTRAINT uq_proyeccion_iva_org_periodo UNIQUE (organizacion_id, periodo))",
         "CREATE INDEX IF NOT EXISTS ix_proyeccion_iva_org ON proyecciones_iva (organizacion_id)",
+        # módulo Control Semestral Monotributo — categorías, config opt-in y snapshots
+        "CREATE TABLE IF NOT EXISTS categorias_monotributo ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "categoria VARCHAR(2) NOT NULL, "
+        "tipo_actividad VARCHAR(20) NOT NULL, "
+        "limite_anual NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "orden INTEGER NOT NULL DEFAULT 0, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_categoria_monotributo_org_cat_tipo "
+        "UNIQUE (organizacion_id, categoria, tipo_actividad))",
+        "CREATE INDEX IF NOT EXISTS ix_categoria_monotributo_org ON categorias_monotributo (organizacion_id)",
+        "CREATE TABLE IF NOT EXISTS monotributo_config ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL UNIQUE REFERENCES organizaciones(id), "
+        "categoria_actual VARCHAR(2), "
+        "tipo_actividad VARCHAR(20) NOT NULL DEFAULT 'servicios', "
+        "activo BOOLEAN NOT NULL DEFAULT FALSE, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW())",
+        "CREATE TABLE IF NOT EXISTS controles_monotributo ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "periodo VARCHAR(7) NOT NULL, "
+        "fecha_corte DATE NOT NULL, "
+        "ingresos_12m NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "categoria_actual VARCHAR(2), "
+        "limite_categoria_actual NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "porcentaje_uso NUMERIC(6,2) NOT NULL DEFAULT 0, "
+        "categoria_sugerida VARCHAR(2), "
+        "excede BOOLEAN NOT NULL DEFAULT FALSE, "
+        "estado VARCHAR(20) NOT NULL DEFAULT 'pendiente', "
+        "fecha_revision TIMESTAMP, "
+        "detalle JSONB, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_control_monotributo_org_periodo "
+        "UNIQUE (organizacion_id, periodo))",
+        "CREATE INDEX IF NOT EXISTS ix_control_monotributo_org ON controles_monotributo (organizacion_id)",
     ]
     try:
         from sqlalchemy import text as _text
@@ -369,6 +411,7 @@ def _init_db():
         from app.database import SessionLocal as SL
         from app.models.organizacion import Organizacion
         from app.services.seed_contable import seed_contabilidad_org, seed_categorias_egreso_org
+        from app.services.monotributo_service import seed_monotributo_categorias
 
         db = SL()
         org_ids = [o.id for o in db.query(Organizacion.id).all()]
@@ -378,6 +421,8 @@ def _init_db():
             try:
                 seed_contabilidad_org(db, oid)
                 seed_categorias_egreso_org(db, oid)
+                # Categorías Monotributo (placeholder, editables) si la org no tiene ninguna
+                seed_monotributo_categorias(db, oid)
             except Exception as ex_org:
                 db.rollback()
                 logger.warning("Error seed contabilidad org %s: %s", oid, ex_org)
@@ -760,6 +805,7 @@ app.include_router(push_router.router)
 app.include_router(agente.router)
 app.include_router(tarjetas.router)
 app.include_router(iva.router)
+app.include_router(monotributo.router)
 app.include_router(google_auth.router)
 
 

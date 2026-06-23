@@ -26,6 +26,10 @@ import {
   IvaConfigCuenta,
   IvaProyeccionPreview,
   ProyeccionIva,
+  MonotributoConfig,
+  CategoriaMonotributo,
+  MonotributoControlPreview,
+  ControlMonotributo,
 } from '@/types'
 import { useLockStore } from '@/store/lock'
 
@@ -815,6 +819,91 @@ class ApiClient {
     if (params.limit != null) q.limit = params.limit
     if (params.offset != null) q.offset = params.offset
     const res: AxiosResponse<PaginatedResponse<ProyeccionIva>> = await this.client.get('/iva/historial', { params: q })
+    return res.data
+  }
+
+  // ── Monotributo — Control Semestral ─────────────────────────────────────────
+  async getMonotributoConfig(orgId?: number): Promise<MonotributoConfig> {
+    const res: AxiosResponse<MonotributoConfig> = await this.client.get('/monotributo/config', {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async setMonotributoConfig(
+    config: { activo: boolean; categoria_actual: string | null; tipo_actividad: string },
+    orgId?: number,
+  ): Promise<MonotributoConfig> {
+    const res: AxiosResponse<MonotributoConfig> = await this.client.put('/monotributo/config', config, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async getMonotributoCategorias(
+    tipoActividad: string,
+    orgId?: number,
+  ): Promise<PaginatedResponse<CategoriaMonotributo>> {
+    const params: Record<string, string | number> = { tipo_actividad: tipoActividad }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<PaginatedResponse<CategoriaMonotributo>> = await this.client.get(
+      '/monotributo/categorias',
+      { params },
+    )
+    return res.data
+  }
+
+  async setMonotributoCategoria(
+    catId: number,
+    limiteAnual: number,
+    orgId?: number,
+  ): Promise<CategoriaMonotributo> {
+    const res: AxiosResponse<CategoriaMonotributo> = await this.client.put(
+      `/monotributo/categorias/${catId}`,
+      { limite_anual: limiteAnual },
+      { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async previewControlMonotributo(periodo: string, orgId?: number): Promise<MonotributoControlPreview> {
+    const params: Record<string, string | number> = { periodo }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<MonotributoControlPreview> = await this.client.get('/monotributo/control', { params })
+    return res.data
+  }
+
+  async calcularControlMonotributo(periodo: string, orgId?: number): Promise<ControlMonotributo> {
+    const params: Record<string, string | number> = { periodo }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<ControlMonotributo> = await this.client.post(
+      '/monotributo/control/calcular',
+      null,
+      { params },
+    )
+    return res.data
+  }
+
+  async marcarControlRevisado(controlId: number, orgId?: number): Promise<ControlMonotributo> {
+    const res: AxiosResponse<ControlMonotributo> = await this.client.post(
+      `/monotributo/control/${controlId}/marcar-revisado`,
+      null,
+      { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async getHistorialMonotributo(params: {
+    orgId?: number; limit?: number; offset?: number
+  } = {}): Promise<PaginatedResponse<ControlMonotributo>> {
+    const q: Record<string, number> = {}
+    if (params.orgId) q.org_id = params.orgId
+    if (params.limit != null) q.limit = params.limit
+    if (params.offset != null) q.offset = params.offset
+    const res: AxiosResponse<PaginatedResponse<ControlMonotributo>> = await this.client.get(
+      '/monotributo/historial',
+      { params: q },
+    )
     return res.data
   }
 

@@ -289,3 +289,53 @@ export interface ProyeccionIva {
   created_at: string
   updated_at: string
 }
+
+// ── Monotributo — Control Semestral ─────────────────────────────────────────
+export interface MonotributoConfig {
+  activo: boolean
+  categoria_actual: string | null
+  tipo_actividad: 'servicios' | 'bienes'
+}
+
+export interface CategoriaMonotributo {
+  id: number
+  categoria: string
+  tipo_actividad: 'servicios' | 'bienes'
+  limite_anual: number
+  orden: number
+}
+
+export interface MonotributoDetalleMes {
+  mes: string
+  ingresos: number
+}
+
+export interface MonotributoControlPreview {
+  periodo: string
+  fecha_corte: string
+  ingresos_12m: number
+  categoria_actual: string
+  limite_categoria_actual: number
+  porcentaje_uso: number
+  categoria_sugerida: string | null
+  excede: boolean
+  detalle: MonotributoDetalleMes[]
+}
+
+export interface ControlMonotributo {
+  id: number
+  organizacion_id: number
+  periodo: string
+  fecha_corte: string
+  ingresos_12m: number
+  categoria_actual: string
+  limite_categoria_actual: number
+  porcentaje_uso: number
+  categoria_sugerida: string | null
+  excede: boolean
+  estado: 'pendiente' | 'revisado'
+  fecha_revision: string | null
+  detalle: MonotributoDetalleMes[]
+  created_at: string
+  updated_at: string
+}
