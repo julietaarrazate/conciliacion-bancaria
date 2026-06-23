@@ -2,12 +2,14 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List
 import base64, io
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.middleware.auth import get_current_user, require_permission, can_switch_org
@@ -22,6 +24,7 @@ from app.services.storage import upload_comprobante
 from app.services.tz import hoy_art
 
 router = APIRouter(prefix="/cheques", tags=["cheques"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ── Schemas ───────────────────────────────────────────────────────
@@ -685,7 +688,9 @@ def list_cheques(
 
 
 @router.post("")
+@limiter.limit("30/minute")
 def crear_cheque(
+    request: Request,
     body: ChequeIn,
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
@@ -806,7 +811,9 @@ def editar_cheque(
 
 
 @router.post("/{cheque_id}/acreditar")
+@limiter.limit("30/minute")
 def acreditar(
+    request: Request,
     cheque_id: int,
     body: AcreditarIn,
     db: Session = Depends(get_db),
@@ -854,7 +861,9 @@ def acreditar(
 
 
 @router.post("/acreditar")
+@limiter.limit("20/minute")
 def acreditar_masivo(
+    request: Request,
     body: AcreditarMasivoIn,
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
@@ -907,7 +916,9 @@ def acreditar_masivo(
 
 
 @router.post("/{cheque_id}/rechazar")
+@limiter.limit("30/minute")
 def rechazar(
+    request: Request,
     cheque_id: int,
     body: RechazarIn,
     db: Session = Depends(get_db),
@@ -952,7 +963,9 @@ def rechazar(
 
 
 @router.delete("/{cheque_id}")
+@limiter.limit("30/minute")
 def eliminar_cheque(
+    request: Request,
     cheque_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("delete_records")),

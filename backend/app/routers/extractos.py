@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_, or_, text, func
 from datetime import date, datetime
 from zoneinfo import ZoneInfo as _ZI
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 _ARG = _ZI('America/Argentina/Buenos_Aires')
 from typing import Optional
 import tempfile, os, io, hashlib
@@ -42,6 +44,7 @@ def _extracto_for_user(db: Session, extracto_id: int, current_user: User,
 settings = get_settings()
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/extractos", tags=["extractos"])
+limiter = Limiter(key_func=get_remote_address)
 
 # Mapeo de clave interna del parser → nombre de banco legible
 _BANCO_NOMBRE = {
@@ -101,7 +104,9 @@ def list_extractos(skip: int = 0, limit: int = 50,
 
 
 @router.post("/upload", response_model=ExtractoBancarioResponse)
-async def upload_extracto(file: UploadFile = File(...),
+@limiter.limit("10/minute")
+async def upload_extracto(request: Request,
+                          file: UploadFile = File(...),
                           banco: str = Query("Banco Macro"),
                           db: Session = Depends(get_db),
                           current_user: User = Depends(get_current_user)):
@@ -367,7 +372,9 @@ def eliminar_movimientos_um(extracto_id: int,
 
 
 @router.post("/{extracto_id}/agregar-um", response_model=MergeUMResponse)
+@limiter.limit("20/minute")
 async def agregar_ultimos_movimientos(
+    request: Request,
     extracto_id: int,
     file: UploadFile = File(...),
     corte_saldo: Optional[float] = Form(None),
