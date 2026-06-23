@@ -23,6 +23,9 @@ import {
   TarjetaUploadPreview,
   TarjetaCreatePayload,
   LiquidacionTarjeta,
+  IvaConfigCuenta,
+  IvaProyeccionPreview,
+  ProyeccionIva,
 } from '@/types'
 import { useLockStore } from '@/store/lock'
 
@@ -766,6 +769,53 @@ class ApiClient {
 
   async deleteTarjeta(liqId: number): Promise<void> {
     await this.client.delete(`/tarjetas/${liqId}`)
+  }
+
+  // ── IVA Proyección y DDJJ ──────────────────────────────────────────────────
+  async getIvaConfig(orgId?: number): Promise<PaginatedResponse<IvaConfigCuenta>> {
+    const res: AxiosResponse<PaginatedResponse<IvaConfigCuenta>> = await this.client.get('/iva/config', {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async setIvaConfig(cuentaId: number, tasaIva: number | null, orgId?: number): Promise<IvaConfigCuenta> {
+    const res: AxiosResponse<IvaConfigCuenta> = await this.client.put(`/iva/config/${cuentaId}`, {
+      tasa_iva: tasaIva,
+    }, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async previewProyeccionIva(periodo: string, orgId?: number): Promise<IvaProyeccionPreview> {
+    const params: Record<string, string | number> = { periodo }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<IvaProyeccionPreview> = await this.client.get('/iva/proyeccion', { params })
+    return res.data
+  }
+
+  async calcularProyeccionIva(periodo: string, orgId?: number): Promise<ProyeccionIva> {
+    const params: Record<string, string | number> = { periodo }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<ProyeccionIva> = await this.client.post('/iva/proyeccion/calcular', null, { params })
+    return res.data
+  }
+
+  async marcarProyeccionPresentada(proyeccionId: number): Promise<ProyeccionIva> {
+    const res: AxiosResponse<ProyeccionIva> = await this.client.post(`/iva/proyeccion/${proyeccionId}/marcar-presentada`)
+    return res.data
+  }
+
+  async getHistorialIva(params: {
+    orgId?: number; limit?: number; offset?: number
+  } = {}): Promise<PaginatedResponse<ProyeccionIva>> {
+    const q: Record<string, number> = {}
+    if (params.orgId) q.org_id = params.orgId
+    if (params.limit != null) q.limit = params.limit
+    if (params.offset != null) q.offset = params.offset
+    const res: AxiosResponse<PaginatedResponse<ProyeccionIva>> = await this.client.get('/iva/historial', { params: q })
+    return res.data
   }
 
   // ─── Export Contable ──────────────────────────────────────────
