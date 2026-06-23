@@ -909,8 +909,9 @@ en 3 capas + tests + página dedicada), y se delega a Opus para la lógica finan
 Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya documentado.
 
 - **v3.19 — IVA Proyección y DDJJ** ✅ implementado (ver abajo). Primer módulo del plan.
-- Pendientes a priorizar: Control Semestral Monotributo, Ingresos Brutos y Convenio Multilateral,
-  Liquidador Sueldos y F931, Intake Exportador de Servicios.
+- **v3.20 — Control Semestral Monotributo** ✅ implementado (ver abajo). Segundo módulo del plan.
+- Pendientes a priorizar: Ingresos Brutos y Convenio Multilateral, Liquidador Sueldos y F931,
+  Intake Exportador de Servicios.
 
 ### v3.19 — Módulo IVA Proyección y DDJJ (junio 2026 — PR #147)
 
@@ -948,6 +949,42 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
   ingresos vs gastos). Nav item gated `view_accounting`; acciones de escritura gated dentro de la
   página. Migración 013 + safety nets en `main.py`. 14 tests nuevos (`test_iva.py`). 333 tests
   pasando en total.
+
+### v3.20 — Módulo Control Semestral Monotributo (junio 2026 — PR #148)
+
+- **Qué hace**: herramienta de **control/alerta interna** (NO una declaración oficial) que proyecta
+  los ingresos de los ÚLTIMOS 12 MESES de la organización (a partir de los asientos ya registrados)
+  y los compara contra las escalas de categoría del Monotributo de ARCA, para anticipar si
+  corresponde recategorizarse o si se excedió el régimen antes del corte semestral (30/jun, 31/dic).
+- **Ventana de 12 meses por corte**: S1 → corte 30/jun/YYYY → ventana [1/jul/(YYYY-1), 30/jun/YYYY];
+  S2 → corte 31/dic/YYYY → ventana [1/ene/YYYY, 31/dic/YYYY]. Criterio de ingreso idéntico a
+  `iva_service.py` (cuentas `resultado` que empiezan con `3-1`, haber − debe).
+- **Modelos nuevos** (`app/models/monotributo.py`): `CategoriaMonotributo` (escala editable por
+  org+tipo_actividad+categoría), `MonotributoConfig` (opt-in por org, `activo=False` por default,
+  `categoria_actual`, `tipo_actividad` servicios/bienes), `ControlMonotributo` (snapshot por
+  período, **inmutable una vez `estado="revisado"`** — mismo patrón que `ProyeccionIva`).
+- **`services/monotributo_service.py`**: `evaluar_categoria()` sugiere la categoría de menor `orden`
+  cuyo `limite_anual >= ingresos_12m`, o la más alta con `excede=True` si supera el tope de todas.
+  `guardar_o_actualizar_control()` hace upsert pero no pisa un control ya revisado.
+- **Escala sembrada con valores REALES vigentes de ARCA** (no placeholders) — `_LIMITES_VIGENTES` en
+  `monotributo_service.py`, corroborados vía prensa especializada (afip.gob.ar bloquea fetch directo
+  con 403 anti-bot). El límite anual por categoría es el MISMO para servicios (A-H) y bienes (A-K) —
+  lo que difiere entre actividades es la cuota mensual a pagar, no la escala de ingresos (este módulo
+  no calcula esa cuota). **Vence con la próxima actualización semestral de ARCA (jul/ago 2026)** —
+  ver recordatorio en "Pendiente para próximas sesiones" más arriba. Completamente editable vía
+  `PUT /monotributo/categorias/{id}`, sin valores hardcodeados en la lógica.
+- **Router `/monotributo`** — permisos en 3 capas: `GET/PUT /monotributo/config` → `admin_accounting`;
+  `GET /monotributo/categorias`/`GET /monotributo/control` (preview)/`GET /monotributo/historial`
+  (paginado) → `view_accounting`; `PUT /monotributo/categorias/{id}` → `admin_accounting`;
+  `POST /monotributo/control/calcular` (persiste) → `manage_finance`;
+  `POST /monotributo/control/{id}/marcar-revisado` → `admin_accounting`.
+- **Frontend `/monotributo`**: 3 tabs — Control Semestral (selector de período, preview en vivo,
+  barra de progreso color-coded, alertas de recategorización/exceso de régimen), Historial
+  (paginado), Config (activo, tipo_actividad, categoría actual, tabla editable de límites por
+  categoría con disclaimer de verificar contra ARCA). Mismo estilo que `/iva`. Nav gateada
+  `view_accounting`. Migración `014_monotributo` + safety nets idempotentes en `main.py` (seed al
+  crear org nueva + backfill para orgs existentes). 19 tests nuevos (`test_monotributo.py`). 352
+  tests pasando en total.
 
 ---
 
@@ -1144,7 +1181,13 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
   + copy de posicionamiento (software financiero con IA) + audio real en el asistente IA: endpoint
   `POST /agente/transcribir` (Gemini) y MediaRecorder en `AgenteChat.tsx` para que el dictado funcione
   en iPhone, con feedback de errores de micrófono. (junio 2026 — PRs #135-#138 mergeados a main)
+- `v3.19` — primer módulo del plan de liquidación de impuestos: IVA Proyección y DDJJ (débito fiscal
+  proyectado sobre cuentas de ingreso gravadas, crédito proyectado + crédito real de Tarjetas,
+  inmutable al marcar presentada). 333 tests. (junio 2026 — PR #147 mergeado a main)
+- `v3.20` — segundo módulo del plan: Control Semestral Monotributo (ventana de ingresos de últimos
+  12 meses por corte semestral, sugerencia de categoría/exceso de régimen, escala sembrada con
+  valores reales vigentes de ARCA — no placeholders). 352 tests. (junio 2026 — PR #148 mergeado a main)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.17
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.20
