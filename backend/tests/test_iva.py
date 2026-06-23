@@ -167,6 +167,38 @@ def test_credito_fiscal_real_sumado(db):
     assert calc["saldo"] == Decimal("16000.00")
 
 
+def test_tarjeta_liq_no_duplica_credito_fiscal(db):
+    """Si el admin marca como gravada una cuenta de aranceles tarjeta y esa
+    cuenta recibe líneas de un asiento `tarjeta_liq` (que ya postea el IVA
+    REAL contra 1-1-2-4 en la misma operación), no debe contarse el IVA
+    proyectado sobre el arancel además del real — sería doble conteo."""
+    _gravar(db, "3-2-3-1", 0.21)  # Aranceles Visa, gravada por el admin
+
+    # Asiento tarjeta_liq: neto banco / aranceles / IVA crédito real / ingresos brutos
+    a = Asiento(fecha=date(2026, 6, 12), descripcion="Liquidación Visa",
+                modulo="tarjeta_liq", organizacion_id=1)
+    db.add(a)
+    db.flush()
+    lineas = [
+        ("1-1-1-3-1", 73790, 0),   # banco neto
+        ("3-2-3-1", 1000, 0),     # aranceles Visa
+        ("1-1-2-4", 210, 0),      # IVA crédito fiscal real sobre el arancel
+        ("3-1-4-0", 0, 75000),    # ingresos por tarjetas (bruto)
+    ]
+    for codigo, debe, haber in lineas:
+        c = _cuenta(db, codigo)
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=c.id,
+                               debe=Decimal(str(debe)), haber=Decimal(str(haber))))
+    db.commit()
+
+    calc = calcular_proyeccion_iva(db, 1, PERIODO)
+    # El arancel gravado NO debe sumar crédito proyectado: ya está el real.
+    assert calc["credito_fiscal_proyectado"] == Decimal("0.00")
+    assert calc["credito_fiscal_real"] == Decimal("210.00")
+    assert calc["credito_fiscal"] == Decimal("210.00")
+    assert not any(d["codigo"] == "3-2-3-1" for d in calc["detalle"])
+
+
 def test_fuera_del_periodo_no_cuenta(db):
     """Asientos de otro mes no entran en la proyección."""
     _gravar(db, "3-1-4-0", 0.21)
@@ -260,13 +292,22 @@ def test_config_admin_ok(db, client):
     assert all(it["tipo"] == "resultado" for it in data["items"])
 
 
-def test_set_tasa_cuenta_no_hoja_falla(db, client):
-    """Setear tasa en una cuenta con subcuentas → 400."""
+def test_set_tasa_cuenta_no_resultado_falla(db, client):
+    """Setear tasa en una cuenta que no es de resultado (ej. activo) → 400."""
     token = _token(db, "admin@iva.test")
-    # 3-1-0-0 Ingresos tiene hijos (3-1-1-0, etc.)
-    madre = _cuenta(db, "3-1-0-0")
-    r = client.put(f"/iva/config/{madre.id}", json={"tasa_iva": 0.21}, headers=_auth(token))
+    banco = _cuenta(db, "1-1-1-3-1")  # Banco Macro — tipo activo
+    r = client.put(f"/iva/config/{banco.id}", json={"tasa_iva": 0.21}, headers=_auth(token))
     assert r.status_code == 400
+
+
+def test_set_tasa_cuenta_cabecera_resultado_ok(db, client):
+    """Cuentas resultado con subcuentas (ej. 3-2-0-0 Gastos, usada por Pagos
+    para postear egresos directamente) también deben poder configurarse."""
+    token = _token(db, "admin@iva.test")
+    madre = _cuenta(db, "3-2-0-0")  # Gastos — tiene hijos (3-2-1-0, etc.)
+    r = client.put(f"/iva/config/{madre.id}", json={"tasa_iva": 0.21}, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["tasa_iva"] == 0.21
 
 
 def test_set_tasa_hoja_ok(db, client):

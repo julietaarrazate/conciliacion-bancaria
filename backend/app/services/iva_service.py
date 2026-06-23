@@ -71,6 +71,11 @@ def calcular_proyeccion_iva(db: Session, organizacion_id: int, periodo: str) -> 
     desde, hasta = _rango_periodo(periodo)
 
     # Líneas de asiento del período de cuentas con tasa_iva configurada.
+    # Se excluye el módulo `tarjeta_liq`: ese asiento ya postea el IVA REAL
+    # de la liquidación contra 1-1-2-4 (ver `credito_real` más abajo) en la
+    # misma operación que debita los aranceles — si además se proyectara IVA
+    # sobre la cuenta de aranceles (en caso de que el admin la marque como
+    # gravada) se contaría dos veces el mismo crédito fiscal.
     filas = (
         db.query(
             AsientoDetalle.cuenta_id,
@@ -88,6 +93,7 @@ def calcular_proyeccion_iva(db: Session, organizacion_id: int, periodo: str) -> 
             Asiento.fecha >= desde,
             Asiento.fecha <= hasta,
             PlanCuenta.tasa_iva.isnot(None),
+            Asiento.modulo != "tarjeta_liq",
         )
         .all()
     )

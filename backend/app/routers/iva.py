@@ -81,16 +81,18 @@ def get_config(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("admin_accounting")),
 ):
-    """Lista las cuentas hoja de tipo resultado (ingresos/gastos) con su tasa_iva
-    actual — para que el admin configure cuáles están gravadas."""
+    """Lista las cuentas de tipo resultado (ingresos/gastos) con su tasa_iva
+    actual — para que el admin configure cuáles están gravadas.
+
+    No se restringe a cuentas hoja: algunos módulos (p. ej. Pagos →
+    `registrar_egreso`) postean directamente contra cuentas "cabecera" como
+    `3-2-0-0 Gastos`, así que esa cuenta también debe poder configurarse o
+    sus egresos quedarían afuera de la proyección sin forma de incluirlos.
+    Como la proyección agrega por `cuenta_id` exacto de cada línea de
+    asiento, no hay riesgo de doble conteo entre una cuenta y sus
+    subcuentas — cada línea pertenece a una sola cuenta."""
     oid = _org_id(current_user, org_id)
 
-    parent_ids = {
-        pid for (pid,) in db.query(PlanCuenta.parent_id).filter(
-            PlanCuenta.organizacion_id == oid,
-            PlanCuenta.parent_id.isnot(None),
-        ).all()
-    }
     cuentas = (
         db.query(PlanCuenta)
         .filter(
@@ -111,7 +113,6 @@ def get_config(
             "tasa_iva": _f(c.tasa_iva),
         }
         for c in cuentas
-        if c.id not in parent_ids  # solo cuentas hoja
     ]
     return {"items": items, "total": len(items)}
 
@@ -124,7 +125,10 @@ def set_tasa_iva(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("admin_accounting")),
 ):
-    """Setea (o limpia, con null) la tasa_iva de una cuenta hoja de la org."""
+    """Setea (o limpia, con null) la tasa_iva de una cuenta resultado de la org.
+
+    No exige cuenta hoja (ver `get_config`) — algunos egresos postean contra
+    cuentas cabecera y deben poder marcarse como gravadas igual."""
     oid = _org_id(current_user, org_id)
     c = (
         db.query(PlanCuenta)
@@ -133,8 +137,8 @@ def set_tasa_iva(
     )
     if not c:
         raise HTTPException(404, "Cuenta no encontrada")
-    if db.query(PlanCuenta).filter(PlanCuenta.parent_id == c.id).first():
-        raise HTTPException(400, f"'{c.nombre}' no es cuenta hoja (tiene subcuentas)")
+    if c.tipo != "resultado":
+        raise HTTPException(400, f"'{c.nombre}' no es una cuenta de resultado (ingreso/gasto)")
 
     if body.tasa_iva is not None and (body.tasa_iva < 0 or body.tasa_iva > 1):
         raise HTTPException(422, "tasa_iva debe estar entre 0 y 1 (ej. 0.21 = 21%)")
