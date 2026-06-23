@@ -339,6 +339,9 @@ def eliminar_movimientos_um(extracto_id: int,
         ids_a_borrar = [m.id for m in movs_a_borrar]
 
         # Revertir asientos contables antes de eliminar los movimientos
+        # (fault-tolerant: un fallo aquí no debe bloquear la baja del lote UM,
+        # pero se reporta para que no quede silencioso)
+        contabilidad_ok = True
         try:
             from app.services.motor_contable import reversar_asientos as _rev
             _org_id = extracto.organizacion_id or 1
@@ -347,7 +350,8 @@ def eliminar_movimientos_um(extracto_id: int,
             if movs_a_borrar:
                 _rev(db, "um_lote", movs_a_borrar[0].id, _org_id, current_user.id, "Baja lote UM")
         except Exception as _mc_ex:
-            logger.warning("reverso UM asientos: %s", _mc_ex)
+            logger.error("reverso UM asientos falló (extracto %s, lote %s): %s", extracto_id, max_lote, _mc_ex)
+            contabilidad_ok = False
 
         if ids_a_borrar:
             db.query(PlanillaRow).filter(
@@ -359,7 +363,7 @@ def eliminar_movimientos_um(extracto_id: int,
         db.commit()
         registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "DELETE_UM",
                       {"eliminados": n, "lote": max_lote})
-        return {"ok": True, "eliminados": n, "lote": max_lote}
+        return {"ok": True, "eliminados": n, "lote": max_lote, "contabilidad_ok": contabilidad_ok}
     except Exception as e:
         db.rollback()
         logger.error("eliminar UM: %s", e)
@@ -401,6 +405,9 @@ async def agregar_ultimos_movimientos(
                       {"archivo": file.filename, **stats})
 
         # Asiento contable automático para los movimientos UM nuevos
+        # (fault-tolerant: la importación de movimientos ya se guardó arriba,
+        # un fallo aquí no debe bloquearla, pero se reporta para que no quede silencioso)
+        contabilidad_ok = True
         if stats["agregados"] > 0 and stats.get("nuevo_lote"):
             try:
                 from app.services.motor_contable import registrar_um_import
@@ -422,9 +429,10 @@ async def agregar_ultimos_movimientos(
                     modo=_modo,
                 )
             except Exception as _mc_ex:
-                logger.warning("motor_contable UM: %s", _mc_ex)
+                logger.error("motor_contable UM falló (extracto %s, lote %s): %s", extracto_id, stats.get("nuevo_lote"), _mc_ex)
+                contabilidad_ok = False
 
-        return {"extracto_id": extracto_id, **stats}
+        return {"extracto_id": extracto_id, **stats, "contabilidad_ok": contabilidad_ok}
     except HTTPException:
         raise
     except Exception as e:

@@ -17,7 +17,7 @@ Invariante validada antes de crear el asiento:
 import os
 import tempfile
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
@@ -29,6 +29,7 @@ from app.middleware.auth import get_current_user, require_permission, can_switch
 from app.models.user import User
 from app.models.extracto import MovimientoBanco
 from app.models.liquidacion_tarjeta import LiquidacionTarjeta, MarcaTarjeta
+from app.services.decimal_utils import to_decimal as _D
 from app.services.motor_contable import registrar_liquidacion_tarjeta, reversar_asientos
 from app.services.tarjeta_parser import parse_liquidacion
 from app.services.auditoria import registrar_log
@@ -68,11 +69,6 @@ def _org_id(current_user: User, org_id: Optional[int]) -> int:
     return current_user.organizacion_id or 1
 
 
-def _D(v) -> Decimal:
-    try:
-        return Decimal(str(v))
-    except (InvalidOperation, ValueError, TypeError):
-        return Decimal("0")
 
 
 def _liq_dict(l: LiquidacionTarjeta) -> dict:
