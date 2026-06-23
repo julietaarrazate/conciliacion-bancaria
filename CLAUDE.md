@@ -840,6 +840,36 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   diferenciados (permiso denegado, sin voz, sin micrófono) en vez de fallar en silencio. Estados visuales:
   rojo pulsante grabando, azul tenue transcribiendo.
 
+### v3.18 — Paginación planillas + Google OAuth + índices DB + fix campana (junio 2026 — PRs #140-#146)
+
+- **Paginación server-side en planillas**: `GET /planillas/{id}/detalle` acepta `limit/offset` +
+  filtros (`status`, `cuit`, `titular`, `importe`, `mov_titular`, `mov_fecha`, `mov_fecha_acred`).
+  Stats (ok, no está, etc.) se calculan desde TODAS las filas con `GROUP BY` (no solo la página
+  actual); `total_filtered` en la respuesta para paginar bien con filtros activos. `PlanillaPanel`
+  hace fetch por página + debounce 350ms en filtros; "Seleccionar todo" = solo la página actual
+  (ya no carga 1000+ filas en memoria). Resuelve el pendiente de v3.12.1.
+- **Google OAuth — login con cuenta de Google** (opt-in, link-only): `POST /auth/google` verifica
+  el token de Google (`useGoogleLogin` con popup + `access_token`, NO el iframe `GoogleLogin` que
+  queda invisible si el origen no está en la whitelist de Google) vía `tokeninfo` y valida
+  `azp == GOOGLE_CLIENT_ID`. Solo permite usuarios YA registrados en el sistema (no crea cuentas
+  nuevas). Activar seteando `GOOGLE_CLIENT_ID` en Render y `VITE_GOOGLE_CLIENT_ID` en Vercel (mismo
+  valor) + agregar el origin en Google Console. Sin esas env vars el botón no aparece.
+- **Índices DB críticos en contabilidad** (migración 012): `asientos(organizacion_id)`,
+  `asientos(organizacion_id, fecha)`, `asientos(modulo)`, `asiento_detalle(asiento_id)`,
+  `asiento_detalle(cuenta_id)`, `asiento_detalle(cuenta_id, asiento_id)`. Cache TTL 60s en
+  `GET /contabilidad/cuentas-corrientes` (se invalida con "Empezar limpio").
+- **Fix campana de alertas**: navegaba a `/resumen` pero el `AlertasWidget` vive en el Dashboard
+  (`/`) — el usuario veía el badge pero al clickear no encontraba las alertas. Corregido a `/`.
+- **Fix badge de campana inflado sin alertas reales**: `filas_atrasadas` contaba como urgencia
+  `"media"` en el total del badge aunque fuera informativo — bajado a `"baja"` (sigue visible en
+  `AlertasWidget`, ya no infla el número de la campana).
+- **Fix micrófono/cámara bloqueados en la PWA**: `Permissions-Policy` en `vercel.json` y `main.py`
+  tenía `microphone=(), camera=()` — paréntesis vacíos bloquean TODOS los orígenes, incluido el
+  propio sitio. Cambiado a `microphone=(self), camera=(self)`. Afectaba dictado por voz en el
+  asistente IA y OCR de fotos (cheques/comprobantes).
+- SVG icons (reemplaza emojis 👁️/🙈) en Login, landing (secciones Seguridad/El Problema);
+  `CuadraLogo` centrado; layout mobile de Organizaciones.
+
 ### Pendiente para próximas sesiones
 
 - ~~**Liquidaciones con asientos**~~ — resuelto en v3.13.
@@ -851,9 +881,66 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - ~~**Split router contabilidad.py**~~ — resuelto en v3.16 (PR #127).
 - ~~**Tipado `any` frontend**~~ — resuelto en v3.16 (PR #131).
 - ~~**Paginación 5 endpoints**~~ — resuelto en v3.16 (PR #133).
-- **Paginación rows en `/planillas/{id}`** — retorna todas las filas sin paginar (puede ser 1000+).
-  No implementado porque `PlanillaPanel` asume todas las filas juntas. Requiere refactor coordinado
-  frontend+backend. Abordar cuando el volumen de planillas crezca y se note la lentitud.
+- ~~**Paginación rows en `/planillas/{id}`**~~ — resuelto en v3.18 (server-side limit/offset + filtros).
+- **Próximos módulos del plan de liquidación de impuestos** (ver sección abajo): orden a decidir
+  con Julieta por valor — candidatos: Control Semestral Monotributo, Ingresos Brutos y Convenio
+  Multilateral, Liquidador Sueldos y F931, Intake Exportador de Servicios.
+
+---
+
+## Plan de expansión: módulos de liquidación de impuestos
+
+Inspirado en un diagrama de agentes (Codex local) con dos managers: **Manager de Liquidación
+Mensual** (IVA Proyección y DDJJ, Liquidador Sueldos y F931, Ingresos Brutos y Convenio
+Multilateral) y **Manager Exportadores de Servicios** (Intake Exportador, Control Semestral
+Monotributo). Decisión de Julieta: implementarlo de verdad en Cuadra (no quedarse en el diagrama),
+mejor que Codex, como sistema robusto y escalable, e iterar módulo por módulo priorizando por valor.
+
+**Patrón establecido**: cada módulo es opt-in/configurable por organización (no algo hardcodeado
+para una sola org), sigue la estructura de Tarjetas/Cheques (modelo + service + router con permisos
+en 3 capas + tests + página dedicada), y se delega a Opus para la lógica financiera compleja y a
+Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya documentado.
+
+- **v3.19 — IVA Proyección y DDJJ** ✅ implementado (ver abajo). Primer módulo del plan.
+- Pendientes a priorizar: Control Semestral Monotributo, Ingresos Brutos y Convenio Multilateral,
+  Liquidador Sueldos y F931, Intake Exportador de Servicios.
+
+### v3.19 — Módulo IVA Proyección y DDJJ (junio 2026 — PR #147)
+
+- **Qué hace**: proyecta el IVA de un período (mes) a partir de los asientos contables ya
+  registrados, cruzados con una `tasa_iva` configurable por cuenta. Cuadra no emite facturas, así
+  que el **Débito Fiscal es una proyección** (no un dato legal real) calculada sobre las cuentas de
+  ingreso que el admin marca como gravadas. El **Crédito Fiscal** combina una proyección similar
+  sobre gastos gravados + el crédito fiscal REAL ya contabilizado en `1-1-2-4 IVA Crédito Fiscal`
+  (p. ej. de liquidaciones de Tarjetas). La UI deja explícito en todo momento que es una
+  herramienta de estimación interna, no una liquidación oficial ante ARCA.
+- **`PlanCuenta.tasa_iva`** (Numeric 5,4 nullable) — % de IVA por cuenta, configurable en
+  `/iva` → tab Config (`admin_accounting`). **No se restringe a cuentas hoja**: algunos módulos
+  (Pagos → `registrar_egreso`) postean directo contra cuentas cabecera como `3-2-0-0 Gastos`, así
+  que esa cuenta también debe poder marcarse como gravada — la agregación es por `cuenta_id` exacto
+  de cada línea de asiento, así que no hay riesgo de doble conteo entre una cuenta y sus subcuentas.
+- **Cuentas nuevas en el plan**: `2-2-0-0 Impuestos a pagar` / `2-2-1-0 IVA Débito Fiscal`
+  (idempotente vía PLAN_PATCH, no toca Org A).
+- **Modelo `ProyeccionIva`** (tabla `proyecciones_iva`, unique por org+período): snapshot
+  débito/crédito/saldo + estado `proyectado`/`presentado` + detalle JSON por cuenta. Marcar como
+  `presentado` (DDJJ ya enviada a ARCA) la deja **inmutable** — recalcular no la pisa.
+- **Excluye `tarjeta_liq` del crédito proyectado**: ese asiento ya postea el IVA REAL del arancel
+  contra `1-1-2-4` en la misma operación — si además se marca como gravada la cuenta de aranceles
+  (Visa/Mastercard/Amex), el sistema NO suma proyectado ahí también (evita doble conteo, hallazgo
+  de code review corregido antes de mergear).
+- **`services/iva_service.py`**: `calcular_proyeccion_iva` (preview, no persiste),
+  `guardar_o_actualizar_proyeccion` (upsert idempotente), `marcar_presentada`. Todo en `Decimal`,
+  fechas con `tz.now_art()`.
+- **`routers/iva.py`** (prefix `/iva`) — permisos en 3 capas: `GET/PUT /iva/config` (tasa por
+  cuenta) → `admin_accounting`; `GET /iva/proyeccion` (preview) → `view_accounting`;
+  `POST /iva/proyeccion/calcular` (persiste) → `manage_finance`;
+  `POST /iva/proyeccion/{id}/marcar-presentada` → `admin_accounting`;
+  `GET /iva/historial` (paginado) → `view_accounting`.
+- **Frontend `/iva`**: 3 tabs — Proyección (período, preview en vivo, calcular y guardar, marcar
+  presentada con confirm), Historial (paginado, saldo color-coded), Config (tasa por cuenta,
+  ingresos vs gastos). Nav item gated `view_accounting`; acciones de escritura gated dentro de la
+  página. Migración 013 + safety nets en `main.py`. 14 tests nuevos (`test_iva.py`). 333 tests
+  pasando en total.
 
 ---
 
