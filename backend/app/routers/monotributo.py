@@ -19,9 +19,11 @@ Permisos:
   marcar-revisado (POST)       → admin_accounting
   historial (GET)              → view_accounting
 
-⚠️ Los límites de categoría sembrados son VALORES DE REFERENCIA. El admin debe
-verificarlos y actualizarlos contra la tabla oficial vigente de arca.gob.ar antes
-de tomar decisiones reales de recategorización.
+Los límites de categoría se siembran con la escala oficial vigente de ARCA
+(actualizada semestralmente). Como vencen con cada actualización semestral
+(enero/julio), el admin debe revisarlos y corregirlos vía PUT si ARCA publicó
+una escala nueva — son completamente editables, no están hardcodeados en la
+lógica de cálculo.
 """
 
 from decimal import Decimal

@@ -295,45 +295,42 @@ def marcar_revisado(
 
 # ── Seed de categorías default ─────────────────────────────────────
 
-# VALORES DE REFERENCIA / PLACEHOLDER sembrados al crear la org.
-# ⚠️ ACTUALIZAR CONTRA LA TABLA OFICIAL VIGENTE DE arca.gob.ar antes de usarlos
-# para decisiones reales: los topes del Monotributo se actualizan cada semestre
-# por Resolución General de ARCA y cambian con la inflación. Son completamente
-# editables vía PUT /monotributo/categorias/{id}; estos números solo dan un orden
-# de magnitud razonable para arrancar.
-#
+# Escala vigente de ARCA desde 1/feb/2026 (actualización semestral por IPC
+# acumulado del 2° semestre 2025, ~14,29%), válida hasta la próxima
+# actualización de julio/agosto 2026. El límite de ingresos anuales por
+# categoría es el MISMO para servicios y venta de bienes (lo que difiere
+# entre actividades es la cuota mensual a pagar, no la escala de ingresos —
+# este módulo no calcula esa cuota, solo controla el límite de facturación).
 # Servicios: categorías A..H. Bienes (venta de cosas muebles): A..K.
-# (categoria, limite_anual_placeholder)
-_CATS_SERVICIOS = [
-    ("A", "8000000.00"),
-    ("B", "12000000.00"),
-    ("C", "16500000.00"),
-    ("D", "20000000.00"),
-    ("E", "24000000.00"),
-    ("F", "30000000.00"),
-    ("G", "36000000.00"),
-    ("H", "44000000.00"),
+#
+# ⚠️ Estos valores vencen con la próxima actualización semestral (RG ARCA).
+# Verificar y, si cambiaron, corregir vía PUT /monotributo/categorias/{id}
+# o re-sembrar — son completamente editables, no están hardcodeados en lógica.
+# Fuente: arca.gob.ar/monotributo/categorias.asp (consultado jun/2026).
+#
+# (categoria, limite_anual_vigente)
+_LIMITES_VIGENTES = [
+    ("A", "10277988.13"),
+    ("B", "15058447.71"),
+    ("C", "21113696.52"),
+    ("D", "26212853.42"),
+    ("E", "30833964.37"),
+    ("F", "38642048.36"),
+    ("G", "46211109.37"),
+    ("H", "70113407.33"),
+    ("I", "78479211.62"),
+    ("J", "89872640.30"),
+    ("K", "108357084.05"),
 ]
-_CATS_BIENES = [
-    ("A", "8000000.00"),
-    ("B", "12000000.00"),
-    ("C", "16500000.00"),
-    ("D", "20000000.00"),
-    ("E", "24000000.00"),
-    ("F", "30000000.00"),
-    ("G", "36000000.00"),
-    ("H", "44000000.00"),
-    ("I", "49000000.00"),
-    ("J", "56000000.00"),
-    ("K", "62000000.00"),
-]
+_CATS_SERVICIOS = [c for c in _LIMITES_VIGENTES if c[0] <= "H"]
+_CATS_BIENES = _LIMITES_VIGENTES
 
 
 def seed_monotributo_categorias(db: Session, organizacion_id: int) -> int:
     """Siembra las categorías default (servicios A-H, bienes A-K) si la org no
     tiene ninguna fila en categorias_monotributo. Idempotente.
 
-    Valores PLACEHOLDER — ver nota en `_CATS_SERVICIOS`. Devuelve cuántas creó."""
+    Usa la escala vigente — ver nota en `_LIMITES_VIGENTES`. Devuelve cuántas creó."""
     ya = (
         db.query(CategoriaMonotributo)
         .filter(CategoriaMonotributo.organizacion_id == organizacion_id)
