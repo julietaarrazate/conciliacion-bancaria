@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.models.contabilidad import Asiento, AsientoDetalle, PlanCuenta
 from app.models.proyeccion_iva import ProyeccionIva
+from app.services.decimal_utils import to_decimal as _D
 from app.services.tz import now_art
 
 logger = logging.getLogger(__name__)
@@ -53,14 +54,6 @@ def _rango_periodo(periodo: str) -> tuple[date, date]:
         raise IvaServiceError(f"Período inválido: {periodo!r}. Use formato 'YYYY-MM'.")
     ultimo = calendar.monthrange(anio, mes)[1]
     return date(anio, mes, 1), date(anio, mes, ultimo)
-
-
-def _D(v) -> Decimal:
-    if v is None:
-        return Decimal("0")
-    if isinstance(v, Decimal):
-        return v
-    return Decimal(str(v))
 
 
 def calcular_proyeccion_iva(db: Session, organizacion_id: int, periodo: str) -> dict:

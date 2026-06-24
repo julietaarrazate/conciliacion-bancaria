@@ -31,6 +31,7 @@ from app.models.contabilidad import Asiento, AsientoDetalle, PlanCuenta
 from app.models.monotributo import (
     CategoriaMonotributo, MonotributoConfig, ControlMonotributo,
 )
+from app.services.decimal_utils import to_decimal as _D
 from app.services.tz import now_art
 
 logger = logging.getLogger(__name__)
@@ -41,14 +42,6 @@ _DOS = Decimal("0.01")
 class MonotributoServiceError(Exception):
     """Error de negocio del servicio de Monotributo (período inválido, módulo
     apagado, sin categorías configuradas, etc.)."""
-
-
-def _D(v) -> Decimal:
-    if v is None:
-        return Decimal("0")
-    if isinstance(v, Decimal):
-        return v
-    return Decimal(str(v))
 
 
 def _rango_periodo(periodo: str) -> tuple[date, date]:

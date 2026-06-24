@@ -196,7 +196,10 @@ def crear_egreso(
         "monto": monto,
     })
 
-    # Motor contable — asiento automático (fault-tolerant)
+    # Motor contable — asiento automático (fault-tolerant: el egreso ya se
+    # guardó arriba; un fallo aquí no debe bloquear el pago, pero se reporta
+    # para que no quede silencioso)
+    contabilidad_ok = True
     try:
         from app.services.motor_contable import registrar_egreso as _reg_egreso
         _reg_egreso(
@@ -207,9 +210,10 @@ def crear_egreso(
             cliente_nombre=cliente.nombre if cliente else "",
         )
     except Exception as _mc_ex:
-        logger.warning("motor_contable egreso: %s", _mc_ex)
+        logger.error("motor_contable egreso falló (egreso %s): %s", egreso.id, _mc_ex)
+        contabilidad_ok = False
 
-    return {"ok": True, "egreso": _egreso_dict(egreso)}
+    return {"ok": True, "egreso": _egreso_dict(egreso), "contabilidad_ok": contabilidad_ok}
 
 
 @router.get("/{egreso_id}/comprobante")
