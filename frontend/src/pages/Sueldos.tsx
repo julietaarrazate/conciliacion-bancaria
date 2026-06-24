@@ -693,7 +693,23 @@ export const Sueldos: React.FC = () => {
                 <IconCheck />{marcando ? 'Marcando…' : 'Marcar como presentada'}
               </button>
             )}
+            {canManageFinance && persistido && persistido.estado !== 'borrador' && (
+              <button
+                onClick={() => apiClient.downloadSicossSueldos(persistido.id, persistido.periodo, activeOrgId || undefined)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-white/5">
+                Exportar SICOSS
+              </button>
+            )}
           </div>
+
+          {canManageFinance && persistido && persistido.estado !== 'borrador' && (
+            <div className="mb-4 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-xs text-amber-800 dark:text-amber-300">
+              <strong>Exportar SICOSS</strong> — formato de referencia (no oficial). Verificá contra la
+              última especificación de AFIP/Mis Aplicaciones Web antes de importarlo: algunas columnas
+              usan valores por defecto documentados (situación de revista, actividad, zona) que pueden
+              requerir ajuste manual antes de presentar.
+            </div>
+          )}
 
           {loadingPreview && <div className="text-sm text-gray-500 dark:text-gray-400">Calculando liquidación…</div>}
 

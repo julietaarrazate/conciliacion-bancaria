@@ -1213,6 +1213,22 @@ class ApiClient {
     URL.revokeObjectURL(url)
   }
 
+  async downloadSicossSueldos(liquidacionId: number, periodo: string, orgId?: number): Promise<void> {
+    _suppressLockForDownload()
+    const params: Record<string, string | number> = {}
+    if (orgId) params.org_id = orgId
+    const res = await this.client.get(
+      `/sueldos/liquidacion/${liquidacionId}/exportar-sicoss`,
+      { params, responseType: 'blob' },
+    )
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'text/plain' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `sicoss_${periodo}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // ─── Export Contable ──────────────────────────────────────────
   async downloadAsientosContable(
     formato: string,

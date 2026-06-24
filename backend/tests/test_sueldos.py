@@ -664,3 +664,109 @@ def test_recibo_pdf_incluye_retencion_ganancias_cuando_aplica(db, client):
     )
     assert r.status_code == 200
     assert r.content[:4] == b"%PDF"
+
+
+# ── Export SICOSS ──────────────────────────────────────────────────
+
+from app.services.sicoss_export import generar_archivo_sicoss, ANCHO_REGISTRO
+
+
+def test_sicoss_linea_tiene_ancho_esperado_por_registro(db, client):
+    admin = _token(db, "admin@sueldos.test")
+    _cfg(db, aporte_jubilacion=0.11, aporte_inssjp=0.03, aporte_obra_social=0.03,
+         contrib_jubilacion=0.10)
+    emp1 = _empleado(db, "Empleado Uno", basico=100000, activo=True)
+    emp2 = _empleado(db, "Empleado Dos", basico=150000, activo=True)
+    _empleado(db, "Empleado Inactivo", basico=80000, activo=False)
+
+    r = client.post(f"/sueldos/liquidacion/calcular?periodo={PERIODO}", headers=_auth(admin))
+    assert r.status_code == 200
+    liq_id = r.json()["id"]
+    r = client.post(f"/sueldos/liquidacion/{liq_id}/aprobar", headers=_auth(admin))
+    assert r.status_code == 200
+
+    contenido = generar_archivo_sicoss(db, 1, PERIODO)
+    texto = contenido.decode("latin-1")
+    lineas = [l for l in texto.split("\r\n") if l]
+    assert len(lineas) == 2  # solo los activos al momento del cálculo
+    for linea in lineas:
+        assert len(linea) == ANCHO_REGISTRO
+
+
+def test_sicoss_un_registro_por_empleado_activo(db, client):
+    admin = _token(db, "admin@sueldos.test")
+    _cfg(db, aporte_jubilacion=0.11)
+    _empleado(db, "Solo Uno", basico=120000, activo=True)
+
+    r = client.post(f"/sueldos/liquidacion/calcular?periodo={PERIODO}", headers=_auth(admin))
+    liq_id = r.json()["id"]
+    client.post(f"/sueldos/liquidacion/{liq_id}/aprobar", headers=_auth(admin))
+
+    contenido = generar_archivo_sicoss(db, 1, PERIODO)
+    lineas = [l for l in contenido.decode("latin-1").split("\r\n") if l]
+    assert len(lineas) == 1
+    assert lineas[0].startswith("0" * 11)  # sin CUIL -> placeholder de ceros
+
+
+def test_sicoss_endpoint_rechaza_borrador(db, client):
+    admin = _token(db, "admin@sueldos.test")
+    _cfg(db, aporte_jubilacion=0.11)
+    _empleado(db, "Sin Aprobar", basico=100000)
+
+    r = client.post(f"/sueldos/liquidacion/calcular?periodo={PERIODO}", headers=_auth(admin))
+    liq_id = r.json()["id"]
+    assert r.json()["estado"] == "borrador"
+
+    r = client.get(f"/sueldos/liquidacion/{liq_id}/exportar-sicoss", headers=_auth(admin))
+    assert r.status_code == 400
+
+
+def test_sicoss_endpoint_devuelve_archivo_tras_aprobar(db, client):
+    admin = _token(db, "admin@sueldos.test")
+    _cfg(db, aporte_jubilacion=0.11)
+    _empleado(db, "Aprobado", basico=100000)
+
+    r = client.post(f"/sueldos/liquidacion/calcular?periodo={PERIODO}", headers=_auth(admin))
+    liq_id = r.json()["id"]
+    client.post(f"/sueldos/liquidacion/{liq_id}/aprobar", headers=_auth(admin))
+
+    r = client.get(f"/sueldos/liquidacion/{liq_id}/exportar-sicoss", headers=_auth(admin))
+    assert r.status_code == 200
+    assert "attachment" in r.headers.get("content-disposition", "")
+    lineas = [l for l in r.content.decode("latin-1").split("\r\n") if l]
+    assert len(lineas) == 1
+    assert len(lineas[0]) == ANCHO_REGISTRO
+
+
+def test_sicoss_endpoint_requiere_manage_finance(db, client):
+    rev = _token(db, "rev@sueldos.test")
+    _cfg(db, aporte_jubilacion=0.11)
+    _empleado(db, "Cualquiera", basico=100000)
+    admin = _token(db, "admin@sueldos.test")
+    r = client.post(f"/sueldos/liquidacion/calcular?periodo={PERIODO}", headers=_auth(admin))
+    liq_id = r.json()["id"]
+    client.post(f"/sueldos/liquidacion/{liq_id}/aprobar", headers=_auth(admin))
+
+    r = client.get(f"/sueldos/liquidacion/{liq_id}/exportar-sicoss", headers=_auth(rev))
+    assert r.status_code == 403
+
+
+def test_sicoss_endpoint_404_liquidacion_inexistente(db, client):
+    admin = _token(db, "admin@sueldos.test")
+    r = client.get("/sueldos/liquidacion/9999/exportar-sicoss", headers=_auth(admin))
+    assert r.status_code == 404
+
+
+def test_sicoss_centavos_sin_decimales_y_rellenado_ceros(db):
+    from decimal import Decimal
+    from app.services.sicoss_export import _centavos
+    assert _centavos(Decimal("1234.56")) == "0000123456"
+    assert _centavos(Decimal("0")) == "0000000000"
+    assert _centavos(None) == "0000000000"
+
+
+def test_sicoss_cuil_normaliza_guiones_y_rellena(db):
+    from app.services.sicoss_export import _cuil
+    assert _cuil("20-12345678-9") == "20123456789"
+    assert _cuil(None) == "0" * 11
+    assert _cuil("") == "0" * 11

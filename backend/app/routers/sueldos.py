@@ -7,6 +7,8 @@ Endpoints (prefix /sueldos):
   POST /sueldos/liquidacion/calcular?periodo=      — calcula y persiste (manage_finance)
   POST /sueldos/liquidacion/{id}/aprobar           — aprueba + genera asiento (manage_finance)
   POST /sueldos/liquidacion/{id}/marcar-presentada — F931 enviado, inmutable (admin_accounting)
+  GET  /sueldos/liquidacion/{id}/empleado/{eid}/recibo-pdf — recibo de sueldo PDF (view_accounting)
+  GET  /sueldos/liquidacion/{id}/exportar-sicoss   — archivo SICOSS, formato de referencia (manage_finance)
   GET  /sueldos/historial                          — snapshots de la org, paginado (view_accounting)
 
 NO sustituye un sistema de liquidación de sueldos homologado ni reemplaza el
@@ -919,6 +921,50 @@ def recibo_sueldo_pdf_endpoint(
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.get("/liquidacion/{liquidacion_id}/exportar-sicoss")
+def exportar_sicoss(
+    liquidacion_id: int,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_finance")),
+):
+    """Exporta la liquidación como archivo SICOSS (texto, ancho fijo).
+
+    Formato de referencia — ver el docstring de app/services/sicoss_export.py
+    para el detalle de qué columnas son confiables y cuáles son placeholder.
+    Verificá contra la última especificación de AFIP/Mis Aplicaciones Web
+    antes de importarlo: puede requerir ajustes.
+    """
+    from fastapi.responses import StreamingResponse
+    import io
+    from app.services.sicoss_export import generar_archivo_sicoss
+
+    oid = _org_id(current_user, org_id)
+    liq = (
+        db.query(LiquidacionSueldoPeriodo)
+        .filter(
+            LiquidacionSueldoPeriodo.id == liquidacion_id,
+            LiquidacionSueldoPeriodo.organizacion_id == oid,
+        )
+        .first()
+    )
+    if not liq:
+        raise HTTPException(404, "Liquidación no encontrada")
+    if liq.estado == "borrador":
+        raise HTTPException(
+            400,
+            "La liquidación está en borrador. Aprobala antes de exportar el archivo SICOSS.",
+        )
+
+    contenido = generar_archivo_sicoss(db, oid, liq.periodo)
+    fname = f"sicoss_{liq.periodo}.txt"
+    return StreamingResponse(
+        io.BytesIO(contenido),
+        media_type="text/plain",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
 
