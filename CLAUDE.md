@@ -1154,6 +1154,45 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
   persiste y se pasa a `registrar_liquidacion_sueldos` como 4ta línea al Haber. SICOSS: `assert` de ancho
   de registro → `ValueError` (los assert se desactivan con `python -O`). 421 tests pasando.
 
+### v3.23 — Asistente IA proactivo y explicativo (junio 2026 — PR #159)
+
+- **Qué hace**: primer paso del plan de mejora del asistente acordado con Julieta — que deje de ser
+  "solo respuestas a lo que se le pregunta" y empiece a (a) avisar proactivamente lo importante del
+  día sin que se le pregunte, y (b) explicar en lenguaje claro POR QUÉ algo no concilió, en vez de
+  devolver solo números.
+- **Tool `consultar_alertas`** (`agente.py`): reusa `reportes_service.calcular_alertas()` (mismo dato
+  que `/analisis/alertas` y el `AlertasWidget` del Dashboard) — cheques urgentes/vencidos, filas
+  atrasadas, movimientos sin asignar. El asistente lo usa proactivamente ante saludos genéricos o
+  preguntas tipo "qué necesito ver hoy".
+- **Tool `explicar_filas_pendientes`**: query nueva sobre `PlanillaRow` + `Planilla` + `Cliente`
+  (`status != "ok"`, filtro opcional por nombre de cliente) que devuelve el detalle de cada fila
+  pendiente (monto, cuit, titular, status, `comentario_revision`). Le permite al asistente traducir
+  los status internos del motor de conciliación (`no está`, `duplicado`, `faltan datos`,
+  `EN_REVISION`) a una explicación concreta por cliente, en vez de un código interno.
+- **Prompt del sistema reescrito**: pide explícitamente comportamiento proactivo (no esperar a que
+  pregunten, chequear alertas/resumen ante saludos genéricos) y explicativo (nunca devolver un número
+  sin contexto).
+- **Refactor `_run_chat_message()`**: la lógica de chat (config Gemini, tools, loop de 3 rondas de
+  function-calling) se extrajo a una función compartida entre `/agente/chat` y el nuevo endpoint de
+  saludo proactivo — sin duplicar código.
+- **Nuevo `GET /agente/saludo-proactivo`**: usa un prompt interno fijo (no escrito por el usuario)
+  para generar un saludo de 2-4 oraciones con lo importante del día. Comparte la cuota diaria
+  (`_CHAT_DAILY_LIMIT`) con `/chat` — no es un endpoint nuevo de cuota separada.
+- **Frontend (`AgenteChat.tsx`)**: al abrir el chat se llama una vez (`useRef` guard, no en cada
+  render) a `/agente/saludo-proactivo`; el resultado se inserta como primer mensaje del asistente.
+  Las sugerencias rápidas estáticas siguen visibles como fallback/quick-replies hasta que el usuario
+  envía su primer mensaje real — no se pierden si Gemini falla o no está configurado.
+- **Mejora de transcripción por audio**: el prompt de `/agente/transcribir` (usado por el flujo
+  MediaRecorder de iOS, ver v3.17) era genérico ("transcribí este audio en español") y por eso
+  Gemini transcribía mal jerga financiera y nombres propios de clientes. Se agregó un glosario de
+  dominio fijo (CUIT, CBU, cheque, planilla, conciliación, extracto, liquidación, comisión, IIBB,
+  IVA, monotributo, sueldo) + la lista de nombres de clientes de la organización del usuario
+  (`_glosario_transcripcion()`, hasta 200 nombres) como contexto del prompt antes de transcribir.
+  No cambia el flujo de SpeechRecognition nativo (Android/Chrome) que ya usaba `lang = 'es-AR'`
+  correctamente — solo mejora el fallback de Gemini para iOS.
+- 421 tests pasando (sin tests nuevos de `agente.py` — el módulo no tiene suite propia todavía,
+  queda anotado como deuda pendiente si se vuelve a tocar este router).
+
 ---
 
 ## Storage de fotos (S3/R2 opcional)
@@ -1367,7 +1406,12 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
   por diseño, anualización documentada igual que el SAC), recibo de sueldo en PDF por empleado/período
   (reportlab, disclaimer Ley 20.744), export SICOSS de referencia (ancho fijo, columnas confiables vs.
   placeholder documentadas explícitamente en el código). 419 tests. (junio 2026 — PR #155)
+- `v3.23` — asistente IA proactivo (saluda con alertas/resumen del día al abrir el chat, sin esperar
+  pregunta) y explicativo (traduce el status interno de conciliación — no está/duplicado/faltan
+  datos/EN_REVISION — a lenguaje claro por cliente); mejora de transcripción de audio en iOS con
+  glosario de dominio + nombres de clientes de la org en el prompt de Gemini. 421 tests.
+  (junio 2026 — PR #159 mergeado a main)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.22
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.23

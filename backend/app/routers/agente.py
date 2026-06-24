@@ -593,9 +593,23 @@ def ocr_transferencia(
         raise HTTPException(500, msg)
 
 
+def _glosario_transcripcion(db: Session, org_id: int) -> str:
+    """Nombres de clientes de la org, para que Gemini no los transcriba mal (son nombres propios)."""
+    from app.models.cliente import Cliente
+    nombres = [
+        n for (n,) in db.query(Cliente.nombre)
+        .filter(Cliente.organizacion_id == org_id, Cliente.deleted_at.is_(None))
+        .order_by(Cliente.nombre)
+        .limit(200)
+        .all()
+    ]
+    return ", ".join(nombres)
+
+
 @router.post("/transcribir")
 async def transcribir_audio(
     audio: UploadFile = File(...),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Transcribe un audio (webm/mp4/etc) a texto con Gemini. Devuelve {texto}."""
@@ -612,9 +626,18 @@ async def transcribir_audio(
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name=_GEMINI_MODEL)
+        org_id = current_user.organizacion_id or 1
+        clientes = _glosario_transcripcion(db, org_id)
+        contexto_clientes = (
+            f" Nombres de clientes que pueden mencionarse (para no transcribirlos mal): {clientes}."
+            if clientes else ""
+        )
         prompt = (
-            "Transcribí este audio en español. Devolvé únicamente el texto exacto "
-            "de lo que se dice, sin comillas ni comentarios."
+            "Transcribí este audio en español rioplatense. Es una consulta sobre un sistema de "
+            "conciliación bancaria y contabilidad: pueden aparecer términos como CUIT, CBU, cheque, "
+            "planilla, conciliación, extracto, liquidación, comisión, IIBB, IVA, monotributo, sueldo."
+            + contexto_clientes +
+            " Devolvé únicamente el texto exacto de lo que se dice, sin comillas ni comentarios."
         )
         audio_part = genai.protos.Part(
             inline_data=genai.protos.Blob(mime_type=mime, data=raw)
