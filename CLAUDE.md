@@ -1101,6 +1101,52 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
   SAC, básico de categoría, inmutabilidad, permisos por capa, aislamiento multi-org, asiento con
   partida doble, validación CUIL, soft delete, end-to-end API). **398 tests pasando en total.**
 
+- **Extensión — Retención de Ganancias 4ta categoría (opt-in)**: `ConfigSueldos` agrega
+  `ganancias_activo` (default False), `minimo_no_imponible` y `deduccion_especial` (Numeric 12,2).
+  Nueva tabla `EscalaGanancias` (org-scoped, tramos `tramo_desde`/`tramo_hasta` nullable/`alicuota`/
+  `monto_fijo`) — **arranca VACÍA a propósito** (los valores de la escala de AFIP/ARCA cambian
+  periódicamente; no se siembran placeholders que aparenten ser reales). `calcular_ganancias_4ta()`
+  en `sueldos_service.py`: si `ganancias_activo=False` o la escala está vacía devuelve 0 sin romper
+  nada; si está activo, **anualiza el bruto mensual ×12** (misma simplificación documentada que el
+  SAC proporcional — no reproduce el cálculo legal exacto acumulativo mes a mes) y aplica la fórmula
+  AFIP `monto_fijo + alícuota × (excedente sobre tramo_desde)`, devolviendo la retención mensual
+  (anual / 12). Nuevo campo `retencion_ganancias` en `DetalleLiquidacionEmpleado`, restado del neto.
+  CRUD de la escala (`GET/POST/PUT/DELETE /sueldos/escala-ganancias`) → `admin_accounting`; lectura
+  vía `GET /sueldos/escala-ganancias` → `view_accounting`. UI: card en tab Config con checkbox de
+  activación, disclaimer de cargar la escala vigente antes de activar, tabla editable de tramos.
+  Migración `017_ganancias` + safety nets idempotentes. **Bug real detectado y corregido durante la
+  extensión siguiente**: `guardar_o_actualizar_liquidacion` no persistía `retencion_ganancias` en
+  `DetalleLiquidacionEmpleado` (quedaba en 0 al recalcular y guardar, aunque el preview sí lo
+  calculaba bien) — corregido junto con el recibo en PDF.
+- **Extensión — Recibo de sueldo en PDF**: `recibo_sueldo_pdf()` en `services/pdf_export.py`, mismo
+  patrón reportlab que `estado_cuenta_pdf`/`cuenta_corriente_pdf` (header de marca, columnas
+  Haberes/Descuentos, contribuciones del empleador como informativo, neto a pagar destacado).
+  Footer aclara explícitamente: *"Liquidación interna de gestión — no reemplaza el recibo oficial de
+  sueldo según la Ley de Contrato de Trabajo (Ley 20.744)"*. Endpoint
+  `GET /sueldos/liquidacion/{id}/empleado/{empleado_id}/recibo-pdf` → `view_accounting`, resuelve
+  nombre de convenio/categoría inline (el helper compartido `_empleado_dict` solo devuelve IDs, no se
+  tocó para no afectar otros endpoints). `StreamingResponse` + `Content-Disposition`, mismo patrón
+  que el PDF de cuenta corriente. Botón **"PDF"** por fila de empleado en la tabla de la tab
+  Liquidación (visible solo si la liquidación ya fue calculada/guardada — necesita el `id` persistido,
+  no solo el preview). 5 tests nuevos (PDF válido, permisos, 404 liquidación/empleado inexistente,
+  retención de Ganancias incluida en el cálculo). 411 tests pasando en total.
+- **Extensión — Export SICOSS (formato de referencia)**: `services/sicoss_export.py` —
+  `generar_archivo_sicoss()` construye un archivo de texto de ancho fijo (106 bytes por registro,
+  un registro por `DetalleLiquidacionEmpleado`) a partir de una liquidación ya aprobada/presentada.
+  **El docstring del módulo documenta explícitamente, columna por columna, qué es confiable y qué es
+  placeholder** — ver detalle completo en el archivo. Resumen: CUIL, nombre, remuneración bruta,
+  remuneración imponible jubilatoria (≈ bruto, sin topes SIPA), aporte jubilatorio, contribución
+  patronal, retención de Ganancias y fecha de ingreso vienen de datos reales de Cuadra; situación de
+  revista, condición, código de actividad y código de zona son **placeholders fijos documentados**
+  porque Cuadra no captura esos datos hoy. Se eligió un archivo honestamente incompleto (con
+  placeholders explícitos) en vez de uno que aparente estar completo con datos inventados. Endpoint
+  `GET /sueldos/liquidacion/{id}/exportar-sicoss` → `manage_finance`; HTTP 400 si la liquidación está
+  en `borrador` (debe estar aprobada o presentada). Botón **"Exportar SICOSS"** + disclaimer ámbar en
+  la tab Liquidación: *"formato de referencia — verificá contra la última especificación de AFIP/Mis
+  Aplicaciones Web antes de importarlo, puede requerir ajustes"*. 8 tests nuevos (ancho de línea, un
+  registro por empleado activo, 400 en borrador, 403 sin permiso, 404 liquidación inexistente,
+  helpers de centavos/CUIL). **419 tests pasando en total.**
+
 ---
 
 ## Storage de fotos (S3/R2 opcional)
@@ -1310,7 +1356,10 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
   convenios/categorías + soft delete, ConfigSueldos opt-in con alícuotas de aportes/contribuciones
   sembradas como default editable de referencia 2024 / ART en 0, liquidación por período con SAC
   proporcional, asiento contable agrupado de partida doble al aprobar, inmutable al marcar presentada,
-  base del F931). 398 tests. (junio 2026 — PR #155)
+  base del F931). 398 tests. Extendido con: retención de Ganancias 4ta categoría opt-in (escala vacía
+  por diseño, anualización documentada igual que el SAC), recibo de sueldo en PDF por empleado/período
+  (reportlab, disclaimer Ley 20.744), export SICOSS de referencia (ancho fijo, columnas confiables vs.
+  placeholder documentadas explícitamente en el código). 419 tests. (junio 2026 — PR #155)
 
 ---
 
