@@ -1146,6 +1146,13 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
   Aplicaciones Web antes de importarlo, puede requerir ajustes"*. 8 tests nuevos (ancho de línea, un
   registro por empleado activo, 400 en borrador, 403 sin permiso, 404 liquidación inexistente,
   helpers de centavos/CUIL). **419 tests pasando en total.**
+- **Fix asiento Ganancias (auditoría post-merge)**: la retención de 4ta categoría ahora tiene
+  contrapartida en `2-1-6-0 Retención de Ganancias a depositar` (nueva cuenta en PLAN_PATCH); sin ella
+  el asiento descuadraba (el neto ya viene con la retención restada) y la red de partida doble lo dejaba
+  sin postear en silencio al activar Ganancias, dejando la liquidación aprobada sin asiento. Se agregó la
+  columna `total_retencion_ganancias` en `LiquidacionSueldoPeriodo` (migración 018 + safety net) que se
+  persiste y se pasa a `registrar_liquidacion_sueldos` como 4ta línea al Haber. SICOSS: `assert` de ancho
+  de registro → `ValueError` (los assert se desactivan con `python -O`). 421 tests pasando.
 
 ---
 

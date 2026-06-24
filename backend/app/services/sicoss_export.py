@@ -164,9 +164,10 @@ def generar_archivo_sicoss(db: Session, organizacion_id: int, periodo: str) -> b
             fecha_ingreso,
         ]
         linea = "".join(campos)
-        assert len(linea) == ANCHO_REGISTRO, (
-            f"Registro SICOSS con ancho incorrecto: {len(linea)} != {ANCHO_REGISTRO}"
-        )
+        if len(linea) != ANCHO_REGISTRO:
+            raise ValueError(
+                f"Registro SICOSS con ancho incorrecto: {len(linea)} != {ANCHO_REGISTRO}"
+            )
         lineas.append(linea)
 
     contenido = "\r\n".join(lineas)
