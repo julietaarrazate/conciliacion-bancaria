@@ -38,6 +38,7 @@ import {
   SueldosCategoria,
   SueldosEmpleado,
   SueldosConfig,
+  EscalaGanancias,
   SueldosLiquidacionPreview,
   SueldosLiquidacion,
 } from '@/types'
@@ -1161,6 +1162,38 @@ class ApiClient {
       '/sueldos/historial', { params: q },
     )
     return res.data
+  }
+
+  async getEscalaGanancias(orgId?: number): Promise<PaginatedResponse<EscalaGanancias>> {
+    const res: AxiosResponse<PaginatedResponse<EscalaGanancias>> = await this.client.get(
+      '/sueldos/escala-ganancias', { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async createEscalaGanancias(
+    body: { tramo_desde: number; tramo_hasta: number | null; alicuota: number; monto_fijo: number },
+    orgId?: number,
+  ): Promise<EscalaGanancias> {
+    const res: AxiosResponse<EscalaGanancias> = await this.client.post(
+      '/sueldos/escala-ganancias', body, { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async updateEscalaGanancias(
+    tramoId: number,
+    body: Partial<{ tramo_desde: number; tramo_hasta: number | null; alicuota: number; monto_fijo: number; limpiar_tramo_hasta: boolean }>,
+    orgId?: number,
+  ): Promise<EscalaGanancias> {
+    const res: AxiosResponse<EscalaGanancias> = await this.client.put(
+      `/sueldos/escala-ganancias/${tramoId}`, body, { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async deleteEscalaGanancias(tramoId: number, orgId?: number): Promise<void> {
+    await this.client.delete(`/sueldos/escala-ganancias/${tramoId}`, { params: orgId ? { org_id: orgId } : {} })
   }
 
   // ─── Export Contable ──────────────────────────────────────────

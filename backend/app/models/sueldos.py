@@ -114,8 +114,39 @@ class ConfigSueldos(Base):
     contrib_fondo_desempleo = Column(Numeric(5, 4), nullable=False, default=0)
     alicuota_art        = Column(Numeric(5, 4), nullable=False, default=0)  # ART: SIEMPRE 0 por default (varía por póliza)
 
+    # ── Retención de Ganancias 4ta categoría (opt-in INDEPENDIENTE del módulo) ──
+    # Si ganancias_activo=False, calcular_ganancias_4ta() devuelve 0 sin calcular
+    # — no rompe orgs que no lo activaron. minimo_no_imponible y deduccion_especial
+    # son montos MENSUALES (se anualizan ×12 internamente para la proyección).
+    ganancias_activo     = Column(Boolean, nullable=False, default=False)
+    minimo_no_imponible  = Column(Numeric(12, 2), nullable=False, default=0)
+    deduccion_especial   = Column(Numeric(12, 2), nullable=False, default=0)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organizacion = relationship("Organizacion", foreign_keys=[organizacion_id])
+
+
+class EscalaGanancias(Base):
+    """Escala de tramos del impuesto a las Ganancias 4ta categoría, por org.
+
+    Fórmula AFIP: retención = monto_fijo + alicuota × (excedente sobre tramo_desde).
+    tramo_hasta=NULL representa el último tramo (abierto, sin techo).
+
+    NO se siembra con valores reales — la escala cambia varias veces por año
+    según resoluciones de AFIP/ARCA. Queda vacía hasta que el admin la cargue
+    manualmente con los valores vigentes (ver disclaimer en el router/UI)."""
+    __tablename__ = "escala_ganancias"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=False, index=True)
+    tramo_desde     = Column(Numeric(14, 2), nullable=False, default=0)
+    tramo_hasta     = Column(Numeric(14, 2), nullable=True)   # NULL = último tramo (sin techo)
+    alicuota        = Column(Numeric(5, 4), nullable=False, default=0)
+    monto_fijo      = Column(Numeric(12, 2), nullable=False, default=0)
+    created_at      = Column(DateTime, default=datetime.utcnow)
+    updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     organizacion = relationship("Organizacion", foreign_keys=[organizacion_id])
 
@@ -159,6 +190,8 @@ class DetalleLiquidacionEmpleado(Base):
     total_aportes        = Column(Numeric(12, 2), nullable=False, default=0)
     total_contribuciones = Column(Numeric(12, 2), nullable=False, default=0)
     sueldo_neto          = Column(Numeric(12, 2), nullable=False, default=0)
+    # Retención de Ganancias 4ta categoría (0 si ganancias_activo=False en ConfigSueldos).
+    retencion_ganancias  = Column(Numeric(12, 2), nullable=False, default=0)
     detalle_json         = Column(JSON, nullable=True)  # desglose de cada concepto
     created_at           = Column(DateTime, default=datetime.utcnow)
 

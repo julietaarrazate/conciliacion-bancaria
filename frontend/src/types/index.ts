@@ -427,6 +427,17 @@ export interface SueldosConfig {
   contrib_asig_fam: number
   contrib_fondo_desempleo: number
   alicuota_art: number
+  ganancias_activo: boolean
+  minimo_no_imponible: number
+  deduccion_especial: number
+}
+
+export interface EscalaGanancias {
+  id: number
+  tramo_desde: number
+  tramo_hasta: number | null
+  alicuota: number
+  monto_fijo: number
 }
 
 export interface SueldosDetalleEmpleado {
@@ -438,6 +449,7 @@ export interface SueldosDetalleEmpleado {
   total_aportes: number
   total_contribuciones: number
   sueldo_neto: number
+  retencion_ganancias?: number
   detalle_json: unknown
 }
 

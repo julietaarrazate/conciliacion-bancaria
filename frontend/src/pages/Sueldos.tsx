@@ -9,6 +9,7 @@ import type {
   SueldosConvenio,
   SueldosCategoria,
   SueldosEmpleado,
+  EscalaGanancias,
   SueldosLiquidacionPreview,
   SueldosLiquidacion,
 } from '@/types'
@@ -378,6 +379,15 @@ export const Sueldos: React.FC = () => {
   const [cfgVals, setCfgVals] = useState<Record<string, string>>({})
   const [savingCfg, setSavingCfg] = useState(false)
 
+  // Retención de Ganancias 4ta categoría (opt-in independiente del módulo)
+  const [gananciasActivo, setGananciasActivo] = useState(false)
+  const [minimoNoImponible, setMinimoNoImponible] = useState('0')
+  const [deduccionEspecial, setDeduccionEspecial] = useState('0')
+  const [escala, setEscala] = useState<EscalaGanancias[]>([])
+  const [escalaLoaded, setEscalaLoaded] = useState(false)
+  const [nuevoTramo, setNuevoTramo] = useState({ desde: '', hasta: '', alicuota: '', fijo: '' })
+  const [savingTramo, setSavingTramo] = useState(false)
+
   useEffect(() => {
     if (config) {
       setCfgActivo(config.activo)
@@ -386,8 +396,24 @@ export const Sueldos: React.FC = () => {
         vals[k as string] = ((config[k] as number) * 100).toString()
       }
       setCfgVals(vals)
+      setGananciasActivo(config.ganancias_activo)
+      setMinimoNoImponible((config.minimo_no_imponible ?? 0).toString())
+      setDeduccionEspecial((config.deduccion_especial ?? 0).toString())
     }
   }, [config])
+
+  const cargarEscala = useCallback(async () => {
+    try {
+      const data = await apiClient.getEscalaGanancias(activeOrgId || undefined)
+      setEscala(data.items)
+    } catch {
+      setEscala([])
+    } finally {
+      setEscalaLoaded(true)
+    }
+  }, [activeOrgId])
+
+  useEffect(() => { if (tab === 'config' && canAdminAccounting) cargarEscala() }, [tab, canAdminAccounting, cargarEscala])
 
   const guardarConfig = async () => {
     const out: Record<string, number> = {}
@@ -396,9 +422,19 @@ export const Sueldos: React.FC = () => {
       if (f === null) { setMsg({ type: 'error', text: `Valor inválido en ${k} (0 a 100%).` }); return }
       out[k as string] = f
     }
+    const mni = parseMonto(minimoNoImponible)
+    const ded = parseMonto(deduccionEspecial)
+    if (mni === null || ded === null) {
+      setMsg({ type: 'error', text: 'Mínimo no imponible / deducción especial inválidos.' }); return
+    }
     setSavingCfg(true); setMsg(null)
     try {
-      const updated = await apiClient.setSueldosConfig({ activo: cfgActivo, ...out } as SueldosConfig, activeOrgId || undefined)
+      const updated = await apiClient.setSueldosConfig({
+        activo: cfgActivo, ...out,
+        ganancias_activo: gananciasActivo,
+        minimo_no_imponible: mni,
+        deduccion_especial: ded,
+      } as SueldosConfig, activeOrgId || undefined)
       setConfig(updated)
       setMsg({ type: 'ok', text: 'Configuración guardada.' })
     } catch (e: unknown) {
@@ -406,6 +442,41 @@ export const Sueldos: React.FC = () => {
       setMsg({ type: 'error', text: typeof detail === 'string' ? detail : 'No se pudo guardar la configuración.' })
     } finally {
       setSavingCfg(false)
+    }
+  }
+
+  const agregarTramo = async () => {
+    const desde = parseMonto(nuevoTramo.desde)
+    const hasta = nuevoTramo.hasta.trim() === '' ? null : parseMonto(nuevoTramo.hasta)
+    const alicuota = parseTasaInput(nuevoTramo.alicuota)
+    const fijo = parseMonto(nuevoTramo.fijo || '0')
+    if (desde === null || alicuota === null || fijo === null) {
+      setMsg({ type: 'error', text: 'Datos de tramo inválidos.' }); return
+    }
+    setSavingTramo(true); setMsg(null)
+    try {
+      await apiClient.createEscalaGanancias({
+        tramo_desde: desde, tramo_hasta: hasta, alicuota, monto_fijo: fijo,
+      }, activeOrgId || undefined)
+      setNuevoTramo({ desde: '', hasta: '', alicuota: '', fijo: '' })
+      await cargarEscala()
+      setMsg({ type: 'ok', text: 'Tramo agregado.' })
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setMsg({ type: 'error', text: typeof detail === 'string' ? detail : 'No se pudo agregar el tramo.' })
+    } finally {
+      setSavingTramo(false)
+    }
+  }
+
+  const borrarTramo = async (id: number) => {
+    const ok = await confirmDialog({ title: 'Borrar tramo', message: '¿Borrar este tramo de la escala de Ganancias?' })
+    if (!ok) return
+    try {
+      await apiClient.deleteEscalaGanancias(id, activeOrgId || undefined)
+      await cargarEscala()
+    } catch {
+      setMsg({ type: 'error', text: 'No se pudo borrar el tramo.' })
     }
   }
 
@@ -661,11 +732,12 @@ export const Sueldos: React.FC = () => {
                       <th className="px-3 py-2 font-medium text-right">Bruto</th>
                       <th className="px-3 py-2 font-medium text-right">Aportes</th>
                       <th className="px-3 py-2 font-medium text-right">Contribuciones</th>
+                      {config?.ganancias_activo && <th className="px-3 py-2 font-medium text-right">Ganancias</th>}
                       <th className="px-3 py-2 font-medium text-right">Neto</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {detalle.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">Sin empleados activos para liquidar.</td></tr>}
+                    {detalle.length === 0 && <tr><td colSpan={config?.ganancias_activo ? 7 : 6} className="px-3 py-6 text-center text-gray-400">Sin empleados activos para liquidar.</td></tr>}
                     {detalle.map((d, i) => (
                       <tr key={d.empleado_id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
                         <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{d.nombre}</td>
@@ -673,6 +745,9 @@ export const Sueldos: React.FC = () => {
                         <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(d.sueldo_bruto)}</td>
                         <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(d.total_aportes)}</td>
                         <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(d.total_contribuciones)}</td>
+                        {config?.ganancias_activo && (
+                          <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(d.retencion_ganancias || 0)}</td>
+                        )}
                         <td className="px-3 py-2 text-right font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">{fmt(d.sueldo_neto)}</td>
                       </tr>
                     ))}
@@ -780,6 +855,91 @@ export const Sueldos: React.FC = () => {
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-ml-blue text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">
                   {savingCfg ? 'Guardando…' : 'Guardar configuración'}
                 </button>
+              </div>
+
+              {/* Retención de Ganancias 4ta categoría */}
+              <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 p-4 space-y-4">
+                <div className="flex items-center gap-3">
+                  <input id="ganancias-activo" type="checkbox" checked={gananciasActivo}
+                    onChange={e => setGananciasActivo(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 dark:border-white/20" />
+                  <label htmlFor="ganancias-activo" className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                    Activar retención de Ganancias 4ta categoría
+                  </label>
+                </div>
+
+                <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-3 py-2">
+                  Cargá la escala vigente de Ganancias 4ta categoría según la última actualización de ARCA
+                  antes de activar este cálculo. Los valores cambian periódicamente. El cálculo es una
+                  proyección simplificada anualizada (mismo enfoque que el SAC proporcional) — no reemplaza
+                  la liquidación oficial de retenciones del empleador ante ARCA.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Mínimo no imponible (mensual, $)</label>
+                    <input className={inputClass} inputMode="decimal" value={minimoNoImponible}
+                      onChange={e => setMinimoNoImponible(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Deducción especial (mensual, $)</label>
+                    <input className={inputClass} inputMode="decimal" value={deduccionEspecial}
+                      onChange={e => setDeduccionEspecial(e.target.value)} />
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Escala de tramos</h3>
+                  {!escalaLoaded && <div className="text-sm text-gray-500 dark:text-gray-400">Cargando escala…</div>}
+                  {escalaLoaded && (
+                    <div className="rounded-lg border border-gray-200 dark:border-white/10 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-white/10">
+                            <th className="px-3 py-2 font-medium text-right">Desde ($)</th>
+                            <th className="px-3 py-2 font-medium text-right">Hasta ($)</th>
+                            <th className="px-3 py-2 font-medium text-right">Alícuota (%)</th>
+                            <th className="px-3 py-2 font-medium text-right">Monto fijo ($)</th>
+                            <th className="px-3 py-2 font-medium text-right">Acción</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {escala.length === 0 && (
+                            <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400">
+                              Sin tramos cargados — la retención no se calcula hasta agregar al menos uno.
+                            </td></tr>
+                          )}
+                          {escala.map(t => (
+                            <tr key={t.id} className="border-b border-gray-100 dark:border-white/5">
+                              <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(t.tramo_desde)}</td>
+                              <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{t.tramo_hasta != null ? fmt(t.tramo_hasta) : 'Sin techo'}</td>
+                              <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{(t.alicuota * 100).toFixed(2)}%</td>
+                              <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(t.monto_fijo)}</td>
+                              <td className="px-3 py-2 text-right whitespace-nowrap">
+                                <button onClick={() => borrarTramo(t.id)} className="text-red-600 dark:text-red-400 hover:underline text-xs">Borrar</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <input className={`${inputClass} w-28`} placeholder="Desde" inputMode="decimal"
+                      value={nuevoTramo.desde} onChange={e => setNuevoTramo(p => ({ ...p, desde: e.target.value }))} />
+                    <input className={`${inputClass} w-28`} placeholder="Hasta (vacío=sin techo)" inputMode="decimal"
+                      value={nuevoTramo.hasta} onChange={e => setNuevoTramo(p => ({ ...p, hasta: e.target.value }))} />
+                    <input className={`${inputClass} w-24`} placeholder="Alícuota %" inputMode="decimal"
+                      value={nuevoTramo.alicuota} onChange={e => setNuevoTramo(p => ({ ...p, alicuota: e.target.value }))} />
+                    <input className={`${inputClass} w-28`} placeholder="Monto fijo" inputMode="decimal"
+                      value={nuevoTramo.fijo} onChange={e => setNuevoTramo(p => ({ ...p, fijo: e.target.value }))} />
+                    <button onClick={agregarTramo} disabled={savingTramo}
+                      className="px-4 py-2 rounded-lg bg-ml-blue text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                      {savingTramo ? 'Agregando…' : '+ Agregar tramo'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </>
           )}

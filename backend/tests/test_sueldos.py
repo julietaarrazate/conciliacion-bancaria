@@ -38,8 +38,9 @@ from app.models.user import User
 from app.models.contabilidad import PlanCuenta, Asiento, AsientoDetalle
 from app.models.sueldos import (
     ConvenioColectivo, CategoriaConvenio, Empleado, ConfigSueldos,
-    LiquidacionSueldoPeriodo, DetalleLiquidacionEmpleado,
+    EscalaGanancias, LiquidacionSueldoPeriodo, DetalleLiquidacionEmpleado,
 )
+from app.services.sueldos_service import calcular_ganancias_4ta
 
 
 PERIODO = "2026-06"
@@ -428,3 +429,151 @@ def test_end_to_end_api(db, client):
     r = client.post(f"/sueldos/liquidacion/{lid}/marcar-presentada", headers=_auth(admin))
     assert r.status_code == 200
     assert r.json()["estado"] == "presentado"
+
+
+# ── Retención de Ganancias 4ta categoría (Extensión 1) ────────────────
+
+def _escala(db, org=1, tramos=None):
+    """Crea tramos de la escala de Ganancias para una org. tramos = lista de
+    dicts {desde, hasta, alicuota, fijo}; hasta=None = último tramo (sin techo)."""
+    creados = []
+    for t in (tramos or []):
+        e = EscalaGanancias(
+            organizacion_id=org,
+            tramo_desde=Decimal(str(t["desde"])),
+            tramo_hasta=(Decimal(str(t["hasta"])) if t.get("hasta") is not None else None),
+            alicuota=Decimal(str(t["alicuota"])),
+            monto_fijo=Decimal(str(t["fijo"])),
+        )
+        db.add(e)
+        creados.append(e)
+    db.commit()
+    for e in creados:
+        db.refresh(e)
+    return creados
+
+
+def test_ganancias_inactivo_retencion_cero(db):
+    """ganancias_activo=False (default) -> calcular_ganancias_4ta no calcula, da 0."""
+    _escala(db, tramos=[{"desde": 0, "hasta": None, "alicuota": 0.27, "fijo": 0}])
+    r = calcular_ganancias_4ta(
+        bruto_mensual=Decimal("500000"),
+        escala=[],
+        minimo_no_imponible=Decimal("100000"),
+        deduccion_especial=Decimal("50000"),
+        ganancias_activo=False,
+    )
+    assert r == Decimal("0")
+
+
+def test_ganancias_sin_escala_retencion_cero(db):
+    """ganancias_activo=True pero sin tramos cargados -> 0 (no debe romper)."""
+    r = calcular_ganancias_4ta(
+        bruto_mensual=Decimal("500000"),
+        escala=[],
+        minimo_no_imponible=Decimal("0"),
+        deduccion_especial=Decimal("0"),
+        ganancias_activo=True,
+    )
+    assert r == Decimal("0")
+
+
+def test_ganancias_dos_tramos_calcula_correctamente(db):
+    """2 tramos: [0, 1000000) al 5% fijo 0 ; [1000000, None) al 10% fijo 50000.
+    bruto mensual = 200000 ; MNI = 50000/mes ; ded.especial = 30000/mes.
+    ganancia_neta_anual = 200000*12 - 50000*12 - 30000*12 = 2400000-600000-360000 = 1440000
+    cae en el 2do tramo (>=1000000): retencion_anual = 50000 + 10%*(1440000-1000000) = 50000+44000=94000
+    retencion_mensual = 94000/12 = 7833.33"""
+    tramos = _escala(db, tramos=[
+        {"desde": 0, "hasta": 1000000, "alicuota": 0.05, "fijo": 0},
+        {"desde": 1000000, "hasta": None, "alicuota": 0.10, "fijo": 50000},
+    ])
+    r = calcular_ganancias_4ta(
+        bruto_mensual=Decimal("200000"),
+        escala=tramos,
+        minimo_no_imponible=Decimal("50000"),
+        deduccion_especial=Decimal("30000"),
+        ganancias_activo=True,
+    )
+    assert r == Decimal("7833.33")
+
+
+def test_ganancias_ganancia_neta_negativa_retencion_cero(db):
+    """Si MNI+deducción superan el bruto anualizado, no hay retención."""
+    tramos = _escala(db, tramos=[{"desde": 0, "hasta": None, "alicuota": 0.27, "fijo": 0}])
+    r = calcular_ganancias_4ta(
+        bruto_mensual=Decimal("50000"),
+        escala=tramos,
+        minimo_no_imponible=Decimal("100000"),
+        deduccion_especial=Decimal("50000"),
+        ganancias_activo=True,
+    )
+    assert r == Decimal("0")
+
+
+def test_ganancias_integrado_en_liquidacion_reduce_neto(db):
+    """Activando ganancias_activo en ConfigSueldos, la liquidación descuenta
+    retencion_ganancias del neto y la reporta en el detalle."""
+    cfg = _cfg(db, aporte_jubilacion=0.11, aporte_inssjp=0.03, aporte_obra_social=0.03)
+    cfg.ganancias_activo = True
+    cfg.minimo_no_imponible = Decimal("0")
+    cfg.deduccion_especial = Decimal("0")
+    db.commit()
+    _escala(db, tramos=[{"desde": 0, "hasta": None, "alicuota": 0.10, "fijo": 0}])
+    _empleado(db, "Juan", basico=120000)  # bruto = 130000
+
+    calc = calcular_liquidacion_periodo(db, 1, PERIODO)
+    d = calc["detalle"][0]
+    # ganancia_neta_anual = 130000*12 = 1560000 ; retencion_anual = 10%*1560000=156000
+    # retencion_mensual = 156000/12 = 13000
+    assert d["retencion_ganancias"] == Decimal("13000.00")
+    # aportes = 130000*17% = 22100 ; neto = 130000 - 22100 - 13000 = 94900
+    assert calc["total_neto"] == Decimal("94900.00")
+
+
+def test_escala_ganancias_crud_admin(db, client):
+    admin = _token(db, "admin@sueldos.test")
+    r = client.post("/sueldos/escala-ganancias", json={
+        "tramo_desde": 0, "tramo_hasta": 500000, "alicuota": 0.05, "monto_fijo": 0,
+    }, headers=_auth(admin))
+    assert r.status_code == 200
+    tid = r.json()["id"]
+
+    r = client.get("/sueldos/escala-ganancias", headers=_auth(admin))
+    assert r.status_code == 200
+    assert r.json()["total"] == 1
+
+    r = client.put(f"/sueldos/escala-ganancias/{tid}", json={"alicuota": 0.07}, headers=_auth(admin))
+    assert r.status_code == 200
+    assert r.json()["alicuota"] == 0.07
+
+    r = client.delete(f"/sueldos/escala-ganancias/{tid}", headers=_auth(admin))
+    assert r.status_code == 200
+
+    r = client.get("/sueldos/escala-ganancias", headers=_auth(admin))
+    assert r.json()["total"] == 0
+
+
+def test_escala_ganancias_post_requiere_admin_accounting(db, client):
+    """revisor no tiene admin_accounting -> 403 al intentar editar la escala."""
+    rev = _token(db, "rev@sueldos.test")
+    r = client.post("/sueldos/escala-ganancias", json={
+        "tramo_desde": 0, "tramo_hasta": None, "alicuota": 0.27, "monto_fijo": 0,
+    }, headers=_auth(rev))
+    assert r.status_code == 403
+
+
+def test_config_acepta_campos_ganancias(db, client):
+    admin = _token(db, "admin@sueldos.test")
+    r = client.put("/sueldos/config", json={
+        "activo": True,
+        "aporte_jubilacion": 0.11, "aporte_inssjp": 0.03, "aporte_obra_social": 0.03,
+        "contrib_jubilacion": 0.10, "contrib_inssjp": 0.0, "contrib_obra_social": 0.0,
+        "contrib_asig_fam": 0.0, "contrib_fondo_desempleo": 0.0, "alicuota_art": 0.0,
+        "ganancias_activo": True, "minimo_no_imponible": 100000, "deduccion_especial": 50000,
+    }, headers=_auth(admin))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ganancias_activo"] is True
+    assert body["minimo_no_imponible"] == 100000.0
+    assert body["deduccion_especial"] == 50000.0

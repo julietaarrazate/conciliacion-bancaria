@@ -41,7 +41,7 @@ from app.models.monotributo import CategoriaMonotributo, MonotributoConfig, Cont
 from app.models.iibb import JurisdiccionIIBB, IIBBConfig, ProyeccionIIBB  # noqa: F401
 from app.models.sueldos import (  # noqa: F401
     ConvenioColectivo, CategoriaConvenio, Empleado, ConfigSueldos,
-    LiquidacionSueldoPeriodo, DetalleLiquidacionEmpleado,
+    EscalaGanancias, LiquidacionSueldoPeriodo, DetalleLiquidacionEmpleado,
 )
 from app.models.caja import ArqueoDiario  # noqa: F401
 from app.models.push_subscription import PushSubscription  # noqa: F401
@@ -344,6 +344,21 @@ def _run_alembic():
         "detalle_json JSONB, "
         "created_at TIMESTAMP DEFAULT NOW())",
         "CREATE INDEX IF NOT EXISTS ix_detalle_liq_sueldo ON detalles_liquidacion_sueldo (liquidacion_periodo_id)",
+        # Retención de Ganancias 4ta categoría (opt-in, ver migración 017)
+        "ALTER TABLE config_sueldos ADD COLUMN IF NOT EXISTS ganancias_activo BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE config_sueldos ADD COLUMN IF NOT EXISTS minimo_no_imponible NUMERIC(12,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE config_sueldos ADD COLUMN IF NOT EXISTS deduccion_especial NUMERIC(12,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE detalles_liquidacion_sueldo ADD COLUMN IF NOT EXISTS retencion_ganancias NUMERIC(12,2) NOT NULL DEFAULT 0",
+        "CREATE TABLE IF NOT EXISTS escala_ganancias ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "tramo_desde NUMERIC(14,2) NOT NULL DEFAULT 0, "
+        "tramo_hasta NUMERIC(14,2), "
+        "alicuota NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "monto_fijo NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW())",
+        "CREATE INDEX IF NOT EXISTS ix_escala_ganancias_org ON escala_ganancias (organizacion_id)",
     ]
     try:
         from sqlalchemy import text as _text

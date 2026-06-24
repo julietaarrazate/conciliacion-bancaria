@@ -29,6 +29,7 @@ from app.models.sueldos import (
     CategoriaConvenio,
     Empleado,
     ConfigSueldos,
+    EscalaGanancias,
     LiquidacionSueldoPeriodo,
     DetalleLiquidacionEmpleado,
 )
@@ -103,6 +104,19 @@ def _config_dict(c: ConfigSueldos) -> dict:
         "contrib_asig_fam": _f(c.contrib_asig_fam),
         "contrib_fondo_desempleo": _f(c.contrib_fondo_desempleo),
         "alicuota_art": _f(c.alicuota_art),
+        "ganancias_activo": c.ganancias_activo,
+        "minimo_no_imponible": _f(c.minimo_no_imponible),
+        "deduccion_especial": _f(c.deduccion_especial),
+    }
+
+
+def _escala_dict(t: EscalaGanancias) -> dict:
+    return {
+        "id": t.id,
+        "tramo_desde": _f(t.tramo_desde),
+        "tramo_hasta": _f(t.tramo_hasta) if t.tramo_hasta is not None else None,
+        "alicuota": _f(t.alicuota),
+        "monto_fijo": _f(t.monto_fijo),
     }
 
 
@@ -129,6 +143,7 @@ def _liquidacion_dict(liq: LiquidacionSueldoPeriodo, incluir_detalle: bool = Fal
             "total_aportes": x.total_aportes,
             "total_contribuciones": x.total_contribuciones,
             "sueldo_neto": x.sueldo_neto,
+            "retencion_ganancias": x.retencion_ganancias,
             "detalle_json": x.detalle_json,
         } for x in liq.detalles]
     return d
@@ -193,6 +208,24 @@ class ConfigIn(BaseModel):
     contrib_asig_fam: float = 0.0
     contrib_fondo_desempleo: float = 0.0
     alicuota_art: float = 0.0
+    ganancias_activo: bool = False
+    minimo_no_imponible: float = 0.0
+    deduccion_especial: float = 0.0
+
+
+class EscalaTramoIn(BaseModel):
+    tramo_desde: float = 0.0
+    tramo_hasta: Optional[float] = None  # None = último tramo (sin techo)
+    alicuota: float = 0.0
+    monto_fijo: float = 0.0
+
+
+class EscalaTramoUpdateIn(BaseModel):
+    tramo_desde: Optional[float] = None
+    tramo_hasta: Optional[float] = None
+    alicuota: Optional[float] = None
+    monto_fijo: Optional[float] = None
+    limpiar_tramo_hasta: bool = False  # True = forzar tramo_hasta a NULL (último tramo)
 
 
 # ── Convenios ─────────────────────────────────────────────────────
@@ -624,14 +657,135 @@ def put_config(
         v = getattr(body, c)
         if v < 0 or v > 1:
             raise HTTPException(422, f"{c} debe estar entre 0 y 1 (ej. 0.11 = 11%)")
+    if body.minimo_no_imponible < 0:
+        raise HTTPException(422, "minimo_no_imponible no puede ser negativo")
+    if body.deduccion_especial < 0:
+        raise HTTPException(422, "deduccion_especial no puede ser negativo")
     cfg = get_o_crear_config(db, oid)
     cfg.activo = body.activo
     for c in campos:
         setattr(cfg, c, Decimal(str(getattr(body, c))))
+    cfg.ganancias_activo = body.ganancias_activo
+    cfg.minimo_no_imponible = Decimal(str(body.minimo_no_imponible))
+    cfg.deduccion_especial = Decimal(str(body.deduccion_especial))
     registrar_log(db, current_user.id, "sueldos_config", oid, "UPDATE", {"activo": body.activo})
     db.commit()
     db.refresh(cfg)
     return _config_dict(cfg)
+
+
+# ── Escala de Ganancias 4ta categoría ──────────────────────────────
+# NO viene sembrada con valores reales: la escala de AFIP/ARCA cambia
+# varias veces por año. El admin_accounting debe cargar/actualizar los
+# tramos vigentes antes de activar ganancias_activo en /sueldos/config.
+
+@router.get("/escala-ganancias")
+def listar_escala_ganancias(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("view_accounting")),
+):
+    oid = _org_id(current_user, org_id)
+    items = (
+        db.query(EscalaGanancias)
+        .filter(EscalaGanancias.organizacion_id == oid)
+        .order_by(EscalaGanancias.tramo_desde.asc())
+        .all()
+    )
+    return {"items": [_escala_dict(t) for t in items], "total": len(items)}
+
+
+@router.post("/escala-ganancias")
+def crear_tramo_ganancias(
+    body: EscalaTramoIn,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    oid = _org_id(current_user, org_id)
+    if body.tramo_desde < 0:
+        raise HTTPException(422, "tramo_desde no puede ser negativo")
+    if body.tramo_hasta is not None and body.tramo_hasta <= body.tramo_desde:
+        raise HTTPException(422, "tramo_hasta debe ser mayor que tramo_desde")
+    if body.alicuota < 0 or body.alicuota > 1:
+        raise HTTPException(422, "alicuota debe estar entre 0 y 1 (ej. 0.27 = 27%)")
+    if body.monto_fijo < 0:
+        raise HTTPException(422, "monto_fijo no puede ser negativo")
+    t = EscalaGanancias(
+        organizacion_id=oid,
+        tramo_desde=Decimal(str(body.tramo_desde)),
+        tramo_hasta=(Decimal(str(body.tramo_hasta)) if body.tramo_hasta is not None else None),
+        alicuota=Decimal(str(body.alicuota)),
+        monto_fijo=Decimal(str(body.monto_fijo)),
+    )
+    db.add(t)
+    registrar_log(db, current_user.id, "sueldos_escala_ganancias", oid, "CREATE", {
+        "tramo_desde": body.tramo_desde, "tramo_hasta": body.tramo_hasta,
+    })
+    db.commit()
+    db.refresh(t)
+    return _escala_dict(t)
+
+
+@router.put("/escala-ganancias/{tramo_id}")
+def editar_tramo_ganancias(
+    tramo_id: int,
+    body: EscalaTramoUpdateIn,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    oid = _org_id(current_user, org_id)
+    t = (
+        db.query(EscalaGanancias)
+        .filter(EscalaGanancias.id == tramo_id, EscalaGanancias.organizacion_id == oid)
+        .first()
+    )
+    if t is None:
+        raise HTTPException(404, "Tramo no encontrado")
+    if body.tramo_desde is not None:
+        if body.tramo_desde < 0:
+            raise HTTPException(422, "tramo_desde no puede ser negativo")
+        t.tramo_desde = Decimal(str(body.tramo_desde))
+    if body.limpiar_tramo_hasta:
+        t.tramo_hasta = None
+    elif body.tramo_hasta is not None:
+        t.tramo_hasta = Decimal(str(body.tramo_hasta))
+    if t.tramo_hasta is not None and Decimal(str(t.tramo_hasta)) <= Decimal(str(t.tramo_desde)):
+        raise HTTPException(422, "tramo_hasta debe ser mayor que tramo_desde")
+    if body.alicuota is not None:
+        if body.alicuota < 0 or body.alicuota > 1:
+            raise HTTPException(422, "alicuota debe estar entre 0 y 1 (ej. 0.27 = 27%)")
+        t.alicuota = Decimal(str(body.alicuota))
+    if body.monto_fijo is not None:
+        if body.monto_fijo < 0:
+            raise HTTPException(422, "monto_fijo no puede ser negativo")
+        t.monto_fijo = Decimal(str(body.monto_fijo))
+    registrar_log(db, current_user.id, "sueldos_escala_ganancias", t.id, "UPDATE", {})
+    db.commit()
+    db.refresh(t)
+    return _escala_dict(t)
+
+
+@router.delete("/escala-ganancias/{tramo_id}")
+def borrar_tramo_ganancias(
+    tramo_id: int,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    oid = _org_id(current_user, org_id)
+    t = (
+        db.query(EscalaGanancias)
+        .filter(EscalaGanancias.id == tramo_id, EscalaGanancias.organizacion_id == oid)
+        .first()
+    )
+    if t is None:
+        raise HTTPException(404, "Tramo no encontrado")
+    db.delete(t)
+    registrar_log(db, current_user.id, "sueldos_escala_ganancias", tramo_id, "DELETE", {})
+    db.commit()
+    return {"ok": True}
 
 
 # ── Liquidación ───────────────────────────────────────────────────

@@ -31,6 +31,7 @@ from app.models.sueldos import (
     ConfigSueldos,
     Empleado,
     CategoriaConvenio,
+    EscalaGanancias,
     LiquidacionSueldoPeriodo,
     DetalleLiquidacionEmpleado,
 )
@@ -154,6 +155,79 @@ def _tasas_contribucion(cfg: ConfigSueldos) -> Decimal:
     )
 
 
+def _escala_ganancias(db: Session, organizacion_id: int) -> list[EscalaGanancias]:
+    return (
+        db.query(EscalaGanancias)
+        .filter(EscalaGanancias.organizacion_id == organizacion_id)
+        .order_by(EscalaGanancias.tramo_desde.asc())
+        .all()
+    )
+
+
+def calcular_ganancias_4ta(
+    bruto_mensual: Decimal,
+    escala: list[EscalaGanancias],
+    minimo_no_imponible: Decimal,
+    deduccion_especial: Decimal,
+    ganancias_activo: bool,
+) -> Decimal:
+    """Proyecta la retención mensual de Ganancias 4ta categoría.
+
+    SIMPLIFICACIÓN DOCUMENTADA (mismo criterio que el SAC proporcional del
+    módulo): la ganancia neta sujeta a impuesto se estima ANUALIZANDO el bruto
+    mensual (×12) — una proyección simple que asume un sueldo estable todo el
+    año. NO reproduce el cálculo legal exacto (que acumula remuneraciones reales
+    mes a mes, con deducciones acumuladas y retenciones de meses previos) — es
+    una herramienta de estimación interna, no una liquidación oficial de AFIP/ARCA.
+
+    Fórmula:
+      ganancia_neta_anual = bruto_mensual × 12 − minimo_no_imponible × 12
+                             − deduccion_especial × 12
+      Si ganancia_neta_anual <= 0 → retención = 0.
+      Se busca el tramo de la escala donde tramo_desde <= ganancia_neta_anual
+      (y ganancia_neta_anual < tramo_hasta, o tramo_hasta es NULL = último tramo).
+      retencion_anual = monto_fijo + alicuota × (ganancia_neta_anual − tramo_desde)
+      retencion_mensual = retencion_anual / 12
+
+    Si ganancias_activo=False devuelve 0 SIN calcular nada — no rompe orgs que
+    no activaron este cálculo. Si está activo pero la escala está vacía, también
+    devuelve 0 (no hay tramos contra los que calcular) — el admin debe cargar la
+    escala vigente de ARCA antes de que esto retenga algo.
+    """
+    if not ganancias_activo:
+        return Decimal("0")
+    if not escala:
+        return Decimal("0")
+
+    bruto_mensual = _D(bruto_mensual)
+    minimo_no_imponible = _D(minimo_no_imponible)
+    deduccion_especial = _D(deduccion_especial)
+
+    ganancia_neta_anual = (
+        bruto_mensual * _DOCE
+        - minimo_no_imponible * _DOCE
+        - deduccion_especial * _DOCE
+    )
+    if ganancia_neta_anual <= 0:
+        return Decimal("0").quantize(_DOS)
+
+    tramo_aplicable = None
+    for tramo in escala:
+        desde = _D(tramo.tramo_desde)
+        hasta = _D(tramo.tramo_hasta) if tramo.tramo_hasta is not None else None
+        if ganancia_neta_anual >= desde and (hasta is None or ganancia_neta_anual < hasta):
+            tramo_aplicable = tramo
+            break
+    if tramo_aplicable is None:
+        # ganancia_neta_anual por debajo del primer tramo_desde: sin retención.
+        return Decimal("0").quantize(_DOS)
+
+    excedente = ganancia_neta_anual - _D(tramo_aplicable.tramo_desde)
+    retencion_anual = _D(tramo_aplicable.monto_fijo) + _D(tramo_aplicable.alicuota) * excedente
+    retencion_mensual = (retencion_anual / _DOCE).quantize(_DOS)
+    return max(retencion_mensual, Decimal("0"))
+
+
 def calcular_liquidacion_periodo(
     db: Session, organizacion_id: int, periodo: str
 ) -> dict:
@@ -194,12 +268,14 @@ def calcular_liquidacion_periodo(
 
     tasa_aporte = _tasas_aporte(cfg)
     tasa_contrib = _tasas_contribucion(cfg)
+    escala_gan = _escala_ganancias(db, organizacion_id) if cfg.ganancias_activo else []
 
     detalle: list[dict] = []
     total_bruto = Decimal("0")
     total_aportes = Decimal("0")
     total_contribuciones = Decimal("0")
     total_neto = Decimal("0")
+    total_retencion_ganancias = Decimal("0")
 
     for emp in empleados:
         basico = _basico_empleado(db, emp).quantize(_DOS)
@@ -208,12 +284,17 @@ def calcular_liquidacion_periodo(
         bruto = (basico + sac).quantize(_DOS)
         aportes = (bruto * tasa_aporte).quantize(_DOS)
         contribuciones = (bruto * tasa_contrib).quantize(_DOS)
-        neto = (bruto - aportes).quantize(_DOS)
+        retencion_ganancias = calcular_ganancias_4ta(
+            bruto, escala_gan, _D(cfg.minimo_no_imponible), _D(cfg.deduccion_especial),
+            cfg.ganancias_activo,
+        )
+        neto = (bruto - aportes - retencion_ganancias).quantize(_DOS)
 
         total_bruto += bruto
         total_aportes += aportes
         total_contribuciones += contribuciones
         total_neto += neto
+        total_retencion_ganancias += retencion_ganancias
 
         desglose = {
             "sueldo_basico": float(basico),
@@ -231,6 +312,7 @@ def calcular_liquidacion_periodo(
                 "fondo_desempleo": float((bruto * _D(cfg.contrib_fondo_desempleo)).quantize(_DOS)),
                 "art": float((bruto * _D(cfg.alicuota_art)).quantize(_DOS)),
             },
+            "retencion_ganancias": float(retencion_ganancias),
         }
 
         detalle.append({
@@ -241,6 +323,7 @@ def calcular_liquidacion_periodo(
             "sac_proporcional": sac,
             "total_aportes": aportes,
             "total_contribuciones": contribuciones,
+            "retencion_ganancias": retencion_ganancias,
             "sueldo_neto": neto,
             "detalle_json": desglose,
         })
@@ -251,6 +334,7 @@ def calcular_liquidacion_periodo(
         "total_bruto": total_bruto.quantize(_DOS),
         "total_aportes": total_aportes.quantize(_DOS),
         "total_contribuciones": total_contribuciones.quantize(_DOS),
+        "total_retencion_ganancias": total_retencion_ganancias.quantize(_DOS),
         "total_neto": total_neto.quantize(_DOS),
         # base del F931
         "f931": {
