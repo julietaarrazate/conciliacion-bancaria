@@ -577,3 +577,90 @@ def test_config_acepta_campos_ganancias(db, client):
     assert body["ganancias_activo"] is True
     assert body["minimo_no_imponible"] == 100000.0
     assert body["deduccion_especial"] == 50000.0
+
+
+# ── Recibo de sueldo en PDF ────────────────────────────────────────
+
+def test_recibo_pdf_devuelve_pdf_valido(db, client):
+    admin = _token(db, "admin@sueldos.test")
+    _cfg(db, aporte_jubilacion=0.11, aporte_inssjp=0.03, aporte_obra_social=0.03,
+         contrib_jubilacion=0.10)
+    emp = _empleado(db, "Juan Recibo", basico=120000)
+
+    r = client.post(f"/sueldos/liquidacion/calcular?periodo={PERIODO}", headers=_auth(admin))
+    assert r.status_code == 200
+    liq_id = r.json()["id"]
+
+    r = client.get(
+        f"/sueldos/liquidacion/{liq_id}/empleado/{emp.id}/recibo-pdf",
+        headers=_auth(admin),
+    )
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.content[:4] == b"%PDF"
+    assert "attachment" in r.headers.get("content-disposition", "")
+
+
+def test_recibo_pdf_requiere_view_accounting(db, client):
+    """Sin token (no autenticado) -> 401, no 500."""
+    _cfg(db)
+    emp = _empleado(db, "Sin Permiso", basico=100000)
+    r = client.get(f"/sueldos/liquidacion/1/empleado/{emp.id}/recibo-pdf")
+    assert r.status_code in (401, 403)
+
+
+def test_recibo_pdf_404_liquidacion_inexistente(db, client):
+    admin = _token(db, "admin@sueldos.test")
+    emp = _empleado(db, "Fantasma", basico=100000)
+    r = client.get(
+        f"/sueldos/liquidacion/9999/empleado/{emp.id}/recibo-pdf",
+        headers=_auth(admin),
+    )
+    assert r.status_code == 404
+
+
+def test_recibo_pdf_404_empleado_sin_detalle(db, client):
+    admin = _token(db, "admin@sueldos.test")
+    _cfg(db, aporte_jubilacion=0.11)
+    _empleado(db, "Juan En Liquidacion", basico=120000)
+    otro = _empleado(db, "Otro Empleado Sin Detalle", basico=80000, activo=False)
+
+    r = client.post(f"/sueldos/liquidacion/calcular?periodo={PERIODO}", headers=_auth(admin))
+    liq_id = r.json()["id"]
+
+    r = client.get(
+        f"/sueldos/liquidacion/{liq_id}/empleado/{otro.id}/recibo-pdf",
+        headers=_auth(admin),
+    )
+    assert r.status_code == 404
+
+
+def test_recibo_pdf_incluye_retencion_ganancias_cuando_aplica(db, client):
+    """Si ganancias_activo y hay retención > 0, el PDF se genera igual sin error
+    (no testeamos el contenido del PDF en detalle, solo que no rompe)."""
+    admin = _token(db, "admin@sueldos.test")
+    cfg = _cfg(db, aporte_jubilacion=0.11, aporte_inssjp=0.03, aporte_obra_social=0.03,
+               contrib_jubilacion=0.10)
+    cfg.ganancias_activo = True
+    cfg.minimo_no_imponible = Decimal("0")
+    cfg.deduccion_especial = Decimal("0")
+    db.commit()
+    db.add(EscalaGanancias(
+        organizacion_id=1, tramo_desde=Decimal("0"), tramo_hasta=None,
+        alicuota=Decimal("0.10"), monto_fijo=Decimal("0"),
+    ))
+    db.commit()
+    emp = _empleado(db, "Con Ganancias", basico=500000)
+
+    r = client.post(f"/sueldos/liquidacion/calcular?periodo={PERIODO}", headers=_auth(admin))
+    assert r.status_code == 200
+    liq_id = r.json()["id"]
+    det = next(d for d in r.json()["detalle"] if d["empleado_id"] == emp.id)
+    assert det["retencion_ganancias"] > 0
+
+    r = client.get(
+        f"/sueldos/liquidacion/{liq_id}/empleado/{emp.id}/recibo-pdf",
+        headers=_auth(admin),
+    )
+    assert r.status_code == 200
+    assert r.content[:4] == b"%PDF"

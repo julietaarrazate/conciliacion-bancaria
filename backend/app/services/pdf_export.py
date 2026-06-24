@@ -606,3 +606,137 @@ def cuenta_corriente_pdf(data: dict, generado_por: str = "Julieta Arrazate") -> 
     deco = _page_decorator(generado_por)
     doc.build(story, onFirstPage=deco, onLaterPages=deco)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Recibo de sueldo (Liquidador de Sueldos y F931)
+# ---------------------------------------------------------------------------
+def recibo_sueldo_pdf(
+    detalle: dict,
+    empleado: dict,
+    periodo: str,
+    generado_por: str = "Julieta Arrazate",
+) -> bytes:
+    """Recibo de sueldo de un empleado para un período liquidado.
+
+    `detalle` es un item de LiquidacionSueldoPeriodo.detalles (dict con
+    sueldo_bruto, sac_proporcional, total_aportes, total_contribuciones,
+    sueldo_neto, retencion_ganancias, detalle_json con el desglose).
+    `empleado` es el dict de Empleado (_empleado_dict en el router) con
+    nombre, cuil, fecha_ingreso, y opcionalmente convenio_nombre/categoria_nombre.
+
+    Esta es una liquidación interna de gestión — NO reemplaza el recibo
+    oficial de sueldo según la Ley 20.744 (Ley de Contrato de Trabajo).
+    """
+    s = _styles()
+    buf = io.BytesIO()
+    desglose = detalle.get("detalle_json") or {}
+    aportes_d = desglose.get("aportes") or {}
+    contrib_d = desglose.get("contribuciones") or {}
+    retencion_ganancias = float(detalle.get("retencion_ganancias") or 0)
+
+    nombre = empleado.get("nombre") or "-"
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=_ML * mm, rightMargin=_MR * mm,
+        topMargin=_MT * mm, bottomMargin=_MB * mm,
+        title=f"Recibo de sueldo - {nombre} - {periodo}",
+        author=generado_por,
+    )
+
+    story: list = []
+    story.append(_header_band("Recibo de sueldo", "Período", periodo))
+
+    sub = f"<b>{nombre}</b>"
+    if empleado.get("cuil"):
+        sub += f'  ·  CUIL {empleado["cuil"]}'
+    if empleado.get("categoria_nombre"):
+        sub += f'  ·  {empleado["categoria_nombre"]}'
+    if empleado.get("convenio_nombre"):
+        sub += f' ({empleado["convenio_nombre"]})'
+    if empleado.get("fecha_ingreso"):
+        sub += f'  ·  Ingreso {empleado["fecha_ingreso"]}'
+    story.append(Paragraph(sub, s["subtitle"]))
+
+    # Haberes / Descuentos en dos columnas
+    story.append(Spacer(1, 6))
+    haberes_rows = [
+        ["Sueldo básico", _fmt_ars(desglose.get("sueldo_basico") or 0)],
+        ["SAC proporcional (1/12)", _fmt_ars(desglose.get("sac_proporcional") or 0)],
+    ]
+    total_haberes = float(detalle.get("sueldo_bruto") or 0)
+    haberes_rows.append(["Total haberes", _fmt_ars(total_haberes)])
+
+    descuentos_rows = [
+        ["Jubilación", _fmt_ars(aportes_d.get("jubilacion") or 0)],
+        ["INSSJP (PAMI)", _fmt_ars(aportes_d.get("inssjp") or 0)],
+        ["Obra social", _fmt_ars(aportes_d.get("obra_social") or 0)],
+    ]
+    if retencion_ganancias:
+        descuentos_rows.append(["Retención Ganancias 4ta cat.", _fmt_ars(retencion_ganancias)])
+    total_descuentos = float(detalle.get("total_aportes") or 0) + retencion_ganancias
+    descuentos_rows.append(["Total descuentos", _fmt_ars(total_descuentos)])
+
+    def _col_table(titulo, rows):
+        block = [Paragraph(titulo, s["h2"])]
+        t = Table(rows, colWidths=[(_CONTENT_W * 0.48) * 0.62, (_CONTENT_W * 0.48) * 0.38])
+        style = [
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+            ("LINEBELOW", (0, 0), (-1, -2), 0.4, _BORDER),
+            ("LINEABOVE", (0, -1), (-1, -1), 1, _BRAND),
+            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]
+        t.setStyle(TableStyle(style))
+        block.append(t)
+        return block
+
+    haberes_block = _col_table("Haberes", haberes_rows)
+    descuentos_block = _col_table("Descuentos", descuentos_rows)
+    cols = Table(
+        [[haberes_block, descuentos_block]],
+        colWidths=[_CONTENT_W * 0.48, _CONTENT_W * 0.48],
+    )
+    cols.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    story.append(cols)
+
+    # Contribuciones del empleador (informativo, no afecta el neto)
+    if any(contrib_d.values()):
+        story.extend(_section("Contribuciones del empleador (informativo)"))
+        contrib_rows = [[k.replace("_", " ").title(), _fmt_ars(v)] for k, v in contrib_d.items() if v]
+        ct = Table(contrib_rows, colWidths=[_CONTENT_W * 0.62, _CONTENT_W * 0.38])
+        ct.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+            ("TEXTCOLOR", (0, 0), (-1, -1), _GRAY),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        story.append(ct)
+
+    # Neto a pagar destacado
+    story.append(Spacer(1, 14))
+    story.append(_totales_box([
+        ("Total haberes", _fmt_ars(total_haberes), _DARK, False),
+        ("Total descuentos", "- " + _fmt_ars(total_descuentos), _RED, False),
+        ("Neto a pagar", _fmt_ars(float(detalle.get("sueldo_neto") or 0)), _BRAND_DARK, True),
+    ]))
+
+    story.append(Spacer(1, 18))
+    story.append(Paragraph(
+        "<i>Liquidación interna de gestión — no reemplaza el recibo oficial de sueldo "
+        "según la Ley de Contrato de Trabajo (Ley 20.744).</i>",
+        s["small"],
+    ))
+
+    deco = _page_decorator(generado_por)
+    doc.build(story, onFirstPage=deco, onLaterPages=deco)
+    return buf.getvalue()

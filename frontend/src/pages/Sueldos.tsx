@@ -734,10 +734,11 @@ export const Sueldos: React.FC = () => {
                       <th className="px-3 py-2 font-medium text-right">Contribuciones</th>
                       {config?.ganancias_activo && <th className="px-3 py-2 font-medium text-right">Ganancias</th>}
                       <th className="px-3 py-2 font-medium text-right">Neto</th>
+                      <th className="px-3 py-2 font-medium text-right">Recibo</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {detalle.length === 0 && <tr><td colSpan={config?.ganancias_activo ? 7 : 6} className="px-3 py-6 text-center text-gray-400">Sin empleados activos para liquidar.</td></tr>}
+                    {detalle.length === 0 && <tr><td colSpan={config?.ganancias_activo ? 8 : 7} className="px-3 py-6 text-center text-gray-400">Sin empleados activos para liquidar.</td></tr>}
                     {detalle.map((d, i) => (
                       <tr key={d.empleado_id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
                         <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{d.nombre}</td>
@@ -749,6 +750,16 @@ export const Sueldos: React.FC = () => {
                           <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(d.retencion_ganancias || 0)}</td>
                         )}
                         <td className="px-3 py-2 text-right font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">{fmt(d.sueldo_neto)}</td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          {persistido && (
+                            <button
+                              className="px-2 py-1 rounded-md text-xs font-medium border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5"
+                              onClick={() => apiClient.downloadReciboSueldoPdf(persistido.id, d.empleado_id, d.nombre, activeOrgId || undefined)}
+                            >
+                              PDF
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

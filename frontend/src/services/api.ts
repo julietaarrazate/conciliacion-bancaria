@@ -1196,6 +1196,23 @@ class ApiClient {
     await this.client.delete(`/sueldos/escala-ganancias/${tramoId}`, { params: orgId ? { org_id: orgId } : {} })
   }
 
+  async downloadReciboSueldoPdf(liquidacionId: number, empleadoId: number, nombreEmpleado?: string, orgId?: number): Promise<void> {
+    _suppressLockForDownload()
+    const params: Record<string, string | number> = {}
+    if (orgId) params.org_id = orgId
+    const res = await this.client.get(
+      `/sueldos/liquidacion/${liquidacionId}/empleado/${empleadoId}/recibo-pdf`,
+      { params, responseType: 'blob' },
+    )
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url
+    const nombreSafe = (nombreEmpleado || `empleado_${empleadoId}`).replace(/[^a-zA-Z0-9_-]/g, '_')
+    a.download = `recibo_${nombreSafe}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // ─── Export Contable ──────────────────────────────────────────
   async downloadAsientosContable(
     formato: string,

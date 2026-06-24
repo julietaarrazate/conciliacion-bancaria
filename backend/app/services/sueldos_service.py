@@ -395,6 +395,7 @@ def guardar_o_actualizar_liquidacion(
             total_aportes=d["total_aportes"],
             total_contribuciones=d["total_contribuciones"],
             sueldo_neto=d["sueldo_neto"],
+            retencion_ganancias=d["retencion_ganancias"],
             detalle_json=d["detalle_json"],
         ))
 

@@ -858,6 +858,71 @@ def marcar_liquidacion_presentada(
     return _liquidacion_dict(liq)
 
 
+@router.get("/liquidacion/{liquidacion_id}/empleado/{empleado_id}/recibo-pdf")
+def recibo_sueldo_pdf_endpoint(
+    liquidacion_id: int,
+    empleado_id: int,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("view_accounting")),
+):
+    """Recibo de sueldo en PDF de un empleado para un período ya liquidado.
+
+    Liquidación interna de gestión — no reemplaza el recibo oficial de sueldo
+    según la Ley de Contrato de Trabajo (Ley 20.744).
+    """
+    from fastapi.responses import StreamingResponse
+    import io
+    from app.services.pdf_export import recibo_sueldo_pdf
+
+    oid = _org_id(current_user, org_id)
+    liq = (
+        db.query(LiquidacionSueldoPeriodo)
+        .filter(
+            LiquidacionSueldoPeriodo.id == liquidacion_id,
+            LiquidacionSueldoPeriodo.organizacion_id == oid,
+        )
+        .first()
+    )
+    if not liq:
+        raise HTTPException(404, "Liquidación no encontrada")
+
+    det = next((x for x in liq.detalles if x.empleado_id == empleado_id), None)
+    if not det:
+        raise HTTPException(404, "El empleado no tiene detalle en esta liquidación")
+
+    emp = (
+        db.query(Empleado)
+        .filter(Empleado.id == empleado_id, Empleado.organizacion_id == oid)
+        .first()
+    )
+    if not emp:
+        raise HTTPException(404, "Empleado no encontrado")
+
+    empleado_dict = _empleado_dict(emp)
+    empleado_dict["convenio_nombre"] = emp.convenio.nombre if emp.convenio else None
+    empleado_dict["categoria_nombre"] = emp.categoria.nombre if emp.categoria else None
+
+    detalle_dict = {
+        "sueldo_bruto": det.sueldo_bruto,
+        "sac_proporcional": det.sac_proporcional,
+        "total_aportes": det.total_aportes,
+        "total_contribuciones": det.total_contribuciones,
+        "sueldo_neto": det.sueldo_neto,
+        "retencion_ganancias": det.retencion_ganancias,
+        "detalle_json": det.detalle_json,
+    }
+
+    pdf_bytes = recibo_sueldo_pdf(detalle_dict, empleado_dict, liq.periodo)
+    nombre_safe = "".join(c for c in (emp.nombre or "empleado") if c.isalnum() or c in " _-").strip().replace(" ", "_")
+    fname = f"recibo_{nombre_safe}_{liq.periodo}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
 @router.get("/historial")
 def historial(
     org_id: Optional[int] = Query(None),
