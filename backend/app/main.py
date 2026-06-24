@@ -359,6 +359,8 @@ def _run_alembic():
         "created_at TIMESTAMP DEFAULT NOW(), "
         "updated_at TIMESTAMP DEFAULT NOW())",
         "CREATE INDEX IF NOT EXISTS ix_escala_ganancias_org ON escala_ganancias (organizacion_id)",
+        # Total de retención de Ganancias en el período (contrapartida 2-1-6-0, ver migración 018)
+        "ALTER TABLE liquidaciones_sueldo ADD COLUMN IF NOT EXISTS total_retencion_ganancias NUMERIC(12,2) NOT NULL DEFAULT 0",
     ]
     try:
         from sqlalchemy import text as _text

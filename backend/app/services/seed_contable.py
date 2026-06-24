@@ -72,6 +72,7 @@ PLAN_PATCH = [
     # Liquidador de Sueldos y F931 (junio 2026)
     ("2-1-4-0",   "Sueldos a pagar",               "pasivo",    "2-1-0-0", 3),
     ("2-1-5-0",   "Cargas sociales a pagar",       "pasivo",    "2-1-0-0", 3),
+    ("2-1-6-0",   "Retención de Ganancias a depositar", "pasivo", "2-1-0-0", 3),
     ("3-2-4-0",   "Sueldos y cargas sociales",     "resultado", "3-2-0-0", 3),
 ]
 
