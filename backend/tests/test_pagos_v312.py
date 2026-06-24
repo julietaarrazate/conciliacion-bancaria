@@ -67,6 +67,15 @@ def _mock_user(org_id=1, is_superadmin=False):
     return u
 
 
+def _fake_request():
+    from starlette.requests import Request
+    from app.main import app as fastapi_app
+    return Request(scope={
+        "type": "http", "headers": [], "client": ("test", 0),
+        "path": "/pagos/test", "method": "DELETE", "app": fastapi_app,
+    })
+
+
 def _crear_egreso(db, egreso_id=1, org_id=1, monto=1000, tipo="proveedor",
                   forma_pago="banco", beneficiario="Proveedor Test",
                   fecha=None):
@@ -262,6 +271,7 @@ class TestEliminarEgreso:
         _crear_egreso(db, egreso_id=20, monto=500)
 
         result = eliminar_egreso(
+            request=_fake_request(),
             egreso_id=20,
             db=db,
             current_user=_mock_user(),
@@ -274,6 +284,7 @@ class TestEliminarEgreso:
 
         with pytest.raises(HTTPException) as exc_info:
             eliminar_egreso(
+                request=_fake_request(),
                 egreso_id=9999,
                 db=db,
                 current_user=_mock_user(),
@@ -289,6 +300,7 @@ class TestEliminarEgreso:
 
         with pytest.raises(HTTPException) as exc_info:
             eliminar_egreso(
+                request=_fake_request(),
                 egreso_id=21,
                 db=db,
                 current_user=_mock_user(org_id=1),
