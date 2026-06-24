@@ -882,9 +882,9 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - ~~**Tipado `any` frontend**~~ — resuelto en v3.16 (PR #131).
 - ~~**Paginación 5 endpoints**~~ — resuelto en v3.16 (PR #133).
 - ~~**Paginación rows en `/planillas/{id}`**~~ — resuelto en v3.18 (server-side limit/offset + filtros).
+- ~~**Ingresos Brutos y Convenio Multilateral**~~ — resuelto en v3.21 (PR #154).
 - **Próximos módulos del plan de liquidación de impuestos** (ver sección abajo): orden a decidir
-  con Julieta por valor — candidatos: Ingresos Brutos y Convenio Multilateral, Liquidador Sueldos
-  y F931, Intake Exportador de Servicios.
+  con Julieta por valor — candidatos: Liquidador Sueldos y F931, Intake Exportador de Servicios.
 - **⏰ RECORDATORIO SEMESTRAL — actualizar escala de Monotributo**: ARCA actualiza los límites de
   facturación anual por categoría cada semestre (ajuste por IPC, próxima actualización
   julio/agosto 2026). Los valores sembrados en `monotributo_service.py` (`_LIMITES_VIGENTES`)
@@ -910,8 +910,8 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
 
 - **v3.19 — IVA Proyección y DDJJ** ✅ implementado (ver abajo). Primer módulo del plan.
 - **v3.20 — Control Semestral Monotributo** ✅ implementado (ver abajo). Segundo módulo del plan.
-- Pendientes a priorizar: Ingresos Brutos y Convenio Multilateral, Liquidador Sueldos y F931,
-  Intake Exportador de Servicios.
+- **v3.21 — Ingresos Brutos y Convenio Multilateral** ✅ implementado (ver abajo). Tercer módulo del plan.
+- Pendientes a priorizar: Liquidador Sueldos y F931, Intake Exportador de Servicios.
 
 ### v3.19 — Módulo IVA Proyección y DDJJ (junio 2026 — PR #147)
 
@@ -985,6 +985,58 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
   `view_accounting`. Migración `014_monotributo` + safety nets idempotentes en `main.py` (seed al
   crear org nueva + backfill para orgs existentes). 19 tests nuevos (`test_monotributo.py`). 352
   tests pasando en total.
+
+### v3.21 — Módulo Ingresos Brutos y Convenio Multilateral (junio 2026 — PR #154)
+
+- **Qué hace**: herramienta de **proyección interna** (NO una DDJJ oficial) que estima el impuesto a
+  los Ingresos Brutos de un período (mes) a partir de los ingresos contables ya reconocidos, aplicando
+  alícuotas que la organización configura por jurisdicción. Sirve para que el estudio anticipe cuánto
+  va a pagar de IIBB antes de armar la declaración real ante AGIP/ARBA o el organismo provincial.
+- **Dos modos de cálculo** (`IIBBConfig.modo`, opt-in por org, `activo=False` por default):
+  - `simple`: la org opera en UNA jurisdicción → `ingreso_total × alícuota` de la jurisdicción única
+    (`IIBBConfig.jurisdiccion_unica_id`).
+  - `convenio_multilateral`: la org opera en VARIAS jurisdicciones → el ingreso total se distribuye
+    según el `coeficiente_distribucion` de cada jurisdicción activa y a cada porción se le aplica SU
+    PROPIA alícuota. El coeficiente es un **% editable por la org** (no se recalcula desde
+    ingresos/gastos del ejercicio anterior — es proyección interna, no la DDJJ del Convenio).
+- **Criterio de ingreso idéntico a `iva_service.py`/`monotributo_service.py`**: cuentas `resultado`
+  cuyo código empieza con `3-1`, sumando (haber − debe) de los `AsientoDetalle` del mes filtrando por
+  `Asiento.fecha` y `organizacion_id`.
+- **NO se siembran alícuotas reales** (a diferencia de Monotributo): las 24 jurisdicciones argentinas
+  (CABA + 23 provincias) tienen su propio régimen, alícuotas que varían por actividad y cambian con
+  frecuencia. `seed_iibb_jurisdiccion()` crea UNA jurisdicción ILUSTRATIVA ("CABA (ejemplo — completar)",
+  alícuota 0) y el admin DEBE completar/verificar todo contra AGIP/ARBA/organismo provincial. Todo
+  100% editable vía API/UI. Disclaimer visible en la página (mismo tono que Monotributo).
+- **Validación de coeficientes (no bloqueante)**: en `convenio_multilateral`, si la suma de
+  `coeficiente_distribucion` de las jurisdicciones activas ≠ 100% (tolerancia 0.0001), el cálculo
+  SIGUE funcionando (es interno) pero la respuesta incluye `suma_coeficientes` + un `warning` explícito
+  para que el usuario lo corrija en Config. La UI muestra una alerta ámbar.
+- **Modelos nuevos** (`app/models/iibb.py`): `JurisdiccionIIBB` (nombre, alícuota Numeric 5,4,
+  coeficiente Numeric 5,4, activa, orden, unique org+nombre), `IIBBConfig` (1 por org, opt-in, modo,
+  FK `jurisdiccion_unica_id`), `ProyeccionIIBB` (snapshot por período, unique org+período, detalle JSON
+  por jurisdicción, **inmutable una vez `estado="presentado"`** — mismo patrón que `ProyeccionIva`).
+- **`services/iibb_service.py`** (puro, sin FastAPI, Decimal + `tz.now_art()`):
+  `calcular_ingreso_periodo`, `calcular_proyeccion_iibb` (preview, no persiste, devuelve detalle +
+  warning), `guardar_o_actualizar_proyeccion` (upsert idempotente, no pisa presentada),
+  `marcar_presentada`, `seed_iibb_jurisdiccion`.
+- **Router `/iibb`** — permisos en 3 capas: `GET/PUT /iibb/config` → `admin_accounting`;
+  `GET/POST /iibb/jurisdicciones`, `PUT /iibb/jurisdicciones/{id}` → `admin_accounting` (409 si nombre
+  duplicado, 422 si alícuota/coef fuera de [0,1]); `GET /iibb/proyeccion` (preview) → `view_accounting`;
+  `POST /iibb/proyeccion/calcular` (persiste) → `manage_finance`;
+  `POST /iibb/proyeccion/{id}/marcar-presentada` → `admin_accounting`;
+  `GET /iibb/historial` (paginado) → `view_accounting`.
+- **Frontend `/ingresos-brutos`** (`pages/IngresosBrutos.tsx`): 3 tabs — Proyección (selector de mes,
+  preview en vivo, calcular y guardar, alerta si coeficientes ≠ 100%, desglose por jurisdicción,
+  marcar presentada con confirm), Historial (paginado), Config (activo, modo, selector de jurisdicción
+  única en modo simple, tabla editable de jurisdicciones con alta inline + toggle activa + columna
+  coeficiente solo visible en convenio_multilateral, disclaimer AGIP/ARBA). Mismo estilo que `/iva` e
+  `/monotributo`. Nav gateada `view_accounting`. Las tasas se ingresan como % (5 = 5%) y se guardan
+  como fracción.
+- **Migración `015_iibb`** + safety nets idempotentes en `main.py` (3x `CREATE TABLE IF NOT EXISTS` +
+  índices + seed de jurisdicción ilustrativa al crear org nueva / backfill para orgs existentes).
+  Org A intacta (solo aditivo). 23 tests nuevos (`test_iibb.py`: simple, convenio, warning de
+  coeficientes, inmutabilidad post-presentado, permisos por capa, aislamiento multi-org). 375 tests
+  pasando en total.
 
 ---
 
@@ -1187,7 +1239,11 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
 - `v3.20` — segundo módulo del plan: Control Semestral Monotributo (ventana de ingresos de últimos
   12 meses por corte semestral, sugerencia de categoría/exceso de régimen, escala sembrada con
   valores reales vigentes de ARCA — no placeholders). 352 tests. (junio 2026 — PR #148 mergeado a main)
+- `v3.21` — tercer módulo del plan: Ingresos Brutos y Convenio Multilateral (proyección por jurisdicción,
+  modo simple vs convenio multilateral con distribución por coeficientes + alícuota propia, warning si
+  los coeficientes no suman 100%, sin sembrar alícuotas reales, inmutable al marcar presentada). 375 tests.
+  (junio 2026 — PR #154)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.20
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.21
