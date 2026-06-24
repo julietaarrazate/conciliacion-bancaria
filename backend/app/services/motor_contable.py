@@ -933,6 +933,63 @@ def registrar_liquidacion_aprobacion(
         logger.warning("Error asiento liquidacion aprobacion detalle %s: %s", detalle_id, ex)
 
 
+def registrar_liquidacion_sueldos(
+    db: Session,
+    liquidacion_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    periodo: str,
+    total_bruto: Decimal,
+    total_aportes: Decimal,
+    total_contribuciones: Decimal,
+    total_neto: Decimal,
+) -> None:
+    """Asiento agrupado al aprobar una liquidación de sueldos del período:
+        Sueldos y cargas sociales (3-2-4-0, gasto) D  por bruto + contribuciones
+        Sueldos a pagar (2-1-4-0) H                   por el neto a pagar al empleado
+        Cargas sociales a pagar (2-1-5-0) H           por aportes + contribuciones
+    Partida doble: D = bruto+contrib ; H = neto + aportes + contrib = bruto+contrib.
+    Idempotente por (modulo, referencia_id=liquidacion_id, org)."""
+    try:
+        if _ya_existe(db, "sueldos_liquidacion", liquidacion_id, org_id):
+            return
+        bruto   = round(_monto(total_bruto), 2)
+        aportes = round(_monto(total_aportes), 2)
+        contrib = round(_monto(total_contribuciones), 2)
+        neto    = round(_monto(total_neto), 2)
+        if bruto <= 0:
+            return
+        gasto       = _get_cuenta_por_codigo(db, "3-2-4-0", org_id)
+        sueldos_pag = _get_cuenta_por_codigo(db, "2-1-4-0", org_id)
+        cargas_pag  = _get_cuenta_por_codigo(db, "2-1-5-0", org_id)
+        if not gasto or not sueldos_pag or not cargas_pag:
+            logger.warning(
+                "Cuentas sueldos no encontradas org %s (3-2-4-0/2-1-4-0/2-1-5-0)", org_id
+            )
+            return
+        debe_total = (bruto + contrib)
+        cargas = (aportes + contrib)
+        lineas = [
+            (gasto.id,       debe_total,   Decimal("0")),
+            (sueldos_pag.id, Decimal("0"), neto),
+            (cargas_pag.id,  Decimal("0"), cargas),
+        ]
+        _crear_asiento_multilinea(
+            db=db,
+            fecha=hoy_art(),
+            descripcion=f"Liquidación de sueldos {periodo}",
+            modulo="sueldos_liquidacion",
+            referencia_id=liquidacion_id,
+            org_id=org_id,
+            usuario_id=usuario_id,
+            lineas=lineas,
+        )
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        logger.warning("Error asiento liquidacion sueldos %s: %s", liquidacion_id, ex)
+
+
 def registrar_cc_inicial(
     db: Session,
     planilla_row_id: int,
