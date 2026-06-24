@@ -320,6 +320,106 @@ def test_aprobar_solo_desde_borrador(db):
         aprobar_liquidacion(db, 1, liq.id, None)  # ya aprobada
 
 
+# ── Asiento con Ganancias 4ta activa (regresión del bug financiero) ──
+
+def test_aprobar_con_ganancias_genera_asiento_balanceado_y_linea_2_1_6_0(db):
+    """Regresión: con Ganancias 4ta activa, neto = bruto − aportes − retención.
+    Sin la contrapartida 2-1-6-0 el asiento descuadraba (D ≠ H) y NO se posteaba
+    en silencio. Verifica que ahora SÍ se genera, cuadra, y tiene la línea al
+    Haber sobre 2-1-6-0 por exactamente el total de retención."""
+    # aportes 17% (11+3+3); sin contribuciones para mantener la aritmética clara
+    cfg = _cfg(db, aporte_jubilacion=0.11, aporte_inssjp=0.03, aporte_obra_social=0.03)
+    cfg.ganancias_activo = True
+    cfg.minimo_no_imponible = Decimal("0")
+    cfg.deduccion_especial = Decimal("0")
+    db.commit()
+
+    # Escala con 2 tramos que produce retención > 0 sobre el bruto anualizado.
+    db.add_all([
+        EscalaGanancias(
+            organizacion_id=1, tramo_desde=Decimal("0"),
+            tramo_hasta=Decimal("10000000"), alicuota=Decimal("0.05"),
+            monto_fijo=Decimal("0"),
+        ),
+        EscalaGanancias(
+            organizacion_id=1, tramo_desde=Decimal("10000000"),
+            tramo_hasta=None, alicuota=Decimal("0.10"),
+            monto_fijo=Decimal("500000"),
+        ),
+    ])
+    db.commit()
+
+    _empleado(db, "Juan", basico=1200000)  # SAC 100000 → bruto 1300000
+    liq = guardar_o_actualizar_liquidacion(db, 1, PERIODO)
+
+    # bruto = 1300000 ; aportes = 17% = 221000
+    assert liq.total_bruto == Decimal("1300000.00")
+    assert liq.total_aportes == Decimal("221000.00")
+    # anualizado = 1300000 × 12 = 15600000 → 2º tramo:
+    #   500000 + 0.10 × (15600000 − 10000000) = 500000 + 560000 = 1060000 anual
+    #   mensual = 1060000 / 12 = 88333.33
+    ret = Decimal("88333.33")
+    assert liq.total_retencion_ganancias == ret
+    # neto = bruto − aportes − retención = 1300000 − 221000 − 88333.33 = 990666.67
+    assert liq.total_neto == Decimal("990666.67")
+
+    liq = aprobar_liquidacion(db, 1, liq.id, None)
+    assert liq.estado == "aprobado"
+
+    # (a) el asiento SÍ se generó (antes del fix no se posteaba por descuadre)
+    asiento = (
+        db.query(Asiento)
+        .filter(Asiento.modulo == "sueldos_liquidacion", Asiento.referencia_id == liq.id)
+        .first()
+    )
+    assert asiento is not None, "el asiento de sueldos con Ganancias debe generarse"
+
+    detalles = db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id == asiento.id).all()
+    total_debe = sum(d.debe for d in detalles)
+    total_haber = sum(d.haber for d in detalles)
+    # (b) cuadra: Debe == Haber
+    assert total_debe == total_haber
+    assert total_debe == Decimal("1300000.00")  # bruto + contrib(0) = bruto
+
+    # (c) hay una línea al Haber sobre 2-1-6-0 por exactamente la retención
+    cuenta_ret = (
+        db.query(PlanCuenta)
+        .filter(PlanCuenta.organizacion_id == 1, PlanCuenta.codigo == "2-1-6-0")
+        .first()
+    )
+    assert cuenta_ret is not None, "PLAN_PATCH debe crear la cuenta 2-1-6-0"
+    linea_ret = [d for d in detalles if d.cuenta_id == cuenta_ret.id]
+    assert len(linea_ret) == 1
+    assert linea_ret[0].haber == ret
+    assert linea_ret[0].debe == Decimal("0")
+
+
+def test_aprobar_sin_ganancias_no_agrega_linea_2_1_6_0(db):
+    """Sin retención (escala vacía / ganancias apagado) el asiento sigue con 3
+    líneas y no toca 2-1-6-0 — el comportamiento previo se mantiene intacto."""
+    _cfg(db, aporte_jubilacion=0.10, contrib_jubilacion=0.20)
+    _empleado(db, "Juan", basico=120000)  # bruto 130000
+    liq = guardar_o_actualizar_liquidacion(db, 1, PERIODO)
+    assert liq.total_retencion_ganancias == Decimal("0.00")
+    liq = aprobar_liquidacion(db, 1, liq.id, None)
+
+    asiento = (
+        db.query(Asiento)
+        .filter(Asiento.modulo == "sueldos_liquidacion", Asiento.referencia_id == liq.id)
+        .first()
+    )
+    assert asiento is not None
+    detalles = db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id == asiento.id).all()
+    assert len(detalles) == 3  # sin la 4ta línea de retención
+    assert sum(d.debe for d in detalles) == sum(d.haber for d in detalles)
+    cuenta_ret = (
+        db.query(PlanCuenta)
+        .filter(PlanCuenta.organizacion_id == 1, PlanCuenta.codigo == "2-1-6-0")
+        .first()
+    )
+    assert not [d for d in detalles if d.cuenta_id == cuenta_ret.id]
+
+
 # ── Aislamiento multi-org ────────────────────────────────────────────
 
 def test_aislamiento_multi_org(db):

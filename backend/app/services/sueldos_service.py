@@ -385,6 +385,7 @@ def guardar_o_actualizar_liquidacion(
     existente.total_aportes = calc["total_aportes"]
     existente.total_contribuciones = calc["total_contribuciones"]
     existente.total_neto = calc["total_neto"]
+    existente.total_retencion_ganancias = calc["total_retencion_ganancias"]
 
     for d in calc["detalle"]:
         db.add(DetalleLiquidacionEmpleado(
@@ -443,6 +444,7 @@ def aprobar_liquidacion(
         total_aportes=_D(liq.total_aportes),
         total_contribuciones=_D(liq.total_contribuciones),
         total_neto=_D(liq.total_neto),
+        total_retencion_ganancias=_D(liq.total_retencion_ganancias),
     )
     db.refresh(liq)
     return liq

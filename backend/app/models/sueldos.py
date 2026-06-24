@@ -162,6 +162,7 @@ class LiquidacionSueldoPeriodo(Base):
     total_aportes         = Column(Numeric(12, 2), nullable=False, default=0)
     total_contribuciones  = Column(Numeric(12, 2), nullable=False, default=0)
     total_neto            = Column(Numeric(12, 2), nullable=False, default=0)
+    total_retencion_ganancias = Column(Numeric(12, 2), nullable=False, default=0, server_default="0")
     fecha_aprobacion      = Column(DateTime, nullable=True)
     fecha_presentacion    = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
