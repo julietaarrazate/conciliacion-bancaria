@@ -50,6 +50,8 @@ export function AgenteChat() {
   const [escuchando, setEscuchando]     = useState(false)
   const [transcribiendo, setTranscribiendo] = useState(false)
   const [visible, setVisible]           = useState(true)
+  const [saludoListo, setSaludoListo]   = useState(false)
+  const saludoIntentado                 = useRef(false)
   const bottomRef                       = useRef<HTMLDivElement>(null)
   const inputRef                        = useRef<HTMLInputElement>(null)
   const recognitionRef                  = useRef<{ stop(): void } | null>(null)
@@ -69,6 +71,21 @@ export function AgenteChat() {
 
   useEffect(() => {
     if (abierto) setTimeout(() => inputRef.current?.focus(), 100)
+  }, [abierto])
+
+  // Al abrir el chat por primera vez, pedimos un pantallazo proactivo en vez
+  // de esperar a que el usuario pregunte algo (alertas + resumen del día).
+  useEffect(() => {
+    if (!abierto || saludoIntentado.current) return
+    saludoIntentado.current = true
+    setSaludoListo(false)
+    apiClient.client.get('/agente/saludo-proactivo')
+      .then(res => {
+        const texto = res.data?.respuesta
+        if (texto) setMensajes(m => [...m, { rol: 'agente', texto }])
+      })
+      .catch(() => { /* silencioso: si falla, quedan las sugerencias fijas */ })
+      .finally(() => setSaludoListo(true))
   }, [abierto])
 
   // Auto-hide FAB while scrolling down; re-show when scrolling up or stopped
@@ -270,15 +287,15 @@ export function AgenteChat() {
 
           {/* Mensajes */}
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {mensajes.length === 0 && (
-              <div className="space-y-2">
-                <p className="text-xs text-gray-500 text-center pt-2">Preguntame sobre tus datos financieros</p>
-                {SUGERENCIAS.map(s => (
-                  <button key={s} onClick={() => enviar(s)}
-                    className="w-full text-left text-xs px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-gray-200 transition-colors">
-                    {s}
-                  </button>
-                ))}
+            {mensajes.length === 0 && !saludoListo && (
+              <div className="flex justify-start">
+                <div className="bg-white/8 px-3 py-2 rounded-xl rounded-bl-sm">
+                  <div className="flex gap-1">
+                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
               </div>
             )}
 
@@ -293,6 +310,20 @@ export function AgenteChat() {
                 </div>
               </div>
             ))}
+
+            {!mensajes.some(m => m.rol === 'user') && saludoListo && (
+              <div className="space-y-2">
+                {mensajes.length === 0 && (
+                  <p className="text-xs text-gray-500 text-center pt-2">Preguntame sobre tus datos financieros</p>
+                )}
+                {SUGERENCIAS.map(s => (
+                  <button key={s} onClick={() => enviar(s)}
+                    className="w-full text-left text-xs px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-gray-200 transition-colors">
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {cargando && (
               <div className="flex justify-start">

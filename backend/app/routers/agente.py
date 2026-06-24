@@ -218,6 +218,52 @@ def _resumen_financiero(db, org_id, mes=None, año=None):
     }
 
 
+def _consultar_alertas(db, org_id):
+    """Alertas operativas vigentes: cheques por vencer/vencidos, filas atrasadas,
+    movimientos sin asignar. Misma fuente que la campana del Dashboard."""
+    from app.services import reportes_service as svc
+    return svc.calcular_alertas(db, org_id)
+
+
+def _explicar_filas_pendientes(db, org_id, cliente_nombre=None, limit=10):
+    """Trae filas de planilla que NO conciliaron (status != ok) para explicar
+    por qué, con el dato real de motivo/comentario que dejó el motor de conciliación."""
+    from app.models.planilla import Planilla, PlanillaRow
+    from app.models.cliente import Cliente
+
+    limit = min(int(limit or 10), 25)
+    q = (
+        db.query(PlanillaRow, Planilla, Cliente)
+        .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
+        .outerjoin(Cliente, Planilla.cliente_id == Cliente.id)
+        .filter(
+            Planilla.organizacion_id == org_id,
+            Planilla.deleted_at.is_(None),
+            PlanillaRow.status != "ok",
+        )
+    )
+    if cliente_nombre:
+        q = q.filter(Cliente.nombre.ilike(f"%{cliente_nombre}%"))
+    filas = q.order_by(PlanillaRow.id.desc()).limit(limit).all()
+
+    if not filas:
+        return {"filas": [], "mensaje": "No hay filas pendientes que coincidan con ese criterio."}
+
+    return {"filas": [
+        {
+            "cliente": cli.nombre if cli else None,
+            "planilla": pl.nombre_archivo,
+            "monto": float(row.monto),
+            "status": row.status,
+            "cuit": row.cuit,
+            "titular": row.titular,
+            "fecha_acred_esperada": str(row.fecha_acred) if row.fecha_acred else None,
+            "comentario": row.comentario_revision,
+        }
+        for row, pl, cli in filas
+    ]}
+
+
 def _ejecutar_funcion(nombre: str, args: dict, db: Session, org_id: int) -> dict:
     try:
         if nombre == "consultar_pagos_cliente":
@@ -230,13 +276,156 @@ def _ejecutar_funcion(nombre: str, args: dict, db: Session, org_id: int) -> dict
             return _buscar_cliente(db, org_id, **args)
         if nombre == "resumen_financiero":
             return _resumen_financiero(db, org_id, **args)
+        if nombre == "consultar_alertas":
+            return _consultar_alertas(db, org_id)
+        if nombre == "explicar_filas_pendientes":
+            return _explicar_filas_pendientes(db, org_id, **args)
         return {"error": f"Función desconocida: {nombre}"}
     except Exception as ex:
         logger.warning("Error ejecutando función %s: %s", nombre, ex)
         return {"error": str(ex)}
 
 
-# ── Endpoint ──────────────────────────────────────────────────────────────────
+# ── Lógica compartida de chat (la usan /chat y /saludo-proactivo) ───────────────
+
+def _run_chat_message(mensaje: str, db: Session, org_id: int, api_key: str) -> str:
+    import google.generativeai as genai
+
+    genai.configure(api_key=api_key)
+
+    DECLARACIONES = [
+        {
+            "name": "consultar_pagos_cliente",
+            "description": "Consulta el total pagado por un cliente en planillas conciliadas. Usá cuando pregunten cuánto pagó un cliente, sus pagos o acreditaciones.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cliente_nombre": {"type": "string", "description": "Nombre del cliente (puede ser parcial)"},
+                    "desde": {"type": "string", "description": "Fecha desde YYYY-MM-DD (opcional)"},
+                    "hasta": {"type": "string", "description": "Fecha hasta YYYY-MM-DD (opcional)"},
+                },
+                "required": ["cliente_nombre"],
+            },
+        },
+        {
+            "name": "consultar_cheques",
+            "description": "Consulta la cartera de cheques: pendientes, acreditados, rechazados, totales, próximos a vencer.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "estado": {"type": "string", "description": "pendiente, acreditado o rechazado (opcional)"},
+                },
+                "required": [],
+            },
+        },
+        {
+            "name": "consultar_saldo_caja",
+            "description": "Consulta el saldo de caja del día de hoy: saldo inicial, pagos realizados, saldo disponible.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "buscar_cliente",
+            "description": "Busca un cliente por nombre y devuelve sus datos: CBU, CUIT, ID. Usá para verificar datos o autocompletar.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre": {"type": "string", "description": "Nombre parcial o completo del cliente"},
+                },
+                "required": ["nombre"],
+            },
+        },
+        {
+            "name": "resumen_financiero",
+            "description": "Resumen del mes: total cobrado en planillas y cheques en cartera.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes": {"type": "integer", "description": "Número de mes 1-12 (opcional, default mes actual)"},
+                    "año": {"type": "integer", "description": "Año (opcional, default año actual)"},
+                },
+                "required": [],
+            },
+        },
+        {
+            "name": "consultar_alertas",
+            "description": "Trae las alertas operativas vigentes: cheques por vencer en 7 días, cheques vencidos, filas de planilla atrasadas +30 días, movimientos bancarios sin asignar en los últimos 30 días. Usala proactivamente al saludar o cuando preguntan 'qué necesito ver hoy' / 'hay algo importante' / 'cómo viene todo'.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "explicar_filas_pendientes",
+            "description": "Trae filas de planilla que NO conciliaron (status distinto de 'ok') con el motivo real registrado por el motor de conciliación (no está / duplicado / faltan datos / en revisión) para poder EXPLICAR por qué un pago de un cliente no quedó conciliado. Usala cuando preguntan 'por qué no concilió X' o 'qué falta de la planilla de X'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cliente_nombre": {"type": "string", "description": "Nombre del cliente para filtrar (opcional, parcial)"},
+                    "limit": {"type": "integer", "description": "Máximo de filas a traer (opcional, default 10, máximo 25)"},
+                },
+                "required": [],
+            },
+        },
+    ]
+
+    hoy = hoy_art()
+    system = (
+        f"Sos el asistente financiero de Cuadra, sistema de conciliación bancaria y contable argentino. "
+        f"Hoy es {hoy.strftime('%d/%m/%Y')}. "
+        f"Respondé siempre en español, conciso pero NUNCA solo un número pelado: "
+        f"cuando das un dato, agregá una línea de contexto o interpretación (¿es bueno, malo, normal? ¿hay algo "
+        f"que requiera acción?). Sos un asistente PROACTIVO Y EXPLICATIVO, no un buscador de datos: "
+        f"- Si te preguntan 'cómo viene todo', 'hay algo importante' o un saludo genérico, consultá alertas y "
+        f"  resumen financiero y contestá con lo más urgente primero, sugiriendo una acción concreta. "
+        f"- Si te preguntan por qué algo no conciliá o por qué falta un pago, usá explicar_filas_pendientes y "
+        f"  traducí el motivo técnico a lenguaje simple (ej. 'no está' significa que no encontramos ningún "
+        f"  movimiento bancario con ese monto en el período; 'duplicado' significa que el monto coincide con "
+        f"  más de un movimiento y no se puede saber cuál es sin más datos como CUIT o titular). "
+        f"- Si detectás algo que valga la pena avisar sin que lo pidan explícitamente (ej. cheques vencidos, "
+        f"  movimientos viejos sin asignar), mencionalo aunque la pregunta haya sido otra cosa. "
+        f"Usá formato de pesos argentinos: $1.250.000,00. "
+        f"Usá las funciones disponibles para consultar la base de datos real — nunca inventes números. "
+        f"Si no encontrás datos, decilo claramente."
+    )
+
+    model = genai.GenerativeModel(
+        model_name=_GEMINI_MODEL,
+        tools=[{"function_declarations": DECLARACIONES}],
+        system_instruction=system,
+    )
+
+    chat_session = model.start_chat()
+    response = _gemini_send(chat_session, mensaje)
+
+    # Function calling loop — máximo 3 rondas
+    for _ in range(3):
+        fn_calls = [
+            p for p in response.candidates[0].content.parts
+            if hasattr(p, "function_call") and p.function_call.name
+        ]
+        if not fn_calls:
+            break
+
+        fn_responses = []
+        for part in fn_calls:
+            fc = part.function_call
+            result = _ejecutar_funcion(fc.name, dict(fc.args), db, org_id)
+            fn_responses.append(
+                genai.protos.Part(
+                    function_response=genai.protos.FunctionResponse(
+                        name=fc.name,
+                        response={"result": result},
+                    )
+                )
+            )
+        response = _gemini_send(chat_session, fn_responses)
+
+    texto = "".join(
+        p.text for p in response.candidates[0].content.parts
+        if hasattr(p, "text") and p.text
+    ).strip()
+
+    return texto or "No pude generar una respuesta."
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/chat")
 def chat(
@@ -258,116 +447,41 @@ def chat(
     org_id = current_user.organizacion_id or 1
 
     try:
-        import google.generativeai as genai
-
-        genai.configure(api_key=api_key)
-
-        DECLARACIONES = [
-            {
-                "name": "consultar_pagos_cliente",
-                "description": "Consulta el total pagado por un cliente en planillas conciliadas. Usá cuando pregunten cuánto pagó un cliente, sus pagos o acreditaciones.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "cliente_nombre": {"type": "string", "description": "Nombre del cliente (puede ser parcial)"},
-                        "desde": {"type": "string", "description": "Fecha desde YYYY-MM-DD (opcional)"},
-                        "hasta": {"type": "string", "description": "Fecha hasta YYYY-MM-DD (opcional)"},
-                    },
-                    "required": ["cliente_nombre"],
-                },
-            },
-            {
-                "name": "consultar_cheques",
-                "description": "Consulta la cartera de cheques: pendientes, acreditados, rechazados, totales, próximos a vencer.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "estado": {"type": "string", "description": "pendiente, acreditado o rechazado (opcional)"},
-                    },
-                    "required": [],
-                },
-            },
-            {
-                "name": "consultar_saldo_caja",
-                "description": "Consulta el saldo de caja del día de hoy: saldo inicial, pagos realizados, saldo disponible.",
-                "parameters": {"type": "object", "properties": {}, "required": []},
-            },
-            {
-                "name": "buscar_cliente",
-                "description": "Busca un cliente por nombre y devuelve sus datos: CBU, CUIT, ID. Usá para verificar datos o autocompletar.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "nombre": {"type": "string", "description": "Nombre parcial o completo del cliente"},
-                    },
-                    "required": ["nombre"],
-                },
-            },
-            {
-                "name": "resumen_financiero",
-                "description": "Resumen del mes: total cobrado en planillas y cheques en cartera.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "mes": {"type": "integer", "description": "Número de mes 1-12 (opcional, default mes actual)"},
-                        "año": {"type": "integer", "description": "Año (opcional, default año actual)"},
-                    },
-                    "required": [],
-                },
-            },
-        ]
-
-        hoy = hoy_art()
-        system = (
-            f"Sos el asistente financiero de Cuadra, sistema de conciliación bancaria argentino. "
-            f"Hoy es {hoy.strftime('%d/%m/%Y')}. "
-            f"Respondé siempre en español, de forma concisa y clara. "
-            f"Usá formato de pesos argentinos: $1.250.000,00. "
-            f"Cuando te pregunten datos financieros, usá las funciones disponibles para consultar la base de datos real. "
-            f"Si no encontrás datos, decilo claramente. No inventes números."
-        )
-
-        model = genai.GenerativeModel(
-            model_name=_GEMINI_MODEL,
-            tools=[{"function_declarations": DECLARACIONES}],
-            system_instruction=system,
-        )
-
-        chat_session = model.start_chat()
-        response = _gemini_send(chat_session, mensaje)
-
-        # Function calling loop — máximo 3 rondas
-        for _ in range(3):
-            fn_calls = [
-                p for p in response.candidates[0].content.parts
-                if hasattr(p, "function_call") and p.function_call.name
-            ]
-            if not fn_calls:
-                break
-
-            fn_responses = []
-            for part in fn_calls:
-                fc = part.function_call
-                result = _ejecutar_funcion(fc.name, dict(fc.args), db, org_id)
-                fn_responses.append(
-                    genai.protos.Part(
-                        function_response=genai.protos.FunctionResponse(
-                            name=fc.name,
-                            response={"result": result},
-                        )
-                    )
-                )
-            response = _gemini_send(chat_session, fn_responses)
-
-        texto = "".join(
-            p.text for p in response.candidates[0].content.parts
-            if hasattr(p, "text") and p.text
-        ).strip()
-
-        return {"respuesta": texto or "No pude generar una respuesta."}
-
+        texto = _run_chat_message(mensaje, db, org_id, api_key)
+        return {"respuesta": texto}
     except Exception as ex:
         logger.warning("Agente chat error: %s", ex)
+        status, msg = _classify_gemini_error(ex)
+        raise HTTPException(status, msg)
+
+
+@router.get("/saludo-proactivo")
+def saludo_proactivo(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Genera un saludo proactivo al abrir el chat: revisa alertas + resumen
+    financiero y devuelve 2-4 frases con lo más relevante de hoy, sin que el
+    usuario tenga que preguntar nada. Mismo cupo diario que /chat."""
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(503, "Agente no configurado (falta GEMINI_API_KEY en Render)")
+    if not _chat_allowed():
+        raise HTTPException(429, "Límite diario del asistente IA alcanzado. Volvé mañana 🙂")
+
+    org_id = current_user.organizacion_id or 1
+    mensaje_interno = (
+        "Dame un pantallazo proactivo de hoy: revisá las alertas vigentes y el resumen "
+        "financiero del mes, y contame en 2 a 4 frases qué es lo más importante que tengo "
+        "que saber ahora, sugiriendo una acción concreta si corresponde. Si no hay nada "
+        "urgente decilo de forma breve y positiva. No me preguntes nada, contame directamente."
+    )
+
+    try:
+        texto = _run_chat_message(mensaje_interno, db, org_id, api_key)
+        return {"respuesta": texto}
+    except Exception as ex:
+        logger.warning("Agente saludo proactivo error: %s", ex)
         status, msg = _classify_gemini_error(ex)
         raise HTTPException(status, msg)
 
