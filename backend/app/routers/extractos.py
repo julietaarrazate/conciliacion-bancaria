@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_, or_, text, func
 from datetime import date, datetime
 from zoneinfo import ZoneInfo as _ZI
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 _ARG = _ZI('America/Argentina/Buenos_Aires')
 from typing import Optional
 import tempfile, os, io, hashlib
@@ -42,6 +44,7 @@ def _extracto_for_user(db: Session, extracto_id: int, current_user: User,
 settings = get_settings()
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/extractos", tags=["extractos"])
+limiter = Limiter(key_func=get_remote_address)
 
 # Mapeo de clave interna del parser → nombre de banco legible
 _BANCO_NOMBRE = {
@@ -101,7 +104,9 @@ def list_extractos(skip: int = 0, limit: int = 50,
 
 
 @router.post("/upload", response_model=ExtractoBancarioResponse)
-async def upload_extracto(file: UploadFile = File(...),
+@limiter.limit("10/minute")
+async def upload_extracto(request: Request,
+                          file: UploadFile = File(...),
                           banco: str = Query("Banco Macro"),
                           db: Session = Depends(get_db),
                           current_user: User = Depends(get_current_user)):
@@ -339,6 +344,9 @@ def eliminar_movimientos_um(extracto_id: int,
         ids_a_borrar = [m.id for m in movs_a_borrar]
 
         # Revertir asientos contables antes de eliminar los movimientos
+        # (fault-tolerant: un fallo aquí no debe bloquear la baja del lote UM,
+        # pero se reporta para que no quede silencioso)
+        contabilidad_ok = True
         try:
             from app.services.motor_contable import reversar_asientos as _rev
             _org_id = extracto.organizacion_id or 1
@@ -347,7 +355,8 @@ def eliminar_movimientos_um(extracto_id: int,
             if movs_a_borrar:
                 _rev(db, "um_lote", movs_a_borrar[0].id, _org_id, current_user.id, "Baja lote UM")
         except Exception as _mc_ex:
-            logger.warning("reverso UM asientos: %s", _mc_ex)
+            logger.error("reverso UM asientos falló (extracto %s, lote %s): %s", extracto_id, max_lote, _mc_ex)
+            contabilidad_ok = False
 
         if ids_a_borrar:
             db.query(PlanillaRow).filter(
@@ -359,7 +368,7 @@ def eliminar_movimientos_um(extracto_id: int,
         db.commit()
         registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "DELETE_UM",
                       {"eliminados": n, "lote": max_lote})
-        return {"ok": True, "eliminados": n, "lote": max_lote}
+        return {"ok": True, "eliminados": n, "lote": max_lote, "contabilidad_ok": contabilidad_ok}
     except Exception as e:
         db.rollback()
         logger.error("eliminar UM: %s", e)
@@ -367,7 +376,9 @@ def eliminar_movimientos_um(extracto_id: int,
 
 
 @router.post("/{extracto_id}/agregar-um", response_model=MergeUMResponse)
+@limiter.limit("20/minute")
 async def agregar_ultimos_movimientos(
+    request: Request,
     extracto_id: int,
     file: UploadFile = File(...),
     corte_saldo: Optional[float] = Form(None),
@@ -401,6 +412,9 @@ async def agregar_ultimos_movimientos(
                       {"archivo": file.filename, **stats})
 
         # Asiento contable automático para los movimientos UM nuevos
+        # (fault-tolerant: la importación de movimientos ya se guardó arriba,
+        # un fallo aquí no debe bloquearla, pero se reporta para que no quede silencioso)
+        contabilidad_ok = True
         if stats["agregados"] > 0 and stats.get("nuevo_lote"):
             try:
                 from app.services.motor_contable import registrar_um_import
@@ -422,9 +436,10 @@ async def agregar_ultimos_movimientos(
                     modo=_modo,
                 )
             except Exception as _mc_ex:
-                logger.warning("motor_contable UM: %s", _mc_ex)
+                logger.error("motor_contable UM falló (extracto %s, lote %s): %s", extracto_id, stats.get("nuevo_lote"), _mc_ex)
+                contabilidad_ok = False
 
-        return {"extracto_id": extracto_id, **stats}
+        return {"extracto_id": extracto_id, **stats, "contabilidad_ok": contabilidad_ok}
     except HTTPException:
         raise
     except Exception as e:

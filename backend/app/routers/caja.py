@@ -109,6 +109,9 @@ def update_arqueo(
     db.refresh(arqueo)
 
     # Motor contable — reposición de efectivo cuando se registran pesos_agregados
+    # (fault-tolerant: el arqueo ya se guardó arriba; un fallo aquí no debe
+    # bloquear la operación de caja, pero se reporta para que no quede silencioso)
+    contabilidad_ok = True
     if "pesos_agregados" in payload and pesos_nuevos > 0:
         try:
             from app.services.motor_contable import registrar_ingreso_efectivo
@@ -121,9 +124,12 @@ def update_arqueo(
                 fecha=arqueo.fecha,
             )
         except Exception as _mc_ex:
-            logger.warning("motor_contable ingreso_efectivo: %s", _mc_ex)
+            logger.error("motor_contable ingreso_efectivo falló (arqueo %s): %s", arqueo.id, _mc_ex)
+            contabilidad_ok = False
 
-    return _arqueo_response(arqueo)
+    resp = _arqueo_response(arqueo)
+    resp["contabilidad_ok"] = contabilidad_ok
+    return resp
 
 
 @router.get("/arqueo/historial")

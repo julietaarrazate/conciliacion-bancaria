@@ -840,6 +840,36 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   diferenciados (permiso denegado, sin voz, sin micrófono) en vez de fallar en silencio. Estados visuales:
   rojo pulsante grabando, azul tenue transcribiendo.
 
+### v3.18 — Paginación planillas + Google OAuth + índices DB + fix campana (junio 2026 — PRs #140-#146)
+
+- **Paginación server-side en planillas**: `GET /planillas/{id}/detalle` acepta `limit/offset` +
+  filtros (`status`, `cuit`, `titular`, `importe`, `mov_titular`, `mov_fecha`, `mov_fecha_acred`).
+  Stats (ok, no está, etc.) se calculan desde TODAS las filas con `GROUP BY` (no solo la página
+  actual); `total_filtered` en la respuesta para paginar bien con filtros activos. `PlanillaPanel`
+  hace fetch por página + debounce 350ms en filtros; "Seleccionar todo" = solo la página actual
+  (ya no carga 1000+ filas en memoria). Resuelve el pendiente de v3.12.1.
+- **Google OAuth — login con cuenta de Google** (opt-in, link-only): `POST /auth/google` verifica
+  el token de Google (`useGoogleLogin` con popup + `access_token`, NO el iframe `GoogleLogin` que
+  queda invisible si el origen no está en la whitelist de Google) vía `tokeninfo` y valida
+  `azp == GOOGLE_CLIENT_ID`. Solo permite usuarios YA registrados en el sistema (no crea cuentas
+  nuevas). Activar seteando `GOOGLE_CLIENT_ID` en Render y `VITE_GOOGLE_CLIENT_ID` en Vercel (mismo
+  valor) + agregar el origin en Google Console. Sin esas env vars el botón no aparece.
+- **Índices DB críticos en contabilidad** (migración 012): `asientos(organizacion_id)`,
+  `asientos(organizacion_id, fecha)`, `asientos(modulo)`, `asiento_detalle(asiento_id)`,
+  `asiento_detalle(cuenta_id)`, `asiento_detalle(cuenta_id, asiento_id)`. Cache TTL 60s en
+  `GET /contabilidad/cuentas-corrientes` (se invalida con "Empezar limpio").
+- **Fix campana de alertas**: navegaba a `/resumen` pero el `AlertasWidget` vive en el Dashboard
+  (`/`) — el usuario veía el badge pero al clickear no encontraba las alertas. Corregido a `/`.
+- **Fix badge de campana inflado sin alertas reales**: `filas_atrasadas` contaba como urgencia
+  `"media"` en el total del badge aunque fuera informativo — bajado a `"baja"` (sigue visible en
+  `AlertasWidget`, ya no infla el número de la campana).
+- **Fix micrófono/cámara bloqueados en la PWA**: `Permissions-Policy` en `vercel.json` y `main.py`
+  tenía `microphone=(), camera=()` — paréntesis vacíos bloquean TODOS los orígenes, incluido el
+  propio sitio. Cambiado a `microphone=(self), camera=(self)`. Afectaba dictado por voz en el
+  asistente IA y OCR de fotos (cheques/comprobantes).
+- SVG icons (reemplaza emojis 👁️/🙈) en Login, landing (secciones Seguridad/El Problema);
+  `CuadraLogo` centrado; layout mobile de Organizaciones.
+
 ### Pendiente para próximas sesiones
 
 - ~~**Liquidaciones con asientos**~~ — resuelto en v3.13.
@@ -851,9 +881,278 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 - ~~**Split router contabilidad.py**~~ — resuelto en v3.16 (PR #127).
 - ~~**Tipado `any` frontend**~~ — resuelto en v3.16 (PR #131).
 - ~~**Paginación 5 endpoints**~~ — resuelto en v3.16 (PR #133).
-- **Paginación rows en `/planillas/{id}`** — retorna todas las filas sin paginar (puede ser 1000+).
-  No implementado porque `PlanillaPanel` asume todas las filas juntas. Requiere refactor coordinado
-  frontend+backend. Abordar cuando el volumen de planillas crezca y se note la lentitud.
+- ~~**Paginación rows en `/planillas/{id}`**~~ — resuelto en v3.18 (server-side limit/offset + filtros).
+- ~~**Ingresos Brutos y Convenio Multilateral**~~ — resuelto en v3.21 (PR #154).
+- **Próximos módulos del plan de liquidación de impuestos** (ver sección abajo): orden a decidir
+  con Julieta por valor — candidatos: Liquidador Sueldos y F931, Intake Exportador de Servicios.
+- **⏰ RECORDATORIO SEMESTRAL — actualizar escala de Monotributo**: ARCA actualiza los límites de
+  facturación anual por categoría cada semestre (ajuste por IPC, próxima actualización
+  julio/agosto 2026). Los valores sembrados en `monotributo_service.py` (`_LIMITES_VIGENTES`)
+  vencen con esa actualización. Cuando se abra una sesión después de esa fecha: ir a
+  arca.gob.ar/monotributo/categorias.asp (el fetch directo devuelve 403 por anti-bot — usar
+  WebSearch cruzando 2-3 medios especializados como Ámbito/iProfesional, o pedirle el dato a
+  Julieta) y actualizar la escala vía `PUT /monotributo/categorias/{id}` o re-sembrando el array.
+
+---
+
+## Plan de expansión: módulos de liquidación de impuestos
+
+Inspirado en un diagrama de agentes (Codex local) con dos managers: **Manager de Liquidación
+Mensual** (IVA Proyección y DDJJ, Liquidador Sueldos y F931, Ingresos Brutos y Convenio
+Multilateral) y **Manager Exportadores de Servicios** (Intake Exportador, Control Semestral
+Monotributo). Decisión de Julieta: implementarlo de verdad en Cuadra (no quedarse en el diagrama),
+mejor que Codex, como sistema robusto y escalable, e iterar módulo por módulo priorizando por valor.
+
+**Patrón establecido**: cada módulo es opt-in/configurable por organización (no algo hardcodeado
+para una sola org), sigue la estructura de Tarjetas/Cheques (modelo + service + router con permisos
+en 3 capas + tests + página dedicada), y se delega a Opus para la lógica financiera compleja y a
+Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya documentado.
+
+- **v3.19 — IVA Proyección y DDJJ** ✅ implementado (ver abajo). Primer módulo del plan.
+- **v3.20 — Control Semestral Monotributo** ✅ implementado (ver abajo). Segundo módulo del plan.
+- **v3.21 — Ingresos Brutos y Convenio Multilateral** ✅ implementado (ver abajo). Tercer módulo del plan.
+- **v3.22 — Liquidador de Sueldos y F931** ✅ implementado (ver abajo). Cuarto módulo del plan.
+- Pendientes a priorizar: Intake Exportador de Servicios.
+
+### v3.19 — Módulo IVA Proyección y DDJJ (junio 2026 — PR #147)
+
+- **Qué hace**: proyecta el IVA de un período (mes) a partir de los asientos contables ya
+  registrados, cruzados con una `tasa_iva` configurable por cuenta. Cuadra no emite facturas, así
+  que el **Débito Fiscal es una proyección** (no un dato legal real) calculada sobre las cuentas de
+  ingreso que el admin marca como gravadas. El **Crédito Fiscal** combina una proyección similar
+  sobre gastos gravados + el crédito fiscal REAL ya contabilizado en `1-1-2-4 IVA Crédito Fiscal`
+  (p. ej. de liquidaciones de Tarjetas). La UI deja explícito en todo momento que es una
+  herramienta de estimación interna, no una liquidación oficial ante ARCA.
+- **`PlanCuenta.tasa_iva`** (Numeric 5,4 nullable) — % de IVA por cuenta, configurable en
+  `/iva` → tab Config (`admin_accounting`). **No se restringe a cuentas hoja**: algunos módulos
+  (Pagos → `registrar_egreso`) postean directo contra cuentas cabecera como `3-2-0-0 Gastos`, así
+  que esa cuenta también debe poder marcarse como gravada — la agregación es por `cuenta_id` exacto
+  de cada línea de asiento, así que no hay riesgo de doble conteo entre una cuenta y sus subcuentas.
+- **Cuentas nuevas en el plan**: `2-2-0-0 Impuestos a pagar` / `2-2-1-0 IVA Débito Fiscal`
+  (idempotente vía PLAN_PATCH, no toca Org A).
+- **Modelo `ProyeccionIva`** (tabla `proyecciones_iva`, unique por org+período): snapshot
+  débito/crédito/saldo + estado `proyectado`/`presentado` + detalle JSON por cuenta. Marcar como
+  `presentado` (DDJJ ya enviada a ARCA) la deja **inmutable** — recalcular no la pisa.
+- **Excluye `tarjeta_liq` del crédito proyectado**: ese asiento ya postea el IVA REAL del arancel
+  contra `1-1-2-4` en la misma operación — si además se marca como gravada la cuenta de aranceles
+  (Visa/Mastercard/Amex), el sistema NO suma proyectado ahí también (evita doble conteo, hallazgo
+  de code review corregido antes de mergear).
+- **`services/iva_service.py`**: `calcular_proyeccion_iva` (preview, no persiste),
+  `guardar_o_actualizar_proyeccion` (upsert idempotente), `marcar_presentada`. Todo en `Decimal`,
+  fechas con `tz.now_art()`.
+- **`routers/iva.py`** (prefix `/iva`) — permisos en 3 capas: `GET/PUT /iva/config` (tasa por
+  cuenta) → `admin_accounting`; `GET /iva/proyeccion` (preview) → `view_accounting`;
+  `POST /iva/proyeccion/calcular` (persiste) → `manage_finance`;
+  `POST /iva/proyeccion/{id}/marcar-presentada` → `admin_accounting`;
+  `GET /iva/historial` (paginado) → `view_accounting`.
+- **Frontend `/iva`**: 3 tabs — Proyección (período, preview en vivo, calcular y guardar, marcar
+  presentada con confirm), Historial (paginado, saldo color-coded), Config (tasa por cuenta,
+  ingresos vs gastos). Nav item gated `view_accounting`; acciones de escritura gated dentro de la
+  página. Migración 013 + safety nets en `main.py`. 14 tests nuevos (`test_iva.py`). 333 tests
+  pasando en total.
+
+### v3.20 — Módulo Control Semestral Monotributo (junio 2026 — PR #148)
+
+- **Qué hace**: herramienta de **control/alerta interna** (NO una declaración oficial) que proyecta
+  los ingresos de los ÚLTIMOS 12 MESES de la organización (a partir de los asientos ya registrados)
+  y los compara contra las escalas de categoría del Monotributo de ARCA, para anticipar si
+  corresponde recategorizarse o si se excedió el régimen antes del corte semestral (30/jun, 31/dic).
+- **Ventana de 12 meses por corte**: S1 → corte 30/jun/YYYY → ventana [1/jul/(YYYY-1), 30/jun/YYYY];
+  S2 → corte 31/dic/YYYY → ventana [1/ene/YYYY, 31/dic/YYYY]. Criterio de ingreso idéntico a
+  `iva_service.py` (cuentas `resultado` que empiezan con `3-1`, haber − debe).
+- **Modelos nuevos** (`app/models/monotributo.py`): `CategoriaMonotributo` (escala editable por
+  org+tipo_actividad+categoría), `MonotributoConfig` (opt-in por org, `activo=False` por default,
+  `categoria_actual`, `tipo_actividad` servicios/bienes), `ControlMonotributo` (snapshot por
+  período, **inmutable una vez `estado="revisado"`** — mismo patrón que `ProyeccionIva`).
+- **`services/monotributo_service.py`**: `evaluar_categoria()` sugiere la categoría de menor `orden`
+  cuyo `limite_anual >= ingresos_12m`, o la más alta con `excede=True` si supera el tope de todas.
+  `guardar_o_actualizar_control()` hace upsert pero no pisa un control ya revisado.
+- **Escala sembrada con valores REALES vigentes de ARCA** (no placeholders) — `_LIMITES_VIGENTES` en
+  `monotributo_service.py`, corroborados vía prensa especializada (afip.gob.ar bloquea fetch directo
+  con 403 anti-bot). El límite anual por categoría es el MISMO para servicios (A-H) y bienes (A-K) —
+  lo que difiere entre actividades es la cuota mensual a pagar, no la escala de ingresos (este módulo
+  no calcula esa cuota). **Vence con la próxima actualización semestral de ARCA (jul/ago 2026)** —
+  ver recordatorio en "Pendiente para próximas sesiones" más arriba. Completamente editable vía
+  `PUT /monotributo/categorias/{id}`, sin valores hardcodeados en la lógica.
+- **Router `/monotributo`** — permisos en 3 capas: `GET/PUT /monotributo/config` → `admin_accounting`;
+  `GET /monotributo/categorias`/`GET /monotributo/control` (preview)/`GET /monotributo/historial`
+  (paginado) → `view_accounting`; `PUT /monotributo/categorias/{id}` → `admin_accounting`;
+  `POST /monotributo/control/calcular` (persiste) → `manage_finance`;
+  `POST /monotributo/control/{id}/marcar-revisado` → `admin_accounting`.
+- **Frontend `/monotributo`**: 3 tabs — Control Semestral (selector de período, preview en vivo,
+  barra de progreso color-coded, alertas de recategorización/exceso de régimen), Historial
+  (paginado), Config (activo, tipo_actividad, categoría actual, tabla editable de límites por
+  categoría con disclaimer de verificar contra ARCA). Mismo estilo que `/iva`. Nav gateada
+  `view_accounting`. Migración `014_monotributo` + safety nets idempotentes en `main.py` (seed al
+  crear org nueva + backfill para orgs existentes). 19 tests nuevos (`test_monotributo.py`). 352
+  tests pasando en total.
+
+### v3.21 — Módulo Ingresos Brutos y Convenio Multilateral (junio 2026 — PR #154)
+
+- **Qué hace**: herramienta de **proyección interna** (NO una DDJJ oficial) que estima el impuesto a
+  los Ingresos Brutos de un período (mes) a partir de los ingresos contables ya reconocidos, aplicando
+  alícuotas que la organización configura por jurisdicción. Sirve para que el estudio anticipe cuánto
+  va a pagar de IIBB antes de armar la declaración real ante AGIP/ARBA o el organismo provincial.
+- **Dos modos de cálculo** (`IIBBConfig.modo`, opt-in por org, `activo=False` por default):
+  - `simple`: la org opera en UNA jurisdicción → `ingreso_total × alícuota` de la jurisdicción única
+    (`IIBBConfig.jurisdiccion_unica_id`).
+  - `convenio_multilateral`: la org opera en VARIAS jurisdicciones → el ingreso total se distribuye
+    según el `coeficiente_distribucion` de cada jurisdicción activa y a cada porción se le aplica SU
+    PROPIA alícuota. El coeficiente es un **% editable por la org** (no se recalcula desde
+    ingresos/gastos del ejercicio anterior — es proyección interna, no la DDJJ del Convenio).
+- **Criterio de ingreso idéntico a `iva_service.py`/`monotributo_service.py`**: cuentas `resultado`
+  cuyo código empieza con `3-1`, sumando (haber − debe) de los `AsientoDetalle` del mes filtrando por
+  `Asiento.fecha` y `organizacion_id`.
+- **NO se siembran alícuotas reales** (a diferencia de Monotributo): las 24 jurisdicciones argentinas
+  (CABA + 23 provincias) tienen su propio régimen, alícuotas que varían por actividad y cambian con
+  frecuencia. `seed_iibb_jurisdiccion()` crea UNA jurisdicción ILUSTRATIVA ("CABA (ejemplo — completar)",
+  alícuota 0) y el admin DEBE completar/verificar todo contra AGIP/ARBA/organismo provincial. Todo
+  100% editable vía API/UI. Disclaimer visible en la página (mismo tono que Monotributo).
+- **Validación de coeficientes (no bloqueante)**: en `convenio_multilateral`, si la suma de
+  `coeficiente_distribucion` de las jurisdicciones activas ≠ 100% (tolerancia 0.0001), el cálculo
+  SIGUE funcionando (es interno) pero la respuesta incluye `suma_coeficientes` + un `warning` explícito
+  para que el usuario lo corrija en Config. La UI muestra una alerta ámbar.
+- **Modelos nuevos** (`app/models/iibb.py`): `JurisdiccionIIBB` (nombre, alícuota Numeric 5,4,
+  coeficiente Numeric 5,4, activa, orden, unique org+nombre), `IIBBConfig` (1 por org, opt-in, modo,
+  FK `jurisdiccion_unica_id`), `ProyeccionIIBB` (snapshot por período, unique org+período, detalle JSON
+  por jurisdicción, **inmutable una vez `estado="presentado"`** — mismo patrón que `ProyeccionIva`).
+- **`services/iibb_service.py`** (puro, sin FastAPI, Decimal + `tz.now_art()`):
+  `calcular_ingreso_periodo`, `calcular_proyeccion_iibb` (preview, no persiste, devuelve detalle +
+  warning), `guardar_o_actualizar_proyeccion` (upsert idempotente, no pisa presentada),
+  `marcar_presentada`, `seed_iibb_jurisdiccion`.
+- **Router `/iibb`** — permisos en 3 capas: `GET/PUT /iibb/config` → `admin_accounting`;
+  `GET/POST /iibb/jurisdicciones`, `PUT /iibb/jurisdicciones/{id}` → `admin_accounting` (409 si nombre
+  duplicado, 422 si alícuota/coef fuera de [0,1]); `GET /iibb/proyeccion` (preview) → `view_accounting`;
+  `POST /iibb/proyeccion/calcular` (persiste) → `manage_finance`;
+  `POST /iibb/proyeccion/{id}/marcar-presentada` → `admin_accounting`;
+  `GET /iibb/historial` (paginado) → `view_accounting`.
+- **Frontend `/ingresos-brutos`** (`pages/IngresosBrutos.tsx`): 3 tabs — Proyección (selector de mes,
+  preview en vivo, calcular y guardar, alerta si coeficientes ≠ 100%, desglose por jurisdicción,
+  marcar presentada con confirm), Historial (paginado), Config (activo, modo, selector de jurisdicción
+  única en modo simple, tabla editable de jurisdicciones con alta inline + toggle activa + columna
+  coeficiente solo visible en convenio_multilateral, disclaimer AGIP/ARBA). Mismo estilo que `/iva` e
+  `/monotributo`. Nav gateada `view_accounting`. Las tasas se ingresan como % (5 = 5%) y se guardan
+  como fracción.
+- **Migración `015_iibb`** + safety nets idempotentes en `main.py` (3x `CREATE TABLE IF NOT EXISTS` +
+  índices + seed de jurisdicción ilustrativa al crear org nueva / backfill para orgs existentes).
+  Org A intacta (solo aditivo). 23 tests nuevos (`test_iibb.py`: simple, convenio, warning de
+  coeficientes, inmutabilidad post-presentado, permisos por capa, aislamiento multi-org). 375 tests
+  pasando en total.
+
+### v3.22 — Módulo Liquidador de Sueldos y F931 (junio 2026 — PR #155)
+
+- **Qué hace**: herramienta de **liquidación interna de sueldos + proyección del F931** (la DDJJ
+  mensual de AFIP/ARCA de aportes y contribuciones de la seguridad social). Por cada empleado activo
+  de la org calcula sueldo bruto (+ SAC proporcional), aportes del empleado, contribuciones del
+  empleador y sueldo neto; los totales agregados son la base del F931 (total remuneraciones, total
+  aportes, total contribuciones). La UI deja explícito que **NO sustituye un sistema de liquidación
+  de sueldos homologado ni reemplaza el SUSS/AFIP** — es gestión interna del estudio.
+- **Dominio de datos nuevo (empleados)** — primer módulo del plan que agrega un dominio, no solo
+  proyección sobre asientos. Modelos en `app/models/sueldos.py`:
+  - `ConvenioColectivo` (org-scoped, unique org+nombre) — varios convenios por org.
+  - `CategoriaConvenio` (FK convenio, unique convenio+nombre, `sueldo_basico` Numeric 12,2).
+  - `Empleado` (org-scoped, `cuil` 11 dígitos validado igual que CUIT de clientes, FK convenio/
+    categoría nullable, `sueldo_basico` override del de la categoría, `cargas_familia`, `activo`,
+    **soft delete `deleted_at`** — mismo patrón que Planilla).
+  - `ConfigSueldos` (1 por org, opt-in `activo=False` por default, igual patrón que IIBBConfig) con
+    las alícuotas de aportes (jubilación/INSSJP/obra social) y contribuciones (jubilación/INSSJP ley
+    19032/obra social/asignaciones familiares/fondo desempleo/ART). **Sembradas como DEFAULT EDITABLE**
+    con valores de referencia 2024 (esquema nacional ley 27.541: aportes 11%+3%+3%; contribuciones
+    ~18%) y nota "verificar vigencia con tu contador/AFIP". **ART queda en 0 obligatoriamente**
+    editable (varía 100% por póliza). A diferencia de IIBB sí se siembran defaults porque el esquema
+    de seguridad social es nacional y estable; igual de explícito que el disclaimer de Monotributo.
+  - `LiquidacionSueldoPeriodo` (snapshot por org+período unique, estados borrador/aprobado/presentado,
+    **inmutable una vez `presentado`** — mismo patrón ProyeccionIva/IIBB/ControlMonotributo).
+  - `DetalleLiquidacionEmpleado` (FK liquidación+empleado, bruto/sac/aportes/contribuciones/neto +
+    `detalle_json` con el desglose de cada concepto).
+- **`services/sueldos_service.py`** (puro, sin FastAPI, Decimal + `tz.now_art()`):
+  `calcular_liquidacion_periodo` (preview, no persiste), `guardar_o_actualizar_liquidacion` (upsert
+  idempotente, reemplaza detalles, no pisa presentado), `aprobar_liquidacion` (genera asiento),
+  `marcar_presentada` (inmutable), `get_o_crear_config`, `seed_config_sueldos`.
+  - **Básico**: override del empleado → básico de su categoría → 0.
+  - **SAC proporcional — SIMPLIFICACIÓN DOCUMENTADA**: el SAC legal se devenga semestralmente; aquí
+    se usa la provisión mensual `sac = básico / 12` (práctica contable habitual de costeo laboral
+    mensual). NO es el cálculo legal del recibo de junio/diciembre. El SAC integra la base imponible
+    (bruto = básico + sac). Documentado en el docstring del service.
+  - aportes = bruto × Σ alícuotas de aporte ; contribuciones = bruto × Σ alícuotas de contribución
+    (incluye ART) ; neto = bruto − aportes.
+- **Asiento contable agrupado** al aprobar (`registrar_liquidacion_sueldos` en `motor_contable.py`,
+  módulo `sueldos_liquidacion`, 3 líneas vía `_crear_asiento_multilinea`):
+  Sueldos y cargas sociales (3-2-4-0, gasto) **D** por bruto+contribuciones / Sueldos a pagar
+  (2-1-4-0) **H** por el neto / Cargas sociales a pagar (2-1-5-0) **H** por aportes+contribuciones.
+  Partida doble: D = bruto+contrib ; H = neto + aportes + contrib = bruto+contrib ✓. Idempotente por
+  (modulo, referencia_id=liquidacion_id, org). 3 cuentas nuevas en PLAN_PATCH (no toca Org A).
+- **Router `/sueldos`** — permisos en 3 capas: CRUD de Convenios/Categorías/Empleados +
+  GET/PUT `/sueldos/config` → escritura `admin_accounting`, lectura `view_accounting`; DELETE
+  (convenios/categorías/empleados) → `delete_records`; `GET /sueldos/liquidacion` (preview) →
+  `view_accounting`; `POST /sueldos/liquidacion/calcular` y `.../{id}/aprobar` → `manage_finance`;
+  `POST .../{id}/marcar-presentada` → `admin_accounting`; `GET /sueldos/historial` (paginado) →
+  `view_accounting`. Empleados con soft delete (DELETE setea `deleted_at` + `activo=False`).
+- **Frontend `pages/Sueldos.tsx`**: 4 tabs — **Empleados** (alta/edición + convenios/categorías
+  inline), **Liquidación** (selector de período, preview en vivo, calcular/guardar borrador, aprobar
+  con asiento, marcar presentada, card "Base del F931", desglose por empleado), **Historial**
+  (paginado), **Config** (activo + alícuotas de aportes/contribuciones editables con disclaimer
+  "valores de referencia — verificar vigencia"). Mismo estilo que `/iva` e `/ingresos-brutos`. Nav
+  gateada `view_accounting` (ícono Users). Las tasas se ingresan como % (11 = 11%) y se guardan como
+  fracción.
+- **Migración `016_sueldos`** + safety nets idempotentes en `main.py` (6x `CREATE TABLE IF NOT EXISTS`
+  + índices + seed de ConfigSueldos apagada al crear org nueva / backfill para orgs existentes).
+  Org A intacta (solo aditivo). 23 tests nuevos (`test_sueldos.py`: cálculo, aportes/contribuciones,
+  SAC, básico de categoría, inmutabilidad, permisos por capa, aislamiento multi-org, asiento con
+  partida doble, validación CUIL, soft delete, end-to-end API). **398 tests pasando en total.**
+
+- **Extensión — Retención de Ganancias 4ta categoría (opt-in)**: `ConfigSueldos` agrega
+  `ganancias_activo` (default False), `minimo_no_imponible` y `deduccion_especial` (Numeric 12,2).
+  Nueva tabla `EscalaGanancias` (org-scoped, tramos `tramo_desde`/`tramo_hasta` nullable/`alicuota`/
+  `monto_fijo`) — **arranca VACÍA a propósito** (los valores de la escala de AFIP/ARCA cambian
+  periódicamente; no se siembran placeholders que aparenten ser reales). `calcular_ganancias_4ta()`
+  en `sueldos_service.py`: si `ganancias_activo=False` o la escala está vacía devuelve 0 sin romper
+  nada; si está activo, **anualiza el bruto mensual ×12** (misma simplificación documentada que el
+  SAC proporcional — no reproduce el cálculo legal exacto acumulativo mes a mes) y aplica la fórmula
+  AFIP `monto_fijo + alícuota × (excedente sobre tramo_desde)`, devolviendo la retención mensual
+  (anual / 12). Nuevo campo `retencion_ganancias` en `DetalleLiquidacionEmpleado`, restado del neto.
+  CRUD de la escala (`GET/POST/PUT/DELETE /sueldos/escala-ganancias`) → `admin_accounting`; lectura
+  vía `GET /sueldos/escala-ganancias` → `view_accounting`. UI: card en tab Config con checkbox de
+  activación, disclaimer de cargar la escala vigente antes de activar, tabla editable de tramos.
+  Migración `017_ganancias` + safety nets idempotentes. **Bug real detectado y corregido durante la
+  extensión siguiente**: `guardar_o_actualizar_liquidacion` no persistía `retencion_ganancias` en
+  `DetalleLiquidacionEmpleado` (quedaba en 0 al recalcular y guardar, aunque el preview sí lo
+  calculaba bien) — corregido junto con el recibo en PDF.
+- **Extensión — Recibo de sueldo en PDF**: `recibo_sueldo_pdf()` en `services/pdf_export.py`, mismo
+  patrón reportlab que `estado_cuenta_pdf`/`cuenta_corriente_pdf` (header de marca, columnas
+  Haberes/Descuentos, contribuciones del empleador como informativo, neto a pagar destacado).
+  Footer aclara explícitamente: *"Liquidación interna de gestión — no reemplaza el recibo oficial de
+  sueldo según la Ley de Contrato de Trabajo (Ley 20.744)"*. Endpoint
+  `GET /sueldos/liquidacion/{id}/empleado/{empleado_id}/recibo-pdf` → `view_accounting`, resuelve
+  nombre de convenio/categoría inline (el helper compartido `_empleado_dict` solo devuelve IDs, no se
+  tocó para no afectar otros endpoints). `StreamingResponse` + `Content-Disposition`, mismo patrón
+  que el PDF de cuenta corriente. Botón **"PDF"** por fila de empleado en la tabla de la tab
+  Liquidación (visible solo si la liquidación ya fue calculada/guardada — necesita el `id` persistido,
+  no solo el preview). 5 tests nuevos (PDF válido, permisos, 404 liquidación/empleado inexistente,
+  retención de Ganancias incluida en el cálculo). 411 tests pasando en total.
+- **Extensión — Export SICOSS (formato de referencia)**: `services/sicoss_export.py` —
+  `generar_archivo_sicoss()` construye un archivo de texto de ancho fijo (106 bytes por registro,
+  un registro por `DetalleLiquidacionEmpleado`) a partir de una liquidación ya aprobada/presentada.
+  **El docstring del módulo documenta explícitamente, columna por columna, qué es confiable y qué es
+  placeholder** — ver detalle completo en el archivo. Resumen: CUIL, nombre, remuneración bruta,
+  remuneración imponible jubilatoria (≈ bruto, sin topes SIPA), aporte jubilatorio, contribución
+  patronal, retención de Ganancias y fecha de ingreso vienen de datos reales de Cuadra; situación de
+  revista, condición, código de actividad y código de zona son **placeholders fijos documentados**
+  porque Cuadra no captura esos datos hoy. Se eligió un archivo honestamente incompleto (con
+  placeholders explícitos) en vez de uno que aparente estar completo con datos inventados. Endpoint
+  `GET /sueldos/liquidacion/{id}/exportar-sicoss` → `manage_finance`; HTTP 400 si la liquidación está
+  en `borrador` (debe estar aprobada o presentada). Botón **"Exportar SICOSS"** + disclaimer ámbar en
+  la tab Liquidación: *"formato de referencia — verificá contra la última especificación de AFIP/Mis
+  Aplicaciones Web antes de importarlo, puede requerir ajustes"*. 8 tests nuevos (ancho de línea, un
+  registro por empleado activo, 400 en borrador, 403 sin permiso, 404 liquidación inexistente,
+  helpers de centavos/CUIL). **419 tests pasando en total.**
+- **Fix asiento Ganancias (auditoría post-merge)**: la retención de 4ta categoría ahora tiene
+  contrapartida en `2-1-6-0 Retención de Ganancias a depositar` (nueva cuenta en PLAN_PATCH); sin ella
+  el asiento descuadraba (el neto ya viene con la retención restada) y la red de partida doble lo dejaba
+  sin postear en silencio al activar Ganancias, dejando la liquidación aprobada sin asiento. Se agregó la
+  columna `total_retencion_ganancias` en `LiquidacionSueldoPeriodo` (migración 018 + safety net) que se
+  persiste y se pasa a `registrar_liquidacion_sueldos` como 4ta línea al Haber. SICOSS: `assert` de ancho
+  de registro → `ValueError` (los assert se desactivan con `python -O`). 421 tests pasando.
 
 ---
 
@@ -1050,7 +1349,25 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
   + copy de posicionamiento (software financiero con IA) + audio real en el asistente IA: endpoint
   `POST /agente/transcribir` (Gemini) y MediaRecorder en `AgenteChat.tsx` para que el dictado funcione
   en iPhone, con feedback de errores de micrófono. (junio 2026 — PRs #135-#138 mergeados a main)
+- `v3.19` — primer módulo del plan de liquidación de impuestos: IVA Proyección y DDJJ (débito fiscal
+  proyectado sobre cuentas de ingreso gravadas, crédito proyectado + crédito real de Tarjetas,
+  inmutable al marcar presentada). 333 tests. (junio 2026 — PR #147 mergeado a main)
+- `v3.20` — segundo módulo del plan: Control Semestral Monotributo (ventana de ingresos de últimos
+  12 meses por corte semestral, sugerencia de categoría/exceso de régimen, escala sembrada con
+  valores reales vigentes de ARCA — no placeholders). 352 tests. (junio 2026 — PR #148 mergeado a main)
+- `v3.21` — tercer módulo del plan: Ingresos Brutos y Convenio Multilateral (proyección por jurisdicción,
+  modo simple vs convenio multilateral con distribución por coeficientes + alícuota propia, warning si
+  los coeficientes no suman 100%, sin sembrar alícuotas reales, inmutable al marcar presentada). 375 tests.
+  (junio 2026 — PR #154)
+- `v3.22` — cuarto módulo del plan: Liquidador de Sueldos y F931 (dominio nuevo de empleados con
+  convenios/categorías + soft delete, ConfigSueldos opt-in con alícuotas de aportes/contribuciones
+  sembradas como default editable de referencia 2024 / ART en 0, liquidación por período con SAC
+  proporcional, asiento contable agrupado de partida doble al aprobar, inmutable al marcar presentada,
+  base del F931). 398 tests. Extendido con: retención de Ganancias 4ta categoría opt-in (escala vacía
+  por diseño, anualización documentada igual que el SAC), recibo de sueldo en PDF por empleado/período
+  (reportlab, disclaimer Ley 20.744), export SICOSS de referencia (ancho fijo, columnas confiables vs.
+  placeholder documentadas explícitamente en el código). 419 tests. (junio 2026 — PR #155)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.17
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.22

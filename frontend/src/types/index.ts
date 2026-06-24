@@ -245,3 +245,240 @@ export interface LiquidacionTarjeta {
   notas: string | null
   created_at: string
 }
+
+// ── IVA Proyección y DDJJ ───────────────────────────────────────────────────
+export interface IvaConfigCuenta {
+  id: number
+  codigo: string
+  nombre: string
+  tipo: string
+  es_ingreso: boolean
+  tasa_iva: number | null
+}
+
+export interface IvaProyeccionDetalleItem {
+  cuenta_id: number
+  codigo: string
+  nombre: string
+  tipo: 'ingreso' | 'gasto'
+  tasa_iva: number
+  base_imponible: number
+  iva: number
+}
+
+export interface IvaProyeccionPreview {
+  periodo: string
+  debito_fiscal: number
+  credito_fiscal: number
+  credito_fiscal_real: number
+  credito_fiscal_proyectado: number
+  saldo: number
+  detalle: IvaProyeccionDetalleItem[]
+}
+
+export interface ProyeccionIva {
+  id: number
+  organizacion_id: number
+  periodo: string
+  debito_fiscal: number
+  credito_fiscal: number
+  saldo: number
+  estado: 'proyectado' | 'presentado'
+  fecha_presentacion: string | null
+  detalle: IvaProyeccionDetalleItem[] | null
+  created_at: string
+  updated_at: string
+}
+
+// ── Monotributo — Control Semestral ─────────────────────────────────────────
+export interface MonotributoConfig {
+  activo: boolean
+  categoria_actual: string | null
+  tipo_actividad: 'servicios' | 'bienes'
+}
+
+export interface CategoriaMonotributo {
+  id: number
+  categoria: string
+  tipo_actividad: 'servicios' | 'bienes'
+  limite_anual: number
+  orden: number
+}
+
+export interface MonotributoDetalleMes {
+  mes: string
+  ingresos: number
+}
+
+export interface MonotributoControlPreview {
+  periodo: string
+  fecha_corte: string
+  ingresos_12m: number
+  categoria_actual: string
+  limite_categoria_actual: number
+  porcentaje_uso: number
+  categoria_sugerida: string | null
+  excede: boolean
+  detalle: MonotributoDetalleMes[]
+}
+
+export interface ControlMonotributo {
+  id: number
+  organizacion_id: number
+  periodo: string
+  fecha_corte: string
+  ingresos_12m: number
+  categoria_actual: string
+  limite_categoria_actual: number
+  porcentaje_uso: number
+  categoria_sugerida: string | null
+  excede: boolean
+  estado: 'pendiente' | 'revisado'
+  fecha_revision: string | null
+  detalle: MonotributoDetalleMes[]
+  created_at: string
+  updated_at: string
+}
+
+// ── Ingresos Brutos (IIBB) y Convenio Multilateral ──────────────────────────
+export interface IIBBJurisdiccion {
+  id: number
+  nombre: string
+  alicuota: number
+  coeficiente_distribucion: number
+  activa: boolean
+  orden: number
+}
+
+export interface IIBBConfig {
+  activo: boolean
+  modo: 'simple' | 'convenio_multilateral'
+  jurisdiccion_unica_id: number | null
+}
+
+export interface IIBBDetalleJurisdiccion {
+  jurisdiccion_id: number
+  nombre: string
+  coeficiente: number
+  ingreso_atribuido: number
+  alicuota: number
+  impuesto: number
+}
+
+export interface IIBBProyeccionPreview {
+  periodo: string
+  modo: 'simple' | 'convenio_multilateral'
+  ingreso_total: number
+  impuesto_total: number
+  suma_coeficientes: number
+  warning: string | null
+  detalle: IIBBDetalleJurisdiccion[]
+}
+
+export interface IIBBProyeccion {
+  id: number
+  organizacion_id: number
+  periodo: string
+  ingreso_total: number
+  impuesto_total: number
+  detalle_por_jurisdiccion: IIBBDetalleJurisdiccion[] | null
+  estado: 'proyectado' | 'presentado'
+  fecha_presentacion: string | null
+  created_at: string
+  updated_at: string
+}
+
+// ── Sueldos y F931 ──────────────────────────────────────────────────────────
+export interface SueldosConvenio {
+  id: number
+  nombre: string
+  descripcion: string | null
+  activo: boolean
+}
+
+export interface SueldosCategoria {
+  id: number
+  convenio_id: number
+  nombre: string
+  sueldo_basico: number
+  orden: number
+}
+
+export interface SueldosEmpleado {
+  id: number
+  nombre: string
+  cuil: string | null
+  convenio_id: number | null
+  categoria_id: number | null
+  fecha_ingreso: string | null
+  sueldo_basico: number | null
+  cargas_familia: number
+  activo: boolean
+}
+
+export interface SueldosConfig {
+  activo: boolean
+  aporte_jubilacion: number
+  aporte_inssjp: number
+  aporte_obra_social: number
+  contrib_jubilacion: number
+  contrib_inssjp: number
+  contrib_obra_social: number
+  contrib_asig_fam: number
+  contrib_fondo_desempleo: number
+  alicuota_art: number
+  ganancias_activo: boolean
+  minimo_no_imponible: number
+  deduccion_especial: number
+}
+
+export interface EscalaGanancias {
+  id: number
+  tramo_desde: number
+  tramo_hasta: number | null
+  alicuota: number
+  monto_fijo: number
+}
+
+export interface SueldosDetalleEmpleado {
+  empleado_id: number
+  nombre: string
+  cuil: string | null
+  sueldo_bruto: number
+  sac_proporcional: number
+  total_aportes: number
+  total_contribuciones: number
+  sueldo_neto: number
+  retencion_ganancias?: number
+  detalle_json: unknown
+}
+
+export interface SueldosLiquidacionPreview {
+  periodo: string
+  cantidad_empleados: number
+  total_bruto: number
+  total_aportes: number
+  total_contribuciones: number
+  total_neto: number
+  f931: {
+    total_remuneraciones: number
+    total_aportes: number
+    total_contribuciones: number
+  }
+  detalle: SueldosDetalleEmpleado[]
+}
+
+export interface SueldosLiquidacion {
+  id: number
+  organizacion_id: number
+  periodo: string
+  estado: 'borrador' | 'aprobado' | 'presentado'
+  total_bruto: number
+  total_aportes: number
+  total_contribuciones: number
+  total_neto: number
+  fecha_aprobacion: string | null
+  fecha_presentacion: string | null
+  created_at: string
+  updated_at: string
+}

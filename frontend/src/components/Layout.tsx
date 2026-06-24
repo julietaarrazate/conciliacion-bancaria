@@ -36,6 +36,8 @@ const Icon = {
   Bell:    () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/></svg>,
   Bank:    () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M4.5 21V10.5m4 10.5V10.5m7 10.5V10.5m4 10.5V10.5M3 10.5h18M12 3l9 4.5H3L12 3z"/></svg>,
   CreditCard: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"/></svg>,
+  Receipt: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l1.5 1.5 3-3.75M3.75 9h16.5M3.75 9V5.625c0-.621.504-1.125 1.125-1.125h14.25c.621 0 1.125.504 1.125 1.125V9m-16.5 0v10.125c0 .621.504 1.125 1.125 1.125h14.25c.621 0 1.125-.504 1.125-1.125V9"/></svg>,
+  Gauge:   () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9.75L14.25 12M5.636 5.636a9 9 0 1012.728 0M12 3v2.25"/></svg>,
 }
 
 const navItems: Array<{ to: string; label: string; Icon: () => JSX.Element; permission?: string; superadmin?: boolean }> = [
@@ -54,6 +56,10 @@ const navItems: Array<{ to: string; label: string; Icon: () => JSX.Element; perm
   { to: '/revision',       label: 'Revisión',      Icon: Icon.Flag, permission: 'reconcile' },
   { to: '/cuentas-corrientes', label: 'Cuentas corrientes', Icon: Icon.Bank, permission: 'manage_finance' },
   { to: '/contabilidad',   label: 'Contabilidad',  Icon: Icon.Stack, permission: 'view_accounting' },
+  { to: '/iva',            label: 'IVA',           Icon: Icon.Receipt, permission: 'view_accounting' },
+  { to: '/monotributo',   label: 'Monotributo',  Icon: Icon.Gauge, permission: 'view_accounting' },
+  { to: '/ingresos-brutos', label: 'Ingresos Brutos', Icon: Icon.Building, permission: 'view_accounting' },
+  { to: '/sueldos',        label: 'Sueldos y F931', Icon: Icon.Users, permission: 'view_accounting' },
   { to: '/liquidaciones',  label: 'Liquidaciones', Icon: Icon.Chart, permission: 'reconcile' },
   { to: '/auditoria',      label: 'Auditoría',     Icon: Icon.Search, permission: 'view_audit' },
   { to: '/aprobaciones',   label: 'Aprobaciones',  Icon: Icon.Bell, superadmin: true },

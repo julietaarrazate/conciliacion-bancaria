@@ -933,6 +933,84 @@ def registrar_liquidacion_aprobacion(
         logger.warning("Error asiento liquidacion aprobacion detalle %s: %s", detalle_id, ex)
 
 
+def registrar_liquidacion_sueldos(
+    db: Session,
+    liquidacion_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    periodo: str,
+    total_bruto: Decimal,
+    total_aportes: Decimal,
+    total_contribuciones: Decimal,
+    total_neto: Decimal,
+    total_retencion_ganancias: Decimal = Decimal("0"),
+) -> None:
+    """Asiento agrupado al aprobar una liquidación de sueldos del período:
+        Sueldos y cargas sociales (3-2-4-0, gasto) D       por bruto + contribuciones
+        Sueldos a pagar (2-1-4-0) H                        por el neto a pagar al empleado
+        Cargas sociales a pagar (2-1-5-0) H                por aportes + contribuciones
+        Retención de Ganancias a depositar (2-1-6-0) H     por la retención de 4ta (si > 0)
+    La retención de Ganancias que se le descuenta al empleado es un pasivo del
+    empleador (la retiene para depositarla a ARCA): por eso va al Haber. Sin esta
+    contrapartida el asiento descuadraba al activar Ganancias (porque el neto ya
+    viene con la retención restada) y la red de partida doble no lo posteaba.
+    Partida doble: D = bruto+contrib ; H = neto + aportes + contrib + ganancias
+                   = (bruto−aportes−ganancias) + aportes + contrib + ganancias
+                   = bruto + contrib = D ✓.
+    Idempotente por (modulo, referencia_id=liquidacion_id, org)."""
+    try:
+        if _ya_existe(db, "sueldos_liquidacion", liquidacion_id, org_id):
+            return
+        bruto   = round(_monto(total_bruto), 2)
+        aportes = round(_monto(total_aportes), 2)
+        contrib = round(_monto(total_contribuciones), 2)
+        neto    = round(_monto(total_neto), 2)
+        ret     = round(_monto(total_retencion_ganancias), 2)
+        if bruto <= 0:
+            return
+        gasto       = _get_cuenta_por_codigo(db, "3-2-4-0", org_id)
+        sueldos_pag = _get_cuenta_por_codigo(db, "2-1-4-0", org_id)
+        cargas_pag  = _get_cuenta_por_codigo(db, "2-1-5-0", org_id)
+        if not gasto or not sueldos_pag or not cargas_pag:
+            logger.warning(
+                "Cuentas sueldos no encontradas org %s (3-2-4-0/2-1-4-0/2-1-5-0)", org_id
+            )
+            return
+        debe_total = (bruto + contrib)
+        cargas = (aportes + contrib)
+        lineas = [
+            (gasto.id,       debe_total,   Decimal("0")),
+            (sueldos_pag.id, Decimal("0"), neto),
+            (cargas_pag.id,  Decimal("0"), cargas),
+        ]
+        if ret > 0:
+            ret_pag = _get_cuenta_por_codigo(db, "2-1-6-0", org_id)
+            if ret_pag:
+                lineas.append((ret_pag.id, Decimal("0"), ret))
+            else:
+                # Defensivo: PLAN_PATCH crea 2-1-6-0 en cada arranque, así que en
+                # producción siempre existe. Si faltara, no agregamos la línea para
+                # no romper el alta — pero el asiento descuadraría, así que avisamos.
+                logger.warning(
+                    "Cuenta 2-1-6-0 (Retención de Ganancias) no encontrada org %s — "
+                    "asiento de sueldos sin contrapartida de retención", org_id
+                )
+        _crear_asiento_multilinea(
+            db=db,
+            fecha=hoy_art(),
+            descripcion=f"Liquidación de sueldos {periodo}",
+            modulo="sueldos_liquidacion",
+            referencia_id=liquidacion_id,
+            org_id=org_id,
+            usuario_id=usuario_id,
+            lineas=lineas,
+        )
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        logger.warning("Error asiento liquidacion sueldos %s: %s", liquidacion_id, ex)
+
+
 def registrar_cc_inicial(
     db: Session,
     planilla_row_id: int,

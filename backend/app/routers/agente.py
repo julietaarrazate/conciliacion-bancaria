@@ -3,7 +3,6 @@ import base64
 import json
 import logging
 import time
-from datetime import date
 from threading import Lock
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -117,28 +116,41 @@ def _consultar_pagos_cliente(db, org_id, cliente_nombre, desde=None, hasta=None)
 def _consultar_cheques(db, org_id, estado=None):
     from app.models.cheque import Cheque
 
-    q = db.query(Cheque).filter(Cheque.organizacion_id == org_id)
+    base = db.query(Cheque).filter(Cheque.organizacion_id == org_id)
     if estado:
-        q = q.filter(Cheque.estado == estado)
-    cheques = q.all()
+        base = base.filter(Cheque.estado == estado)
 
-    por_estado: dict = {}
-    for c in cheques:
-        por_estado.setdefault(c.estado, {"cantidad": 0, "total": 0.0})
-        por_estado[c.estado]["cantidad"] += 1
-        por_estado[c.estado]["total"] += float(c.monto or 0)
+    # Agregados via SQL (GROUP BY) en vez de cargar todas las filas a Python.
+    agregados = (
+        base.with_entities(
+            Cheque.estado,
+            func.count(Cheque.id),
+            func.coalesce(func.sum(Cheque.monto), 0),
+        )
+        .group_by(Cheque.estado)
+        .all()
+    )
+    por_estado = {
+        est: {"cantidad": cant, "total": float(total)}
+        for est, cant, total in agregados
+    }
+    total_cheques = sum(v["cantidad"] for v in por_estado.values())
+    total_monto = sum(v["total"] for v in por_estado.values())
 
+    proximos_rows = (
+        base.filter(Cheque.estado == "pendiente")
+        .order_by(Cheque.fecha_deposito.asc().nullslast())
+        .limit(5)
+        .all()
+    )
     proximos = [
         {"numero": c.numero, "monto": float(c.monto or 0), "cliente": c.cliente_nombre,
          "vencimiento": str(c.fecha_deposito), "banco": c.banco_origen}
-        for c in sorted(
-            [x for x in cheques if x.estado == "pendiente"],
-            key=lambda x: x.fecha_deposito or date.max
-        )[:5]
+        for c in proximos_rows
     ]
     return {
-        "total_cheques": len(cheques),
-        "total_monto": sum(float(c.monto or 0) for c in cheques),
+        "total_cheques": total_cheques,
+        "total_monto": total_monto,
         "por_estado": por_estado,
         "proximos_a_vencer": proximos,
     }

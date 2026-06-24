@@ -30,9 +30,19 @@ from app.routers import public_router
 from app.routers import push_router
 from app.routers import agente
 from app.routers import tarjetas
+from app.routers import iva
+from app.routers import monotributo
+from app.routers import iibb
+from app.routers import sueldos
 from app.routers import google_auth
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.egreso import Egreso, CategoriaEgreso  # noqa: F401
+from app.models.monotributo import CategoriaMonotributo, MonotributoConfig, ControlMonotributo  # noqa: F401
+from app.models.iibb import JurisdiccionIIBB, IIBBConfig, ProyeccionIIBB  # noqa: F401
+from app.models.sueldos import (  # noqa: F401
+    ConvenioColectivo, CategoriaConvenio, Empleado, ConfigSueldos,
+    EscalaGanancias, LiquidacionSueldoPeriodo, DetalleLiquidacionEmpleado,
+)
 from app.models.caja import ArqueoDiario  # noqa: F401
 from app.models.push_subscription import PushSubscription  # noqa: F401
 from app.models.revoked_token import RevokedToken  # noqa: F401
@@ -165,6 +175,192 @@ def _run_alembic():
         "CREATE INDEX IF NOT EXISTS idx_asdet_asiento ON asiento_detalle(asiento_id)",
         "CREATE INDEX IF NOT EXISTS idx_asdet_cuenta ON asiento_detalle(cuenta_id)",
         "CREATE INDEX IF NOT EXISTS idx_asdet_cuenta_asiento ON asiento_detalle(cuenta_id, asiento_id)",
+        # módulo IVA Proyección y DDJJ — tasa de IVA por cuenta + snapshot por período
+        "ALTER TABLE plan_cuentas ADD COLUMN IF NOT EXISTS tasa_iva NUMERIC(5,4)",
+        "CREATE TABLE IF NOT EXISTS proyecciones_iva ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "periodo VARCHAR(7) NOT NULL, "
+        "debito_fiscal NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "credito_fiscal NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "saldo NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "estado VARCHAR(20) NOT NULL DEFAULT 'proyectado', "
+        "fecha_presentacion TIMESTAMP, "
+        "detalle JSONB, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_proyeccion_iva_org_periodo UNIQUE (organizacion_id, periodo))",
+        "CREATE INDEX IF NOT EXISTS ix_proyeccion_iva_org ON proyecciones_iva (organizacion_id)",
+        # módulo Control Semestral Monotributo — categorías, config opt-in y snapshots
+        "CREATE TABLE IF NOT EXISTS categorias_monotributo ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "categoria VARCHAR(2) NOT NULL, "
+        "tipo_actividad VARCHAR(20) NOT NULL, "
+        "limite_anual NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "orden INTEGER NOT NULL DEFAULT 0, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_categoria_monotributo_org_cat_tipo "
+        "UNIQUE (organizacion_id, categoria, tipo_actividad))",
+        "CREATE INDEX IF NOT EXISTS ix_categoria_monotributo_org ON categorias_monotributo (organizacion_id)",
+        "CREATE TABLE IF NOT EXISTS monotributo_config ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL UNIQUE REFERENCES organizaciones(id), "
+        "categoria_actual VARCHAR(2), "
+        "tipo_actividad VARCHAR(20) NOT NULL DEFAULT 'servicios', "
+        "activo BOOLEAN NOT NULL DEFAULT FALSE, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW())",
+        "CREATE TABLE IF NOT EXISTS controles_monotributo ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "periodo VARCHAR(7) NOT NULL, "
+        "fecha_corte DATE NOT NULL, "
+        "ingresos_12m NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "categoria_actual VARCHAR(2), "
+        "limite_categoria_actual NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "porcentaje_uso NUMERIC(6,2) NOT NULL DEFAULT 0, "
+        "categoria_sugerida VARCHAR(2), "
+        "excede BOOLEAN NOT NULL DEFAULT FALSE, "
+        "estado VARCHAR(20) NOT NULL DEFAULT 'pendiente', "
+        "fecha_revision TIMESTAMP, "
+        "detalle JSONB, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_control_monotributo_org_periodo "
+        "UNIQUE (organizacion_id, periodo))",
+        "CREATE INDEX IF NOT EXISTS ix_control_monotributo_org ON controles_monotributo (organizacion_id)",
+        # módulo Ingresos Brutos (IIBB) y Convenio Multilateral — jurisdicciones, config opt-in y snapshots
+        "CREATE TABLE IF NOT EXISTS jurisdicciones_iibb ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "nombre VARCHAR(80) NOT NULL, "
+        "alicuota NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "coeficiente_distribucion NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "activa BOOLEAN NOT NULL DEFAULT TRUE, "
+        "orden INTEGER NOT NULL DEFAULT 0, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_jurisdiccion_iibb_org_nombre UNIQUE (organizacion_id, nombre))",
+        "CREATE INDEX IF NOT EXISTS ix_jurisdiccion_iibb_org ON jurisdicciones_iibb (organizacion_id)",
+        "CREATE TABLE IF NOT EXISTS iibb_config ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL UNIQUE REFERENCES organizaciones(id), "
+        "activo BOOLEAN NOT NULL DEFAULT FALSE, "
+        "modo VARCHAR(24) NOT NULL DEFAULT 'simple', "
+        "jurisdiccion_unica_id INTEGER REFERENCES jurisdicciones_iibb(id), "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW())",
+        "CREATE TABLE IF NOT EXISTS proyecciones_iibb ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "periodo VARCHAR(7) NOT NULL, "
+        "ingreso_total NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "impuesto_total NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "detalle_por_jurisdiccion JSONB, "
+        "estado VARCHAR(20) NOT NULL DEFAULT 'proyectado', "
+        "fecha_presentacion TIMESTAMP, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_proyeccion_iibb_org_periodo UNIQUE (organizacion_id, periodo))",
+        "CREATE INDEX IF NOT EXISTS ix_proyeccion_iibb_org ON proyecciones_iibb (organizacion_id)",
+        # módulo Liquidador de Sueldos y F931 — convenios, categorías, empleados, config y liquidaciones
+        "CREATE TABLE IF NOT EXISTS convenios_colectivos ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "nombre VARCHAR(120) NOT NULL, "
+        "descripcion VARCHAR(255), "
+        "activo BOOLEAN NOT NULL DEFAULT TRUE, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_convenio_org_nombre UNIQUE (organizacion_id, nombre))",
+        "CREATE INDEX IF NOT EXISTS ix_convenio_org ON convenios_colectivos (organizacion_id)",
+        "CREATE TABLE IF NOT EXISTS categorias_convenio ("
+        "id SERIAL PRIMARY KEY, "
+        "convenio_id INTEGER NOT NULL REFERENCES convenios_colectivos(id), "
+        "nombre VARCHAR(120) NOT NULL, "
+        "sueldo_basico NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "orden INTEGER NOT NULL DEFAULT 0, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_categoria_convenio_nombre UNIQUE (convenio_id, nombre))",
+        "CREATE INDEX IF NOT EXISTS ix_categoria_convenio ON categorias_convenio (convenio_id)",
+        "CREATE TABLE IF NOT EXISTS empleados ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "nombre VARCHAR(160) NOT NULL, "
+        "cuil VARCHAR(13), "
+        "convenio_id INTEGER REFERENCES convenios_colectivos(id), "
+        "categoria_id INTEGER REFERENCES categorias_convenio(id), "
+        "fecha_ingreso DATE, "
+        "sueldo_basico NUMERIC(12,2), "
+        "cargas_familia INTEGER NOT NULL DEFAULT 0, "
+        "activo BOOLEAN NOT NULL DEFAULT TRUE, "
+        "deleted_at TIMESTAMP, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW())",
+        "CREATE INDEX IF NOT EXISTS ix_empleado_org ON empleados (organizacion_id)",
+        "CREATE INDEX IF NOT EXISTS ix_empleado_deleted ON empleados (deleted_at)",
+        "CREATE TABLE IF NOT EXISTS config_sueldos ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL UNIQUE REFERENCES organizaciones(id), "
+        "activo BOOLEAN NOT NULL DEFAULT FALSE, "
+        "aporte_jubilacion NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "aporte_inssjp NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "aporte_obra_social NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "contrib_jubilacion NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "contrib_inssjp NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "contrib_obra_social NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "contrib_asig_fam NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "contrib_fondo_desempleo NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "alicuota_art NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW())",
+        "CREATE TABLE IF NOT EXISTS liquidaciones_sueldo ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "periodo VARCHAR(7) NOT NULL, "
+        "estado VARCHAR(20) NOT NULL DEFAULT 'borrador', "
+        "total_bruto NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "total_aportes NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "total_contribuciones NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "total_neto NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "fecha_aprobacion TIMESTAMP, "
+        "fecha_presentacion TIMESTAMP, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_liquidacion_sueldo_org_periodo UNIQUE (organizacion_id, periodo))",
+        "CREATE INDEX IF NOT EXISTS ix_liquidacion_sueldo_org ON liquidaciones_sueldo (organizacion_id)",
+        "CREATE TABLE IF NOT EXISTS detalles_liquidacion_sueldo ("
+        "id SERIAL PRIMARY KEY, "
+        "liquidacion_periodo_id INTEGER NOT NULL REFERENCES liquidaciones_sueldo(id), "
+        "empleado_id INTEGER REFERENCES empleados(id), "
+        "sueldo_bruto NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "sac_proporcional NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "total_aportes NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "total_contribuciones NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "sueldo_neto NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "detalle_json JSONB, "
+        "created_at TIMESTAMP DEFAULT NOW())",
+        "CREATE INDEX IF NOT EXISTS ix_detalle_liq_sueldo ON detalles_liquidacion_sueldo (liquidacion_periodo_id)",
+        # Retención de Ganancias 4ta categoría (opt-in, ver migración 017)
+        "ALTER TABLE config_sueldos ADD COLUMN IF NOT EXISTS ganancias_activo BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE config_sueldos ADD COLUMN IF NOT EXISTS minimo_no_imponible NUMERIC(12,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE config_sueldos ADD COLUMN IF NOT EXISTS deduccion_especial NUMERIC(12,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE detalles_liquidacion_sueldo ADD COLUMN IF NOT EXISTS retencion_ganancias NUMERIC(12,2) NOT NULL DEFAULT 0",
+        "CREATE TABLE IF NOT EXISTS escala_ganancias ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "tramo_desde NUMERIC(14,2) NOT NULL DEFAULT 0, "
+        "tramo_hasta NUMERIC(14,2), "
+        "alicuota NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "monto_fijo NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW())",
+        "CREATE INDEX IF NOT EXISTS ix_escala_ganancias_org ON escala_ganancias (organizacion_id)",
+        # Total de retención de Ganancias en el período (contrapartida 2-1-6-0, ver migración 018)
+        "ALTER TABLE liquidaciones_sueldo ADD COLUMN IF NOT EXISTS total_retencion_ganancias NUMERIC(12,2) NOT NULL DEFAULT 0",
     ]
     try:
         from sqlalchemy import text as _text
@@ -352,6 +548,9 @@ def _init_db():
         from app.database import SessionLocal as SL
         from app.models.organizacion import Organizacion
         from app.services.seed_contable import seed_contabilidad_org, seed_categorias_egreso_org
+        from app.services.monotributo_service import seed_monotributo_categorias
+        from app.services.iibb_service import seed_iibb_jurisdiccion
+        from app.services.sueldos_service import seed_config_sueldos
 
         db = SL()
         org_ids = [o.id for o in db.query(Organizacion.id).all()]
@@ -361,6 +560,12 @@ def _init_db():
             try:
                 seed_contabilidad_org(db, oid)
                 seed_categorias_egreso_org(db, oid)
+                # Categorías Monotributo (placeholder, editables) si la org no tiene ninguna
+                seed_monotributo_categorias(db, oid)
+                # Jurisdicción IIBB ilustrativa (editable) si la org no tiene ninguna
+                seed_iibb_jurisdiccion(db, oid)
+                # ConfigSueldos apagada (alícuotas de referencia editables) si la org no tiene ninguna
+                seed_config_sueldos(db, oid)
             except Exception as ex_org:
                 db.rollback()
                 logger.warning("Error seed contabilidad org %s: %s", oid, ex_org)
@@ -715,7 +920,7 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"]    = "nosniff"
     response.headers["X-Frame-Options"]           = "DENY"
     response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"]        = "geolocation=(), microphone=(), camera=(), payment=()"
+    response.headers["Permissions-Policy"]        = "geolocation=(), microphone=(self), camera=(self), payment=()"
     response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     return response
 
@@ -742,6 +947,10 @@ app.include_router(public_router.router)
 app.include_router(push_router.router)
 app.include_router(agente.router)
 app.include_router(tarjetas.router)
+app.include_router(iva.router)
+app.include_router(monotributo.router)
+app.include_router(iibb.router)
+app.include_router(sueldos.router)
 app.include_router(google_auth.router)
 
 
