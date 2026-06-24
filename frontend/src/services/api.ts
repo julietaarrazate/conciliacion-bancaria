@@ -34,6 +34,12 @@ import {
   IIBBJurisdiccion,
   IIBBProyeccionPreview,
   IIBBProyeccion,
+  SueldosConvenio,
+  SueldosCategoria,
+  SueldosEmpleado,
+  SueldosConfig,
+  SueldosLiquidacionPreview,
+  SueldosLiquidacion,
 } from '@/types'
 import { useLockStore } from '@/store/lock'
 
@@ -1005,6 +1011,154 @@ class ApiClient {
     const res: AxiosResponse<PaginatedResponse<IIBBProyeccion>> = await this.client.get(
       '/iibb/historial',
       { params: q },
+    )
+    return res.data
+  }
+
+  // ── Sueldos y F931 ──────────────────────────────────────────────────────────
+  async getSueldosConvenios(orgId?: number): Promise<PaginatedResponse<SueldosConvenio>> {
+    const res: AxiosResponse<PaginatedResponse<SueldosConvenio>> = await this.client.get(
+      '/sueldos/convenios', { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async createSueldosConvenio(
+    body: { nombre: string; descripcion?: string | null; activo?: boolean },
+    orgId?: number,
+  ): Promise<SueldosConvenio> {
+    const res: AxiosResponse<SueldosConvenio> = await this.client.post(
+      '/sueldos/convenios', body, { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async deleteSueldosConvenio(convenioId: number, orgId?: number): Promise<void> {
+    await this.client.delete(`/sueldos/convenios/${convenioId}`, { params: orgId ? { org_id: orgId } : {} })
+  }
+
+  async getSueldosCategorias(convenioId: number, orgId?: number): Promise<PaginatedResponse<SueldosCategoria>> {
+    const res: AxiosResponse<PaginatedResponse<SueldosCategoria>> = await this.client.get(
+      `/sueldos/convenios/${convenioId}/categorias`, { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async createSueldosCategoria(
+    convenioId: number,
+    body: { nombre: string; sueldo_basico: number; orden?: number },
+    orgId?: number,
+  ): Promise<SueldosCategoria> {
+    const res: AxiosResponse<SueldosCategoria> = await this.client.post(
+      `/sueldos/convenios/${convenioId}/categorias`, body, { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async deleteSueldosCategoria(categoriaId: number, orgId?: number): Promise<void> {
+    await this.client.delete(`/sueldos/categorias/${categoriaId}`, { params: orgId ? { org_id: orgId } : {} })
+  }
+
+  async getSueldosEmpleados(
+    params: { orgId?: number; incluirInactivos?: boolean; limit?: number; offset?: number } = {},
+  ): Promise<PaginatedResponse<SueldosEmpleado>> {
+    const q: Record<string, number | boolean> = {}
+    if (params.orgId) q.org_id = params.orgId
+    if (params.incluirInactivos != null) q.incluir_inactivos = params.incluirInactivos
+    if (params.limit != null) q.limit = params.limit
+    if (params.offset != null) q.offset = params.offset
+    const res: AxiosResponse<PaginatedResponse<SueldosEmpleado>> = await this.client.get(
+      '/sueldos/empleados', { params: q },
+    )
+    return res.data
+  }
+
+  async createSueldosEmpleado(
+    body: {
+      nombre: string; cuil?: string | null; convenio_id?: number | null;
+      categoria_id?: number | null; fecha_ingreso?: string | null;
+      sueldo_basico?: number | null; cargas_familia?: number; activo?: boolean
+    },
+    orgId?: number,
+  ): Promise<SueldosEmpleado> {
+    const res: AxiosResponse<SueldosEmpleado> = await this.client.post(
+      '/sueldos/empleados', body, { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async updateSueldosEmpleado(
+    empleadoId: number,
+    body: {
+      nombre?: string; cuil?: string | null; convenio_id?: number | null;
+      categoria_id?: number | null; fecha_ingreso?: string | null;
+      sueldo_basico?: number | null; cargas_familia?: number; activo?: boolean
+    },
+    orgId?: number,
+  ): Promise<SueldosEmpleado> {
+    const res: AxiosResponse<SueldosEmpleado> = await this.client.put(
+      `/sueldos/empleados/${empleadoId}`, body, { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async deleteSueldosEmpleado(empleadoId: number, orgId?: number): Promise<void> {
+    await this.client.delete(`/sueldos/empleados/${empleadoId}`, { params: orgId ? { org_id: orgId } : {} })
+  }
+
+  async getSueldosConfig(orgId?: number): Promise<SueldosConfig> {
+    const res: AxiosResponse<SueldosConfig> = await this.client.get(
+      '/sueldos/config', { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async setSueldosConfig(config: SueldosConfig, orgId?: number): Promise<SueldosConfig> {
+    const res: AxiosResponse<SueldosConfig> = await this.client.put(
+      '/sueldos/config', config, { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async previewLiquidacionSueldos(periodo: string, orgId?: number): Promise<SueldosLiquidacionPreview> {
+    const params: Record<string, string | number> = { periodo }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<SueldosLiquidacionPreview> = await this.client.get('/sueldos/liquidacion', { params })
+    return res.data
+  }
+
+  async calcularLiquidacionSueldos(periodo: string, orgId?: number): Promise<SueldosLiquidacion> {
+    const params: Record<string, string | number> = { periodo }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<SueldosLiquidacion> = await this.client.post(
+      '/sueldos/liquidacion/calcular', null, { params },
+    )
+    return res.data
+  }
+
+  async aprobarLiquidacionSueldos(liquidacionId: number, orgId?: number): Promise<SueldosLiquidacion> {
+    const res: AxiosResponse<SueldosLiquidacion> = await this.client.post(
+      `/sueldos/liquidacion/${liquidacionId}/aprobar`, null, { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async marcarLiquidacionSueldosPresentada(liquidacionId: number, orgId?: number): Promise<SueldosLiquidacion> {
+    const res: AxiosResponse<SueldosLiquidacion> = await this.client.post(
+      `/sueldos/liquidacion/${liquidacionId}/marcar-presentada`, null, { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async getHistorialSueldos(params: {
+    orgId?: number; limit?: number; offset?: number
+  } = {}): Promise<PaginatedResponse<SueldosLiquidacion>> {
+    const q: Record<string, number> = {}
+    if (params.orgId) q.org_id = params.orgId
+    if (params.limit != null) q.limit = params.limit
+    if (params.offset != null) q.offset = params.offset
+    const res: AxiosResponse<PaginatedResponse<SueldosLiquidacion>> = await this.client.get(
+      '/sueldos/historial', { params: q },
     )
     return res.data
   }

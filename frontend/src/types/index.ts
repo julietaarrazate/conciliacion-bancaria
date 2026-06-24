@@ -387,3 +387,86 @@ export interface IIBBProyeccion {
   created_at: string
   updated_at: string
 }
+
+// ── Sueldos y F931 ──────────────────────────────────────────────────────────
+export interface SueldosConvenio {
+  id: number
+  nombre: string
+  descripcion: string | null
+  activo: boolean
+}
+
+export interface SueldosCategoria {
+  id: number
+  convenio_id: number
+  nombre: string
+  sueldo_basico: number
+  orden: number
+}
+
+export interface SueldosEmpleado {
+  id: number
+  nombre: string
+  cuil: string | null
+  convenio_id: number | null
+  categoria_id: number | null
+  fecha_ingreso: string | null
+  sueldo_basico: number | null
+  cargas_familia: number
+  activo: boolean
+}
+
+export interface SueldosConfig {
+  activo: boolean
+  aporte_jubilacion: number
+  aporte_inssjp: number
+  aporte_obra_social: number
+  contrib_jubilacion: number
+  contrib_inssjp: number
+  contrib_obra_social: number
+  contrib_asig_fam: number
+  contrib_fondo_desempleo: number
+  alicuota_art: number
+}
+
+export interface SueldosDetalleEmpleado {
+  empleado_id: number
+  nombre: string
+  cuil: string | null
+  sueldo_bruto: number
+  sac_proporcional: number
+  total_aportes: number
+  total_contribuciones: number
+  sueldo_neto: number
+  detalle_json: unknown
+}
+
+export interface SueldosLiquidacionPreview {
+  periodo: string
+  cantidad_empleados: number
+  total_bruto: number
+  total_aportes: number
+  total_contribuciones: number
+  total_neto: number
+  f931: {
+    total_remuneraciones: number
+    total_aportes: number
+    total_contribuciones: number
+  }
+  detalle: SueldosDetalleEmpleado[]
+}
+
+export interface SueldosLiquidacion {
+  id: number
+  organizacion_id: number
+  periodo: string
+  estado: 'borrador' | 'aprobado' | 'presentado'
+  total_bruto: number
+  total_aportes: number
+  total_contribuciones: number
+  total_neto: number
+  fecha_aprobacion: string | null
+  fecha_presentacion: string | null
+  created_at: string
+  updated_at: string
+}

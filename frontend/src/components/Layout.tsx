@@ -59,6 +59,7 @@ const navItems: Array<{ to: string; label: string; Icon: () => JSX.Element; perm
   { to: '/iva',            label: 'IVA',           Icon: Icon.Receipt, permission: 'view_accounting' },
   { to: '/monotributo',   label: 'Monotributo',  Icon: Icon.Gauge, permission: 'view_accounting' },
   { to: '/ingresos-brutos', label: 'Ingresos Brutos', Icon: Icon.Building, permission: 'view_accounting' },
+  { to: '/sueldos',        label: 'Sueldos y F931', Icon: Icon.Users, permission: 'view_accounting' },
   { to: '/liquidaciones',  label: 'Liquidaciones', Icon: Icon.Chart, permission: 'reconcile' },
   { to: '/auditoria',      label: 'Auditoría',     Icon: Icon.Search, permission: 'view_audit' },
   { to: '/aprobaciones',   label: 'Aprobaciones',  Icon: Icon.Bell, superadmin: true },
