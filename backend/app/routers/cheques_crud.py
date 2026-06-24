@@ -22,8 +22,10 @@ from decimal import Decimal
 from typing import Optional, List
 import io
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 import openpyxl
 
 from app.database import get_db
@@ -43,6 +45,7 @@ from .cheques_common import (
 )
 
 router = APIRouter(tags=["cheques"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ── Carga masiva OCR ──────────────────────────────────────────────
@@ -362,7 +365,9 @@ def editar_cheque(
 
 
 @router.delete("/{cheque_id}")
+@limiter.limit("30/minute")
 def eliminar_cheque(
+    request: Request,
     cheque_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("delete_records")),

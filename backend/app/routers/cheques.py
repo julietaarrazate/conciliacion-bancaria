@@ -27,8 +27,10 @@ Helpers compartidos: cheques_common.py (_org_id, _cheque_dict, _local_interior,
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
@@ -51,6 +53,7 @@ from .cheques_common import (
 )
 
 router = APIRouter(prefix="/cheques", tags=["cheques"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ── CRUD principal: listar / crear (paths vacíos, ver nota arriba) ──
@@ -83,7 +86,9 @@ def list_cheques(
 
 
 @router.post("")
+@limiter.limit("30/minute")
 def crear_cheque(
+    request: Request,
     body: ChequeIn,
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),

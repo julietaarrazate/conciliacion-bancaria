@@ -9,8 +9,10 @@ import logging
 from datetime import date
 from decimal import Decimal
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.middleware.auth import get_current_user, require_permission, can_switch_org
@@ -25,6 +27,7 @@ from app.services.tz import hoy_art
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 def _org_id(user: User, org_id_param: Optional[int] = None) -> int:
@@ -92,7 +95,9 @@ def listar_egresos(
 
 
 @router.post("")
+@limiter.limit("30/minute")
 def crear_egreso(
+    request: Request,
     payload: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("reconcile")),
@@ -315,7 +320,9 @@ def editar_egreso(
 
 
 @router.delete("/{egreso_id}")
+@limiter.limit("30/minute")
 def eliminar_egreso(
+    request: Request,
     egreso_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("delete_records")),

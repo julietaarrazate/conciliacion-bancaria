@@ -1,9 +1,11 @@
 import logging
 from decimal import Decimal
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Request
 from sqlalchemy import func, cast, String, or_
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 import tempfile
 import os
 
@@ -25,6 +27,7 @@ from app.services.tz import hoy_art
 from app.middleware.auth import get_current_user, require_permission
 
 router = APIRouter(prefix="/planillas", tags=["planillas"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 def _get_org_config(db: Session, organizacion_id: int) -> dict:
@@ -52,7 +55,9 @@ def _planilla_for_user(db: Session, planilla_id: int, current_user: User,
 
 
 @router.post("/upload", response_model=PlanillaResponse)
+@limiter.limit("20/minute")
 async def upload_planilla(
+    request: Request,
     cliente_nombre: str = Query(..., description="Nombre del cliente"),
     extracto_id: int = Query(..., description="ID del extracto a usar"),
     file: UploadFile = File(...),
@@ -156,7 +161,9 @@ async def upload_planilla(
 
 
 @router.post("/{planilla_id}/conciliar", response_model=ConciliacionResultado)
+@limiter.limit("30/minute")
 def conciliar(
+    request: Request,
     planilla_id: int,
     fecha_acred: str = Query("hoy", description="Fecha de acreditación: 'hoy', 'ayer', o fecha ISO"),
     solo_pendientes: bool = Query(False, description="Si True, solo re-procesa filas no-ok (preserva correcciones manuales)"),
