@@ -30,6 +30,10 @@ import {
   CategoriaMonotributo,
   MonotributoControlPreview,
   ControlMonotributo,
+  IIBBConfig,
+  IIBBJurisdiccion,
+  IIBBProyeccionPreview,
+  IIBBProyeccion,
 } from '@/types'
 import { useLockStore } from '@/store/lock'
 
@@ -902,6 +906,104 @@ class ApiClient {
     if (params.offset != null) q.offset = params.offset
     const res: AxiosResponse<PaginatedResponse<ControlMonotributo>> = await this.client.get(
       '/monotributo/historial',
+      { params: q },
+    )
+    return res.data
+  }
+
+  // ── Ingresos Brutos (IIBB) y Convenio Multilateral ──────────────────────────
+  async getIIBBConfig(orgId?: number): Promise<IIBBConfig> {
+    const res: AxiosResponse<IIBBConfig> = await this.client.get('/iibb/config', {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async setIIBBConfig(
+    config: { activo: boolean; modo: string; jurisdiccion_unica_id: number | null },
+    orgId?: number,
+  ): Promise<IIBBConfig> {
+    const res: AxiosResponse<IIBBConfig> = await this.client.put('/iibb/config', config, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async getIIBBJurisdicciones(orgId?: number): Promise<PaginatedResponse<IIBBJurisdiccion>> {
+    const res: AxiosResponse<PaginatedResponse<IIBBJurisdiccion>> = await this.client.get(
+      '/iibb/jurisdicciones',
+      { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async createIIBBJurisdiccion(
+    body: {
+      nombre: string; alicuota: number; coeficiente_distribucion: number;
+      activa: boolean; orden: number
+    },
+    orgId?: number,
+  ): Promise<IIBBJurisdiccion> {
+    const res: AxiosResponse<IIBBJurisdiccion> = await this.client.post(
+      '/iibb/jurisdicciones',
+      body,
+      { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async updateIIBBJurisdiccion(
+    jurId: number,
+    body: {
+      nombre?: string; alicuota?: number; coeficiente_distribucion?: number;
+      activa?: boolean; orden?: number
+    },
+    orgId?: number,
+  ): Promise<IIBBJurisdiccion> {
+    const res: AxiosResponse<IIBBJurisdiccion> = await this.client.put(
+      `/iibb/jurisdicciones/${jurId}`,
+      body,
+      { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async previewProyeccionIIBB(periodo: string, orgId?: number): Promise<IIBBProyeccionPreview> {
+    const params: Record<string, string | number> = { periodo }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<IIBBProyeccionPreview> = await this.client.get('/iibb/proyeccion', { params })
+    return res.data
+  }
+
+  async calcularProyeccionIIBB(periodo: string, orgId?: number): Promise<IIBBProyeccion> {
+    const params: Record<string, string | number> = { periodo }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<IIBBProyeccion> = await this.client.post(
+      '/iibb/proyeccion/calcular',
+      null,
+      { params },
+    )
+    return res.data
+  }
+
+  async marcarProyeccionIIBBPresentada(proyeccionId: number, orgId?: number): Promise<IIBBProyeccion> {
+    const res: AxiosResponse<IIBBProyeccion> = await this.client.post(
+      `/iibb/proyeccion/${proyeccionId}/marcar-presentada`,
+      null,
+      { params: orgId ? { org_id: orgId } : {} },
+    )
+    return res.data
+  }
+
+  async getHistorialIIBB(params: {
+    orgId?: number; limit?: number; offset?: number
+  } = {}): Promise<PaginatedResponse<IIBBProyeccion>> {
+    const q: Record<string, number> = {}
+    if (params.orgId) q.org_id = params.orgId
+    if (params.limit != null) q.limit = params.limit
+    if (params.offset != null) q.offset = params.offset
+    const res: AxiosResponse<PaginatedResponse<IIBBProyeccion>> = await this.client.get(
+      '/iibb/historial',
       { params: q },
     )
     return res.data

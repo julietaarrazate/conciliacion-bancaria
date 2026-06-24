@@ -339,3 +339,51 @@ export interface ControlMonotributo {
   created_at: string
   updated_at: string
 }
+
+// ── Ingresos Brutos (IIBB) y Convenio Multilateral ──────────────────────────
+export interface IIBBJurisdiccion {
+  id: number
+  nombre: string
+  alicuota: number
+  coeficiente_distribucion: number
+  activa: boolean
+  orden: number
+}
+
+export interface IIBBConfig {
+  activo: boolean
+  modo: 'simple' | 'convenio_multilateral'
+  jurisdiccion_unica_id: number | null
+}
+
+export interface IIBBDetalleJurisdiccion {
+  jurisdiccion_id: number
+  nombre: string
+  coeficiente: number
+  ingreso_atribuido: number
+  alicuota: number
+  impuesto: number
+}
+
+export interface IIBBProyeccionPreview {
+  periodo: string
+  modo: 'simple' | 'convenio_multilateral'
+  ingreso_total: number
+  impuesto_total: number
+  suma_coeficientes: number
+  warning: string | null
+  detalle: IIBBDetalleJurisdiccion[]
+}
+
+export interface IIBBProyeccion {
+  id: number
+  organizacion_id: number
+  periodo: string
+  ingreso_total: number
+  impuesto_total: number
+  detalle_por_jurisdiccion: IIBBDetalleJurisdiccion[] | null
+  estado: 'proyectado' | 'presentado'
+  fecha_presentacion: string | null
+  created_at: string
+  updated_at: string
+}

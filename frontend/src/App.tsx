@@ -40,6 +40,7 @@ const Cheques           = lazyPage(() => import('@/pages/Cheques'),           'C
 const Tarjetas          = lazyPage(() => import('@/pages/Tarjetas'),          'Tarjetas')
 const Iva               = lazyPage(() => import('@/pages/Iva'),               'Iva')
 const Monotributo       = lazyPage(() => import('@/pages/Monotributo'),       'Monotributo')
+const IngresosBrutos    = lazyPage(() => import('@/pages/IngresosBrutos'),    'IngresosBrutos')
 const Pagos             = lazyPage(() => import('@/pages/Pagos'),             'Pagos')
 const Papelera          = lazyPage(() => import('@/pages/Papelera'),          'Papelera')
 const Compartir         = lazyPage(() => import('@/pages/Compartir'),         'Compartir')
@@ -179,6 +180,7 @@ export function App() {
             <Route path="/tarjetas" element={<ProtectedRoute permission="manage_finance"><Tarjetas /></ProtectedRoute>} />
             <Route path="/iva" element={<ProtectedRoute permission="view_accounting"><Iva /></ProtectedRoute>} />
             <Route path="/monotributo" element={<ProtectedRoute permission="view_accounting"><Monotributo /></ProtectedRoute>} />
+            <Route path="/ingresos-brutos" element={<ProtectedRoute permission="view_accounting"><IngresosBrutos /></ProtectedRoute>} />
             <Route path="/papelera" element={<ProtectedRoute permission="manage_users"><Papelera /></ProtectedRoute>} />
             <Route path="/compartir" element={<Compartir />} />
             <Route path="/movimientos" element={<Movimientos />} />
