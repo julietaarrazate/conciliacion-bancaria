@@ -32,10 +32,12 @@ from app.routers import agente
 from app.routers import tarjetas
 from app.routers import iva
 from app.routers import monotributo
+from app.routers import iibb
 from app.routers import google_auth
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.egreso import Egreso, CategoriaEgreso  # noqa: F401
 from app.models.monotributo import CategoriaMonotributo, MonotributoConfig, ControlMonotributo  # noqa: F401
+from app.models.iibb import JurisdiccionIIBB, IIBBConfig, ProyeccionIIBB  # noqa: F401
 from app.models.caja import ArqueoDiario  # noqa: F401
 from app.models.push_subscription import PushSubscription  # noqa: F401
 from app.models.revoked_token import RevokedToken  # noqa: F401
@@ -224,6 +226,40 @@ def _run_alembic():
         "CONSTRAINT uq_control_monotributo_org_periodo "
         "UNIQUE (organizacion_id, periodo))",
         "CREATE INDEX IF NOT EXISTS ix_control_monotributo_org ON controles_monotributo (organizacion_id)",
+        # módulo Ingresos Brutos (IIBB) y Convenio Multilateral — jurisdicciones, config opt-in y snapshots
+        "CREATE TABLE IF NOT EXISTS jurisdicciones_iibb ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "nombre VARCHAR(80) NOT NULL, "
+        "alicuota NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "coeficiente_distribucion NUMERIC(5,4) NOT NULL DEFAULT 0, "
+        "activa BOOLEAN NOT NULL DEFAULT TRUE, "
+        "orden INTEGER NOT NULL DEFAULT 0, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_jurisdiccion_iibb_org_nombre UNIQUE (organizacion_id, nombre))",
+        "CREATE INDEX IF NOT EXISTS ix_jurisdiccion_iibb_org ON jurisdicciones_iibb (organizacion_id)",
+        "CREATE TABLE IF NOT EXISTS iibb_config ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL UNIQUE REFERENCES organizaciones(id), "
+        "activo BOOLEAN NOT NULL DEFAULT FALSE, "
+        "modo VARCHAR(24) NOT NULL DEFAULT 'simple', "
+        "jurisdiccion_unica_id INTEGER REFERENCES jurisdicciones_iibb(id), "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW())",
+        "CREATE TABLE IF NOT EXISTS proyecciones_iibb ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "periodo VARCHAR(7) NOT NULL, "
+        "ingreso_total NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "impuesto_total NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "detalle_por_jurisdiccion JSONB, "
+        "estado VARCHAR(20) NOT NULL DEFAULT 'proyectado', "
+        "fecha_presentacion TIMESTAMP, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_proyeccion_iibb_org_periodo UNIQUE (organizacion_id, periodo))",
+        "CREATE INDEX IF NOT EXISTS ix_proyeccion_iibb_org ON proyecciones_iibb (organizacion_id)",
     ]
     try:
         from sqlalchemy import text as _text
@@ -412,6 +448,7 @@ def _init_db():
         from app.models.organizacion import Organizacion
         from app.services.seed_contable import seed_contabilidad_org, seed_categorias_egreso_org
         from app.services.monotributo_service import seed_monotributo_categorias
+        from app.services.iibb_service import seed_iibb_jurisdiccion
 
         db = SL()
         org_ids = [o.id for o in db.query(Organizacion.id).all()]
@@ -423,6 +460,8 @@ def _init_db():
                 seed_categorias_egreso_org(db, oid)
                 # Categorías Monotributo (placeholder, editables) si la org no tiene ninguna
                 seed_monotributo_categorias(db, oid)
+                # Jurisdicción IIBB ilustrativa (editable) si la org no tiene ninguna
+                seed_iibb_jurisdiccion(db, oid)
             except Exception as ex_org:
                 db.rollback()
                 logger.warning("Error seed contabilidad org %s: %s", oid, ex_org)
@@ -806,6 +845,7 @@ app.include_router(agente.router)
 app.include_router(tarjetas.router)
 app.include_router(iva.router)
 app.include_router(monotributo.router)
+app.include_router(iibb.router)
 app.include_router(google_auth.router)
 
 
