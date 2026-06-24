@@ -911,7 +911,8 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
 - **v3.19 — IVA Proyección y DDJJ** ✅ implementado (ver abajo). Primer módulo del plan.
 - **v3.20 — Control Semestral Monotributo** ✅ implementado (ver abajo). Segundo módulo del plan.
 - **v3.21 — Ingresos Brutos y Convenio Multilateral** ✅ implementado (ver abajo). Tercer módulo del plan.
-- Pendientes a priorizar: Liquidador Sueldos y F931, Intake Exportador de Servicios.
+- **v3.22 — Liquidador de Sueldos y F931** ✅ implementado (ver abajo). Cuarto módulo del plan.
+- Pendientes a priorizar: Intake Exportador de Servicios.
 
 ### v3.19 — Módulo IVA Proyección y DDJJ (junio 2026 — PR #147)
 
@@ -1037,6 +1038,68 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
   Org A intacta (solo aditivo). 23 tests nuevos (`test_iibb.py`: simple, convenio, warning de
   coeficientes, inmutabilidad post-presentado, permisos por capa, aislamiento multi-org). 375 tests
   pasando en total.
+
+### v3.22 — Módulo Liquidador de Sueldos y F931 (junio 2026 — PR #155)
+
+- **Qué hace**: herramienta de **liquidación interna de sueldos + proyección del F931** (la DDJJ
+  mensual de AFIP/ARCA de aportes y contribuciones de la seguridad social). Por cada empleado activo
+  de la org calcula sueldo bruto (+ SAC proporcional), aportes del empleado, contribuciones del
+  empleador y sueldo neto; los totales agregados son la base del F931 (total remuneraciones, total
+  aportes, total contribuciones). La UI deja explícito que **NO sustituye un sistema de liquidación
+  de sueldos homologado ni reemplaza el SUSS/AFIP** — es gestión interna del estudio.
+- **Dominio de datos nuevo (empleados)** — primer módulo del plan que agrega un dominio, no solo
+  proyección sobre asientos. Modelos en `app/models/sueldos.py`:
+  - `ConvenioColectivo` (org-scoped, unique org+nombre) — varios convenios por org.
+  - `CategoriaConvenio` (FK convenio, unique convenio+nombre, `sueldo_basico` Numeric 12,2).
+  - `Empleado` (org-scoped, `cuil` 11 dígitos validado igual que CUIT de clientes, FK convenio/
+    categoría nullable, `sueldo_basico` override del de la categoría, `cargas_familia`, `activo`,
+    **soft delete `deleted_at`** — mismo patrón que Planilla).
+  - `ConfigSueldos` (1 por org, opt-in `activo=False` por default, igual patrón que IIBBConfig) con
+    las alícuotas de aportes (jubilación/INSSJP/obra social) y contribuciones (jubilación/INSSJP ley
+    19032/obra social/asignaciones familiares/fondo desempleo/ART). **Sembradas como DEFAULT EDITABLE**
+    con valores de referencia 2024 (esquema nacional ley 27.541: aportes 11%+3%+3%; contribuciones
+    ~18%) y nota "verificar vigencia con tu contador/AFIP". **ART queda en 0 obligatoriamente**
+    editable (varía 100% por póliza). A diferencia de IIBB sí se siembran defaults porque el esquema
+    de seguridad social es nacional y estable; igual de explícito que el disclaimer de Monotributo.
+  - `LiquidacionSueldoPeriodo` (snapshot por org+período unique, estados borrador/aprobado/presentado,
+    **inmutable una vez `presentado`** — mismo patrón ProyeccionIva/IIBB/ControlMonotributo).
+  - `DetalleLiquidacionEmpleado` (FK liquidación+empleado, bruto/sac/aportes/contribuciones/neto +
+    `detalle_json` con el desglose de cada concepto).
+- **`services/sueldos_service.py`** (puro, sin FastAPI, Decimal + `tz.now_art()`):
+  `calcular_liquidacion_periodo` (preview, no persiste), `guardar_o_actualizar_liquidacion` (upsert
+  idempotente, reemplaza detalles, no pisa presentado), `aprobar_liquidacion` (genera asiento),
+  `marcar_presentada` (inmutable), `get_o_crear_config`, `seed_config_sueldos`.
+  - **Básico**: override del empleado → básico de su categoría → 0.
+  - **SAC proporcional — SIMPLIFICACIÓN DOCUMENTADA**: el SAC legal se devenga semestralmente; aquí
+    se usa la provisión mensual `sac = básico / 12` (práctica contable habitual de costeo laboral
+    mensual). NO es el cálculo legal del recibo de junio/diciembre. El SAC integra la base imponible
+    (bruto = básico + sac). Documentado en el docstring del service.
+  - aportes = bruto × Σ alícuotas de aporte ; contribuciones = bruto × Σ alícuotas de contribución
+    (incluye ART) ; neto = bruto − aportes.
+- **Asiento contable agrupado** al aprobar (`registrar_liquidacion_sueldos` en `motor_contable.py`,
+  módulo `sueldos_liquidacion`, 3 líneas vía `_crear_asiento_multilinea`):
+  Sueldos y cargas sociales (3-2-4-0, gasto) **D** por bruto+contribuciones / Sueldos a pagar
+  (2-1-4-0) **H** por el neto / Cargas sociales a pagar (2-1-5-0) **H** por aportes+contribuciones.
+  Partida doble: D = bruto+contrib ; H = neto + aportes + contrib = bruto+contrib ✓. Idempotente por
+  (modulo, referencia_id=liquidacion_id, org). 3 cuentas nuevas en PLAN_PATCH (no toca Org A).
+- **Router `/sueldos`** — permisos en 3 capas: CRUD de Convenios/Categorías/Empleados +
+  GET/PUT `/sueldos/config` → escritura `admin_accounting`, lectura `view_accounting`; DELETE
+  (convenios/categorías/empleados) → `delete_records`; `GET /sueldos/liquidacion` (preview) →
+  `view_accounting`; `POST /sueldos/liquidacion/calcular` y `.../{id}/aprobar` → `manage_finance`;
+  `POST .../{id}/marcar-presentada` → `admin_accounting`; `GET /sueldos/historial` (paginado) →
+  `view_accounting`. Empleados con soft delete (DELETE setea `deleted_at` + `activo=False`).
+- **Frontend `pages/Sueldos.tsx`**: 4 tabs — **Empleados** (alta/edición + convenios/categorías
+  inline), **Liquidación** (selector de período, preview en vivo, calcular/guardar borrador, aprobar
+  con asiento, marcar presentada, card "Base del F931", desglose por empleado), **Historial**
+  (paginado), **Config** (activo + alícuotas de aportes/contribuciones editables con disclaimer
+  "valores de referencia — verificar vigencia"). Mismo estilo que `/iva` e `/ingresos-brutos`. Nav
+  gateada `view_accounting` (ícono Users). Las tasas se ingresan como % (11 = 11%) y se guardan como
+  fracción.
+- **Migración `016_sueldos`** + safety nets idempotentes en `main.py` (6x `CREATE TABLE IF NOT EXISTS`
+  + índices + seed de ConfigSueldos apagada al crear org nueva / backfill para orgs existentes).
+  Org A intacta (solo aditivo). 23 tests nuevos (`test_sueldos.py`: cálculo, aportes/contribuciones,
+  SAC, básico de categoría, inmutabilidad, permisos por capa, aislamiento multi-org, asiento con
+  partida doble, validación CUIL, soft delete, end-to-end API). **398 tests pasando en total.**
 
 ---
 
@@ -1243,7 +1306,12 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
   modo simple vs convenio multilateral con distribución por coeficientes + alícuota propia, warning si
   los coeficientes no suman 100%, sin sembrar alícuotas reales, inmutable al marcar presentada). 375 tests.
   (junio 2026 — PR #154)
+- `v3.22` — cuarto módulo del plan: Liquidador de Sueldos y F931 (dominio nuevo de empleados con
+  convenios/categorías + soft delete, ConfigSueldos opt-in con alícuotas de aportes/contribuciones
+  sembradas como default editable de referencia 2024 / ART en 0, liquidación por período con SAC
+  proporcional, asiento contable agrupado de partida doble al aprobar, inmutable al marcar presentada,
+  base del F931). 398 tests. (junio 2026 — PR #155)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.21
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.22
