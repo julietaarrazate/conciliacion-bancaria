@@ -80,6 +80,10 @@ class ComprobanteArca(Base):
     doc_nro             = Column(String(11), nullable=True)
 
     fecha_emision       = Column(Date, nullable=False)
+    # Obligatorios ante ARCA cuando concepto es 2 (servicios) o 3 (ambos) — ver WSFEv1 FECAEDetRequest
+    fecha_serv_desde    = Column(Date, nullable=True)
+    fecha_serv_hasta    = Column(Date, nullable=True)
+    fecha_vto_pago      = Column(Date, nullable=True)
     importe_neto        = Column(Numeric(12, 2), nullable=False, default=0)
     importe_iva         = Column(Numeric(12, 2), nullable=False, default=0)
     importe_total       = Column(Numeric(12, 2), nullable=False, default=0)

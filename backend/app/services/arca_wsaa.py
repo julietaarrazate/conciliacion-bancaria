@@ -3,9 +3,9 @@
 Cada organización tiene su propio certificado X.509 + clave privada (emitidos
 por ARCA para su CUIT). Para llamar a WSFEv1 primero hay que loguearse contra
 WSAA: se construye un "Ticket de Requerimiento de Acceso" (TRA, XML simple),
-se firma como CMS/PKCS#7 (detached, DER) con el certificado+clave del org, y se
-envía en una llamada SOAP `loginCms`. ARCA devuelve un token+sign válidos por
-~12hs que se usan en cada llamada a WSFEv1.
+se firma como CMS/PKCS#7 NO detached (el TRA va embebido en la firma, DER) con
+el certificado+clave del org, y se envía en una llamada SOAP `loginCms`. ARCA
+devuelve un token+sign válidos por ~12hs que se usan en cada llamada a WSFEv1.
 
 El token/sign se cachean cifrados en `ArcaConfig` (mismo patrón que el propio
 certificado — ver `arca_crypto.py`) para no loguear en cada factura.
@@ -63,7 +63,7 @@ def _build_tra() -> bytes:
 
 
 def _firmar_cms(tra_xml: bytes, certificado_pem: str, clave_privada_pem: str) -> bytes:
-    """Firma el TRA como CMS/PKCS#7 (DER, con certificado embebido) — lo que ARCA exige en loginCms."""
+    """Firma el TRA como CMS/PKCS#7 NO detached (DER, con certificado y contenido embebidos) — lo que ARCA exige en loginCms."""
     try:
         cert = x509.load_pem_x509_certificate(certificado_pem.encode())
         clave = serialization.load_pem_private_key(clave_privada_pem.encode(), password=None)

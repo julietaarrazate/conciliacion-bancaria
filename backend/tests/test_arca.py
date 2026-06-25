@@ -221,11 +221,23 @@ def test_crear_comprobante_ok(client, db):
     r = client.post("/arca/comprobantes", json={
         "cliente_id": 1, "tipo_comprobante": 11, "concepto": 2,
         "importe_neto": 826.45, "importe_iva": 173.55, "importe_total": 1000.0,
+        "fecha_serv_desde": "2026-06-01", "fecha_serv_hasta": "2026-06-30",
+        "fecha_vto_pago": "2026-07-10",
     }, headers=_auth(tok_op))
     assert r.status_code == 200
     body = r.json()
     assert body["estado"] == "borrador"
     assert body["cae"] is None
+    assert body["fecha_serv_desde"] == "2026-06-01"
+
+
+def test_crear_comprobante_servicios_sin_fechas_falla(client, db):
+    tok_admin = _token(db, "admin@arca.test")
+    _activar(client, tok_admin)
+    r = client.post("/arca/comprobantes", json={
+        "tipo_comprobante": 11, "concepto": 2, "importe_total": 1000.0,
+    }, headers=_auth(tok_admin))
+    assert r.status_code == 422
 
 
 def test_crear_comprobante_sin_permiso_403(client, db):
@@ -266,6 +278,8 @@ def test_emitir_exito_genera_asiento_balanceado(client, db, monkeypatch):
     r = client.post("/arca/comprobantes", json={
         "cliente_id": 1, "tipo_comprobante": 11, "concepto": 2,
         "importe_neto": 826.45, "importe_iva": 173.55, "importe_total": 1000.0,
+        "fecha_serv_desde": "2026-06-01", "fecha_serv_hasta": "2026-06-30",
+        "fecha_vto_pago": "2026-07-10",
     }, headers=_auth(tok_admin))
     comprobante_id = r.json()["id"]
 
@@ -357,3 +371,42 @@ def test_aislamiento_multi_org(client, db):
     r = client.get("/arca/comprobantes", headers=_auth(tok_admin))
     assert r.status_code == 200
     assert r.json()["total"] == 0
+
+
+# ── arca_wsfe: FchServDesde/FchServHasta/FchVtoPago obligatorios para servicios ──
+
+def test_solicitar_cae_servicios_sin_fechas_falla():
+    from app.services.arca_wsfe import solicitar_cae, DatosComprobante
+
+    datos = DatosComprobante(
+        cuit="20111111112", punto_venta=1, tipo_comprobante=11, numero=1, concepto=2,
+        doc_tipo=99, doc_nro="0", fecha_emision="20260625",
+        importe_neto=Decimal("826.45"), importe_iva=Decimal("173.55"), importe_total=Decimal("1000.00"),
+    )
+    with pytest.raises(ArcaWsfeError):
+        solicitar_cae("TOKEN", "SIGN", "homologacion", datos)
+
+
+def test_solicitar_cae_productos_no_requiere_fechas(monkeypatch):
+    from app.services import arca_wsfe
+    from app.services.arca_wsfe import solicitar_cae, DatosComprobante
+
+    capturado = {}
+
+    def _fake_soap_call(ambiente, soap_action, body_xml):
+        capturado["body"] = body_xml
+        import xml.etree.ElementTree as ET
+        return ET.fromstring(
+            "<r><Resultado>A</Resultado><CAE>123</CAE><CAEFchVto>20260710</CAEFchVto></r>"
+        )
+
+    monkeypatch.setattr(arca_wsfe, "_soap_call", _fake_soap_call)
+
+    datos = DatosComprobante(
+        cuit="20111111112", punto_venta=1, tipo_comprobante=11, numero=1, concepto=1,
+        doc_tipo=99, doc_nro="0", fecha_emision="20260625",
+        importe_neto=Decimal("826.45"), importe_iva=Decimal("173.55"), importe_total=Decimal("1000.00"),
+    )
+    resultado = solicitar_cae("TOKEN", "SIGN", "homologacion", datos)
+    assert resultado["cae"] == "123"
+    assert "FchServDesde" not in capturado["body"]

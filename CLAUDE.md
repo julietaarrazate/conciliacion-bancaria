@@ -1239,6 +1239,23 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
 - **Setup en producción**: generar `ARCA_ENCRYPTION_KEY` (Fernet, 32 bytes urlsafe-base64) y pegarla en
   Render. Sin esa env var el módulo no cifra/descifra y la activación queda bloqueada — degradación
   segura, nunca cae a texto plano.
+- **Revisión de correctitud pre-merge** (mismo PR, antes de salir de draft): se evaluó AfipSDK
+  (afip.php/js/py/rb) como posible referencia y se descartó — sus repos públicos son clientes
+  delgados contra `app.afipsdk.com` (su backend propio con Bearer token), no implementaciones
+  abiertas de WSAA/WSFEv1; no firman CMS ni hablan SOAP directo con ARCA. Se usó en cambio
+  `PyAr/pyafipws` (implementación abierta y activamente mantenida) como criterio de comparación:
+  confirmó que las URLs de WSAA/WSFEv1 (`afip.gov.ar`, no `arca.gov.ar`) y el `SOAPAction` vacío de
+  `loginCms` ya estaban correctos en `arca_wsaa.py`/`arca_wsfe.py`. Encontró y corrigió dos problemas
+  reales: (1) **bug de datos faltantes** — `FchServDesde`/`FchServHasta`/`FchVtoPago` son obligatorios
+  ante ARCA cuando `Concepto` es 2 (servicios) o 3 (ambos), y no existían en `DatosComprobante` ni en
+  el XML de `FECAEDetRequest`; cualquier factura de servicios habría sido rechazada por ARCA. Se
+  agregaron las 3 fechas a `ComprobanteArca` (3 columnas nuevas), `ComprobanteIn`, `DatosComprobante`
+  y al XML (solo cuando concepto≠1, con validación tanto en el router como en `arca_wsfe.solicitar_cae`
+  como segunda red de seguridad); UI en `Arca.tsx` con selector de Concepto + 3 campos de fecha
+  condicionales. (2) **comentario engañoso** — el docstring de `arca_wsaa.py` decía que la firma
+  CMS/PKCS#7 era "detached" cuando en realidad (correctamente) es NO detached/attached — corregido
+  para que un futuro mantenimiento no "arregle" agregando `PKCS7Options.DetachedSignature`, lo que
+  rompería la integración en producción. 3 tests nuevos. **440 tests pasando en total.**
 
 ---
 

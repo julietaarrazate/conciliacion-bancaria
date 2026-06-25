@@ -65,6 +65,9 @@ class DatosComprobante:
     importe_neto: Decimal
     importe_iva: Decimal
     importe_total: Decimal
+    fecha_serv_desde: Optional[str] = None  # YYYYMMDD — obligatorio si concepto es 2 o 3
+    fecha_serv_hasta: Optional[str] = None  # YYYYMMDD — obligatorio si concepto es 2 o 3
+    fecha_vto_pago: Optional[str] = None    # YYYYMMDD — obligatorio si concepto es 2 o 3
     ivas: list[ItemIva] = field(default_factory=list)
 
 
@@ -151,6 +154,20 @@ def solicitar_cae(token: str, sign: str, ambiente: str, datos: DatosComprobante)
         )
         ivas_xml = f"<ar:Iva>{items}</ar:Iva>"
 
+    # ARCA exige FchServDesde/FchServHasta/FchVtoPago cuando Concepto es 2 (servicios) o 3 (ambos);
+    # deben omitirse para Concepto 1 (productos) — incluirlos ahí también es rechazado por WSFEv1.
+    fechas_serv_xml = ""
+    if datos.concepto in (2, 3):
+        if not (datos.fecha_serv_desde and datos.fecha_serv_hasta and datos.fecha_vto_pago):
+            raise ArcaWsfeError(
+                "Concepto servicios/ambos requiere fecha_serv_desde, fecha_serv_hasta y fecha_vto_pago"
+            )
+        fechas_serv_xml = (
+            f"<ar:FchServDesde>{datos.fecha_serv_desde}</ar:FchServDesde>"
+            f"<ar:FchServHasta>{datos.fecha_serv_hasta}</ar:FchServHasta>"
+            f"<ar:FchVtoPago>{datos.fecha_vto_pago}</ar:FchVtoPago>"
+        )
+
     det = (
         "<ar:FECAEDetRequest>"
         f"<ar:Concepto>{datos.concepto}</ar:Concepto>"
@@ -165,6 +182,7 @@ def solicitar_cae(token: str, sign: str, ambiente: str, datos: DatosComprobante)
         "<ar:ImpOpEx>0.00</ar:ImpOpEx>"
         f"<ar:ImpIVA>{datos.importe_iva:.2f}</ar:ImpIVA>"
         "<ar:ImpTrib>0.00</ar:ImpTrib>"
+        f"{fechas_serv_xml}"
         "<ar:MonId>PES</ar:MonId><ar:MonCotiz>1</ar:MonCotiz>"
         f"{ivas_xml}"
         "</ar:FECAEDetRequest>"

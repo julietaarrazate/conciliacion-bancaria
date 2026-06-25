@@ -158,7 +158,8 @@ export const Arca: React.FC = () => {
   const [showForm, setShowForm] = useState(false)
   const [clientes, setClientes] = useState<ClienteOpt[]>([])
   const [form, setForm] = useState({
-    cliente_id: '', tipo_comprobante: 11, importe_neto: '', importe_iva: '', importe_total: '',
+    cliente_id: '', tipo_comprobante: 11, concepto: 1, importe_neto: '', importe_iva: '', importe_total: '',
+    fecha_serv_desde: '', fecha_serv_hasta: '', fecha_vto_pago: '',
   })
   const [creando, setCreando] = useState(false)
   const [emitiendoId, setEmitiendoId] = useState<number | null>(null)
@@ -180,19 +181,30 @@ export const Arca: React.FC = () => {
       setMsg({ type: 'error', text: 'El importe total debe ser mayor a 0.' })
       return
     }
+    if (form.concepto !== 1 && (!form.fecha_serv_desde || !form.fecha_serv_hasta || !form.fecha_vto_pago)) {
+      setMsg({ type: 'error', text: 'Servicios/Productos y servicios requiere completar el período del servicio y la fecha de vencimiento de pago.' })
+      return
+    }
     setCreando(true)
     setMsg(null)
     try {
       await apiClient.crearComprobanteArca({
         cliente_id: form.cliente_id ? Number(form.cliente_id) : null,
         tipo_comprobante: form.tipo_comprobante,
+        concepto: form.concepto,
         importe_neto: parseFloat((form.importe_neto || '0').replace(',', '.')) || 0,
         importe_iva: parseFloat((form.importe_iva || '0').replace(',', '.')) || 0,
         importe_total: total,
+        fecha_serv_desde: form.concepto !== 1 ? form.fecha_serv_desde : null,
+        fecha_serv_hasta: form.concepto !== 1 ? form.fecha_serv_hasta : null,
+        fecha_vto_pago: form.concepto !== 1 ? form.fecha_vto_pago : null,
       }, activeOrgId || undefined)
       setMsg({ type: 'ok', text: 'Comprobante creado en borrador.' })
       setShowForm(false)
-      setForm({ cliente_id: '', tipo_comprobante: 11, importe_neto: '', importe_iva: '', importe_total: '' })
+      setForm({
+        cliente_id: '', tipo_comprobante: 11, concepto: 1, importe_neto: '', importe_iva: '', importe_total: '',
+        fecha_serv_desde: '', fecha_serv_hasta: '', fecha_vto_pago: '',
+      })
       setOffset(0)
       await cargarComprobantes()
     } catch (e: any) {
@@ -309,6 +321,49 @@ export const Arca: React.FC = () => {
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Concepto</label>
+                  <select
+                    className={inputClass}
+                    value={form.concepto}
+                    onChange={e => setForm(p => ({ ...p, concepto: Number(e.target.value) }))}
+                  >
+                    <option value={1}>Productos</option>
+                    <option value={2}>Servicios</option>
+                    <option value={3}>Productos y servicios</option>
+                  </select>
+                </div>
+                {form.concepto !== 1 && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Período servicio — desde</label>
+                      <input
+                        type="date"
+                        className={inputClass}
+                        value={form.fecha_serv_desde}
+                        onChange={e => setForm(p => ({ ...p, fecha_serv_desde: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Período servicio — hasta</label>
+                      <input
+                        type="date"
+                        className={inputClass}
+                        value={form.fecha_serv_hasta}
+                        onChange={e => setForm(p => ({ ...p, fecha_serv_hasta: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Vencimiento de pago</label>
+                      <input
+                        type="date"
+                        className={inputClass}
+                        value={form.fecha_vto_pago}
+                        onChange={e => setForm(p => ({ ...p, fecha_vto_pago: e.target.value }))}
+                      />
+                    </div>
+                  </>
+                )}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Importe neto</label>
                   <input

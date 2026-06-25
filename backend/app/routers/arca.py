@@ -20,6 +20,7 @@ Nunca se devuelve `certificado_enc`/`clave_privada_enc`/tokens cifrados en ningu
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 
@@ -85,6 +86,9 @@ def _comprobante_dict(c: ComprobanteArca) -> dict:
         "doc_tipo": c.doc_tipo,
         "doc_nro": c.doc_nro,
         "fecha_emision": c.fecha_emision,
+        "fecha_serv_desde": c.fecha_serv_desde,
+        "fecha_serv_hasta": c.fecha_serv_hasta,
+        "fecha_vto_pago": c.fecha_vto_pago,
         "importe_neto": c.importe_neto,
         "importe_iva": c.importe_iva,
         "importe_total": c.importe_total,
@@ -120,6 +124,10 @@ class ComprobanteIn(BaseModel):
     importe_iva: float = 0.0
     importe_total: float
     alic_iva: Optional[int] = None  # código AFIP de alícuota (3,4,5,6) si hay IVA
+    # Obligatorios ante ARCA si concepto es 2 (servicios) o 3 (ambos)
+    fecha_serv_desde: Optional[date] = None
+    fecha_serv_hasta: Optional[date] = None
+    fecha_vto_pago: Optional[date] = None
 
 
 # ── Config ────────────────────────────────────────────────────────
@@ -291,6 +299,12 @@ def crear_comprobante(
     if body.importe_total <= 0:
         raise HTTPException(422, "importe_total debe ser mayor a 0")
 
+    if body.concepto in (2, 3) and not (body.fecha_serv_desde and body.fecha_serv_hasta and body.fecha_vto_pago):
+        raise HTTPException(
+            422,
+            "Concepto servicios/ambos requiere fecha_serv_desde, fecha_serv_hasta y fecha_vto_pago",
+        )
+
     c = ComprobanteArca(
         organizacion_id=oid,
         cliente_id=body.cliente_id,
@@ -300,6 +314,9 @@ def crear_comprobante(
         doc_tipo=body.doc_tipo,
         doc_nro=body.doc_nro,
         fecha_emision=hoy_art(),
+        fecha_serv_desde=body.fecha_serv_desde,
+        fecha_serv_hasta=body.fecha_serv_hasta,
+        fecha_vto_pago=body.fecha_vto_pago,
         importe_neto=Decimal(str(body.importe_neto)),
         importe_iva=Decimal(str(body.importe_iva)),
         importe_total=Decimal(str(body.importe_total)),
@@ -362,6 +379,9 @@ def emitir_comprobante(
             importe_neto=c.importe_neto,
             importe_iva=c.importe_iva,
             importe_total=c.importe_total,
+            fecha_serv_desde=c.fecha_serv_desde.strftime("%Y%m%d") if c.fecha_serv_desde else None,
+            fecha_serv_hasta=c.fecha_serv_hasta.strftime("%Y%m%d") if c.fecha_serv_hasta else None,
+            fecha_vto_pago=c.fecha_vto_pago.strftime("%Y%m%d") if c.fecha_vto_pago else None,
             ivas=ivas,
         )
         resultado = solicitar_cae(token, sign, cfg.ambiente, datos)

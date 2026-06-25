@@ -504,6 +504,9 @@ export interface ComprobanteArca {
   doc_tipo: number
   doc_nro: string | null
   fecha_emision: string
+  fecha_serv_desde: string | null
+  fecha_serv_hasta: string | null
+  fecha_vto_pago: string | null
   importe_neto: number
   importe_iva: number
   importe_total: number
@@ -523,4 +526,7 @@ export interface ComprobanteArcaPayload {
   importe_neto?: number
   importe_iva?: number
   importe_total: number
+  fecha_serv_desde?: string | null
+  fecha_serv_hasta?: string | null
+  fecha_vto_pago?: string | null
 }

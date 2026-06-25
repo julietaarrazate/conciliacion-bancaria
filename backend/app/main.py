@@ -390,6 +390,9 @@ def _run_alembic():
         "doc_tipo INTEGER NOT NULL DEFAULT 99, "
         "doc_nro VARCHAR(11), "
         "fecha_emision DATE NOT NULL, "
+        "fecha_serv_desde DATE, "
+        "fecha_serv_hasta DATE, "
+        "fecha_vto_pago DATE, "
         "importe_neto NUMERIC(12,2) NOT NULL DEFAULT 0, "
         "importe_iva NUMERIC(12,2) NOT NULL DEFAULT 0, "
         "importe_total NUMERIC(12,2) NOT NULL DEFAULT 0, "
@@ -403,6 +406,10 @@ def _run_alembic():
         "created_at TIMESTAMP DEFAULT NOW(), "
         "updated_at TIMESTAMP DEFAULT NOW(), "
         "CONSTRAINT uq_comprobante_arca_org_pv_tipo_numero UNIQUE (organizacion_id, punto_venta, tipo_comprobante, numero))",
+        # Por si la tabla ya existía sin estas 3 columnas (deploy parcial de la migración 019)
+        "ALTER TABLE comprobantes_arca ADD COLUMN IF NOT EXISTS fecha_serv_desde DATE",
+        "ALTER TABLE comprobantes_arca ADD COLUMN IF NOT EXISTS fecha_serv_hasta DATE",
+        "ALTER TABLE comprobantes_arca ADD COLUMN IF NOT EXISTS fecha_vto_pago DATE",
         "CREATE INDEX IF NOT EXISTS ix_arca_config_org ON arca_config (organizacion_id)",
         "CREATE INDEX IF NOT EXISTS ix_comprobantes_arca_org ON comprobantes_arca (organizacion_id)",
         "CREATE INDEX IF NOT EXISTS ix_comprobantes_arca_cliente ON comprobantes_arca (cliente_id)",
