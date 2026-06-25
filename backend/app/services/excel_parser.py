@@ -123,6 +123,12 @@ INDICADORES_BANCO = {
     "lapampa":     ["banco de la pampa", "bancodelapampa", "banco la pampa"],
 }
 
+def _kw_en_texto(keyword: str, texto: str) -> bool:
+    """Matchea `keyword` como palabra/frase completa (con \\b), no como substring
+    suelto — evita falsos positivos como "rio" adentro de "periodo", "anterior",
+    "horario", "prioridad", etc."""
+    return re.search(r'\b' + re.escape(keyword) + r'\b', texto) is not None
+
 def detectar_banco(ws) -> str:
     texto = ""
     # Escanea más filas/columnas: algunos formatos (Credicoop, Supervielle,
@@ -142,10 +148,7 @@ def detectar_banco(ws) -> str:
             candidatos.append((banco, _normalizar(p)))
     candidatos.sort(key=lambda bp: len(bp[1]), reverse=True)
     for banco, p in candidatos:
-        # "rio" suelto no debe matchear "rioja" / "prioritario" / etc.
-        if p == "rio" and ("rioja" in texto or "prio" in texto):
-            continue
-        if p in texto:
+        if _kw_en_texto(p, texto):
             return banco
     # Mercado Pago por estructura: el CSV de liberaciones no siempre
     # contiene el texto "Mercado Pago", pero sí columnas características.
@@ -209,7 +212,7 @@ KEYWORDS_CREDITO = ["credito","haber","credit"]
 KEYWORDS_DEBITO  = ["debito","debe","debit","cargo"]
 KEYWORDS_FECHA   = ["fecha","date","vencimiento","release_date","date_created","money_release_date"]
 KEYWORDS_TITULAR = ["titular","concepto","descripcion","glosa","detalle","nombre","beneficiario","ordenante",
-                    "transaction_type","payer_name","description"]
+                    "transaction_type","payer_name","description","tipo de transferencia","tipo de movimiento"]
 KEYWORDS_ORDEN   = ["orden","nro. de referencia","nro","numero","secuencia","referencia",
                     "operation_id","source_id","external_reference","payment_id"]
 KEYWORDS_SALDO   = ["saldo","balance","balance_amount"]
@@ -242,10 +245,37 @@ def _match_kw_raw(header, keywords):
     h = _normalizar(header.lower().strip())
     return any(k in h for k in keywords)
 
+def _fila_valida_como_header(ws, row, encontrados):
+    """Confirma que la fila candidata a header tenga datos reales en la fila
+    siguiente (no sea una línea de resumen tipo "Total débitos: $X" que matchea
+    keywords por casualidad pero no es una fila de encabezado de tabla)."""
+    nxt = row + 1
+    if nxt > ws.max_row:
+        return False
+    # Columnas numéricas (monto/credito/debito/saldo): alcanza con que UNA tenga
+    # un valor real en la fila siguiente — en formatos con crédito/débito
+    # separados, cada fila solo llena una de las dos columnas.
+    numericas = [c for campo, c in encontrados.items() if campo in ("monto", "credito", "debito", "saldo")]
+    if numericas:
+        if not any(
+            (v := ws.cell(nxt, c).value) is not None and not (isinstance(v, str) and _parse_monto(v) is None)
+            for c in numericas
+        ):
+            return False
+    if "fecha" in encontrados:
+        v = ws.cell(nxt, encontrados["fecha"]).value
+        if v is None or _parse_fecha(v) is None:
+            return False
+    if "indicador_dc" in encontrados:
+        v = ws.cell(nxt, encontrados["indicador_dc"]).value
+        if not v or not str(v).strip():
+            return False
+    return True
+
 def detectar_columnas(ws):
     cols = {"hdr_row":1,"monto":None,"credito":None,"debito":None,"fecha":None,
             "titular":None,"orden":None,"saldo":None,"mes":None,
-            "cliente_acred":None,"fecha_acred":None}
+            "cliente_acred":None,"fecha_acred":None,"indicador_dc":None}
     for r in range(1, min(13, ws.max_row + 1)):
         encontrados = {}
         for c in range(1, ws.max_column + 1):
@@ -258,6 +288,13 @@ def detectar_columnas(ws):
                 continue
             if _match_kw_raw(h, KEYWORDS_FECHA_ACRED):
                 encontrados.setdefault("fecha_acred", c)
+                continue
+            h_norm = _normalizar(h)
+            # Columna indicadora de texto "Débito/Crédito" por fila (no son dos
+            # columnas de monto separadas, sino una sola columna clasificadora
+            # que acompaña a una columna "Monto" única siempre positiva).
+            if "debito" in h_norm and "credito" in h_norm:
+                encontrados.setdefault("indicador_dc", c)
                 continue
             if _match_kw(h, KEYWORDS_MONTO):
                 encontrados.setdefault("monto", c)
@@ -275,8 +312,10 @@ def detectar_columnas(ws):
                 encontrados.setdefault("saldo", c)
             elif _match_kw(h, KEYWORDS_MES):
                 encontrados.setdefault("mes", c)
-        # Fila de headers válida si tiene monto unitario O par crédito/débito
-        if "monto" in encontrados or "credito" in encontrados or "debito" in encontrados:
+        # Fila de headers válida si tiene monto unitario O par crédito/débito,
+        # y además los datos de la fila siguiente confirman que es un header real.
+        if ("monto" in encontrados or "credito" in encontrados or "debito" in encontrados) \
+                and _fila_valida_como_header(ws, r, encontrados):
             cols["hdr_row"] = r
             cols.update(encontrados)
             return cols
@@ -297,6 +336,15 @@ def parsear_generico(ws, cols):
         if cols["monto"]:
             # Columna única de monto (Banco Macro y formato genérico)
             monto = _parse_monto(ws.cell(row, cols["monto"]).value)
+            # Si además hay una columna indicadora "Débito/Crédito" por fila
+            # (monto siempre positivo, el signo lo da esa columna de texto),
+            # usarla para determinar el signo real del movimiento.
+            if monto is not None and cols.get("indicador_dc"):
+                ind = _normalizar(str(ws.cell(row, cols["indicador_dc"]).value or "").lower().strip())
+                if "debito" in ind:
+                    monto = -abs(monto)
+                elif "credito" in ind:
+                    monto = abs(monto)
         else:
             # Columnas separadas crédito/débito (BBVA, Santander, Galicia)
             credito = _parse_monto(ws.cell(row, cols["credito"]).value) if cols.get("credito") else None
@@ -422,8 +470,22 @@ def parsear_planilla_cliente(filepath: str) -> dict:
         titular_col = detectar_titular_col(ws, hdr_row)
         filas = []
         for row in range(hdr_row + 1, ws.max_row + 1):
+            fila_vacia = all(c.value in (None, "") for c in ws[row])
+            if fila_vacia:
+                # Una fila completamente vacía puede ser un separador accidental
+                # en medio de la tabla (seguir) o el fin de la tabla real, con un
+                # bloque de resumen/notas debajo (ej. "Suma"/"Comi"/"Transfer N")
+                # que no tiene cuit ni titular — ahí cortamos.
+                nxt = row + 1
+                tiene_identidad_despues = nxt <= ws.max_row and (
+                    (cuit_col and ws.cell(nxt, cuit_col).value)
+                    or (titular_col and ws.cell(nxt, titular_col).value)
+                )
+                if tiene_identidad_despues:
+                    continue
+                break
             monto = ws.cell(row, imp_col).value
-            if monto is None:
+            if monto is None or not isinstance(monto, (int, float)):
                 continue
             cuit    = ws.cell(row, cuit_col).value    if cuit_col    else None
             titular = ws.cell(row, titular_col).value if titular_col else None

@@ -522,3 +522,85 @@ def test_bancos_nuevos_no_rompen_generico():
         assert result["total"] == 2
     finally:
         _cleanup(path)
+
+
+# ── Regresión: "rio" no debe matchear adentro de "período" / "anterior" ──────
+# (encontrado con un extracto real subido por la usuaria, banco no identificado)
+
+def test_rio_no_matchea_dentro_de_periodo():
+    """'Período' contiene la substring 'rio' — no debe detectar Santander."""
+    wb = Workbook()
+    ws = wb.active
+    ws.cell(3, 1).value = "CBU de la cuenta:"
+    ws.cell(3, 2).value = "4320001010003448310015"
+    ws.cell(3, 4).value = "Período:"
+    ws.cell(3, 5).value = "17/06/2026 al 24/06/2026"
+    assert detectar_banco(ws) == "generico"
+
+
+def test_rio_no_matchea_dentro_de_anterior_ni_horario():
+    wb = Workbook()
+    ws = wb.active
+    ws.cell(1, 1).value = "Saldo anterior y horario de corte"
+    assert detectar_banco(ws) == "generico"
+
+
+def test_rioja_sigue_detectando_aunque_diga_rio_solo():
+    """El fix de \\b no debe romper la detección real de Rioja/Río."""
+    wb = Workbook()
+    ws = wb.active
+    ws.cell(1, 1).value = "Nuevo Banco de La Rioja S.A."
+    assert detectar_banco(ws) == "rioja"
+
+
+# ── Regresión: fila de resumen "Total débitos:/Total créditos:" no debe ──────
+# confundirse con el header real de la tabla (encontrado en extracto real) ────
+
+def _wb_resumen_antes_de_header():
+    """Extracto con un renglón resumen tipo label:valor antes del header real,
+    y una columna única 'Monto' + columna indicadora de texto 'Débito/Crédito'."""
+    wb = Workbook()
+    ws = wb.active
+    ws.cell(3, 1).value = "CBU de la cuenta:"
+    ws.cell(3, 2).value = "4320001010003448310015"
+    ws.cell(6, 1).value = "Total débitos:"
+    ws.cell(6, 2).value = "$ 27.489,34"
+    ws.cell(6, 4).value = "Total créditos:"
+    ws.cell(6, 5).value = "$ 900.000,00"
+    ws.cell(8, 1).value = "Fecha"
+    ws.cell(8, 2).value = "Tipo de transferencia"
+    ws.cell(8, 3).value = "Débito/Crédito"
+    ws.cell(8, 4).value = "Monto"
+    ws.cell(8, 5).value = "Saldo"
+    ws.cell(9, 1).value = date(2026, 6, 24)
+    ws.cell(9, 2).value = "SIRCREB"
+    ws.cell(9, 3).value = "Débito"
+    ws.cell(9, 4).value = 90.0
+    ws.cell(9, 5).value = 98192956.14
+    ws.cell(10, 1).value = date(2026, 6, 24)
+    ws.cell(10, 2).value = "CRÉDITO POR TRANSFERENCIA"
+    ws.cell(10, 3).value = "Crédito"
+    ws.cell(10, 4).value = 900000.0
+    ws.cell(10, 5).value = 98193046.14
+    return wb
+
+
+def test_resumen_no_se_confunde_con_header():
+    wb = _wb_resumen_antes_de_header()
+    cols = detectar_columnas(wb.active)
+    assert cols["hdr_row"] == 8
+
+
+def test_columna_indicador_debito_credito_define_signo():
+    """Monto único + columna 'Débito/Crédito' por fila: el signo lo da el indicador."""
+    wb = _wb_resumen_antes_de_header()
+    path = _xlsx_tmp(wb)
+    try:
+        movs = parsear_extracto_bancario(path)["movimientos"]
+        assert len(movs) == 2
+        debito = next(m for m in movs if m["titular"] == "SIRCREB")
+        credito = next(m for m in movs if "TRANSFERENCIA" in m["titular"])
+        assert debito["monto"] == -90.0
+        assert credito["monto"] == 900000.0
+    finally:
+        _cleanup(path)
