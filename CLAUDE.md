@@ -1457,7 +1457,7 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
   pregunta) y explicativo (traduce el status interno de conciliación — no está/duplicado/faltan
   datos/EN_REVISION — a lenguaje claro por cliente); mejora de transcripción de audio en iOS con
   glosario de dominio + nombres de clientes de la org en el prompt de Gemini. 421 tests.
-  (junio 2026 — PR #159)
+  (junio 2026 — PR #159 mergeado a main)
 - `v3.24` — ARCA (ex-AFIP): facturación electrónica con integración propia WSFEv1/WSAA (sin
   intermediarios) — certificado y clave privada cifrados con Fernet, nunca expuestos en API ni logs;
   emisión de CAE real contra ARCA homologación/producción; asiento contable automático al emitir
