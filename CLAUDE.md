@@ -112,6 +112,9 @@ Scoring por identidad:
 
 Regla fundamental: monto duplicado en extracto → SIEMPRE exigir identidad.
 Tolerancia fecha: 5 días · UM deduplicación: (orden, monto) o (fecha, monto, titular_norm)
+
+**Antes de tocar fechas, montos (Decimal), compartir por WhatsApp o detección de banco**: revisar
+`BUGS.md` — son las áreas con bugs recurrentes documentados (causa raíz + cómo evitarlos).
 Bancos soportados: Macro, BBVA, Santander, Galicia, ICBC y genérico.
 
 IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ confirmaciones → aplica auto).
