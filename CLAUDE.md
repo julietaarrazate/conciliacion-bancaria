@@ -892,6 +892,20 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
   arca.gob.ar/monotributo/categorias.asp (el fetch directo devuelve 403 por anti-bot — usar
   WebSearch cruzando 2-3 medios especializados como Ámbito/iProfesional, o pedirle el dato a
   Julieta) y actualizar la escala vía `PUT /monotributo/categorias/{id}` o re-sembrando el array.
+- **Activación de ARCA en producción — diferida a pedido**: el módulo (`v3.24`) ya está mergeado y
+  `ARCA_ENCRYPTION_KEY` ya está seteada en Render, pero Julieta decidió NO activarlo todavía — lo
+  dejó listo "por si algún cliente lo solicita" más adelante. Falta, recién cuando haya un cliente
+  real interesado en facturar electrónicamente desde Cuadra:
+  1. Sacar el certificado de **homologación** en ARCA (gratis, sirve para probar sin validez
+     fiscal) y probar el flujo completo en `/arca` antes de tocar producción.
+  2. Cuando el cliente confirme que quiere usarlo en serio, gestionar en ARCA (Administrador de
+     Relaciones de Clave Fiscal) el certificado de **producción** autorizado para el servicio
+     **WSFEv1**, a nombre del CUIT que va a facturar.
+  3. Subir ese certificado en `/arca` → tab Config (requiere `admin_accounting`), cambiar
+     `ambiente` a `produccion` y recién ahí los CAE emitidos cuentan fiscalmente.
+  **Importante**: una vez que se emite con ambiente producción, cada factura genera un CAE real
+  ante ARCA (cuenta como IVA débito fiscal real, numeración correlativa sin posibilidad de
+  resetear) — no es reversible ni para "probar". Cualquier prueba va siempre en homologación.
 
 ---
 
