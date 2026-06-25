@@ -482,3 +482,45 @@ export interface SueldosLiquidacion {
   created_at: string
   updated_at: string
 }
+
+// ── ARCA (ex-AFIP) — facturación electrónica, integración propia WSFEv1 ────
+export interface ArcaConfig {
+  activo: boolean
+  cuit: string | null
+  ambiente: 'homologacion' | 'produccion'
+  punto_venta: number
+  tiene_certificado: boolean
+  certificado_subido_en?: string | null
+}
+
+export interface ComprobanteArca {
+  id: number
+  cliente_id: number | null
+  cliente_nombre: string | null
+  tipo_comprobante: number
+  punto_venta: number
+  numero: number | null
+  concepto: number
+  doc_tipo: number
+  doc_nro: string | null
+  fecha_emision: string
+  importe_neto: number
+  importe_iva: number
+  importe_total: number
+  cae: string | null
+  cae_vencimiento: string | null
+  estado: 'borrador' | 'emitido' | 'rechazado' | 'error'
+  error_detalle: string | null
+  created_at: string
+}
+
+export interface ComprobanteArcaPayload {
+  cliente_id?: number | null
+  tipo_comprobante: number
+  concepto?: number
+  doc_tipo?: number
+  doc_nro?: string | null
+  importe_neto?: number
+  importe_iva?: number
+  importe_total: number
+}

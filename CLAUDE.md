@@ -1154,6 +1154,92 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
   persiste y se pasa a `registrar_liquidacion_sueldos` como 4ta línea al Haber. SICOSS: `assert` de ancho
   de registro → `ValueError` (los assert se desactivan con `python -O`). 421 tests pasando.
 
+### v3.23 — Asistente IA proactivo y explicativo (junio 2026 — PR #159)
+
+- **Qué hace**: primer paso del plan de mejora del asistente acordado con Julieta — que deje de ser
+  "solo respuestas a lo que se le pregunta" y empiece a (a) avisar proactivamente lo importante del
+  día sin que se le pregunte, y (b) explicar en lenguaje claro POR QUÉ algo no concilió, en vez de
+  devolver solo números.
+- **Tool `consultar_alertas`** (`agente.py`): reusa `reportes_service.calcular_alertas()` (mismo dato
+  que `/analisis/alertas` y el `AlertasWidget` del Dashboard) — cheques urgentes/vencidos, filas
+  atrasadas, movimientos sin asignar. El asistente lo usa proactivamente ante saludos genéricos o
+  preguntas tipo "qué necesito ver hoy".
+- **Tool `explicar_filas_pendientes`**: query nueva sobre `PlanillaRow` + `Planilla` + `Cliente`
+  (`status != "ok"`, filtro opcional por nombre de cliente) que devuelve el detalle de cada fila
+  pendiente (monto, cuit, titular, status, `comentario_revision`). Le permite al asistente traducir
+  los status internos del motor de conciliación (`no está`, `duplicado`, `faltan datos`,
+  `EN_REVISION`) a una explicación concreta por cliente, en vez de un código interno.
+- **Prompt del sistema reescrito**: pide explícitamente comportamiento proactivo (no esperar a que
+  pregunten, chequear alertas/resumen ante saludos genéricos) y explicativo (nunca devolver un número
+  sin contexto).
+- **Refactor `_run_chat_message()`**: la lógica de chat (config Gemini, tools, loop de 3 rondas de
+  function-calling) se extrajo a una función compartida entre `/agente/chat` y el nuevo endpoint de
+  saludo proactivo — sin duplicar código.
+- **Nuevo `GET /agente/saludo-proactivo`**: usa un prompt interno fijo (no escrito por el usuario)
+  para generar un saludo de 2-4 oraciones con lo importante del día. Comparte la cuota diaria
+  (`_CHAT_DAILY_LIMIT`) con `/chat` — no es un endpoint nuevo de cuota separada.
+- **Frontend (`AgenteChat.tsx`)**: al abrir el chat se llama una vez (`useRef` guard, no en cada
+  render) a `/agente/saludo-proactivo`; el resultado se inserta como primer mensaje del asistente.
+  Las sugerencias rápidas estáticas siguen visibles como fallback/quick-replies hasta que el usuario
+  envía su primer mensaje real — no se pierden si Gemini falla o no está configurado.
+- **Mejora de transcripción por audio**: el prompt de `/agente/transcribir` (usado por el flujo
+  MediaRecorder de iOS, ver v3.17) era genérico ("transcribí este audio en español") y por eso
+  Gemini transcribía mal jerga financiera y nombres propios de clientes. Se agregó un glosario de
+  dominio fijo (CUIT, CBU, cheque, planilla, conciliación, extracto, liquidación, comisión, IIBB,
+  IVA, monotributo, sueldo) + la lista de nombres de clientes de la organización del usuario
+  (`_glosario_transcripcion()`, hasta 200 nombres) como contexto del prompt antes de transcribir.
+  No cambia el flujo de SpeechRecognition nativo (Android/Chrome) que ya usaba `lang = 'es-AR'`
+  correctamente — solo mejora el fallback de Gemini para iOS.
+- 421 tests pasando (sin tests nuevos de `agente.py` — el módulo no tiene suite propia todavía,
+  queda anotado como deuda pendiente si se vuelve a tocar este router).
+
+### v3.24 — ARCA (ex-AFIP): facturación electrónica con integración propia WSFEv1 (junio 2026)
+
+- **Qué hace**: emisión de comprobantes electrónicos (Factura A/B/C) con CAE real de ARCA, integrando
+  Cuadra DIRECTAMENTE contra los web services SOAP de ARCA (WSAA + WSFEv1) — sin tercerizar en un
+  proveedor intermediario. Decisión explícita de Julieta: "Integración propia con WSFEv1".
+- **Seguridad del certificado — la parte más sensible del sistema**: el certificado y clave privada
+  de cada org se cifran con Fernet (`services/arca_crypto.py`, clave `ARCA_ENCRYPTION_KEY` — env var
+  SOLO en Render, nunca en el repo) antes de persistir en `arca_config.certificado_enc` /
+  `clave_privada_enc`. El token/sign de WSAA (cacheados ~12h para no reloguear en cada factura)
+  también se guardan cifrados (`ultimo_token_enc`/`ultimo_sign_enc`). **Ningún endpoint devuelve estos
+  campos** — `_config_dict()` solo expone `tiene_certificado: bool`. Nunca se loguean.
+- **`services/arca_wsaa.py`**: login WSAA — genera el TRA (XML con `uniqueId`/`generationTime`/
+  `expirationTime`), lo firma CMS/PKCS#7 con la clave privada de la org (vía `cryptography`/`openssl`),
+  lo manda al WSAA (homologación o producción según `ArcaConfig.ambiente`) y parsea el `token`+`sign`
+  de la respuesta. Cachea en DB cifrado; solo relogea si el token cacheado venció.
+- **`services/arca_wsfe.py`**: WSFEv1 — `FECompUltimoAutorizado` (consulta el último número autorizado
+  para no pisar numeración) + `FECAESolicitar` (pide el CAE armando el XML del comprobante: tipo,
+  punto de venta, concepto, doc tipo/nro del receptor, importes neto/IVA/total, fecha). Parsea CAE +
+  vencimiento de la respuesta SOAP o el detalle de rechazo de ARCA si lo hay.
+- **Asiento contable** (`registrar_factura_arca()` en `motor_contable.py`): Cliente (2-1-2-X) **D** /
+  Ventas facturadas — ARCA (3-1-5-0, cuenta nueva en PLAN_PATCH) **H** neto / IVA Débito Fiscal
+  (2-2-1-0, ya existía desde v3.19) **H** IVA. Idempotente por `(modulo="factura_arca",
+  referencia_id=comprobante_id, org_id)`. Se dispara solo si la emisión devuelve CAE (nunca para
+  comprobantes rechazados o en error).
+- **Modelos** (`app/models/arca.py`): `ArcaConfig` (1 por org, opt-in `activo=False` por default,
+  `cuit`, `ambiente` homologación/producción, `punto_venta`, certificado/clave/token cifrados) y
+  `ComprobanteArca` (tipo de comprobante, cliente, importes, `cae`/`cae_vencimiento`, estado
+  `borrador|emitido|rechazado|error`, `error_detalle`). **Inmutable una vez `emitido`** — re-emitir
+  devuelve 409 (mismo patrón que `ProyeccionIva`/`ControlMonotributo` al marcar presentado).
+- **Router `/arca`** — permisos en 3 capas: `GET/PUT /arca/config` y `POST/DELETE /arca/certificado`
+  → `admin_accounting`; `GET /arca/comprobantes` (paginado) y `GET /arca/comprobantes/{id}` →
+  `view_accounting`; `POST /arca/comprobantes` (crea borrador) y `POST /arca/comprobantes/{id}/emitir`
+  (llama WSAA+WSFEv1, genera el asiento) → `manage_finance`. El router bloquea activar `ArcaConfig`
+  sin certificado cargado.
+- **Frontend `/arca`** (`pages/Arca.tsx`, mismo patrón que `Iva.tsx`): tab **Comprobantes** (alta de
+  borrador con selector de cliente vía `organizaciones[].clientes` — no `clientes`, que excluye
+  clientes sin planillas —, botón "Emitir" con confirm, badges de estado) y tab **Config** (activar
+  módulo, CUIT, ambiente, punto de venta, subir/borrar certificado por textarea PEM — gateado
+  `admin_accounting`). Nav `/arca` gateada `view_accounting`, ícono nuevo en `Layout.tsx`.
+- **Migración `019_arca`** + safety nets idempotentes en `main.py` (`CREATE TABLE IF NOT EXISTS` ×2 +
+  índices). Org A intacta (solo aditivo — `3-1-5-0` es una cuenta nueva, no toca el plan existente).
+  16 tests nuevos (`test_arca.py`: cifrado, permisos por capa, inmutabilidad post-emisión, aislamiento
+  multi-org, asiento con partida doble, bloqueo sin certificado). **437 tests pasando en total.**
+- **Setup en producción**: generar `ARCA_ENCRYPTION_KEY` (Fernet, 32 bytes urlsafe-base64) y pegarla en
+  Render. Sin esa env var el módulo no cifra/descifra y la activación queda bloqueada — degradación
+  segura, nunca cae a texto plano.
+
 ---
 
 ## Storage de fotos (S3/R2 opcional)
@@ -1367,7 +1453,17 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
   por diseño, anualización documentada igual que el SAC), recibo de sueldo en PDF por empleado/período
   (reportlab, disclaimer Ley 20.744), export SICOSS de referencia (ancho fijo, columnas confiables vs.
   placeholder documentadas explícitamente en el código). 419 tests. (junio 2026 — PR #155)
+- `v3.23` — asistente IA proactivo (saluda con alertas/resumen del día al abrir el chat, sin esperar
+  pregunta) y explicativo (traduce el status interno de conciliación — no está/duplicado/faltan
+  datos/EN_REVISION — a lenguaje claro por cliente); mejora de transcripción de audio en iOS con
+  glosario de dominio + nombres de clientes de la org en el prompt de Gemini. 421 tests.
+  (junio 2026 — PR #159)
+- `v3.24` — ARCA (ex-AFIP): facturación electrónica con integración propia WSFEv1/WSAA (sin
+  intermediarios) — certificado y clave privada cifrados con Fernet, nunca expuestos en API ni logs;
+  emisión de CAE real contra ARCA homologación/producción; asiento contable automático al emitir
+  (Cliente D / Ventas facturadas ARCA H / IVA Débito Fiscal H); inmutable una vez emitido. 437 tests.
+  (junio 2026)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.22
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.24

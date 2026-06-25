@@ -1282,3 +1282,75 @@ def registrar_liquidacion_tarjeta(
         db.rollback()
         logger.warning("Error asiento tarjeta_liq %s: %s", liquidacion_id, ex)
         return None
+
+
+def registrar_factura_arca(
+    db: Session,
+    comprobante_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    cliente_id: Optional[int],
+    cliente_nombre: str,
+    importe_neto: Decimal,
+    importe_iva: Decimal,
+    importe_total: Decimal,
+    fecha: date,
+) -> Optional[int]:
+    """Asiento al obtener el CAE de una factura ARCA:
+    Cliente (2-1-2-X) D total  /  Ventas (3-1-5-0) H neto + IVA Débito Fiscal (2-2-1-0) H iva.
+    Sin cliente vinculado no se postea (no hay contra-cuenta D) — el comprobante con CAE
+    sigue siendo válido igual, solo queda sin reflejo en el Libro Diario."""
+    try:
+        if _ya_existe(db, "arca_factura", comprobante_id, org_id):
+            return None
+        importe_neto  = round(_monto(importe_neto), 2)
+        importe_iva   = round(_monto(importe_iva), 2)
+        importe_total = round(_monto(importe_total), 2)
+        if importe_total <= 0 or not cliente_id:
+            return None
+
+        cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_id, org_id)
+        ventas         = _get_cuenta_por_codigo(db, "3-1-5-0", org_id)
+        iva_df         = _get_cuenta_por_codigo(db, "2-2-1-0", org_id)
+        if not cuenta_cliente or not ventas or (importe_iva > 0 and not iva_df):
+            logger.warning("Cuentas factura ARCA incompletas org %s (cliente_id=%s) — no se postea", org_id, cliente_id)
+            return None
+
+        lineas = [
+            (cuenta_cliente.id, importe_total, Decimal("0")),
+            (ventas.id,         Decimal("0"),  importe_neto),
+        ]
+        if importe_iva > 0:
+            lineas.append((iva_df.id, Decimal("0"), importe_iva))
+
+        a = Asiento(
+            fecha=fecha if isinstance(fecha, date) else hoy_art(),
+            descripcion=f"Factura ARCA — {cliente_nombre or ''}",
+            modulo="arca_factura",
+            referencia_id=comprobante_id,
+            organizacion_id=org_id,
+            usuario_id=usuario_id,
+            numero_asiento=_next_numero_asiento(db, org_id),
+        )
+        total_debe  = sum(d for _c, d, _h in lineas)
+        total_haber = sum(h for _c, _d, h in lineas)
+        if abs(total_debe - total_haber) > Decimal("0.01"):
+            logger.error(
+                "Asiento arca_factura comprobante %s NO balancea (debe=%s haber=%s) — no se postea",
+                comprobante_id, total_debe, total_haber,
+            )
+            return None
+        db.add(a)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            return None
+        for cuenta_id, debe, haber in lineas:
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_id, debe=debe, haber=haber))
+        db.commit()
+        return a.id
+    except Exception as ex:
+        db.rollback()
+        logger.warning("Error asiento arca_factura %s: %s", comprobante_id, ex)
+        return None

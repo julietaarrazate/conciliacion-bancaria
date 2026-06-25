@@ -41,6 +41,9 @@ import {
   EscalaGanancias,
   SueldosLiquidacionPreview,
   SueldosLiquidacion,
+  ArcaConfig,
+  ComprobanteArca,
+  ComprobanteArcaPayload,
 } from '@/types'
 import { useLockStore } from '@/store/lock'
 
@@ -1227,6 +1230,71 @@ class ApiClient {
     a.download = `sicoss_${periodo}.txt`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  // ── ARCA (ex-AFIP) — facturación electrónica ────────────────────────────────
+  async getArcaConfig(orgId?: number): Promise<ArcaConfig> {
+    const res: AxiosResponse<ArcaConfig> = await this.client.get('/arca/config', {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async putArcaConfig(
+    body: { activo: boolean; cuit: string | null; ambiente: string; punto_venta: number },
+    orgId?: number,
+  ): Promise<ArcaConfig> {
+    const res: AxiosResponse<ArcaConfig> = await this.client.put('/arca/config', body, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async subirCertificadoArca(
+    certificadoPem: string, clavePrivadaPem: string, orgId?: number,
+  ): Promise<ArcaConfig> {
+    const res: AxiosResponse<ArcaConfig> = await this.client.post('/arca/certificado', {
+      certificado_pem: certificadoPem,
+      clave_privada_pem: clavePrivadaPem,
+    }, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async borrarCertificadoArca(orgId?: number): Promise<ArcaConfig> {
+    const res: AxiosResponse<ArcaConfig> = await this.client.delete('/arca/certificado', {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async getComprobantesArca(params: {
+    orgId?: number; estado?: string; limit?: number; offset?: number
+  } = {}): Promise<PaginatedResponse<ComprobanteArca>> {
+    const q: Record<string, string | number> = {}
+    if (params.orgId) q.org_id = params.orgId
+    if (params.estado) q.estado = params.estado
+    if (params.limit != null) q.limit = params.limit
+    if (params.offset != null) q.offset = params.offset
+    const res: AxiosResponse<PaginatedResponse<ComprobanteArca>> = await this.client.get('/arca/comprobantes', { params: q })
+    return res.data
+  }
+
+  async crearComprobanteArca(payload: ComprobanteArcaPayload, orgId?: number): Promise<ComprobanteArca> {
+    const res: AxiosResponse<ComprobanteArca> = await this.client.post('/arca/comprobantes', payload, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async emitirComprobanteArca(comprobanteId: number, orgId?: number): Promise<ComprobanteArca> {
+    const res: AxiosResponse<ComprobanteArca> = await this.client.post(
+      `/arca/comprobantes/${comprobanteId}/emitir`, null, {
+        params: orgId ? { org_id: orgId } : {},
+      },
+    )
+    return res.data
   }
 
   // ─── Export Contable ──────────────────────────────────────────

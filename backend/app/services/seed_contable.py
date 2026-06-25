@@ -74,6 +74,8 @@ PLAN_PATCH = [
     ("2-1-5-0",   "Cargas sociales a pagar",       "pasivo",    "2-1-0-0", 3),
     ("2-1-6-0",   "Retención de Ganancias a depositar", "pasivo", "2-1-0-0", 3),
     ("3-2-4-0",   "Sueldos y cargas sociales",     "resultado", "3-2-0-0", 3),
+    # Facturación electrónica ARCA — integración propia WSFEv1 (junio 2026)
+    ("3-1-5-0",   "Ventas facturadas (ARCA)",      "resultado", "3-1-0-0", 3),
 ]
 
 # (evento, descripcion, debe_codigo, haber_codigo)
