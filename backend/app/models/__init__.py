@@ -14,6 +14,7 @@ from .portador import Portador
 from .liquidacion_tarjeta import LiquidacionTarjeta, MarcaTarjeta, EstadoTarjeta
 from .proyeccion_iva import ProyeccionIva
 from .password_reset import PasswordResetToken
+from .arca import ArcaConfig, ComprobanteArca
 
 __all__ = [
     "Organizacion", "User", "Cliente",
@@ -28,4 +29,5 @@ __all__ = [
     "LiquidacionTarjeta", "MarcaTarjeta", "EstadoTarjeta",
     "ProyeccionIva",
     "PasswordResetToken",
+    "ArcaConfig", "ComprobanteArca",
 ]

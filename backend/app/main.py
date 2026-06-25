@@ -35,6 +35,7 @@ from app.routers import monotributo
 from app.routers import iibb
 from app.routers import sueldos
 from app.routers import google_auth
+from app.routers import arca
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.egreso import Egreso, CategoriaEgreso  # noqa: F401
 from app.models.monotributo import CategoriaMonotributo, MonotributoConfig, ControlMonotributo  # noqa: F401
@@ -48,6 +49,7 @@ from app.models.push_subscription import PushSubscription  # noqa: F401
 from app.models.revoked_token import RevokedToken  # noqa: F401
 from app.models.login_approval import LoginApproval  # noqa: F401
 from app.models.twofa_code import TwofaCode  # noqa: F401
+from app.models.arca import ArcaConfig, ComprobanteArca  # noqa: F401
 from app.models.organizacion import Organizacion
 
 # ── Decimal → float encoder para SQLAlchemy Numeric columns ──────────────────
@@ -361,6 +363,56 @@ def _run_alembic():
         "CREATE INDEX IF NOT EXISTS ix_escala_ganancias_org ON escala_ganancias (organizacion_id)",
         # Total de retención de Ganancias en el período (contrapartida 2-1-6-0, ver migración 018)
         "ALTER TABLE liquidaciones_sueldo ADD COLUMN IF NOT EXISTS total_retencion_ganancias NUMERIC(12,2) NOT NULL DEFAULT 0",
+        # ARCA (ex-AFIP) — facturación electrónica, integración propia WSFEv1/WSAA (ver migración 019)
+        "CREATE TABLE IF NOT EXISTS arca_config ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL UNIQUE REFERENCES organizaciones(id), "
+        "cuit VARCHAR(11), "
+        "ambiente VARCHAR(20) NOT NULL DEFAULT 'homologacion', "
+        "punto_venta INTEGER NOT NULL DEFAULT 1, "
+        "activo BOOLEAN NOT NULL DEFAULT FALSE, "
+        "certificado_enc TEXT, "
+        "clave_privada_enc TEXT, "
+        "certificado_subido_en TIMESTAMP, "
+        "ultimo_token_enc TEXT, "
+        "ultimo_sign_enc TEXT, "
+        "token_expira TIMESTAMP, "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW())",
+        "CREATE TABLE IF NOT EXISTS comprobantes_arca ("
+        "id SERIAL PRIMARY KEY, "
+        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+        "cliente_id INTEGER REFERENCES clientes(id), "
+        "tipo_comprobante INTEGER NOT NULL, "
+        "punto_venta INTEGER NOT NULL, "
+        "numero INTEGER, "
+        "concepto INTEGER NOT NULL DEFAULT 1, "
+        "doc_tipo INTEGER NOT NULL DEFAULT 99, "
+        "doc_nro VARCHAR(11), "
+        "fecha_emision DATE NOT NULL, "
+        "fecha_serv_desde DATE, "
+        "fecha_serv_hasta DATE, "
+        "fecha_vto_pago DATE, "
+        "importe_neto NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "importe_iva NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "importe_total NUMERIC(12,2) NOT NULL DEFAULT 0, "
+        "cae VARCHAR(20), "
+        "cae_vencimiento DATE, "
+        "estado VARCHAR(20) NOT NULL DEFAULT 'borrador', "
+        "error_detalle TEXT, "
+        "referencia_planilla_id INTEGER REFERENCES planillas(id), "
+        "asiento_id INTEGER REFERENCES asientos(id), "
+        "usuario_id INTEGER REFERENCES users(id), "
+        "created_at TIMESTAMP DEFAULT NOW(), "
+        "updated_at TIMESTAMP DEFAULT NOW(), "
+        "CONSTRAINT uq_comprobante_arca_org_pv_tipo_numero UNIQUE (organizacion_id, punto_venta, tipo_comprobante, numero))",
+        # Por si la tabla ya existía sin estas 3 columnas (deploy parcial de la migración 019)
+        "ALTER TABLE comprobantes_arca ADD COLUMN IF NOT EXISTS fecha_serv_desde DATE",
+        "ALTER TABLE comprobantes_arca ADD COLUMN IF NOT EXISTS fecha_serv_hasta DATE",
+        "ALTER TABLE comprobantes_arca ADD COLUMN IF NOT EXISTS fecha_vto_pago DATE",
+        "CREATE INDEX IF NOT EXISTS ix_arca_config_org ON arca_config (organizacion_id)",
+        "CREATE INDEX IF NOT EXISTS ix_comprobantes_arca_org ON comprobantes_arca (organizacion_id)",
+        "CREATE INDEX IF NOT EXISTS ix_comprobantes_arca_cliente ON comprobantes_arca (cliente_id)",
     ]
     try:
         from sqlalchemy import text as _text
@@ -952,6 +1004,7 @@ app.include_router(monotributo.router)
 app.include_router(iibb.router)
 app.include_router(sueldos.router)
 app.include_router(google_auth.router)
+app.include_router(arca.router)
 
 
 @app.get("/")

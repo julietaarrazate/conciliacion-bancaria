@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     # Necesarias todas: S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY, S3_SECRET_KEY, S3_PUBLIC_URL, S3_REGION
     s3_endpoint: str = ""
 
+    # ARCA (ex-AFIP) — facturación electrónica, integración propia WSFEv1/WSAA (opt-in por org)
+    # ARCA_ENCRYPTION_KEY cifra en reposo el certificado y la clave privada de cada organización
+    # antes de guardarlos en la DB (Fernet/AES). Setear en Render — generar con:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Sin esta key, el módulo ARCA no permite cargar certificados (falla explícito, no degrada).
+    arca_encryption_key: str = ""
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

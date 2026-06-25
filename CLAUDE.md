@@ -1193,6 +1193,70 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
 - 421 tests pasando (sin tests nuevos de `agente.py` — el módulo no tiene suite propia todavía,
   queda anotado como deuda pendiente si se vuelve a tocar este router).
 
+### v3.24 — ARCA (ex-AFIP): facturación electrónica con integración propia WSFEv1 (junio 2026)
+
+- **Qué hace**: emisión de comprobantes electrónicos (Factura A/B/C) con CAE real de ARCA, integrando
+  Cuadra DIRECTAMENTE contra los web services SOAP de ARCA (WSAA + WSFEv1) — sin tercerizar en un
+  proveedor intermediario. Decisión explícita de Julieta: "Integración propia con WSFEv1".
+- **Seguridad del certificado — la parte más sensible del sistema**: el certificado y clave privada
+  de cada org se cifran con Fernet (`services/arca_crypto.py`, clave `ARCA_ENCRYPTION_KEY` — env var
+  SOLO en Render, nunca en el repo) antes de persistir en `arca_config.certificado_enc` /
+  `clave_privada_enc`. El token/sign de WSAA (cacheados ~12h para no reloguear en cada factura)
+  también se guardan cifrados (`ultimo_token_enc`/`ultimo_sign_enc`). **Ningún endpoint devuelve estos
+  campos** — `_config_dict()` solo expone `tiene_certificado: bool`. Nunca se loguean.
+- **`services/arca_wsaa.py`**: login WSAA — genera el TRA (XML con `uniqueId`/`generationTime`/
+  `expirationTime`), lo firma CMS/PKCS#7 con la clave privada de la org (vía `cryptography`/`openssl`),
+  lo manda al WSAA (homologación o producción según `ArcaConfig.ambiente`) y parsea el `token`+`sign`
+  de la respuesta. Cachea en DB cifrado; solo relogea si el token cacheado venció.
+- **`services/arca_wsfe.py`**: WSFEv1 — `FECompUltimoAutorizado` (consulta el último número autorizado
+  para no pisar numeración) + `FECAESolicitar` (pide el CAE armando el XML del comprobante: tipo,
+  punto de venta, concepto, doc tipo/nro del receptor, importes neto/IVA/total, fecha). Parsea CAE +
+  vencimiento de la respuesta SOAP o el detalle de rechazo de ARCA si lo hay.
+- **Asiento contable** (`registrar_factura_arca()` en `motor_contable.py`): Cliente (2-1-2-X) **D** /
+  Ventas facturadas — ARCA (3-1-5-0, cuenta nueva en PLAN_PATCH) **H** neto / IVA Débito Fiscal
+  (2-2-1-0, ya existía desde v3.19) **H** IVA. Idempotente por `(modulo="factura_arca",
+  referencia_id=comprobante_id, org_id)`. Se dispara solo si la emisión devuelve CAE (nunca para
+  comprobantes rechazados o en error).
+- **Modelos** (`app/models/arca.py`): `ArcaConfig` (1 por org, opt-in `activo=False` por default,
+  `cuit`, `ambiente` homologación/producción, `punto_venta`, certificado/clave/token cifrados) y
+  `ComprobanteArca` (tipo de comprobante, cliente, importes, `cae`/`cae_vencimiento`, estado
+  `borrador|emitido|rechazado|error`, `error_detalle`). **Inmutable una vez `emitido`** — re-emitir
+  devuelve 409 (mismo patrón que `ProyeccionIva`/`ControlMonotributo` al marcar presentado).
+- **Router `/arca`** — permisos en 3 capas: `GET/PUT /arca/config` y `POST/DELETE /arca/certificado`
+  → `admin_accounting`; `GET /arca/comprobantes` (paginado) y `GET /arca/comprobantes/{id}` →
+  `view_accounting`; `POST /arca/comprobantes` (crea borrador) y `POST /arca/comprobantes/{id}/emitir`
+  (llama WSAA+WSFEv1, genera el asiento) → `manage_finance`. El router bloquea activar `ArcaConfig`
+  sin certificado cargado.
+- **Frontend `/arca`** (`pages/Arca.tsx`, mismo patrón que `Iva.tsx`): tab **Comprobantes** (alta de
+  borrador con selector de cliente vía `organizaciones[].clientes` — no `clientes`, que excluye
+  clientes sin planillas —, botón "Emitir" con confirm, badges de estado) y tab **Config** (activar
+  módulo, CUIT, ambiente, punto de venta, subir/borrar certificado por textarea PEM — gateado
+  `admin_accounting`). Nav `/arca` gateada `view_accounting`, ícono nuevo en `Layout.tsx`.
+- **Migración `019_arca`** + safety nets idempotentes en `main.py` (`CREATE TABLE IF NOT EXISTS` ×2 +
+  índices). Org A intacta (solo aditivo — `3-1-5-0` es una cuenta nueva, no toca el plan existente).
+  16 tests nuevos (`test_arca.py`: cifrado, permisos por capa, inmutabilidad post-emisión, aislamiento
+  multi-org, asiento con partida doble, bloqueo sin certificado). **437 tests pasando en total.**
+- **Setup en producción**: generar `ARCA_ENCRYPTION_KEY` (Fernet, 32 bytes urlsafe-base64) y pegarla en
+  Render. Sin esa env var el módulo no cifra/descifra y la activación queda bloqueada — degradación
+  segura, nunca cae a texto plano.
+- **Revisión de correctitud pre-merge** (mismo PR, antes de salir de draft): se evaluó AfipSDK
+  (afip.php/js/py/rb) como posible referencia y se descartó — sus repos públicos son clientes
+  delgados contra `app.afipsdk.com` (su backend propio con Bearer token), no implementaciones
+  abiertas de WSAA/WSFEv1; no firman CMS ni hablan SOAP directo con ARCA. Se usó en cambio
+  `PyAr/pyafipws` (implementación abierta y activamente mantenida) como criterio de comparación:
+  confirmó que las URLs de WSAA/WSFEv1 (`afip.gov.ar`, no `arca.gov.ar`) y el `SOAPAction` vacío de
+  `loginCms` ya estaban correctos en `arca_wsaa.py`/`arca_wsfe.py`. Encontró y corrigió dos problemas
+  reales: (1) **bug de datos faltantes** — `FchServDesde`/`FchServHasta`/`FchVtoPago` son obligatorios
+  ante ARCA cuando `Concepto` es 2 (servicios) o 3 (ambos), y no existían en `DatosComprobante` ni en
+  el XML de `FECAEDetRequest`; cualquier factura de servicios habría sido rechazada por ARCA. Se
+  agregaron las 3 fechas a `ComprobanteArca` (3 columnas nuevas), `ComprobanteIn`, `DatosComprobante`
+  y al XML (solo cuando concepto≠1, con validación tanto en el router como en `arca_wsfe.solicitar_cae`
+  como segunda red de seguridad); UI en `Arca.tsx` con selector de Concepto + 3 campos de fecha
+  condicionales. (2) **comentario engañoso** — el docstring de `arca_wsaa.py` decía que la firma
+  CMS/PKCS#7 era "detached" cuando en realidad (correctamente) es NO detached/attached — corregido
+  para que un futuro mantenimiento no "arregle" agregando `PKCS7Options.DetachedSignature`, lo que
+  rompería la integración en producción. 3 tests nuevos. **440 tests pasando en total.**
+
 ---
 
 ## Storage de fotos (S3/R2 opcional)
@@ -1411,7 +1475,12 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
   datos/EN_REVISION — a lenguaje claro por cliente); mejora de transcripción de audio en iOS con
   glosario de dominio + nombres de clientes de la org en el prompt de Gemini. 421 tests.
   (junio 2026 — PR #159 mergeado a main)
+- `v3.24` — ARCA (ex-AFIP): facturación electrónica con integración propia WSFEv1/WSAA (sin
+  intermediarios) — certificado y clave privada cifrados con Fernet, nunca expuestos en API ni logs;
+  emisión de CAE real contra ARCA homologación/producción; asiento contable automático al emitir
+  (Cliente D / Ventas facturadas ARCA H / IVA Débito Fiscal H); inmutable una vez emitido. 437 tests.
+  (junio 2026)
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.23
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.24
