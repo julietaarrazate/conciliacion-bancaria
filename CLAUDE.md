@@ -30,6 +30,15 @@ Deploy manual Render:
   curl -X POST https://api.render.com/v1/services/srv-d7pqt81j2pic73c0c6fg/deploys \
     -H "Authorization: Bearer <RENDER_API_KEY>"
 
+Env vars opcionales en Render (feature flags — sin la var, la feature se degrada sola, no rompe):
+`RESEND_API_KEY` backup diario + 2FA admin/superadmin · `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` push
+· `GEMINI_API_KEY`(+`GEMINI_MODEL`) asistente IA/OCR/transcripción · `SENTRY_DSN` (Render) /
+`VITE_SENTRY_DSN` (Vercel) monitoreo errores · `GOOGLE_CLIENT_ID` (Render) /
+`VITE_GOOGLE_CLIENT_ID` (Vercel) login Google · `S3_*` (5 vars) storage fotos R2 ·
+`ARCA_ENCRYPTION_KEY` ya seteada, módulo ARCA construido pero desactivado a propósito (ver
+"Pendiente para próximas sesiones"). Stack: Python 3.11 / Node 20, Neon free tier (puede dormir),
+Render free tier (cold start ~30s, mitigado con UptimeRobot + retry en frontend).
+
 ---
 
 ## Stack
@@ -1343,7 +1352,9 @@ Reglas del bucle (cuanto más corta y verificable cada unidad, más robusto el b
 7. Si un agente muere: auditar el worktree (`git log` + `git status`) y relanzar uno nuevo que
    continúe desde el estado exacto, con instrucción de no terminar sin pushear.
 
-Checkpoints disponibles:
+Checkpoints disponibles (nota: son referencias documentales del changelog, no siempre tags físicos
+de git — antes de un `git checkout vX.Y` correr `git tag` y confirmar que existe; tags reales hoy:
+`v2.1`, `v2.2`, `v3.14-stable`, `v3.22`, `dnda-software-2026-v1`):
 - `v3.1-stable-checkpoint` — antes de las 5 features de mayo 2026
 - `v3.2-stable-checkpoint` — después de seguridad hardening + Numeric migration + legal pages (mayo 2026)
 - `v3.3-stable-checkpoint` — después de export robusto, comisiones, landing page, Borrar UM
