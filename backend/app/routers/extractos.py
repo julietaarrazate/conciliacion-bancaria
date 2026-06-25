@@ -108,8 +108,16 @@ def list_extractos(skip: int = 0, limit: int = 50,
 async def upload_extracto(request: Request,
                           file: UploadFile = File(...),
                           banco: str = Query("Banco Macro"),
+                          org_id: Optional[int] = Query(None),
                           db: Session = Depends(get_db),
                           current_user: User = Depends(get_current_user)):
+    # Org destino: la activa seleccionada por el usuario (si tiene permiso para
+    # operar ahí), si no la propia. Antes esto se ignoraba y todo se guardaba
+    # con el default del modelo (organizacion_id=1) sin importar qué org tenía
+    # seleccionada el superadmin — además de archivar mal el extracto, un
+    # segundo intento podía pisar el unique index (fingerprint, organizacion_id)
+    # de un upload previo y tirar un error genérico de "procesar el archivo".
+    org_destino = org_id if (org_id and can_switch_org(current_user, org_id)) else (current_user.organizacion_id or 1)
     ext = os.path.splitext(file.filename or '')[1].lower()
     if ext not in ('.xlsx', '.xls', '.csv'):
         raise HTTPException(400, "Formatos aceptados: .xlsx, .xls, .csv")
@@ -153,7 +161,7 @@ async def upload_extracto(request: Request,
         # subir el extracto "actualice" lo que ya esta.
         existente = db.query(ExtractoBancario).filter(
             ExtractoBancario.fingerprint == fp,
-            ExtractoBancario.organizacion_id == current_user.organizacion_id,
+            ExtractoBancario.organizacion_id == org_destino,
         ).first()
         if existente:
             actualizados = 0
@@ -184,7 +192,8 @@ async def upload_extracto(request: Request,
                           {"archivo": file.filename, "actualizados": actualizados})
             return existente
 
-        extracto = ExtractoBancario(nombre_archivo=file.filename, creado_por=current_user.id, fingerprint=fp, banco=banco_final)
+        extracto = ExtractoBancario(nombre_archivo=file.filename, creado_por=current_user.id, fingerprint=fp,
+                                     banco=banco_final, organizacion_id=org_destino)
         db.add(extracto)
         db.flush()
         # Orden: contador global secuencial — NO usar valores del banco.
@@ -202,6 +211,7 @@ async def upload_extracto(request: Request,
                 titular=m.get("titular"), monto=m.get("monto"), saldo=m.get("saldo"),
                 cliente_acreditado=m.get("cliente_acreditado"),
                 fecha_acred=m.get("fecha_acred"),
+                organizacion_id=org_destino,
             ))
         db.commit()
         db.refresh(extracto)

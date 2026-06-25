@@ -24,7 +24,7 @@ from app.services.conciliacion import conciliar_planilla
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_planilla_conciliada
 from app.services.tz import hoy_art
-from app.middleware.auth import get_current_user, require_permission
+from app.middleware.auth import get_current_user, require_permission, can_switch_org
 
 router = APIRouter(prefix="/planillas", tags=["planillas"])
 limiter = Limiter(key_func=get_remote_address)
@@ -60,6 +60,7 @@ async def upload_planilla(
     request: Request,
     cliente_nombre: str = Query(..., description="Nombre del cliente"),
     extracto_id: int = Query(..., description="ID del extracto a usar"),
+    org_id: Optional[int] = Query(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -72,16 +73,19 @@ async def upload_planilla(
             detail="Formatos aceptados: .xlsx, .xls, .csv"
         )
 
+    # Misma org activa que el extracto elegido (no la home org del usuario):
+    # ver fix análogo en extractos.py upload_extracto.
+    org_id = org_id if (org_id and can_switch_org(current_user, org_id)) else (current_user.organizacion_id or 1)
+
     extracto = db.query(ExtractoBancario).filter(
-        ExtractoBancario.id == extracto_id
+        ExtractoBancario.id == extracto_id,
+        ExtractoBancario.organizacion_id == org_id,
     ).first()
     if not extracto:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Extracto bancario no encontrado"
         )
-
-    org_id = current_user.organizacion_id or 1
 
     # Normalize: first letter uppercase, preserve rest
     cliente_nombre = cliente_nombre[:1].upper() + cliente_nombre[1:] if cliente_nombre else cliente_nombre
