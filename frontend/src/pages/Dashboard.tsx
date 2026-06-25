@@ -257,7 +257,7 @@ export const Dashboard: React.FC = () => {
       if (item.status === 'ok') continue
       updateBulkItem(item.id, { status: 'loading', error: undefined })
       try {
-        const planilla = await apiClient.uploadPlanilla(item.clienteNombre, extractoId, item.file)
+        const planilla = await apiClient.uploadPlanilla(item.clienteNombre, extractoId, item.file, activeOrgId)
         const resultado = await apiClient.conciliarPlanilla(planilla.id, bulkFecha)
         updateBulkItem(item.id, { status: 'ok', resultado })
       } catch (err: any) {
@@ -340,7 +340,7 @@ export const Dashboard: React.FC = () => {
     setError('')
     setSuccess('')
     try {
-      const data = await apiClient.uploadExtraco(file, banco)
+      const data = await apiClient.uploadExtraco(file, banco, activeOrgId)
       setExtractoId(data.id)
       setExtractoNombre(data.nombre_archivo)
       setSuccess(`Extracto cargado: ${data.movimientos.length} movimientos`)
@@ -408,7 +408,8 @@ export const Dashboard: React.FC = () => {
       const planilla = await apiClient.uploadPlanilla(
         clienteNombre,
         extractoId,
-        file
+        file,
+        activeOrgId
       )
       const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred, false, parseFloat(comisionPct) || 0)
       setResultado(r)
@@ -598,8 +599,13 @@ export const Dashboard: React.FC = () => {
               onChange={e => setBanco(e.target.value)}
               placeholder="Banco Macro"
             />
+            <p className="text-xs opacity-60 mt-1">
+              Podés escribir cualquier nombre de banco, aunque no esté en la lista — el sistema
+              detecta el formato automáticamente cuando puede.
+            </p>
             <datalist id="bancos-list">
-              {['Banco Macro','Banco Nación','BBVA','Santander','Galicia','HSBC','Brubank','Mercado Pago'].map(b => (
+              {['Banco Macro','Banco Nación','BBVA','Santander','Galicia','HSBC','Brubank','Mercado Pago',
+                'ICBC','Bapro','Banco Ciudad','Credicoop','Supervielle','Patagonia','Bancor','Banco Rioja','Banco La Pampa'].map(b => (
                 <option key={b} value={b} />
               ))}
             </datalist>

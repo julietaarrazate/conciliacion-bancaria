@@ -379,13 +379,15 @@ class ApiClient {
   }
 
   // Extractos endpoints
-  async uploadExtraco(file: File, banco: string = 'Banco Macro'): Promise<ExtractoBancario> {
+  async uploadExtraco(file: File, banco: string = 'Banco Macro', orgId?: number | null): Promise<ExtractoBancario> {
     const formData = new FormData()
     formData.append('file', file)
 
+    const params: any = { banco }
+    if (orgId) params.org_id = orgId
     const res = await this.client.post('/extractos/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      params: { banco }
+      params
     })
     return res.data
   }
@@ -399,17 +401,17 @@ class ApiClient {
   async uploadPlanilla(
     clienteNombre: string,
     extractoId: number,
-    file: File
+    file: File,
+    orgId?: number | null
   ): Promise<Planilla> {
     const formData = new FormData()
     formData.append('file', file)
 
+    const params: any = { cliente_nombre: clienteNombre, extracto_id: extractoId }
+    if (orgId) params.org_id = orgId
     const res = await this.client.post('/planillas/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      params: {
-        cliente_nombre: clienteNombre,
-        extracto_id: extractoId
-      }
+      params
     })
     return res.data
   }
