@@ -965,15 +965,30 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
-# Headers de seguridad bancaria
+# Headers de seguridad bancaria + observabilidad de latencia.
+# Mide cada request y la loguea como WARNING si supera settings.slow_request_ms,
+# para que los logs de Render muestren qué endpoints están lentos con datos
+# reales (en vez de adivinar con auditorías). Expone X-Process-Time para debug.
+import time as _time
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
+    _start = _time.monotonic()
     response = await call_next(request)
+    _elapsed_ms = (_time.monotonic() - _start) * 1000
+
     response.headers["X-Content-Type-Options"]    = "nosniff"
     response.headers["X-Frame-Options"]           = "DENY"
     response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"]        = "geolocation=(), microphone=(self), camera=(self), payment=()"
     response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    response.headers["X-Process-Time"]            = f"{_elapsed_ms:.0f}ms"
+
+    if _elapsed_ms >= settings.slow_request_ms:
+        logger.warning(
+            "SLOW %s %s → %s en %.0fms",
+            request.method, request.url.path, response.status_code, _elapsed_ms,
+        )
     return response
 
 app.include_router(auth.router)
