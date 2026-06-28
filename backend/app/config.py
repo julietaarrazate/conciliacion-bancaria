@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # Setear SENTRY_DSN en Render para activar. Sin DSN, no se envía nada.
     sentry_dsn: str = ""
 
+    # Observabilidad — umbral (ms) por encima del cual una request se loguea
+    # como lenta (WARNING en los logs de Render + breadcrumb en Sentry).
+    # Ajustable via env SLOW_REQUEST_MS sin tocar código.
+    slow_request_ms: int = 1500
+
     # Web Push (VAPID) — generados via POST /push/setup
     # Si están vacíos, el push queda deshabilitado (opt-in).
     vapid_private_key: str = ""
