@@ -9,7 +9,7 @@ from typing import Optional
 import io
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
@@ -46,7 +46,11 @@ def exportar_todos_excel(
         q = q.filter(Cheque.fecha_deposito >= desde)
     if hasta:
         q = q.filter(Cheque.fecha_deposito <= hasta)
-    cheques = q.order_by(Cheque.fecha_deposito.desc().nullslast(), Cheque.id.desc()).all()
+    cheques = (
+        q.options(joinedload(Cheque.cliente), joinedload(Cheque.portador))
+        .order_by(Cheque.fecha_deposito.desc().nullslast(), Cheque.id.desc())
+        .all()
+    )
 
     wb = openpyxl.Workbook()
     ws = wb.active

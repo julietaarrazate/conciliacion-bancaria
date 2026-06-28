@@ -1,15 +1,25 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import * as Sentry from '@sentry/react'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { App } from './App'
 
+// Sentry se carga en un chunk aparte y en segundo plano (después del primer
+// paint), no en el bundle inicial — así no agrega ~100KB al arranque. Si no hay
+// DSN configurado, ni siquiera se descarga. captureException queda como no-op
+// hasta que el módulo termina de cargar.
+let sentryCapture: ((err: unknown) => void) | null = null
+
 if (import.meta.env.VITE_SENTRY_DSN) {
-  Sentry.init({
-    dsn: import.meta.env.VITE_SENTRY_DSN,
-    tracesSampleRate: 0.05,
-    sendDefaultPii: false,
-  })
+  import('@sentry/react')
+    .then((Sentry) => {
+      Sentry.init({
+        dsn: import.meta.env.VITE_SENTRY_DSN,
+        tracesSampleRate: 0.05,
+        sendDefaultPii: false,
+      })
+      sentryCapture = (err) => Sentry.captureException(err)
+    })
+    .catch(() => {})
 }
 
 class ErrorBoundary extends React.Component<
@@ -24,7 +34,7 @@ class ErrorBoundary extends React.Component<
     return { hasError: true, message: err?.message || 'Error desconocido' }
   }
   componentDidCatch(err: Error) {
-    Sentry.captureException(err)
+    sentryCapture?.(err)
     // Chunk caducado tras un nuevo deploy → recarga automática silenciosa
     const isChunkError =
       err?.message?.includes('Failed to fetch dynamically imported module') ||

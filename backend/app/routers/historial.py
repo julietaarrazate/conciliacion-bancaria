@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy import desc, func
 from typing import Optional
 from datetime import datetime
@@ -56,7 +56,12 @@ def list_planillas(
 
     total = q.count()
     planillas = (
-        q.order_by(desc(Planilla.fecha_carga))
+        q.options(
+            selectinload(Planilla.rows),
+            joinedload(Planilla.cliente),
+            joinedload(Planilla.usuario),
+        )
+        .order_by(desc(Planilla.fecha_carga))
         .offset(skip)
         .limit(limit)
         .all()
@@ -121,7 +126,15 @@ def export_historial_xlsx(
     if hasta:
         q = q.filter(Planilla.fecha_carga <= hasta)
 
-    planillas = q.order_by(desc(Planilla.fecha_carga)).all()
+    planillas = (
+        q.options(
+            selectinload(Planilla.rows),
+            joinedload(Planilla.cliente),
+            joinedload(Planilla.usuario),
+        )
+        .order_by(desc(Planilla.fecha_carga))
+        .all()
+    )
 
     items = []
     for p in planillas:
@@ -176,7 +189,11 @@ def list_extractos(
 
     total = q.count()
     extractos = (
-        q.order_by(desc(ExtractoBancario.fecha_creacion))
+        q.options(
+            selectinload(ExtractoBancario.movimientos),
+            joinedload(ExtractoBancario.creado_por_user),
+        )
+        .order_by(desc(ExtractoBancario.fecha_creacion))
         .offset(skip)
         .limit(limit)
         .all()
