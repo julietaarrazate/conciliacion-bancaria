@@ -109,6 +109,13 @@ function _shouldRetry(err: unknown, cfg: AxiosRetryConfig): boolean {
 // Cache entry shape
 interface CacheEntry { data: unknown; at: number }
 
+// TTL para reportes de /analisis (dashboard, aging, estado-cuenta, evolución,
+// flujo-caja): datos estables que sólo cambian al subir/conciliar, y esas
+// acciones invalidan el cache explícitamente (invalidateCache('/analisis')).
+// 5 min evita refetch innecesario al navegar entre pantallas sin perder
+// frescura cuando algo realmente cambia.
+const REPORTS_TTL_MS = 5 * 60_000
+
 class ApiClient {
   client: AxiosInstance   // público para endpoints puntuales
   private token: string | null = null
@@ -283,7 +290,7 @@ class ApiClient {
   // Analisis / reportes — cacheados 60s para navegación fluida
   async getDashboard(params?: { periodo?: 'hoy' | 'semana' | 'mes'; anio?: number; mes?: number; org_id?: number }): Promise<any> {
     const key = this._cacheKey('/analisis/dashboard', params)
-    return this._cached(key, 60_000, async () => {
+    return this._cached(key, REPORTS_TTL_MS, async () => {
       const res = await this.client.get('/analisis/dashboard', { params })
       return res.data
     })
@@ -291,7 +298,7 @@ class ApiClient {
 
   async getClientesAging(orgId?: number): Promise<any> {
     const key = this._cacheKey('/analisis/clientes-aging', { org_id: orgId })
-    return this._cached(key, 60_000, async () => {
+    return this._cached(key, REPORTS_TTL_MS, async () => {
       const res = await this.client.get('/analisis/clientes-aging', { params: { org_id: orgId } })
       return res.data
     })
@@ -299,7 +306,7 @@ class ApiClient {
 
   async getEstadoCuentaCliente(clienteId: number, desde?: string, hasta?: string): Promise<any> {
     const key = this._cacheKey(`/analisis/cliente/${clienteId}/estado-cuenta`, { desde, hasta })
-    return this._cached(key, 60_000, async () => {
+    return this._cached(key, REPORTS_TTL_MS, async () => {
       const res = await this.client.get(`/analisis/cliente/${clienteId}/estado-cuenta`, {
         params: { desde, hasta },
       })
@@ -364,7 +371,7 @@ class ApiClient {
 
   async getEvolucion(meses: number = 6, orgId?: number): Promise<any> {
     const key = this._cacheKey('/analisis/evolucion', { meses, org_id: orgId })
-    return this._cached(key, 60_000, async () => {
+    return this._cached(key, REPORTS_TTL_MS, async () => {
       const res = await this.client.get('/analisis/evolucion', { params: { meses, org_id: orgId } })
       return res.data
     })
@@ -372,7 +379,7 @@ class ApiClient {
 
   async getFlujoCaja(meses: number = 6, orgId?: number): Promise<any> {
     const key = this._cacheKey('/analisis/flujo-caja', { meses, org_id: orgId })
-    return this._cached(key, 60_000, async () => {
+    return this._cached(key, REPORTS_TTL_MS, async () => {
       const res = await this.client.get('/analisis/flujo-caja', { params: { meses, org_id: orgId } })
       return res.data
     })

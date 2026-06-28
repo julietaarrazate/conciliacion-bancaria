@@ -46,6 +46,8 @@ export const Conciliaciones: React.FC = () => {
   const [hasta, setHasta] = useState('')
   const [montoMin, setMontoMin] = useState('')
   const [montoMax, setMontoMax] = useState('')
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 200
 
   const dCliente = useDebounce(cliente, 800)
   const dTitular = useDebounce(titular, 800)
@@ -73,6 +75,7 @@ export const Conciliaciones: React.FC = () => {
       setItems(d.items as ConciliacionItem[])
       setTotal(d.total)
       setSuma(d.suma)
+      setPage(0)
     } catch {
       setItems([]); setTotal(0); setSuma(0)
     } finally {
@@ -163,6 +166,28 @@ export const Conciliaciones: React.FC = () => {
             {hayFiltros ? 'Sin resultados para los filtros aplicados' : 'No hay acreditaciones registradas todavía'}
           </div>
         ) : (
+          <>
+          {items.length > PAGE_SIZE && (
+            <div className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border-b dark:border-slate-700 flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, items.length)} de {items.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                  className="px-2 py-0.5 text-xs rounded border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
+                  ← Ant.
+                </button>
+                <span className="text-xs text-gray-500 dark:text-gray-400 px-1">
+                  {page + 1} / {Math.ceil(items.length / PAGE_SIZE)}
+                </span>
+                <button onClick={() => setPage(p => Math.min(Math.ceil(items.length / PAGE_SIZE) - 1, p + 1))}
+                  disabled={page >= Math.ceil(items.length / PAGE_SIZE) - 1}
+                  className="px-2 py-0.5 text-xs rounded border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
+                  Sig. →
+                </button>
+              </div>
+            </div>
+          )}
           <div className="overflow-x-auto max-h-[calc(100dvh-260px)]" style={{ WebkitOverflowScrolling: 'touch' }}>
             <table className="w-full text-xs border-collapse min-w-[700px]">
               <thead className="sticky top-0 z-10">
@@ -176,7 +201,7 @@ export const Conciliaciones: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                {items.map(m => (
+                {items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(m => (
                   <tr key={m.id} className="row-15 hover:bg-gray-50 dark:hover:bg-slate-700/40">
                     <td className="px-2 whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
                     <td className="px-2 max-w-[260px]">
@@ -195,6 +220,7 @@ export const Conciliaciones: React.FC = () => {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>
