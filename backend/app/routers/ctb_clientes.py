@@ -56,11 +56,20 @@ def get_clientes_cuentas(
     total = clientes_q.count()
     clientes = clientes_q.offset(offset).limit(limit).all()
 
+    # Algunos clientes pueden tener una cuenta fuera del padre 2-1-2-0 (asignada
+    # a mano a otro nivel). Esas no están en cuentas_by_id; en vez de una query
+    # por cliente (N+1), las traemos todas de un saque y completamos el dict.
+    faltantes = {
+        cli.cuenta_contable_id for cli in clientes
+        if cli.cuenta_contable_id and cli.cuenta_contable_id not in cuentas_by_id
+    }
+    if faltantes:
+        for c in db.query(PlanCuenta).filter(PlanCuenta.id.in_(faltantes)).all():
+            cuentas_by_id[c.id] = c
+
     items = []
     for cli in clientes:
         cuenta = cuentas_by_id.get(cli.cuenta_contable_id)
-        if cli.cuenta_contable_id and not cuenta:
-            cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == cli.cuenta_contable_id).first()
         items.append({
             "cliente_id": cli.id,
             "cliente_nombre": cli.nombre,

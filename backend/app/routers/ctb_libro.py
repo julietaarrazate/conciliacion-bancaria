@@ -17,6 +17,7 @@ Rutas expuestas (bajo el prefix /contabilidad del router padre):
   POST   /fix-fechas-utc
 """
 import logging
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -33,6 +34,38 @@ from .ctb_common import _org_id
 
 router = APIRouter(tags=["contabilidad"])
 logger = logging.getLogger(__name__)
+
+# Cache TTL para reportes pesados (Sumas y Saldos + Balance): hacen un GROUP BY
+# sobre todos los asientos de la org y se recalculan en cada carga del módulo
+# Contabilidad. Rara vez cambian en < 60 s, y se invalidan explícitamente en
+# cada mutación de asientos (ver _invalidar_reportes), con el TTL como respaldo.
+# Mismo criterio ya usado para la cartera global (_cartera_cache).
+_reportes_cache: dict[tuple, tuple[float, object]] = {}  # (oid, tipo, desde, hasta) → (ts, payload)
+_REPORTES_TTL = 60  # segundos
+
+
+def _reportes_get(oid: int, tipo: str, desde, hasta):
+    hit = _reportes_cache.get((oid, tipo, desde, hasta))
+    if hit and time.monotonic() - hit[0] < _REPORTES_TTL:
+        return hit[1]
+    return None
+
+
+def _reportes_set(oid: int, tipo: str, desde, hasta, payload):
+    _reportes_cache[(oid, tipo, desde, hasta)] = (time.monotonic(), payload)
+
+
+def _invalidar_reportes(oid: int) -> None:
+    """Limpia los caches derivados de asientos para una org tras una mutación:
+    los reportes (sumas-saldo/balance) y la cartera global. Se llama después de
+    cada commit que toca asientos en este router."""
+    for k in [k for k in _reportes_cache if k[0] == oid]:
+        _reportes_cache.pop(k, None)
+    try:
+        from app.routers.ctb_ctas_corrientes import _cartera_cache
+        _cartera_cache.pop(oid, None)
+    except Exception:
+        pass
 
 
 @router.get("/asientos/gaps")
@@ -352,6 +385,10 @@ def get_sumas_saldo(
     """Sumas y saldo: total debe/haber por cuenta."""
     oid = _org_id(current_user, org_id)
 
+    cached = _reportes_get(oid, "sumas", desde, hasta)
+    if cached is not None:
+        return cached
+
     q = (
         db.query(
             PlanCuenta.id,
@@ -391,6 +428,7 @@ def get_sumas_saldo(
             "saldo_deudor":  max(saldo, 0),
             "saldo_acreedor": max(-saldo, 0),
         })
+    _reportes_set(oid, "sumas", desde, hasta, rows)
     return rows
 
 
@@ -404,6 +442,10 @@ def get_balance(
 ):
     """Balance simplificado: totales por tipo de cuenta."""
     oid = _org_id(current_user, org_id)
+
+    cached = _reportes_get(oid, "balance", desde, hasta)
+    if cached is not None:
+        return cached
 
     q = (
         db.query(
@@ -435,12 +477,14 @@ def get_balance(
     pasivo    = totales.get("pasivo",    {}).get("saldo", 0)
     resultado = totales.get("resultado", {}).get("saldo", 0)
 
-    return {
+    result = {
         "activo":    totales.get("activo",    {"total_debe": 0, "total_haber": 0, "saldo": 0}),
         "pasivo":    totales.get("pasivo",    {"total_debe": 0, "total_haber": 0, "saldo": 0}),
         "resultado": totales.get("resultado", {"total_debe": 0, "total_haber": 0, "saldo": 0}),
         "ecuacion_ok": round(activo, 2) == round(abs(pasivo) + abs(resultado), 2),
     }
+    _reportes_set(oid, "balance", desde, hasta, result)
+    return result
 
 
 @router.post("/reset-y-rebuild")
@@ -648,9 +692,8 @@ def reset_y_rebuild_asientos(
             a.numero_asiento = i
 
         db.commit()
-        # Invalidar cache de cartera global (los asientos cambiaron)
-        from app.routers.ctb_ctas_corrientes import _cartera_cache
-        _cartera_cache.pop(oid, None)
+        # Invalidar caches derivados (cartera + reportes): los asientos cambiaron
+        _invalidar_reportes(oid)
         return {
             "dry_run": False,
             "borrados": {"asientos": n_asientos, "detalles": n_detalles},
@@ -715,6 +758,7 @@ def post_asiento_manual(
             descripcion=body.descripcion.strip() or f"Ajuste manual: {cuenta_debe.nombre} / {cuenta_haber.nombre}",
         )
         db.commit()
+        _invalidar_reportes(oid)
         return {"ok": True, "asiento_id": asiento_id}
     except Exception as ex:
         db.rollback()
@@ -743,6 +787,7 @@ def patch_asiento_fecha(
     except ValueError:
         raise HTTPException(400, "Formato de fecha inválido (YYYY-MM-DD)")
     db.commit()
+    _invalidar_reportes(oid)
     return {"ok": True, "id": a.id, "fecha": str(a.fecha)}
 
 
@@ -785,6 +830,7 @@ def delete_asiento_manual(
         for linea in lineas_orig:
             db.add(AsientoDetalle(asiento_id=reverso.id, cuenta_id=linea.cuenta_id, debe=linea.haber, haber=linea.debe))
         db.commit()
+        _invalidar_reportes(oid)
         return {"ok": True, "reverso_id": reverso.id}
     except Exception as ex:
         db.rollback()
@@ -854,6 +900,7 @@ def fix_fechas_utc(
             if e.fecha:
                 e.fecha = e.fecha + delta
         db.commit()
+        _invalidar_reportes(oid)
 
     accion = "+1 día (adelantado)" if direccion == "adelantar" else "−1 día (atrasado)"
     return {

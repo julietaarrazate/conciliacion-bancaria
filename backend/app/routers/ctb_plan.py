@@ -8,7 +8,7 @@ Rutas expuestas (bajo el prefix /contabilidad del router padre):
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
@@ -83,7 +83,17 @@ def get_reglas(
         .order_by(ReglaContable.evento)
     )
     total = q.count()
-    reglas = q.offset(offset).limit(limit).all()
+    # selectinload de las cuentas debe/haber: antes cada regla disparaba 2
+    # queries extra (N+1) al serializar r.cuenta_debe / r.cuenta_haber.
+    reglas = (
+        q.options(
+            selectinload(ReglaContable.cuenta_debe),
+            selectinload(ReglaContable.cuenta_haber),
+        )
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return {
         "items": [
             {

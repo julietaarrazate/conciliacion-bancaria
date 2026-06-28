@@ -38,6 +38,7 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
   const [libroMayor, setLibroMayor]   = useState<LibroMayorData | null>(null)
   const [mayorCuentaId, setMayorCuentaId] = useState<number | ''>('')
   const [loading, setLoading]         = useState(true)
+  const [loadingReportes, setLoadingReportes] = useState(true)
   const [loadingMayor, setLoadingMayor] = useState(false)
   const [openAsientos, setOpenAsientos] = useState<Set<number>>(new Set())
   const [asientoLineas, setAsientoLineas] = useState<Record<number, AsientoLinea[]>>({})
@@ -72,7 +73,11 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
     if (modo === 'ctacte') return
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
     setLoading(true)
-    cargarAsientos()  // dispara en paralelo, no espera los otros 4
+    setLoadingReportes(true)
+    cargarAsientos()  // dispara en paralelo, no espera a los demás
+
+    // Datos estructurales (plan de cuentas + reglas): rápidos e indexados.
+    // Desbloquean la UI — la pestaña por defecto (plan) ya es usable acá.
     Promise.all([
       canViewAccounting
         ? apiClient.client.get(`/contabilidad/plan-cuentas${q}`).then(r => r.data?.items ?? r.data)
@@ -80,13 +85,21 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       canViewAccounting
         ? apiClient.client.get(`/contabilidad/reglas${q}`).then(r => r.data?.items ?? r.data)
         : Promise.resolve([]),
-      apiClient.client.get(`/contabilidad/sumas-saldo${q}`).then(r => r.data),
-      apiClient.client.get(`/contabilidad/balance${q}`).then(r => r.data),
-    ]).then(([c, r, ss, b]) => {
+    ]).then(([c, r]) => {
       setCuentas(c); setReglas(r)
-      setSumasSaldo(ss); setBalance(b)
       setLoading(false)
     }).catch(() => setLoading(false))
+
+    // Reportes pesados (sumas-saldo + balance, GROUP BY sobre todos los
+    // asientos): cargan en segundo plano sin bloquear el primer render. Sus
+    // pestañas muestran "Cargando…" hasta que llegan (ver loadingReportes).
+    Promise.all([
+      apiClient.client.get(`/contabilidad/sumas-saldo${q}`).then(r => r.data),
+      apiClient.client.get(`/contabilidad/balance${q}`).then(r => r.data),
+    ]).then(([ss, b]) => {
+      setSumasSaldo(ss); setBalance(b)
+      setLoadingReportes(false)
+    }).catch(() => setLoadingReportes(false))
   }
 
   const cargarAsientos = () => {
@@ -480,7 +493,7 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
     diarioDesde, setDiarioDesde, diarioHasta, setDiarioHasta, diarioModulo, setDiarioModulo,
     diarioCuentaId, setDiarioCuentaId, diarioCuentaBusq, setDiarioCuentaBusq,
     sumasSaldo, balance, libroMayor, setLibroMayor, mayorCuentaId, setMayorCuentaId,
-    loading, loadingMayor, openAsientos, asientoLineas, loadingLineas,
+    loading, loadingReportes, loadingMayor, openAsientos, asientoLineas, loadingLineas,
     tab, setTab,
     cliCuentas, cuentasDisp, loadingCli, savingCli,
     ctaCte, ctaCteClienteId, loadingCtaCte, catFiltro, ccMode, setCcMode,
