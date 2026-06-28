@@ -161,6 +161,16 @@ próximas sesiones" abajo). 440 tests pasando.
 
 ### Pendiente para próximas sesiones
 
+- **🔔 MAÑANA — activar Sentry (observabilidad)**: el código ya está 100% cableado (backend en
+  `main.py` con 5% de performance tracing; frontend lazy, auto-captura errores globales al iniciar).
+  Solo falta que Julieta pegue los DSN: en su cuenta de Sentry crear/abrir **dos proyectos** (uno
+  Python/FastAPI = backend, uno React = frontend), cada uno da un DSN. Luego: Render → env var
+  `SENTRY_DSN` = DSN del proyecto Python (Save and Deploy); Vercel → env var `VITE_SENTRY_DSN` = DSN
+  del proyecto React (Redeploy). Complemento ya mergeado (PR #169): el backend loguea como WARNING
+  `SLOW <método> <path> → <status> en <ms>` las requests que superan `SLOW_REQUEST_MS` (default
+  1500ms) y expone el header `X-Process-Time`. Después de unos días con datos reales, revisar
+  errores recurrentes en Sentry + los `SLOW` en logs de Render para decidir el próximo foco de
+  performance con evidencia (no con auditorías — esta sesión la auditoría se equivocó 2 veces).
 - **Próximos módulos del plan de liquidación de impuestos** (ver "Plan de expansión" abajo): orden a
   decidir con Julieta por valor — candidato: Intake Exportador de Servicios.
 - **⏰ RECORDATORIO SEMESTRAL — actualizar escala de Monotributo**: ARCA actualiza los límites de
