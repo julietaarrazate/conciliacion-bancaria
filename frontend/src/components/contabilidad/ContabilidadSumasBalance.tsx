@@ -4,7 +4,11 @@ import type { ContabilidadCtx } from './useContabilidad'
 
 export const ContabilidadSumas: React.FC<{ c: ContabilidadCtx }> = ({ c }) => (
   <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
-    {c.sumasSaldo.length === 0 ? (
+    {c.loadingReportes && c.sumasSaldo.length === 0 ? (
+      <div className="py-16 text-center text-gray-400">
+        <p className="text-sm">Cargando…</p>
+      </div>
+    ) : c.sumasSaldo.length === 0 ? (
       <div className="py-16 text-center text-gray-400">
         <p className="text-sm">Sin movimientos contables todavía.</p>
       </div>
@@ -42,7 +46,7 @@ export const ContabilidadBalance: React.FC<{ c: ContabilidadCtx }> = ({ c }) => 
   return (
     <div className="space-y-3">
       {!balance ? (
-        <p className="text-center py-8 text-gray-400 text-sm">Sin datos</p>
+        <p className="text-center py-8 text-gray-400 text-sm">{c.loadingReportes ? 'Cargando…' : 'Sin datos'}</p>
       ) : (
         <>
           {(['activo', 'pasivo', 'resultado'] as const).map(tipo => (

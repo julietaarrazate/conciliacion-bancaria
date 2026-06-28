@@ -302,3 +302,50 @@ class TestCuentasCorrientes:
         token = _token(db, "op@ctb.test")
         r = client.get("/contabilidad/cuentas-corrientes", headers=_auth(token))
         assert r.status_code == 200
+
+
+# ── Tests: caché de reportes (sumas-saldo / balance) e invalidación ───────────
+
+class TestReportesCache:
+    """El caché de sumas-saldo/balance no debe servir datos viejos: tras crear
+    un asiento manual, los reportes tienen que reflejar el nuevo movimiento
+    (la mutación invalida el caché). También chequea el N+1-fixed /reglas."""
+
+    def test_sumas_saldo_se_actualiza_tras_asiento_manual(self, client, db):
+        from app.routers.ctb_libro import _reportes_cache
+        _reportes_cache.clear()  # arranque determinístico
+
+        token = _token(db, "admin@ctb.test")
+        debe_id, haber_id = _cuentas_hoja(db)
+
+        def total_debe_de(cuenta_id):
+            r = client.get("/contabilidad/sumas-saldo", headers=_auth(token))
+            assert r.status_code == 200, r.text
+            fila = next((x for x in r.json() if x["id"] == cuenta_id), None)
+            return fila["total_debe"] if fila else 0.0
+
+        antes = total_debe_de(debe_id)  # primer GET → puebla el caché
+
+        monto = 1234.56
+        r = client.post(
+            "/contabilidad/asiento-manual",
+            json={"cuenta_debe_id": debe_id, "cuenta_haber_id": haber_id,
+                  "monto": monto, "fecha": "2026-06-15", "descripcion": "test cache"},
+            headers=_auth(token),
+        )
+        assert r.status_code == 200, r.text
+
+        # Sin invalidación, este GET devolvería el caché viejo y el delta sería 0.
+        despues = total_debe_de(debe_id)
+        assert round(despues - antes, 2) == monto
+
+    def test_reglas_incluye_cuentas_debe_haber(self, client, db):
+        """El /reglas (con selectinload) sigue serializando debe/haber completos."""
+        token = _token(db, "admin@ctb.test")
+        r = client.get("/contabilidad/reglas", headers=_auth(token))
+        assert r.status_code == 200
+        for regla in r.json()["items"]:
+            for lado in ("debe", "haber"):
+                assert regla[lado] is not None
+                for campo in ("id", "codigo", "nombre"):
+                    assert campo in regla[lado]
