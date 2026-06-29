@@ -1,14 +1,82 @@
-# Sistema de Conciliación Bancaria
+# Cuadra — Conciliación Bancaria y Gestión Financiera
 
-Plataforma web y móvil para automatizar la conciliación de transferencias bancarias contra planillas de clientes, con autenticación, auditoría completa, multi-tenant y permisos granulares.
+Plataforma web y móvil (PWA) para estudios contables y empresas argentinas. Automatiza la
+conciliación de transferencias bancarias contra las planillas de cada cliente, y suma una suite
+completa de gestión financiera: cheques, pagos, caja, liquidaciones, contabilidad de partida doble,
+liquidación de impuestos y un asistente con IA. Multi-tenant, con auditoría completa y permisos
+granulares.
 
 ## Autora y Propietaria
 
-**Julieta Arrazate** — Desarrolladora, propietaria intelectual y titular de todos los derechos sobre este sistema.
+**Julieta Arrazate** — Desarrolladora, propietaria intelectual y titular de todos los derechos sobre
+este sistema.
 
-Este software es propiedad exclusiva de Julieta Arrazate. Queda prohibida su reproducción, distribución o uso comercial sin autorización expresa de la autora.
+Este software es propiedad exclusiva de Julieta Arrazate. Queda prohibida su reproducción,
+distribución o uso comercial sin autorización expresa de la autora.
 
-## Inicio Rápido
+---
+
+## Módulos
+
+### Conciliación bancaria
+- Importación de extractos bancarios en Excel con **detección automática de formato** de múltiples
+  bancos argentinos (Macro, Nación, BBVA, Santander, Galicia, ICBC, HSBC, Ciudad, Provincia…) más un
+  parser genérico para cualquier planilla.
+- Carga de "Últimos Movimientos" (UM) diarios que se agregan al extracto sin duplicar.
+- **Motor de conciliación con scoring por identidad** (CUIT, CBU/CVU, número de cuenta, referencia,
+  titular, cercanía de fecha) que cruza el extracto contra la planilla de cada cliente.
+- **IA Nivel 2**: aprende de las correcciones manuales (patrones que, tras confirmarse, se aplican
+  solos).
+- Carga masiva (varias planillas en lote, auto-conciliadas).
+- Export Excel formato banco para el contador + PDF de cierre mensual.
+
+### Gestión financiera
+- **Cheques** — cartera de cheques con alertas de vencimiento, estados (depositado, acreditado,
+  rechazado) y comisiones.
+- **Pagos y Gastos** — órdenes de pago con foto del comprobante, OCR del importe/fecha y compartir
+  por WhatsApp.
+- **Caja** — arqueo diario de efectivo.
+- **Liquidaciones** — liquidación de comisiones por cliente y período, con cierre.
+- **Contabilidad** — partida doble completa: plan de cuentas, asientos automáticos y manuales, libro
+  diario, libro mayor, cuentas corrientes por cliente, sumas y saldos, balance. Export a formatos
+  contables (Tango, Holistor, etc.).
+
+### Liquidación de impuestos
+- **IVA** — proyección y DDJJ a partir de los asientos contables.
+- **Monotributo** — control semestral de facturación contra las escalas de categoría de ARCA.
+- **Ingresos Brutos** — proyección con Convenio Multilateral.
+- **Sueldos / F931** — liquidador de sueldos y cargas sociales.
+
+### Asistente con IA (Gemini, opt-in)
+- Chat en lenguaje natural con acceso a los datos reales (saldos, comisiones, cheques por vencer,
+  movimientos sin conciliar).
+- OCR de comprobantes y transcripción de voz desde el celular.
+- Alertas proactivas (saludo con lo importante del día).
+
+### ARCA — facturación electrónica
+- Integración propia con WSFEv1/WSAA (emisión de CAE), con asiento contable automático.
+- **Construido pero desactivado a propósito** — se activa por organización cuando un cliente lo
+  solicite (ver `CLAUDE.md`).
+
+---
+
+## Stack
+
+- **Backend**: FastAPI + SQLAlchemy + PostgreSQL (Neon) · Python 3.11 · Alembic
+- **Frontend**: React 18 + TypeScript + Vite + TailwindCSS · PWA instalable (Android/iOS)
+- **Auth**: JWT 8h · `pbkdf2_sha256` · rate limiting (slowapi) · headers de seguridad · 2FA opcional
+- **Diseño**: inspirado en Linear · Inter · dark mode
+
+## Arquitectura de producción
+
+- **Frontend** → Vercel — https://conciliacion-bancaria-ten.vercel.app
+- **Backend** → Render — https://conciliacion-api.onrender.com
+- **Base de datos** → Neon PostgreSQL
+- Keep-alive con UptimeRobot (`/health`) para mitigar el cold start del free tier.
+
+---
+
+## Inicio rápido (desarrollo)
 
 ### Backend
 
@@ -16,7 +84,8 @@ Este software es propiedad exclusiva de Julieta Arrazate. Queda prohibida su rep
 cd backend
 pip install -r requirements.txt
 export SUPERADMIN_PASSWORD="tu_contraseña_segura"
-python seed.py
+# export DATABASE_URL="postgresql://..."   # opcional; por defecto usa SQLite local
+python seed.py                              # siembra org base + plan de cuentas + superadmin
 uvicorn app.main:app --reload
 ```
 
@@ -28,113 +97,121 @@ npm install
 npm run dev
 ```
 
-## Estructura del Proyecto
+### Tests
+
+```bash
+cd backend && python -m pytest -q     # ~460 tests
+cd frontend && npx tsc --noEmit       # type-check
+```
+
+---
+
+## Estructura del repositorio
 
 ```
 conciliacion-bancaria/
-├── backend/                    # API FastAPI + BD PostgreSQL
+├── backend/                      # API FastAPI + PostgreSQL
 │   ├── app/
-│   │   ├── models/            # SQLAlchemy: Organizacion, User, Cliente, Extracto, Planilla
-│   │   ├── schemas/           # Pydantic schemas
-│   │   ├── services/          # conciliacion.py, excel_parser, excel_export
-│   │   ├── routers/           # auth, me, extractos, planillas, admin, organizaciones
-│   │   └── middleware/        # Auth JWT + superadmin
+│   │   ├── models/               # Organizacion, User, Cliente, Extracto, Planilla, Cheque,
+│   │   │                         #   Pago, Gasto, Liquidacion, Asiento, PlanCuenta, ARCA…
+│   │   ├── schemas/              # Pydantic
+│   │   ├── services/             # conciliacion, excel_parser/export, motor_contable,
+│   │   │                         #   backup, push, email, módulos de impuestos…
+│   │   ├── routers/              # auth, extractos, planillas, cheques, pagos, caja,
+│   │   │                         #   contabilidad, liquidaciones, iva, monotributo, arca…
+│   │   └── middleware/           # Auth JWT + permisos + aislamiento multi-tenant
+│   ├── alembic/                  # Migraciones
 │   └── seed.py
 │
-├── frontend/                   # React 18 + TypeScript + Vite + TailwindCSS + PWA
-└── mobile/                     # App móvil (React Native — en desarrollo)
+├── frontend/                     # React 18 + TS + Vite + Tailwind + PWA
+├── mobile/                       # Scaffold React Native (la experiencia mobile productiva es la PWA)
+└── *.md                          # Documentación (ver abajo)
 ```
 
-## Características
+---
 
-### Backend (FastAPI)
-- Autenticación JWT con roles y permisos
-- **Multi-tenant**: cada organización tiene datos aislados
-- **Superadmin** (Julieta Arrazate): acceso a todas las organizaciones
-- Configuración de flujo personalizable por cliente (JSON)
-- Estados ricos de conciliación por organización
-- Cola de revisión manual para orgs con cierre de período
-- Match configurable: por referencia, monto+CUIT, monto+fecha
-- Auditoría automática de todas las operaciones
-- Exportación Excel con Hoja1 (planilla) + Hoja2 (extracto)
+## Roles y permisos
 
-### Frontend (React)
-- PWA instalable en Android e iOS
-- Dashboard con KPIs
-- Gestión de clientes, extractos y planillas
-- Dark mode persistido
-- Login con usuario/contraseña
-- **Próximamente**: Login con Google / OAuth2
+El acceso se controla por permisos granulares según el rol (más el flag **superadmin**, que ve y
+gestiona todas las organizaciones).
 
-## Roles y Permisos
-
-| Rol | Permisos |
+| Rol | Permisos principales |
 |---|---|
-| **Superadmin** | Todo — acceso a todas las organizaciones |
-| **Admin** | Usuarios, auditoría, conciliación |
-| **Operador** | Subir archivos, conciliar |
-| **Revisor** | Solo lectura de resultados |
-| **Auditor** | Solo auditoría y reportes |
+| **Superadmin** | Todo, en todas las organizaciones |
+| **Admin** | Usuarios, auditoría, conciliación, finanzas y contabilidad completa, borrado |
+| **Contador** | Conciliación, finanzas, contabilidad (lectura), auditoría |
+| **Operador** | Subir archivos, conciliar, finanzas, contabilidad (lectura) |
+| **Auditor** | Auditoría, contabilidad (lectura), finanzas |
+| **Revisor** | Solo lectura de resultados y contabilidad |
 
-## Flujo de Conciliación
+Cada organización ve **solo sus propios datos**: el aislamiento multi-tenant se aplica en cada
+endpoint de lectura y escritura.
 
-1. Cargar extracto bancario (.xlsx Banco Macro)
-2. Seleccionar cliente y cargar su planilla de pagos
-3. Ejecutar conciliación (algoritmo configurable por organización)
-4. Revisar resultados y descargar Excel acreditado
+## Motor de conciliación
 
-### Estados de Fila (Organización A)
-- **ok** — Coincidencia exacta encontrada
-- **no está** — Monto no existe en banco
-- **duplicado** — Ya fue acreditado antes
-- **faltan datos** — Monto común, sin CUIT/titular
-- **acreditado DD/MM** — Ya acreditado a otro cliente
+Scoring por identidad (a mayor puntaje, mayor confianza del match):
 
-### Estados Ricos (orgs Pro)
-- **PAGO_PARCIAL** — Pago parcial registrado
-- **CONCILIADO_CON_DIFERENCIA** — Conciliado con diferencia de monto
-- **VENCIDO** — Pago vencido sin acreditar
-- **EN_REVISION** — En cola de revisión manual
+| Señal | Puntos |
+|---|---|
+| CUIT exacto (10-11 dígitos) | 12 |
+| CBU/CVU exacto (22 dígitos) | 10 |
+| Número de cuenta largo (10+ dígitos) | 8 |
+| Número de referencia (6-9 dígitos) | 6 |
+| Titular (2 palabras / 1 palabra) | 5 / 3 |
+| Bonus por fecha cercana | +1 a +5 |
 
-## API Endpoints Principales
+**Regla fundamental**: si un monto está duplicado en el extracto, siempre se exige identidad
+(CUIT/CBU/referencia) para acreditar. Tolerancia de fecha configurable por organización.
 
-### Auth
-- `POST /auth/login` — Login y obtener JWT
+---
 
-### Extractos
-- `POST /extractos/upload` — Subir extracto bancario
-- `GET /extractos` — Listar extractos
+## Integraciones opcionales (feature flags)
 
-### Planillas
-- `POST /planillas/upload` — Subir planilla cliente
-- `POST /planillas/{id}/conciliar` — Ejecutar conciliación
-- `GET /planillas/{id}/revision` — Cola de revisión (orgs Pro)
-- `POST /planillas/{id}/revision/{row_id}/resolver` — Resolver revisión
+Todo se degrada solo si la variable no está seteada — ninguna rompe el sistema:
 
-### Admin (superadmin)
-- `GET /admin/organizaciones` — Listar organizaciones
-- `POST /admin/organizaciones` — Crear organización
-- `PUT /admin/organizaciones/{id}` — Actualizar configuración
+| Variable(s) | Función |
+|---|---|
+| `GEMINI_API_KEY` | Asistente IA, OCR y transcripción de voz |
+| `RESEND_API_KEY` | Backup diario por email + 2FA admin/superadmin |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Notificaciones push (Web Push) |
+| `S3_*` (5 vars) | Storage de fotos en Cloudflare R2 / S3 (por defecto, base64 en DB) |
+| `SENTRY_DSN` / `VITE_SENTRY_DSN` | Monitoreo de errores y performance |
+| `GOOGLE_CLIENT_ID` / `VITE_GOOGLE_CLIENT_ID` | Login con Google |
+| `ARCA_ENCRYPTION_KEY` | Cifrado de certificados ARCA (módulo opt-in por org) |
+| `SLOW_REQUEST_MS` | Umbral del log de requests lentas (default 1500 ms) |
 
-## Producción
-
-- Frontend: [conciliacion-bancaria-ten.vercel.app](https://conciliacion-bancaria-ten.vercel.app)
-- Backend: [conciliacion-api.onrender.com](https://conciliacion-api.onrender.com)
-- Base de datos: Neon PostgreSQL
+---
 
 ## Seguridad
 
-- Contraseñas hasheadas (pbkdf2_sha256)
-- JWT tokens con expiración de 8h
-- SQL injection prevention (ORM SQLAlchemy)
-- CORS configurado
-- Auditoría completa de cambios
-- Contraseña de superadmin vía variable de entorno (nunca en código)
-- **Roadmap**: autenticación biométrica (huella dactilar) para acceso móvil
+- Contraseñas con `pbkdf2_sha256` (nunca en texto plano).
+- JWT con expiración de 8 h · rate limiting contra fuerza bruta · 2FA opcional para admin/superadmin.
+- Aislamiento multi-tenant en cada endpoint.
+- Prevención de inyección SQL vía ORM (SQLAlchemy) · CORS restringido al dominio de producción.
+- Headers de seguridad bancaria (HSTS, X-Frame-Options, etc.).
+- Auditoría completa: quién hizo qué, cuándo y desde dónde.
+- Backup automático diario (cuando está configurado) · contraseña de superadmin solo por env var.
+- PIN + biometría para bloqueo de la app en mobile.
+
+---
+
+## Documentación
+
+| Archivo | Contenido |
+|---|---|
+| `CLAUDE.md` | Orientación del repo: arquitectura, motor, pendientes y reglas críticas |
+| `CHANGELOG.md` | Historial de versiones (v3.6 → v3.24) con detalle por feature/fix |
+| `BUGS.md` | Bitácora de bugs recurrentes (causa raíz + cómo evitarlos) |
+| `ROADMAP.md` | Roadmap por valor/esfuerzo |
+| `DEPLOY.md` | Guía de despliegue |
+| `BACKUP_Y_RECUPERACION.md` | Backups y recuperación |
+| `PROBAR_EN_CELULAR.md` | Cómo probar la PWA en el celular |
+| `COSTEO.md` | Costeo de infraestructura |
+
+---
 
 ## Licencia
 
 © 2026 **Julieta Arrazate** — Todos los derechos reservados.
 
-Este software es propiedad intelectual exclusiva de Julieta Arrazate.
-Desarrollado a partir de Mayo 2026.
+Software de propiedad intelectual exclusiva de Julieta Arrazate. Desarrollado a partir de Mayo 2026.
