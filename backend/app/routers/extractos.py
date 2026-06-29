@@ -164,16 +164,24 @@ async def upload_extracto(request: Request,
             ExtractoBancario.organizacion_id == org_destino,
         ).first()
         if existente:
+            # Si el extracto coincidente había sido borrado (soft delete), re-subir
+            # el mismo archivo lo reactiva — si no, la rama de upsert actualizaría una
+            # fila borrada que nunca vuelve a aparecer en el listado.
+            if existente.deleted_at is not None:
+                existente.deleted_at = None
             actualizados = 0
             for m in existente.movimientos:
                 cliente_nuevo = None
                 fecha_nueva = None
-                # buscar el correspondiente en el nuevo archivo por (orden) o (saldo, monto)
+                # buscar el correspondiente en el nuevo archivo por (orden) o (saldo, monto).
+                # m.saldo/m.monto son Decimal (Numeric en la DB) y n[...] viene float del
+                # parser → comparar en float evita "unsupported operand Decimal - float"
+                # (bug recurrente Decimal/float, ver BUGS.md).
                 for n in movs:
                     if (m.orden is not None and n.get("orden") == m.orden) or (
                         m.saldo is not None and n.get("saldo") is not None
-                        and abs((m.saldo or 0) - float(n["saldo"])) < 0.01
-                        and abs((m.monto or 0) - float(n.get("monto") or 0)) < 0.01
+                        and abs(float(m.saldo or 0) - float(n["saldo"])) < 0.01
+                        and abs(float(m.monto or 0) - float(n.get("monto") or 0)) < 0.01
                     ):
                         cliente_nuevo = n.get("cliente_acreditado")
                         fecha_nueva = n.get("fecha_acred")

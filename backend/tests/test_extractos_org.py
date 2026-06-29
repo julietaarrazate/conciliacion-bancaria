@@ -215,3 +215,27 @@ class TestUploadExtractoOrg:
             for i in ids
         }
         assert orgs == {2}, f"el listado de la org 2 trajo extractos de orgs {orgs}"
+
+    def test_resubir_mismo_archivo_tras_borrar_no_rompe(self, client, db):
+        """Regresión: subir un extracto, borrarlo (soft delete) y re-subir el MISMO
+        archivo caía con 400 'Error al procesar el archivo' por una resta
+        Decimal - float en la rama de upsert (m.saldo Decimal vs float del parser).
+        Ahora reactiva el extracto borrado y devuelve 200."""
+        token = _token(db, "super@org.test")
+        # saldos con decimales → columna Numeric(12,2) llega como Decimal a la rama de upsert
+        xlsx = _xlsx_bytes([("2026-06-01", "Cli A", 5000, 12345.67),
+                            ("2026-06-02", "Cli B", 6000, 18345.67)])
+        f = {"file": ("e.xlsx", xlsx,
+                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+
+        r1 = client.post("/extractos/upload?org_id=2", files=f, headers=_auth(token))
+        assert r1.status_code == 200, r1.text
+        eid = r1.json()["id"]
+
+        assert client.delete(f"/extractos/{eid}?org_id=2", headers=_auth(token)).status_code == 200
+
+        r2 = client.post("/extractos/upload?org_id=2", files=f, headers=_auth(token))
+        assert r2.status_code == 200, r2.text  # antes: 400 "Error al procesar el archivo"
+
+        ids = {e["id"] for e in client.get("/extractos?org_id=2", headers=_auth(token)).json()["items"]}
+        assert eid in ids, "el extracto re-subido tras borrar debe volver a aparecer activo"
