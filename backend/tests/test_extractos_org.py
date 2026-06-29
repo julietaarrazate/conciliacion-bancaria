@@ -192,3 +192,26 @@ class TestUploadExtractoOrg:
             m.orden for m in db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id == r2.json()["id"]).all()
         )
         assert ordenes_org2 == [1, 2], f"esperaba [1, 2], obtuve {ordenes_org2}"
+
+    def test_listado_de_extractos_aislado_por_org(self, client, db):
+        """GET /extractos?org_id=N devuelve SOLO los extractos de esa org, incluso
+        para un superadmin (regresión: el front pedía sin org_id y un superadmin
+        veía extractos de otras empresas — fuga de tenant)."""
+        token = _token(db, "super@org.test")
+        xlsx = _xlsx_bytes([("2026-06-01", "X", 1000, 1000)])
+
+        client.post("/extractos/upload?org_id=1",
+                    files={"file": ("a.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                    headers=_auth(token))
+        client.post("/extractos/upload?org_id=2",
+                    files={"file": ("b.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                    headers=_auth(token))
+
+        r = client.get("/extractos?org_id=2", headers=_auth(token))
+        assert r.status_code == 200, r.text
+        ids = {e["id"] for e in r.json()["items"]}
+        orgs = {
+            db.query(ExtractoBancario).filter(ExtractoBancario.id == i).first().organizacion_id
+            for i in ids
+        }
+        assert orgs == {2}, f"el listado de la org 2 trajo extractos de orgs {orgs}"

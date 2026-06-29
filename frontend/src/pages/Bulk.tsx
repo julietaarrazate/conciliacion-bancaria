@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { ExtractoListItem, ConciliacionResultado } from '@/types'
+import { useOrgStore } from '@/store/org'
 import { localIsoDate } from '@/utils/fecha'
 
 interface BulkItem {
@@ -13,6 +14,7 @@ interface BulkItem {
 }
 
 export const Bulk: React.FC = () => {
+  const { activeOrgId } = useOrgStore()
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [items, setItems] = useState<BulkItem[]>([])
@@ -20,11 +22,13 @@ export const Bulk: React.FC = () => {
   const [fechaAcred, setFechaAcred] = useState<string>(localIsoDate())
 
   useEffect(() => {
-    apiClient.listExtractos().then(d => {
+    // Scopear por org activa: sin org_id un superadmin recibiría extractos de
+    // todas las orgs (fuga de tenant).
+    apiClient.listExtractos(activeOrgId).then(d => {
       setExtractos(d.items)
       if (d.items.length > 0) setExtractoId(d.items[0].id)
     })
-  }, [])
+  }, [activeOrgId])
 
   const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -53,7 +57,7 @@ export const Bulk: React.FC = () => {
       updateItem(item.id, { status: 'loading', error: undefined })
       try {
         const planilla = await apiClient.uploadPlanilla(
-          item.clienteNombre, extractoId, item.file
+          item.clienteNombre, extractoId, item.file, activeOrgId
         )
         const resultado = await apiClient.conciliarPlanilla(planilla.id, fechaAcred)
         updateItem(item.id, { status: 'ok', resultado })

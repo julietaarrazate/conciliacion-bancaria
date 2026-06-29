@@ -334,7 +334,9 @@ export const Dashboard: React.FC = () => {
     })) return
     try {
       await apiClient.deleteExtracto(id)
-      const data = await apiClient.listExtractos()
+      // SIEMPRE scopear por la org activa: sin org_id, un superadmin recibe los
+      // extractos de TODAS las orgs y se filtran empresas ajenas (fuga de tenant).
+      const data = await apiClient.listExtractos(activeOrgId)
       setExtractos(data.items)
       if (extractoId === id) {
         setExtractoId(data.items[0]?.id ?? null)
@@ -621,22 +623,33 @@ export const Dashboard: React.FC = () => {
           <div className="mb-3">
             <label className="label">Banco</label>
             <input
-              list="bancos-list"
               className="input-field"
               value={banco}
               onChange={e => setBanco(e.target.value)}
-              onFocus={e => e.target.select()}
-              placeholder="Escribí o elegí el banco (ej: Banco Comercio)"
+              placeholder="Escribí el banco (ej: Banco Comercio)"
             />
-            <p className="text-xs opacity-60 mt-1">
-              Borrá y escribí el nombre de tu banco aunque no esté en la lista (ej: Banco Comercio).
-              Queda guardado y aparece en el desplegable la próxima vez.
-            </p>
-            <datalist id="bancos-list">
-              {[...BANCOS_SUGERIDOS, ...bancosCustom].map(b => (
-                <option key={b} value={b} />
+            {/* Chips en vez de <datalist> (poco fiable en mobile): tocás uno para
+                elegirlo, o escribís el tuyo arriba. Los custom aparecen primero. */}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {[...bancosCustom, ...BANCOS_SUGERIDOS.slice(0, 8)].map(b => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setBanco(b)}
+                  className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                    banco === b
+                      ? 'bg-ml-blue text-white border-ml-blue'
+                      : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {b}
+                </button>
               ))}
-            </datalist>
+            </div>
+            <p className="text-xs opacity-60 mt-1">
+              Tocá un banco de la lista o escribí el tuyo arriba (ej: Banco Comercio).
+              El que escribas queda guardado para la próxima.
+            </p>
           </div>
 
           <FileUpload

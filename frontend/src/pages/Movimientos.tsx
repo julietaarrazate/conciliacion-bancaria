@@ -255,8 +255,9 @@ export const Movimientos: React.FC = () => {
       if (r.duplicados > 0) msg += ` · ${r.duplicados} ya existían (ignorados)`
       if ((r.duplicados_internos ?? 0) > 0) msg += ` · ⚠️ ${r.duplicados_internos} duplicado(s) en el archivo del banco eliminados automáticamente`
       setUmMsg(msg)
-      // Refrescar extracto y movimientos
-      const data = await apiClient.listExtractos()
+      // Refrescar extracto y movimientos (scopeado a la org activa: sin org_id
+      // un superadmin recibiría extractos de todas las orgs — fuga de tenant)
+      const data = await apiClient.listExtractos(activeOrgId)
       setExtractos(data.items)
       load()
     } catch (err: any) {
