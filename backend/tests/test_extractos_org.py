@@ -65,6 +65,17 @@ def db():
     session.close()
 
 
+@pytest.fixture(autouse=True)
+def _sin_rate_limit():
+    # Varios tests suben más de 10 extractos/min; el rate limit (10/min) es de
+    # producción, no relevante acá. Se desactiva durante los tests.
+    from app.routers import extractos as _ext
+    prev = _ext.limiter.enabled
+    _ext.limiter.enabled = False
+    yield
+    _ext.limiter.enabled = prev
+
+
 @pytest.fixture
 def client(db):
     def _override_db():
@@ -162,36 +173,31 @@ class TestUploadExtractoOrg:
         extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == r.json()["id"]).first()
         assert extracto.organizacion_id == 1
 
-    def test_orden_arranca_en_1_por_org(self, client, db):
-        """La numeración de orden es por organización: un extracto subido a la
-        org 2 arranca en 1 aunque la org 1 ya tenga movimientos (regresión: el
-        max de orden era global y el extracto de otra empresa continuaba la
-        numeración de Banco Macro de la org 1)."""
+    def test_orden_arranca_en_1_por_extracto(self, client, db):
+        """Cada extracto numera desde 1, sin importar la org ni cuántos extractos
+        ya existan (regresión: el orden continuaba la numeración global de Banco
+        Macro en vez de arrancar nuevo)."""
+        MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         token = _token(db, "super@org.test")
 
-        # Org 1: dos movimientos → orden 1 y 2
-        client.post(
-            "/extractos/upload?org_id=1",
-            files={"file": ("macro.xlsx", _xlsx_bytes([("2026-06-01", "Macro Uno", 1000, 1000),
-                                                       ("2026-06-02", "Macro Dos", 2000, 2000)]),
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
-            headers=_auth(token),
-        )
+        def subir(org, filas, nombre):
+            return client.post(f"/extractos/upload?org_id={org}",
+                               files={"file": (nombre, _xlsx_bytes(filas), MIME)}, headers=_auth(token))
 
-        # Org 2: otro banco/empresa → debe arrancar en 1, no continuar desde org 1
-        r2 = client.post(
-            "/extractos/upload?org_id=2",
-            files={"file": ("comercio.xlsx", _xlsx_bytes([("2026-06-03", "Comercio Uno", 3000, 3000),
-                                                          ("2026-06-04", "Comercio Dos", 4000, 4000)]),
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
-            headers=_auth(token),
-        )
+        def ordenes(extracto_id):
+            return sorted(m.orden for m in db.query(MovimientoBanco)
+                          .filter(MovimientoBanco.extracto_id == extracto_id).all())
+
+        # Org 1 con movimientos
+        subir(1, [("2026-06-01", "M1", 1000, 1000), ("2026-06-02", "M2", 2000, 2000)], "macro.xlsx")
+        # Org 2, extracto distinto → arranca en 1 (no continúa desde org 1)
+        r2 = subir(2, [("2026-06-03", "C1", 3000, 3000), ("2026-06-04", "C2", 4000, 4000)], "comercio.xlsx")
         assert r2.status_code == 200, r2.text
-
-        ordenes_org2 = sorted(
-            m.orden for m in db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id == r2.json()["id"]).all()
-        )
-        assert ordenes_org2 == [1, 2], f"esperaba [1, 2], obtuve {ordenes_org2}"
+        assert ordenes(r2.json()["id"]) == [1, 2]
+        # SEGUNDO extracto distinto en la MISMA org 2 → también arranca en 1 (per-extracto)
+        r3 = subir(2, [("2026-07-01", "C3", 7000, 7000), ("2026-07-02", "C4", 8000, 8000)], "comercio2.xlsx")
+        assert r3.status_code == 200, r3.text
+        assert ordenes(r3.json()["id"]) == [1, 2], "el 2do extracto de la org debe arrancar en 1"
 
     def test_listado_de_extractos_aislado_por_org(self, client, db):
         """GET /extractos?org_id=N devuelve SOLO los extractos de esa org, incluso
@@ -216,13 +222,13 @@ class TestUploadExtractoOrg:
         }
         assert orgs == {2}, f"el listado de la org 2 trajo extractos de orgs {orgs}"
 
-    def test_resubir_mismo_archivo_tras_borrar_no_rompe(self, client, db):
-        """Regresión: subir un extracto, borrarlo (soft delete) y re-subir el MISMO
-        archivo caía con 400 'Error al procesar el archivo' por una resta
-        Decimal - float en la rama de upsert (m.saldo Decimal vs float del parser).
-        Ahora reactiva el extracto borrado y devuelve 200."""
+    def test_resubir_mismo_archivo_tras_borrar_crea_uno_nuevo(self, client, db):
+        """Subir un extracto, borrarlo (soft delete) y re-subir el MISMO archivo
+        crea uno NUEVO y limpio (numerado desde 1), no resucita la fila borrada.
+        Antes caía con 400 'Error al procesar el archivo' por una resta
+        Decimal - float en la rama de upsert que matcheaba la fila borrada."""
         token = _token(db, "super@org.test")
-        # saldos con decimales → columna Numeric(12,2) llega como Decimal a la rama de upsert
+        # saldos con decimales → Numeric(12,2) llega como Decimal a la rama de upsert
         xlsx = _xlsx_bytes([("2026-06-01", "Cli A", 5000, 12345.67),
                             ("2026-06-02", "Cli B", 6000, 18345.67)])
         f = {"file": ("e.xlsx", xlsx,
@@ -230,12 +236,18 @@ class TestUploadExtractoOrg:
 
         r1 = client.post("/extractos/upload?org_id=2", files=f, headers=_auth(token))
         assert r1.status_code == 200, r1.text
-        eid = r1.json()["id"]
+        eid1 = r1.json()["id"]
 
-        assert client.delete(f"/extractos/{eid}?org_id=2", headers=_auth(token)).status_code == 200
+        assert client.delete(f"/extractos/{eid1}?org_id=2", headers=_auth(token)).status_code == 200
 
         r2 = client.post("/extractos/upload?org_id=2", files=f, headers=_auth(token))
         assert r2.status_code == 200, r2.text  # antes: 400 "Error al procesar el archivo"
+        eid2 = r2.json()["id"]
+        assert eid2 != eid1, "re-subir tras borrar debe crear un extracto nuevo"
 
+        # el nuevo aparece activo, el borrado no
         ids = {e["id"] for e in client.get("/extractos?org_id=2", headers=_auth(token)).json()["items"]}
-        assert eid in ids, "el extracto re-subido tras borrar debe volver a aparecer activo"
+        assert eid2 in ids and eid1 not in ids
+        # numerado desde 1 (per-extracto)
+        ordenes = sorted(m.orden for m in db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id == eid2).all())
+        assert ordenes == [1, 2], f"esperaba [1, 2], obtuve {ordenes}"

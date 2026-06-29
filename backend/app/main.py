@@ -177,6 +177,12 @@ def _run_alembic():
         "CREATE INDEX IF NOT EXISTS idx_asdet_asiento ON asiento_detalle(asiento_id)",
         "CREATE INDEX IF NOT EXISTS idx_asdet_cuenta ON asiento_detalle(cuenta_id)",
         "CREATE INDEX IF NOT EXISTS idx_asdet_cuenta_asiento ON asiento_detalle(cuenta_id, asiento_id)",
+        # uq_extracto_fp_org: excluir extractos borrados (soft delete) del índice
+        # único, así borrar y re-subir el mismo archivo crea uno nuevo en vez de
+        # chocar contra la fila borrada (migración 020). DROP+CREATE para reemplazar
+        # la definición vieja de la migración 006.
+        "DROP INDEX IF EXISTS uq_extracto_fp_org",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_extracto_fp_org ON extractos_bancarios (fingerprint, organizacion_id) WHERE fingerprint IS NOT NULL AND deleted_at IS NULL",
         # módulo IVA Proyección y DDJJ — tasa de IVA por cuenta + snapshot por período
         "ALTER TABLE plan_cuentas ADD COLUMN IF NOT EXISTS tasa_iva NUMERIC(5,4)",
         "CREATE TABLE IF NOT EXISTS proyecciones_iva ("

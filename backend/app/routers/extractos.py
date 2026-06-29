@@ -159,16 +159,16 @@ async def upload_extracto(request: Request,
         # actualizar cliente_acreditado y fecha_acred en movs existentes cuando el archivo
         # nuevo trae info que el guardado no tiene. NO tirar 409: el usuario espera que
         # subir el extracto "actualice" lo que ya esta.
+        # Solo matchea extractos ACTIVOS: re-subir el mismo archivo ACTUALIZA los
+        # acreditados del extracto vigente. Si el archivo fue borrado, el dedupe NO
+        # lo encuentra → se crea uno nuevo y limpio (numerado desde 1), en vez de
+        # resucitar la fila vieja con su numeración heredada.
         existente = db.query(ExtractoBancario).filter(
             ExtractoBancario.fingerprint == fp,
             ExtractoBancario.organizacion_id == org_destino,
+            ExtractoBancario.deleted_at.is_(None),
         ).first()
         if existente:
-            # Si el extracto coincidente había sido borrado (soft delete), re-subir
-            # el mismo archivo lo reactiva — si no, la rama de upsert actualizaría una
-            # fila borrada que nunca vuelve a aparecer en el listado.
-            if existente.deleted_at is not None:
-                existente.deleted_at = None
             actualizados = 0
             for m in existente.movimientos:
                 cliente_nuevo = None
@@ -204,16 +204,15 @@ async def upload_extracto(request: Request,
                                      banco=banco_final, organizacion_id=org_destino)
         db.add(extracto)
         db.flush()
-        # Orden: contador secuencial POR ORGANIZACIÓN — NO usar valores del banco.
-        # El más antiguo recibe max_org+1, el más reciente max_org+N.
-        # Los movimientos del parser vienen newest-first → se asigna en reversa.
-        # Scope por org: cada empresa/banco arranca su propia numeración (antes el
-        # max era global y un extracto de otra org continuaba la numeración de Macro).
+        # Orden: contador secuencial POR EXTRACTO — NO usar valores del banco.
+        # Cada extracto arranca su propia numeración desde 1 (un extracto recién
+        # creado no tiene movimientos → max 0 → el más antiguo recibe 1, el más
+        # reciente N). Mismo criterio que el append de UM (extracto_merger), y evita
+        # que un extracto de otra empresa/banco continúe la numeración de otro.
         from sqlalchemy import func as _func
         max_global = (
             db.query(_func.max(MovimientoBanco.orden))
-            .join(ExtractoBancario, MovimientoBanco.extracto_id == ExtractoBancario.id)
-            .filter(ExtractoBancario.organizacion_id == org_destino)
+            .filter(MovimientoBanco.extracto_id == extracto.id)
             .scalar() or 0
         )
         n_movs = len(movs)
