@@ -189,6 +189,19 @@ function fmtFecha(s: string) {
   } catch { return s }
 }
 
+// Bancos sugeridos en el desplegable al cargar un extracto. La lista es editable:
+// el usuario puede escribir cualquier nombre, y los bancos que use se recuerdan
+// (localStorage) y se suman al desplegable la próxima vez.
+const BANCOS_SUGERIDOS = [
+  'Banco Macro', 'Banco Nación', 'BBVA', 'Santander', 'Galicia', 'HSBC', 'Brubank',
+  'Mercado Pago', 'ICBC', 'Bapro', 'Banco Ciudad', 'Credicoop', 'Supervielle',
+  'Patagonia', 'Bancor', 'Banco Rioja', 'Banco La Pampa',
+]
+
+function leerBancosCustom(): string[] {
+  try { return JSON.parse(localStorage.getItem('bancos_personalizados') || '[]') } catch { return [] }
+}
+
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate()
   const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
@@ -212,6 +225,20 @@ export const Dashboard: React.FC = () => {
   const [panelId, setPanelId] = useState<number | null>(null)
   const [fechaAcred, setFechaAcred] = useState<string>(localIsoDate())
   const [banco, setBanco] = useState('Banco Macro')
+  const [bancosCustom, setBancosCustom] = useState<string[]>(leerBancosCustom)
+
+  // Recuerda un banco escrito por el usuario para que aparezca en el desplegable
+  // la próxima vez (no pisa los sugeridos ni duplica).
+  const recordarBanco = (nombre: string) => {
+    const n = nombre.trim()
+    if (!n || BANCOS_SUGERIDOS.includes(n)) return
+    setBancosCustom(prev => {
+      if (prev.includes(n)) return prev
+      const next = [...prev, n]
+      try { localStorage.setItem('bancos_personalizados', JSON.stringify(next)) } catch { /* storage lleno/bloqueado */ }
+      return next
+    })
+  }
   const [comisionPct, setComisionPct] = useState('')
   const [umCorteDetectado, setUmCorteDetectado] = useState<number | null>(null)
   const [umCorteManual, setUmCorteManual] = useState<string>('')
@@ -344,6 +371,7 @@ export const Dashboard: React.FC = () => {
       setExtractoId(data.id)
       setExtractoNombre(data.nombre_archivo)
       setSuccess(`Extracto cargado: ${data.movimientos.length} movimientos`)
+      recordarBanco(banco)
       await refreshExtractos()
     } catch (err: any) {
       // Detectar duplicado (409)
@@ -597,15 +625,15 @@ export const Dashboard: React.FC = () => {
               className="input-field"
               value={banco}
               onChange={e => setBanco(e.target.value)}
-              placeholder="Banco Macro"
+              onFocus={e => e.target.select()}
+              placeholder="Escribí o elegí el banco (ej: Banco Comercio)"
             />
             <p className="text-xs opacity-60 mt-1">
-              Podés escribir cualquier nombre de banco, aunque no esté en la lista — el sistema
-              detecta el formato automáticamente cuando puede.
+              Borrá y escribí el nombre de tu banco aunque no esté en la lista (ej: Banco Comercio).
+              Queda guardado y aparece en el desplegable la próxima vez.
             </p>
             <datalist id="bancos-list">
-              {['Banco Macro','Banco Nación','BBVA','Santander','Galicia','HSBC','Brubank','Mercado Pago',
-                'ICBC','Bapro','Banco Ciudad','Credicoop','Supervielle','Patagonia','Bancor','Banco Rioja','Banco La Pampa'].map(b => (
+              {[...BANCOS_SUGERIDOS, ...bancosCustom].map(b => (
                 <option key={b} value={b} />
               ))}
             </datalist>

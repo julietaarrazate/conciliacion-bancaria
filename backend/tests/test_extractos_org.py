@@ -29,7 +29,7 @@ from app.database import Base, get_db
 from app.services.auth import get_password_hash, create_access_token
 from app.models.organizacion import Organizacion
 from app.models.user import User
-from app.models.extracto import ExtractoBancario
+from app.models.extracto import ExtractoBancario, MovimientoBanco
 
 
 @pytest.fixture
@@ -161,3 +161,34 @@ class TestUploadExtractoOrg:
         assert r.status_code == 200, r.text
         extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == r.json()["id"]).first()
         assert extracto.organizacion_id == 1
+
+    def test_orden_arranca_en_1_por_org(self, client, db):
+        """La numeración de orden es por organización: un extracto subido a la
+        org 2 arranca en 1 aunque la org 1 ya tenga movimientos (regresión: el
+        max de orden era global y el extracto de otra empresa continuaba la
+        numeración de Banco Macro de la org 1)."""
+        token = _token(db, "super@org.test")
+
+        # Org 1: dos movimientos → orden 1 y 2
+        client.post(
+            "/extractos/upload?org_id=1",
+            files={"file": ("macro.xlsx", _xlsx_bytes([("2026-06-01", "Macro Uno", 1000, 1000),
+                                                       ("2026-06-02", "Macro Dos", 2000, 2000)]),
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+
+        # Org 2: otro banco/empresa → debe arrancar en 1, no continuar desde org 1
+        r2 = client.post(
+            "/extractos/upload?org_id=2",
+            files={"file": ("comercio.xlsx", _xlsx_bytes([("2026-06-03", "Comercio Uno", 3000, 3000),
+                                                          ("2026-06-04", "Comercio Dos", 4000, 4000)]),
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r2.status_code == 200, r2.text
+
+        ordenes_org2 = sorted(
+            m.orden for m in db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id == r2.json()["id"]).all()
+        )
+        assert ordenes_org2 == [1, 2], f"esperaba [1, 2], obtuve {ordenes_org2}"

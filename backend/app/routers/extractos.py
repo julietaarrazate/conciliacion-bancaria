@@ -196,11 +196,18 @@ async def upload_extracto(request: Request,
                                      banco=banco_final, organizacion_id=org_destino)
         db.add(extracto)
         db.flush()
-        # Orden: contador global secuencial — NO usar valores del banco.
-        # El más antiguo recibe max_global+1, el más reciente max_global+N.
+        # Orden: contador secuencial POR ORGANIZACIÓN — NO usar valores del banco.
+        # El más antiguo recibe max_org+1, el más reciente max_org+N.
         # Los movimientos del parser vienen newest-first → se asigna en reversa.
+        # Scope por org: cada empresa/banco arranca su propia numeración (antes el
+        # max era global y un extracto de otra org continuaba la numeración de Macro).
         from sqlalchemy import func as _func
-        max_global = db.query(_func.max(MovimientoBanco.orden)).scalar() or 0
+        max_global = (
+            db.query(_func.max(MovimientoBanco.orden))
+            .join(ExtractoBancario, MovimientoBanco.extracto_id == ExtractoBancario.id)
+            .filter(ExtractoBancario.organizacion_id == org_destino)
+            .scalar() or 0
+        )
         n_movs = len(movs)
         for i, m in enumerate(movs):
             # i=0 es el más reciente → orden más alto

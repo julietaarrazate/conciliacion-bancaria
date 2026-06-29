@@ -286,6 +286,14 @@ export const Pagos: React.FC = () => {
 
   // ── Nuevo egreso (flujo foto → datos → éxito) ─────────────────────
   const [step, setStep] = useState<Step>('datos')
+
+  // Pre-carga jsPDF al llegar a la pantalla de éxito: así cuando el usuario toca
+  // "Compartir", navigator.share() se llama de inmediato sin esperar el chunk
+  // (un await antes del share consume la ventana de activación de usuario en
+  // mobile y el share falla en silencio — ver BUGS.md "transient activation").
+  useEffect(() => {
+    if (step === 'exito') { import('jspdf').catch(() => {}) }
+  }, [step])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [foto, setFoto] = useState<string | null>(null)
