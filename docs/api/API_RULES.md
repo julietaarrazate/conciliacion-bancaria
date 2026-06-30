@@ -159,13 +159,20 @@ y los stores en `frontend/src/store`). Es UX, **no** seguridad: el backend siemp
 
 ---
 
-## 4. Paginación: `skip`/`offset` + `limit`, respuesta `{items|total}`
+## 4. Paginación: `offset` + `limit`, respuesta `{items, total}`
 
 Los endpoints de listado paginan con dos enteros y devuelven el total para que el frontend
-arme la paginación. Hay dos nombres de offset conviviendo en el código:
+arme la paginación.
 
-- `skip` (la mayoría: `extractos.py`, `historial.py`)
-- `offset` (módulo contabilidad: `ctb_plan.py`)
+**Estándar (obligatorio en código nuevo): `offset` + `limit`.** Es el término REST convencional y
+el que ya usa la mayoría del frontend. Hoy conviven dos nombres por motivos históricos:
+
+- ✅ `offset` — **el estándar** (contabilidad, impuestos, planillas, análisis, ARCA, etc.).
+- ⚠️ `skip` — legacy (`extractos.py`, `historial.py`, `caja.py`, `pagos.py`, `auditoria.py`,
+  `admin.py`, `ctb_libro.py`). **No se renombran en masa** (cada endpoint es internamente
+  consistente con su llamador del frontend, y un rename masivo sin tests end-to-end de paginación
+  es alto riesgo / bajo valor). Se migran a `offset` **oportunamente**, cuando ya se toca ese
+  endpoint por otra razón.
 
 Forma de respuesta estándar — un dict con `total` e `items`:
 
@@ -319,9 +326,9 @@ headers de seguridad y el header de latencia `X-Process-Time`; las requests por 
 
 ## Pendiente de revisar
 
-- **Nombre del offset inconsistente**: la mayoría de routers usan `skip`, pero el módulo
-  contabilidad (`ctb_plan.py`) usa `offset`. No es un bug, pero conviene saberlo al consumir la API
-  o unificar a futuro.
+- ~~**Nombre del offset inconsistente**~~ → **RESUELTO como convención** (ver §4): el estándar es
+  `offset`; los routers legacy con `skip` se migran oportunamente, no en masa (rename masivo sin
+  tests de paginación = alto riesgo / bajo valor). No es un bug.
 - **`limit=0` = sin límite** en `listar_movimientos` (`extractos.py`): difiere de otros listados
   donde `limit` siempre acota. Verificar el comportamiento esperado antes de copiar el patrón.
 - **`can_switch_org` con `org_id=None`**: el bloque `if can_switch_org(...) and org_id` exige

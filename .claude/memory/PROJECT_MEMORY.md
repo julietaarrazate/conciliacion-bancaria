@@ -40,7 +40,7 @@ Registro vivo. Cada doc de `/docs` tiene además su propia sección `## Pendient
 
 | # | Deuda | Riesgo | Estado |
 |---|---|---|---|
-| D-1 | **Paginación inconsistente**: conviven `skip` y `offset` como nombre del parámetro según el router | Bajo (confunde, no rompe) | Abierta — renombrar toca el frontend |
+| D-1 | **Paginación inconsistente**: conviven `skip` y `offset` según el router | Bajo (confunde, no rompe) | **Convención fijada en `offset`** ([API_RULES §4](../../docs/api/API_RULES.md)); los `skip` legacy se migran oportunamente, no en masa |
 | D-2 | **Design system**: `.btn-ghost` con dos definiciones y **dos paletas de verde** (app vs landing) | Bajo (cosmético) | Abierta — requiere decisión de diseño |
 | D-3 | **Doble fuente de DDL**: esquema en migraciones Alembic **y** en safety-nets de `main.py` | Medio (pueden divergir) | **Por diseño** (los safety-nets cubren si Render no corre Alembic); documentar al editar |
 | D-4 | **Cachés/cuotas en memoria del proceso** (cartera, sumas-saldo, balance, cuota del agente IA) se reinician en cada redeploy/cold start | Bajo | Aceptado (TTL corto); revisar si se necesita persistencia |

@@ -224,7 +224,7 @@ Test mínimo del endpoint nuevo:
 
 ## Pendiente de revisar
 
-- En el repo conviven dos nombres para el offset: `skip` (extractos, historial)
-  y `offset` (ctb_plan, cheques). No hay un estándar único documentado; este
-  playbook recomienda `limit`/`offset` para código nuevo, pero conviene
-  confirmar la convención canónica en [`../api/API_RULES.md`](../api/API_RULES.md).
+- **Convención de paginación fijada**: el estándar canónico es `limit`/`offset`
+  (ver [`../api/API_RULES.md §4`](../api/API_RULES.md)). Los routers legacy con `skip`
+  (extractos, historial, caja, pagos, auditoria, admin, ctb_libro) se migran
+  oportunamente, no en masa. **Código nuevo: siempre `offset`.**

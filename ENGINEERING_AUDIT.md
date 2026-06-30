@@ -58,7 +58,7 @@ Registro vivo en [`PROJECT_MEMORY.md §3`](.claude/memory/PROJECT_MEMORY.md). Re
 | Alta | Cold start free-tier (latencia) | Render paid |
 | Media | Sin tests de frontend | Vitest/Playwright en CI (smoke de flujos críticos) |
 | Media | Doble fuente de DDL (puede divergir) | Alembic como autoritativo; safety-nets documentados como red |
-| Baja | `skip`/`offset` inconsistente | Unificar el nombre del parámetro (coordinar frontend) |
+| Baja | `skip`/`offset` inconsistente | **Convención fijada en `offset`** (API_RULES §4); legacy se migra oportunamente, no en masa |
 | Baja | Design tokens duplicados (verde, `.btn-ghost`) | Unificar paleta y clases |
 | Baja | `mobile/` scaffold sin uso | Decidir: retomar o eliminar |
 | Baja | Cachés/cuotas en memoria | Evaluar persistencia si crece el tráfico |
@@ -92,9 +92,9 @@ Escala 1 (prototipo) – 5 (producto industrializado):
 |---|---|---|
 | Funcionalidad / producto | 4.5 | Amplio, en producción, con usuarios reales |
 | Arquitectura backend | 4 | Capas claras, multi-tenant, partida doble |
-| Calidad / tests | 3.5 | Backend fuerte; frontend sin tests |
+| Calidad / tests | 3.5 | Backend fuerte; frontend con primeros tests de utils (fecha/monto) + vitest en CI |
 | Documentación | 4.5 | Profunda y honesta tras Fase 1 |
-| Procesos / tooling | 4 | CI + plantillas + loops (Fases 2–3); falta branch protection y linter |
+| Procesos / tooling | 4 | CI con ruff + pytest + vitest + build, plantillas y loops; falta branch protection |
 | Operación / infra | 3 | Funciona, pero free-tier y bus factor 1 |
 | **Global** | **~4 / 5** | **Producto maduro; ingeniería recién profesionalizada — esta es la base para escalar** |
 
