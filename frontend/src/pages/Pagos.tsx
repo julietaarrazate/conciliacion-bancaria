@@ -315,7 +315,7 @@ export const Pagos: React.FC = () => {
         setVista('nuevo')
         setStep('datos')
       } catch {}
-      ;['destino', 'archivos', 'titulo', 'texto', 'ts'].forEach(k =>
+      ['destino', 'archivos', 'titulo', 'texto', 'ts'].forEach(k =>
         sessionStorage.removeItem(`compartido:${k}`))
     }
     const sp = new URLSearchParams(searchParams)

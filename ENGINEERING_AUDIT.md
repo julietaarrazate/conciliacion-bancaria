@@ -73,12 +73,12 @@ Registro vivo en [`PROJECT_MEMORY.md §3`](.claude/memory/PROJECT_MEMORY.md). Re
   performance con evidencia (no con auditorías estáticas, que en esta etapa fallaron varias veces).
 - **Tests de frontend** sobre los flujos críticos (conciliación, pagos, compartir).
 - **Resolver la doble fuente de DDL** y las inconsistencias de diseño para bajar carga cognitiva.
-- **Linter/formatter en CI** (ruff/eslint) para consistencia automática.
+- ~~**Linter en CI**~~ → **HECHO**: `ruff` (backend) y `eslint` (frontend) corren en CI.
 
 ## 6. Roadmap de ingeniería (no de producto)
 
 1. **Inmediato**: activar branch protection; Render paid; mirar Sentry/SLOW con datos reales.
-2. **Corto plazo**: tests de frontend (smoke), linter en CI, unificar paginación y design tokens.
+2. **Corto plazo**: tests de frontend (smoke de componentes), unificar design tokens.
 3. **Mediano plazo**: decidir fuente única de esquema; evaluar cachés persistentes; eliminar o
    cobertura de tests sobre el motor de conciliación con fixtures reales anonimizados.
 4. **Largo plazo**: si crece el equipo, CODEOWNERS por área + revisiones obligatorias; si crece el
