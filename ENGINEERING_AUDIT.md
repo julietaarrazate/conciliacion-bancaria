@@ -60,7 +60,7 @@ Registro vivo en [`PROJECT_MEMORY.md §3`](.claude/memory/PROJECT_MEMORY.md). Re
 | Media | Doble fuente de DDL (puede divergir) | Alembic como autoritativo; safety-nets documentados como red |
 | Baja | `skip`/`offset` inconsistente | **Convención fijada en `offset`** (API_RULES §4); legacy se migra oportunamente, no en masa |
 | Baja | Design tokens duplicados (verde, `.btn-ghost`) | Unificar paleta y clases |
-| Baja | `mobile/` scaffold sin uso | Decidir: retomar o eliminar |
+| — | ~~`mobile/` scaffold sin uso~~ | **RESUELTO**: eliminado (la app mobile es la PWA) |
 | Baja | Cachés/cuotas en memoria | Evaluar persistencia si crece el tráfico |
 
 > Áreas históricamente frágiles (regresiones repetidas): ver [`BUGS.md`](BUGS.md) —
@@ -80,7 +80,7 @@ Registro vivo en [`PROJECT_MEMORY.md §3`](.claude/memory/PROJECT_MEMORY.md). Re
 1. **Inmediato**: activar branch protection; Render paid; mirar Sentry/SLOW con datos reales.
 2. **Corto plazo**: tests de frontend (smoke), linter en CI, unificar paginación y design tokens.
 3. **Mediano plazo**: decidir fuente única de esquema; evaluar cachés persistentes; eliminar o
-   retomar `mobile/`; cobertura de tests sobre el motor de conciliación con fixtures reales anonimizados.
+   cobertura de tests sobre el motor de conciliación con fixtures reales anonimizados.
 4. **Largo plazo**: si crece el equipo, CODEOWNERS por área + revisiones obligatorias; si crece el
    tráfico, mover cachés/cuotas fuera del proceso (Redis) y revisar el plan de Neon.
 

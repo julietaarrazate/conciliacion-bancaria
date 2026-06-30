@@ -45,7 +45,7 @@ Registro vivo. Cada doc de `/docs` tiene además su propia sección `## Pendient
 | D-3 | **Doble fuente de DDL**: esquema en migraciones Alembic **y** en safety-nets de `main.py` | Medio (pueden divergir) | **Por diseño** (los safety-nets cubren si Render no corre Alembic); documentar al editar |
 | D-4 | **Cachés/cuotas en memoria del proceso** (cartera, sumas-saldo, balance, cuota del agente IA) se reinician en cada redeploy/cold start | Bajo | Aceptado (TTL corto); revisar si se necesita persistencia |
 | D-5 | **Free tier**: cold start de Render (~30s) y Neon que duerme | Alto (latencia percibida) | Mitigado (UptimeRobot + retry); se resuelve pasando Render a paid |
-| D-6 | **`mobile/`**: scaffold React Native sin uso real; la experiencia mobile es la PWA | Bajo | Decidir si se retoma o se elimina |
+| D-6 | ~~`mobile/` scaffold React Native sin uso~~ | Bajo | **RESUELTO**: eliminado (la app mobile es la PWA). Si se retoma nativo, se arranca limpio. |
 | D-7 | Sin tests de frontend (solo `tsc`/`build`); cobertura de UI manual | Medio | Abierta |
 
 > Áreas históricamente frágiles (ver [`BUGS.md`](../../BUGS.md)): fechas UTC-3, Decimal vs float,
