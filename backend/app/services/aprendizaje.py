@@ -144,7 +144,7 @@ def buscar_por_patrones(
                 nums_patron = set(patron.numeros_clave.split(','))
                 if nums_patron & nums_mov:
                     return mov
-                if nums_plan & nums_mov:
+                if numeros_plan & nums_mov:
                     return mov
 
     return None

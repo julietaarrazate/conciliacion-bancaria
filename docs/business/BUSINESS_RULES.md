@@ -192,10 +192,9 @@ Archivos: `backend/app/services/aprendizaje.py` + modelo
 - Integración en el motor: se llama **después** del scoring, solo si el estado no
   es `ok`/`no está`/`duplicado`/`acreditado` (`conciliacion.py:434-456`).
 
-> **Bug de código detectado**: en `aprendizaje.py:147` se referencia `nums_plan`
-> pero la variable local se llama `numeros_plan` (definida en
-> `aprendizaje.py:126`). Esa rama lanzaría `NameError` si se alcanzara.
-> Ver "Pendiente de revisar" (no se corrige acá — esto es solo documentación).
+> **Bug corregido (Fase 2)**: en `aprendizaje.py` la rama "match por números del
+> plan" referenciaba `nums_plan` (indefinido) en vez de `numeros_plan` → `NameError`
+> en runtime. Corregido + test de regresión en `tests/test_aprendizaje.py`.
 
 ---
 
@@ -353,10 +352,8 @@ Archivo: `backend/app/services/cierre_periodo.py`.
    (`conciliacion.py:118-119`) son inalcanzables porque `_bonus_fecha` corta en
    `dias_tolerancia` (`conciliacion.py:125-126`). El comportamiento real depende
    del `dias_tolerancia_fecha` de cada org.
-3. **Bug en `aprendizaje.py:147`**: se usa `nums_plan` (indefinido) en lugar de
-   `numeros_plan` (`aprendizaje.py:126`). La rama de "match por números del plan"
-   lanzaría `NameError` si se ejecutara. Es un bug de código a corregir aparte de
-   esta documentación.
+3. ~~**Bug en `aprendizaje.py:147`**: `nums_plan` indefinido~~ → **CORREGIDO** (Fase 2):
+   ahora usa `numeros_plan`, con test en `tests/test_aprendizaje.py`.
 4. **Conteo de bancos soportados**: discrepancia entre landing ("10+"),
    README (lista 9) y CLAUDE.md ("16 bancos"). Verificar contra
    `backend/app/services/excel_parser.py`.

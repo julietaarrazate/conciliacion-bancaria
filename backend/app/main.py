@@ -939,7 +939,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="2.0.0",
+    version="3.24.0",
     debug=settings.debug,
     lifespan=lifespan,
     default_response_class=JSONResponse,

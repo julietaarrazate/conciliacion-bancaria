@@ -61,6 +61,25 @@ Diseño: Linear-inspired · Inter font · dark mode (#0B0B0F)
 
 ---
 
+## Documentación técnica (`/docs`)
+
+Base arquitectónica detallada (creada en Fase 1). Este CLAUDE.md es la orientación rápida; `/docs`
+es la referencia profunda. **Consultá el doc correspondiente ANTES de tocar su área:**
+
+- Reglas de conciliación (scoring, dedup, estados) → `docs/business/BUSINESS_RULES.md`
+- Motor contable / asientos / partida doble → `docs/architecture/ACCOUNTING_ENGINE.md`
+- Convenciones de API (org_id, permisos, paginación, errores) → `docs/api/API_RULES.md`
+- Convenciones de BD (Decimal, soft delete, migraciones + safety nets) → `docs/database/DATABASE_RULES.md`
+- Seguridad / roles / permisos / multi-tenant → `docs/security/SECURITY_MODEL.md`
+- Diseño / tokens / componentes → `docs/ux/DESIGN_SYSTEM.md` y `docs/ux/UX_RULES.md`
+- Agregar módulo/endpoint/banco/parser/reporte/módulo-contable → `docs/playbooks/`
+- Mapa general y entidades → `docs/architecture/SYSTEM_MAP.md`, `DOMAIN_MODEL.md` · Índice: `docs/README.md`
+
+Cada doc tiene una sección `## Pendiente de revisar` con discrepancias código↔doc detectadas.
+Si cambiás el código de un área, actualizá su doc (la doc describe el código tal como está).
+
+---
+
 ## Estructura del repositorio
 
 ```

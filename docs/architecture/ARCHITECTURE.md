@@ -271,9 +271,9 @@ explícito por seguridad (no se cifran certificados sin key). Ver `CLAUDE.md`
 
 ## Pendiente de revisar
 
-- **Versión declarada**: `FastAPI(version="2.0.0")` en `main.py`, mientras que
-  `CLAUDE.md`/`CHANGELOG.md` hablan de **v3.24**. La versión de la app FastAPI no
-  se actualizó al ritmo del changelog de producto.
+- ~~**Versión declarada**: `FastAPI(version="2.0.0")` desalineada de v3.24~~ →
+  **CORREGIDO** (Fase 2): `version="3.24.0"` en `main.py`. Conviene atarla al
+  `CHANGELOG.md` a futuro para que no se vuelva a desfasar.
 - **Nombre del producto**: el `app_name` en `config.py` es
   "Conciliacion Bancaria — Julieta Arrazate"; `README.md` y la UI usan **"Cuadra"**.
   El branding "Cuadra" no está reflejado en el `app_name` del backend.
