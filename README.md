@@ -197,16 +197,35 @@ Todo se degrada solo si la variable no está seteada — ninguna rompe el sistem
 
 ## Documentación
 
+Este README es el **índice**. La documentación detallada vive en [`docs/`](docs/README.md).
+
+### 📚 Documentación técnica especializada — [`docs/`](docs/README.md)
+Arquitectura, modelo de dominio, motor contable, reglas de negocio, API, base de datos, seguridad,
+UX/diseño, decisiones (ADR) y **playbooks** para extender el sistema. Empezá por
+[`docs/README.md`](docs/README.md).
+
+### 🧭 Orientación y proceso
 | Archivo | Contenido |
 |---|---|
-| `CLAUDE.md` | Orientación del repo: arquitectura, motor, pendientes y reglas críticas |
-| `CHANGELOG.md` | Historial de versiones (v3.6 → v3.24) con detalle por feature/fix |
-| `BUGS.md` | Bitácora de bugs recurrentes (causa raíz + cómo evitarlos) |
-| `ROADMAP.md` | Roadmap por valor/esfuerzo |
-| `DEPLOY.md` | Guía de despliegue |
-| `BACKUP_Y_RECUPERACION.md` | Backups y recuperación |
-| `PROBAR_EN_CELULAR.md` | Cómo probar la PWA en el celular |
-| `COSTEO.md` | Costeo de infraestructura |
+| [`CLAUDE.md`](CLAUDE.md) | Orientación rápida del repo + puntero a `/docs` |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Cómo contribuir, setup, reglas de oro |
+| [`SECURITY.md`](SECURITY.md) | Política de seguridad y reporte de vulnerabilidades |
+| [`SUPPORT.md`](SUPPORT.md) | Canales de soporte |
+| [`.claude/`](.claude/) | Comandos, checklists, templates y [memoria de ingeniería](.claude/memory/PROJECT_MEMORY.md) para Claude Code |
+| [`CHANGELOG.md`](CHANGELOG.md) | Historial de versiones (v3.6 → v3.24) |
+| [`BUGS.md`](BUGS.md) | Bitácora de bugs recurrentes (causa raíz + cómo evitarlos) |
+| [`ROADMAP.md`](ROADMAP.md) | Roadmap por valor/esfuerzo |
+
+### 🚀 Operación
+| Archivo | Contenido |
+|---|---|
+| [`DEPLOY.md`](DEPLOY.md) | Guía de despliegue |
+| [`BACKUP_Y_RECUPERACION.md`](BACKUP_Y_RECUPERACION.md) | Backups y recuperación |
+| [`PROBAR_EN_CELULAR.md`](PROBAR_EN_CELULAR.md) | Cómo probar la PWA en el celular |
+| [`COSTEO.md`](COSTEO.md) | Costeo de infraestructura |
+
+> **CI**: cada push/PR corre tests del backend + type-check/build del frontend
+> ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ---
 

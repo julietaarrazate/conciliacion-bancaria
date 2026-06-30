@@ -66,3 +66,17 @@ logs/
 
 # Config local de Claude (puede contener tokens) — NO versionar
 .claude/settings.local.json
+
+# .claude/ — runtime de Claude Code (volátil, NO se commitea).
+# Los entregables de proceso SÍ se trackean: commands/, checklists/, templates/, memory/.
+.claude/settings.json
+.claude/worktrees/
+.claude/checkpoints/
+.claude/mailbox/
+.claude/routines/
+.claude/scheduled_tasks.json
+.claude/scheduled_tasks.lock
+.claude/agent-registry.json
+.claude/agent-memory-local/
+.claude/first-run
+.claude/assistant-daemon-state.json

@@ -1,0 +1,8 @@
+# Propietaria del código. Hoy el repo es de autora única; este archivo deja el
+# terreno listo para sumar reviewers por área cuando crezca el equipo.
+* @julietaarrazate
+
+# Ejemplos para el futuro (descomentar y ajustar al sumar gente):
+# /backend/app/services/motor_contable.py   @julietaarrazate   # lógica contable
+# /backend/app/services/conciliacion.py      @julietaarrazate   # motor de conciliación
+# /docs/                                      @julietaarrazate
