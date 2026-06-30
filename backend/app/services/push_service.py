@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 def send_push(endpoint: str, p256dh: str, auth_key: str, title: str, body: str, url: str = "/") -> bool:
     """Envía una web push notification. Retorna True si OK, False si falló."""
     try:
-        from pywebpush import webpush, WebPushException
+        from pywebpush import webpush
         from app.config import get_settings
         settings = get_settings()
         if not settings.vapid_private_key or not settings.vapid_public_key:

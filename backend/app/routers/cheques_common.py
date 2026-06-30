@@ -1,6 +1,5 @@
 """Helpers y schemas compartidos por los sub-módulos de cheques."""
 from datetime import date
-from decimal import Decimal
 from typing import Optional, List
 
 from pydantic import BaseModel, Field

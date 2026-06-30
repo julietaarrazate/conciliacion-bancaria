@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload, joinedload
-from sqlalchemy import desc, func
+from sqlalchemy import desc
 from typing import Optional
 from datetime import datetime
 import io
 
 from app.database import get_db
 from app.models.user import User
-from app.models.planilla import Planilla, PlanillaRow
-from app.models.extracto import ExtractoBancario, MovimientoBanco
+from app.models.planilla import Planilla
+from app.models.extracto import ExtractoBancario
 from app.models.cliente import Cliente
 from app.schemas.historial import (
     HistorialPlanillasResponse,

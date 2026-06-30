@@ -10,7 +10,7 @@ el motor consulta los patrones aprendidos para ese cliente/org.
 """
 
 import re
-from typing import Optional, List
+from typing import Optional
 from sqlalchemy.orm import Session
 from app.models.patron_aprendido import PatronAprendido
 from app.models.planilla import PlanillaRow

@@ -50,7 +50,6 @@ from app.models.revoked_token import RevokedToken  # noqa: F401
 from app.models.login_approval import LoginApproval  # noqa: F401
 from app.models.twofa_code import TwofaCode  # noqa: F401
 from app.models.arca import ArcaConfig, ComprobanteArca  # noqa: F401
-from app.models.organizacion import Organizacion
 
 # ── Decimal → float encoder para SQLAlchemy Numeric columns ──────────────────
 class _DecimalEncoder(json.JSONEncoder):
@@ -577,7 +576,7 @@ def _init_db():
     # 5. Seed Organizacion principal (id=1)
     try:
         from app.database import SessionLocal as SL
-        from app.models.organizacion import Organizacion as Org, CONFIG_DEFAULT
+        from app.models.organizacion import Organizacion as Org
         db = SL()
         org_principal = db.query(Org).filter(Org.id == 1).first()
         if not org_principal:
@@ -638,7 +637,6 @@ def _init_db():
         from app.models.planilla import Planilla as Plan
         from app.models.contabilidad import Asiento as A
         from app.services.motor_contable import registrar_extracto, registrar_planilla
-        from datetime import date as _date
         from app.services.tz import hoy_art
 
         db = SL()
@@ -729,7 +727,7 @@ def _init_db():
     # 7c. Cleanup único: eliminar planillas auto-recuperadas y clientes huérfanos
     try:
         from app.database import SessionLocal as SL
-        from app.models.planilla import Planilla as Pl, PlanillaRow as PR
+        from app.models.planilla import Planilla as Pl
         from app.models.cliente import Cliente as Cli
         from app.models.cheque import Cheque as Ch
         from app.models.egreso import Egreso as Eg

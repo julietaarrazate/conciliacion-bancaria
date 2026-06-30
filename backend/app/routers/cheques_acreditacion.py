@@ -108,7 +108,7 @@ def acreditar_masivo(
         cli = db.query(Cliente).filter(Cliente.id == c.cliente_id).first() if c.cliente_id else None
         if not cli or not cli.cuenta_contable_id:
             resultados.append({"id": cheque_id, "ok": False,
-                               "error": f"Cliente sin cuenta contable"})
+                               "error": "Cliente sin cuenta contable"})
             continue
 
         c.estado          = "acreditado"

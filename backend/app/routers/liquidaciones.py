@@ -124,7 +124,7 @@ def generar_liquidacion(
     Agrupa lo conciliado por cliente y calcula comisiones segun config de la org.
     """
     org_id = current_user.organizacion_id or 1
-    config = _get_org_config(db, org_id)
+    _get_org_config(db, org_id)
 
     try:
         periodo_inicio = date.fromisoformat(payload["periodo_inicio"])
@@ -388,7 +388,7 @@ def cerrar_periodo(
 
     # Generar liquidación automática
     liq_payload = {"periodo_inicio": str(periodo_inicio), "periodo_fin": str(periodo_fin),
-                   "notas": f"Cierre automático del período"}
+                   "notas": "Cierre automático del período"}
     liq_resp = generar_liquidacion(liq_payload, db, current_user)
 
     # Registrar cierre

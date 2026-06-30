@@ -15,7 +15,7 @@ from app.database import get_db
 from app.models.revoked_token import RevokedToken
 from app.models.user import User, RoleEnum
 from app.models.login_approval import LoginApproval
-from app.schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse
+from app.schemas.user import UserRegister, UserLogin, UserResponse
 from app.services.auth import register_user, authenticate_user, create_access_token
 from app.services.password_reset import (
     crear_token_y_enviar_email,

@@ -509,7 +509,6 @@ def download_planilla_conciliada(
 ):
     """Descarga xlsx con Hoja1=planilla+estado y Hoja2=movimientos acreditados"""
     import io
-    from datetime import datetime
     from app.models.extracto import MovimientoBanco
 
     p = _planilla_for_user(db, planilla_id, current_user, include_deleted=True)

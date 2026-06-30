@@ -10,7 +10,7 @@ si silenciar (caso: scheduler en dev) o propagar al usuario.
 
 import base64
 import logging
-from typing import List, Optional
+from typing import Optional
 
 import requests
 

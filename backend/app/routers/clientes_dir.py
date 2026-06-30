@@ -571,7 +571,7 @@ def borrar_cliente(cliente_id: int,
     y NULL al cliente_acreditado de los movimientos.
     """
     from app.models.cliente import Cliente
-    from app.models.planilla import Planilla, PlanillaRow
+    from app.models.planilla import Planilla
     from app.services.auditoria import registrar_log
 
     q = db.query(Cliente).filter(Cliente.id == cliente_id)
@@ -780,7 +780,6 @@ def fusionar_clientes(
     if cliente_id == target_id:
         raise HTTPException(400, "El cliente origen y destino deben ser distintos")
 
-    org_filter = {} if current_user.is_superadmin else {"organizacion_id": current_user.organizacion_id or 1}
 
     source = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     target = db.query(Cliente).filter(Cliente.id == target_id).first()

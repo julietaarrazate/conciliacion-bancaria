@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.middleware.auth import get_current_user, require_permission, can_switch_org
+from app.middleware.auth import require_permission, can_switch_org
 from app.models.user import User
 from app.models.extracto import MovimientoBanco
 from app.models.liquidacion_tarjeta import LiquidacionTarjeta, MarcaTarjeta
@@ -33,7 +33,6 @@ from app.services.decimal_utils import to_decimal as _D
 from app.services.motor_contable import registrar_liquidacion_tarjeta, reversar_asientos
 from app.services.tarjeta_parser import parse_liquidacion
 from app.services.auditoria import registrar_log
-from app.services.tz import hoy_art
 
 router = APIRouter(prefix="/tarjetas", tags=["tarjetas"])
 

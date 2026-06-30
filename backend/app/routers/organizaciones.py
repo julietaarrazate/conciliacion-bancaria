@@ -11,9 +11,8 @@ from app.models.organizacion import Organizacion, CONFIG_DEFAULT
 from app.models.user import User
 from app.models.planilla import Planilla
 from app.models.extracto import ExtractoBancario
-from app.models.cliente import Cliente
 from app.schemas.organizacion import OrganizacionCreate, OrganizacionUpdate, OrganizacionResponse
-from app.middleware.auth import get_current_user, require_superadmin
+from app.middleware.auth import require_superadmin
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_backup_completo
 from app.services.auth import get_password_hash
@@ -281,16 +280,15 @@ def panel_actividad(
     Muestra estado actual de cada org: ultima conciliacion, planillas del mes,
     tasa de exito, casos pendientes, usuarios activos.
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
     from sqlalchemy import func
-    from app.models.planilla import Planilla, PlanillaRow
+    from app.models.planilla import Planilla
     from app.models.user import User as U
-    from app.models.cliente import Cliente
 
     orgs = db.query(Organizacion).filter(Organizacion.activo == True).all()
     hoy = now_art()
     inicio_mes = hoy.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    hace_7_dias = hoy - timedelta(days=7)
+    hoy - timedelta(days=7)
 
     resultado = []
     for org in orgs:

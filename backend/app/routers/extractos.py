@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_, or_, text, func
+from sqlalchemy import desc, and_, or_, func
 from datetime import date, datetime
 from zoneinfo import ZoneInfo as _ZI
 from slowapi import Limiter
@@ -295,7 +295,7 @@ def delete_todos_extractos(db: Session = Depends(get_db),
     if not current_user.is_superadmin:
         raise HTTPException(403, "Solo superadmin puede ejecutar limpieza masiva")
 
-    from app.models.planilla import PlanillaRow, Planilla
+    from app.models.planilla import PlanillaRow
     oid = current_user.organizacion_id
 
     try:

@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from app.models.user import User, RoleEnum
+from app.models.user import User
 from app.models.revoked_token import RevokedToken
 from app.database import get_db
 from app.services.auth import verify_token

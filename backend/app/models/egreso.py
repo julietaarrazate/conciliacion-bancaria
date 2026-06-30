@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Boolean, Text, JSON, Numeric
 from sqlalchemy.orm import relationship
-from datetime import datetime, date
+from datetime import datetime
 from app.database import Base
 from app.services.tz import hoy_art
 

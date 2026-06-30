@@ -17,7 +17,6 @@ Nota: GET "" y POST "" (listar/crear cheque) están declarados directamente
 en cheques.py (el agregador), no en este módulo — ver comentario en la
 sección "CRUD principal" más abajo.
 """
-from datetime import date
 from decimal import Decimal
 from typing import Optional, List
 import io

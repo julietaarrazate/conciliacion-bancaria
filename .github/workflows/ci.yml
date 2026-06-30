@@ -10,7 +10,7 @@ on:
 
 jobs:
   backend:
-    name: Backend · pytest
+    name: Backend · ruff + pytest
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -23,7 +23,9 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Instalar dependencias
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt ruff
+      - name: Lint (ruff — reglas de bugs reales, ver ruff.toml)
+        run: ruff check .
       - name: Tests
         run: python -m pytest -q
 
@@ -44,6 +46,8 @@ jobs:
         run: npm ci
       - name: Type-check
         run: npx tsc --noEmit
+      - name: Tests (vitest)
+        run: npx vitest run
       - name: Build
         run: npm run build
         env:

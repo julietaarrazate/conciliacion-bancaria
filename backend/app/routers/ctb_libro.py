@@ -543,7 +543,6 @@ def reset_y_rebuild_asientos(
         .order_by(MovimientoBanco.um_lote, MovimientoBanco.id)
         .all()
     )
-    from itertools import groupby
     lotes = {}
     for m in um_movs:
         lote_key = m.um_lote or 0
@@ -799,7 +798,6 @@ def delete_asiento_manual(
     current_user: User = Depends(require_permission("admin_accounting")),
 ):
     from app.services.motor_contable import _next_numero_asiento
-    from datetime import date as _date
 
     oid = _org_id(current_user, org_id)
     asiento = db.query(Asiento).filter(Asiento.id == asiento_id, Asiento.organizacion_id == oid).first()

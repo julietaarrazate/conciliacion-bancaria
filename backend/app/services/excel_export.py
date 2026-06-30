@@ -211,7 +211,7 @@ def export_extracto_contador(extracto_nombre: str, movimientos: List[dict]) -> b
     TOTAL_FONT   = Font(bold=True, size=11)
     TOTAL_FILL   = PatternFill("solid", fgColor="E2EAF7")
     THIN_BLUE    = Side(style="thin", color="3483FA")
-    BORDER_BLUE  = Border(bottom=THIN_BLUE)
+    Border(bottom=THIN_BLUE)
 
     now_str = _now().strftime('%d/%m/%Y %H:%M')
 
@@ -462,7 +462,6 @@ def export_liquidacion_excel(liquidacion, revisiones) -> bytes:
     Hoja 2 — Detalle por cliente
     Hoja 3 — Log de revisiones manuales
     """
-    from datetime import datetime as dt
     ESTADO_FILL = {
         "borrador": PatternFill("solid", fgColor="FEF3C7"),
         "aprobada": PatternFill("solid", fgColor="D1FAE5"),
@@ -581,7 +580,7 @@ def export_eft_historial(ops: list, periodo: str = "") -> bytes:
     GREEN_HEADER = PatternFill("solid", fgColor="92D050")  # verde del original
     GREEN_FONT   = Font(bold=True, color="FFFFFF", size=11)
     MONEY_FMT    = '"$"#,##0.00'
-    now_str      = _now().strftime('%d/%m/%Y %H:%M')
+    _now().strftime('%d/%m/%Y %H:%M')
 
     wb = openpyxl.Workbook()
 

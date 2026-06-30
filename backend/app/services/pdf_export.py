@@ -11,12 +11,11 @@ con numeración de página.
 from __future__ import annotations
 
 import io
-from datetime import datetime
 from typing import Any, Optional
 from app.services.tz import now_art
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT, TA_RIGHT
+from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm

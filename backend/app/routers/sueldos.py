@@ -33,7 +33,6 @@ from app.models.sueldos import (
     ConfigSueldos,
     EscalaGanancias,
     LiquidacionSueldoPeriodo,
-    DetalleLiquidacionEmpleado,
 )
 from app.models.user import User
 from app.services.auditoria import registrar_log
