@@ -42,6 +42,7 @@ estado actual del sistema basándose exclusivamente en el código.
 - [DECISIONS.md](./adr/DECISIONS.md) — registro de decisiones arquitectónicas (ADR)
 
 ### Playbooks (`playbooks/`) — guías paso a paso
+- [LOOPS.md](./playbooks/LOOPS.md) — ciclos de trabajo permanentes (Feature/Bug/Refactor/… con ruteo por modelo)
 - [NEW_MODULE.md](./playbooks/NEW_MODULE.md) — agregar un módulo
 - [NEW_API_ENDPOINT.md](./playbooks/NEW_API_ENDPOINT.md) — agregar un endpoint
 - [NEW_BANK.md](./playbooks/NEW_BANK.md) — soportar un banco nuevo

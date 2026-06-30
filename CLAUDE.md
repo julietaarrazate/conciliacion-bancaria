@@ -309,6 +309,39 @@ con descripción por versión. Son en su mayoría referencias documentales, no s
 git — antes de un `git checkout vX.Y` correr `git tag` y confirmar que existe; tags reales hoy:
 `v2.1`, `v2.2`, `v3.14-stable`, `v3.22`, `dnda-software-2026-v1`.
 
+### Ciclo de trabajo obligatorio — Claude como Software Architect (Fase 3)
+
+Claude mantiene la calidad del sistema a medida que evoluciona. El rigor **se escala al tamaño y
+riesgo del cambio** (no gastar tokens de más: leer con cerebros baratos, razonar/implementar lo
+complejo con los caros).
+
+**Ruteo por costo de modelo** (clave para no gastar de más):
+- **Haiku** → leer, buscar, resumir impacto, tareas mecánicas (renombres, docs menores).
+- **Sonnet** → implementación estándar (CRUD, UI, endpoints, refactors, tipado).
+- **Opus** → lógica compleja/riesgosa (motor contable, parsers, migraciones, lógica financiera).
+- **Fable** → orquesta: diseño, descomposición, dependencias, conflictos de merge, auditoría.
+- Regla de oro: el orquestador **delega la lectura/análisis a Haiku** y reserva Opus para el
+  razonamiento difícil. Nunca leer 4 docs con un modelo caro si Haiku puede resumirlos.
+
+**Nivel del cambio → ceremonia:**
+- **Trivial** (fix de 1 línea, typo, refactor mecánico): reproducir/verificar → corregir → test →
+  doc si aplica. (Haiku/Sonnet)
+- **Estándar** (endpoint, CRUD, UI): leer SOLO el/los doc(s) del área tocada → analizar impacto →
+  implementar → tests → actualizar doc. (Sonnet)
+- **Complejo** (feature/módulo nuevo, cambio de esquema, lógica financiera): **ciclo completo** →
+  1) PRODUCT_BIBLE 2) SYSTEM_MAP 3) DOMAIN_MODEL 4) DECISIONS 5) analizar impacto 6) buscar
+  reutilización 7) diseñar 8) implementar 9) tests 10) docs 11) CHANGELOG 12) detectar deuda
+  técnica 13) proponer mejoras arquitectónicas. (Fable diseña · Opus implementa lo difícil)
+
+Los flujos detallados (entrada/salida/docs afectada por tipo de trabajo) están en
+**`docs/playbooks/LOOPS.md`** (Feature/Bug/Refactor/Documentation/Security/Database/AI/Release/
+Architecture/Product), operacionalizados en `.claude/commands/`.
+
+**Reglas de calidad permanentes** (innegociables en todo cambio):
+no duplicar lógica · no romper compatibilidad · mantener el aislamiento multi-tenant ·
+mantener la auditoría · mantener la trazabilidad contable (partida doble) · mantener/crear tests ·
+actualizar la documentación afectada. Verificación siempre: `pytest` + `tsc --noEmit` + `build`.
+
 ---
 
 ## Registro de Obra de Software (DNDA)
