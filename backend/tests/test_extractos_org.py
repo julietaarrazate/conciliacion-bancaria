@@ -251,3 +251,32 @@ class TestUploadExtractoOrg:
         # numerado desde 1 (per-extracto)
         ordenes = sorted(m.orden for m in db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id == eid2).all())
         assert ordenes == [1, 2], f"esperaba [1, 2], obtuve {ordenes}"
+
+    def test_listar_movimientos_default_acota_a_100(self, client, db):
+        """GET /extractos/{id}/movimientos sin `limit` acota a 100 (default), para que
+        un consumidor que olvide paginar no se lleve el extracto entero. `limit=0` es
+        el opt-in explícito de 'sin límite' (lo usa Movimientos.tsx para paginar en
+        cliente). Regresión: antes el default era 0 = sin límite."""
+        token = _token(db, "super@org.test")
+        # 105 movimientos únicos (titular/monto/saldo distintos → no colapsan por dedup)
+        filas = [(f"2026-06-{(i % 28) + 1:02d}", f"Cli {i}", 1000 + i, 100000 + i)
+                 for i in range(105)]
+        r = client.post("/extractos/upload?org_id=2",
+                        files={"file": ("grande.xlsx", _xlsx_bytes(filas),
+                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                        headers=_auth(token))
+        assert r.status_code == 200, r.text
+        eid = r.json()["id"]
+
+        # sin limit → default 100, pero total refleja los 105
+        d = client.get(f"/extractos/{eid}/movimientos", headers=_auth(token)).json()
+        assert d["total"] == 105
+        assert len(d["items"]) == 100, "el default debe acotar a 100"
+
+        # limit explícito
+        d10 = client.get(f"/extractos/{eid}/movimientos?limit=10", headers=_auth(token)).json()
+        assert len(d10["items"]) == 10
+
+        # limit=0 = escape hatch sin límite → trae los 105
+        d0 = client.get(f"/extractos/{eid}/movimientos?limit=0", headers=_auth(token)).json()
+        assert len(d0["items"]) == 105, "limit=0 debe traer todo (opt-in)"

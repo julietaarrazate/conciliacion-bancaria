@@ -501,12 +501,15 @@ def listar_movimientos(extracto_id: int,
                        titular: Optional[str] = Query(None), desde: Optional[date] = Query(None),
                        hasta: Optional[date] = Query(None), fecha_desde: Optional[date] = Query(None),
                        fecha_hasta: Optional[date] = Query(None), sin_acreditar: Optional[bool] = Query(None),
-                       skip: int = 0, limit: int = 0,
+                       skip: int = 0, limit: int = 100,
                        db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
     q = _build_mov_query(db, extracto_id, cliente, cuit, titular, desde, hasta, fecha_desde, fecha_hasta, sin_acreditar)
     total = q.count()
     q = q.order_by(MovimientoBanco.orden.desc().nulls_last(), MovimientoBanco.id.desc()).offset(skip)
+    # Default acotado (100). `limit=0` = sin límite: escape hatch explícito que usa
+    # Movimientos.tsx para traer todo el extracto y paginar client-side. Sin esto, un
+    # consumidor que olvide pasar limit se llevaría el extracto entero (riesgo de memoria).
     if limit > 0:
         q = q.limit(limit)
     items = q.all()

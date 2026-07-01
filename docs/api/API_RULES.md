@@ -329,10 +329,11 @@ headers de seguridad y el header de latencia `X-Process-Time`; las requests por 
 - ~~**Nombre del offset inconsistente**~~ → **RESUELTO como convención** (ver §4): el estándar es
   `offset`; los routers legacy con `skip` se migran oportunamente, no en masa (rename masivo sin
   tests de paginación = alto riesgo / bajo valor). No es un bug.
-- **`limit=0` = sin límite** en `listar_movimientos` (`extractos.py`): difiere de otros listados
-  donde `limit` siempre acota. Verificar el comportamiento esperado antes de copiar el patrón.
+- ~~**`limit=0` = sin límite** en `listar_movimientos` sin default acotado~~ → **RESUELTO
+  (jul 2026)**: el default ahora es `limit=100` (antes `0`), así un consumidor que olvide pasar
+  `limit` ya no se lleva el extracto entero. `limit=0` se conserva como **opt-in explícito** de
+  "sin límite" (lo usa `Movimientos.tsx` para paginar client-side). Documentado en el endpoint.
 - **`can_switch_org` con `org_id=None`**: el bloque `if can_switch_org(...) and org_id` exige
   `org_id` truthy, así que `org_id=0` se trataría como ausente. No hay org 0 en el sistema, pero
   es un borde a tener presente.
-- El playbook [../playbooks/NEW_API_ENDPOINT.md](../playbooks/NEW_API_ENDPOINT.md) referenciado
-  aquí puede no existir todavía al momento de leer esto.
+- El playbook [../playbooks/NEW_API_ENDPOINT.md](../playbooks/NEW_API_ENDPOINT.md) ya existe.
