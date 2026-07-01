@@ -5,7 +5,8 @@ convenciones seguir al tocar la DB y por qué existen los patrones defensivos.
 
 Fuentes de verdad (código):
 - `backend/alembic/versions/*.py` — 20 migraciones versionadas.
-- `backend/app/main.py` (`_run_alembic`, `_init_db`) — safety nets DDL idempotentes + seed.
+- `backend/app/db_safety.py` (`SAFETY_NET_DDL`) — safety nets DDL idempotentes (fuente única).
+- `backend/app/main.py` (`_run_alembic`, `_init_db`) — aplica los safety nets + seed en el arranque.
 - `backend/app/services/tz.py` — fechas de negocio en ART.
 - `backend/app/services/decimal_utils.py` — conversión a `Decimal`.
 - `BUGS.md` — bugs recurrentes ("Decimal vs float", "Fechas ART").
@@ -67,10 +68,14 @@ necesita **podrían no existir** y la app rompería al primer query.
 Por eso, después de Alembic, `main.py` ejecuta listas de DDL **idempotente** que garantizan el
 esquema mínimo aunque Alembic no haya corrido:
 
-- `_safety_cols` (en `_run_alembic`): `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`,
-  `CREATE TABLE IF NOT EXISTS`, `CREATE [UNIQUE] INDEX IF NOT EXISTS`. Cubren columnas de
+- `SAFETY_NET_DDL` (en `app/db_safety.py`, aplicada por `_run_alembic`):
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`,
+  `CREATE [UNIQUE] INDEX IF NOT EXISTS`, `DROP INDEX IF EXISTS`. Cubren columnas de
   comisión, `cuenta_contable_id`, `numero_asiento`, portadores/cheques, twofa, liquidaciones
   de tarjeta, índices de contabilidad, IVA, monotributo, IIBB, sueldos, ganancias y ARCA.
+  Está extraída a un módulo importable para poder testearla: `tests/test_db_safety.py`
+  **exige que toda sentencia sea idempotente** (falla en CI si aparece un `ADD COLUMN` sin
+  `IF NOT EXISTS`, que crashearía el 2º boot) y que no haya índices con nombre duplicado.
 - `indexes` (en `_init_db`): `CREATE INDEX IF NOT EXISTS` de performance.
 - `migrations` (en `_init_db`): `ALTER TABLE ... ADD COLUMN` sin `IF NOT EXISTS`, cada uno en
   su propio try/except que ignora "column already exists" (porque `IF NOT EXISTS` no está
@@ -79,7 +84,7 @@ esquema mínimo aunque Alembic no haya corrido:
   subcuentas, normalizar `mes`, etc.).
 
 **Regla al agregar una columna/tabla/índice nuevo**: escribir la migración Alembic *y* agregar
-la sentencia idempotente equivalente al safety net de `main.py`. Las dos rutas deben converger
+la sentencia idempotente equivalente a `SAFETY_NET_DDL` (`app/db_safety.py`). Las dos rutas deben converger
 al mismo esquema. El seed contable (`seed_contabilidad_org`) corre también en cada boot, por
 organización, e igualmente es idempotente (ver [ACCOUNTING_ENGINE](../architecture/ACCOUNTING_ENGINE.md)).
 

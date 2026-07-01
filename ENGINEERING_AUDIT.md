@@ -57,8 +57,8 @@ Registro vivo en [`PROJECT_MEMORY.md §3`](.claude/memory/PROJECT_MEMORY.md). Re
 | Prioridad | Deuda | Acción sugerida |
 |---|---|---|
 | Alta | Cold start free-tier (latencia) | Render paid |
-| Media | Sin tests de frontend | Vitest/Playwright en CI (smoke de flujos críticos) |
-| Media | Doble fuente de DDL (puede divergir) | Alembic como autoritativo; safety-nets documentados como red |
+| Baja | Cobertura de frontend acotada (utils + smoke de componentes; sin E2E) | Playwright para flujos críticos (login, carga de extracto, conciliación) |
+| Media | Doble fuente de DDL (puede divergir) | Alembic autoritativo; safety-nets en `db_safety.py` con guard de idempotencia en CI |
 | Baja | `skip`/`offset` inconsistente | **Convención fijada en `offset`** (API_RULES §4); legacy se migra oportunamente, no en masa |
 | Baja | Design tokens: `.btn-ghost` duplicado (verde de la app ya unificado) | Unificar `.btn-ghost` global vs landing |
 | — | ~~`mobile/` scaffold sin uso~~ | **RESUELTO**: eliminado (la app mobile es la PWA) |

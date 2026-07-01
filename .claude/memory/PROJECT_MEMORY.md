@@ -42,11 +42,11 @@ Registro vivo. Cada doc de `/docs` tiene además su propia sección `## Pendient
 |---|---|---|---|
 | D-1 | **Paginación inconsistente**: conviven `skip` y `offset` según el router | Bajo (confunde, no rompe) | **Convención fijada en `offset`** ([API_RULES §4](../../docs/api/API_RULES.md)); los `skip` legacy se migran oportunamente, no en masa |
 | D-2 | **Design system**: `.btn-ghost` con dos definiciones y dos paletas de verde | Bajo (cosmético) | **Verde de la app unificado** en un token mode-aware (`--ml-green`: claro `#16A34A` / oscuro `#4ADE80`); quedan pendientes solo la colisión `.btn-ghost` y el verde propio de la landing |
-| D-3 | **Doble fuente de DDL**: esquema en migraciones Alembic **y** en safety-nets de `main.py` | Medio (pueden divergir) | **Por diseño** (los safety-nets cubren si Render no corre Alembic); documentar al editar |
+| D-3 | **Doble fuente de DDL**: esquema en migraciones Alembic **y** en safety-nets (`app/db_safety.py`) | Medio (pueden divergir) | **Por diseño** (los safety-nets cubren si Render no corre Alembic). Extraídos a `db_safety.py` (importable) + guard en CI (`test_db_safety.py`) que exige que **toda** sentencia sea idempotente y sin índices duplicados; documentar al editar |
 | D-4 | **Cachés/cuotas en memoria del proceso** (cartera, sumas-saldo, balance, cuota del agente IA) se reinician en cada redeploy/cold start | Bajo | Aceptado (TTL corto); revisar si se necesita persistencia |
 | D-5 | **Free tier**: cold start de Render (~30s) y Neon que duerme | Alto (latencia percibida) | Mitigado (UptimeRobot + retry); se resuelve pasando Render a paid |
 | D-6 | ~~`mobile/` scaffold React Native sin uso~~ | Bajo | **RESUELTO**: eliminado (la app mobile es la PWA). Si se retoma nativo, se arranca limpio. |
-| D-7 | Sin tests de frontend (solo `tsc`/`build`); cobertura de UI manual | Medio | Abierta |
+| D-7 | Cobertura de frontend acotada (utilidades + smoke de componentes; sin E2E) | Bajo-Medio | **Parcial**: vitest + Testing Library (jsdom) con smoke tests de componentes (`CuadraLogo`, `Skeleton`, `DonutChart`) + tests de utilidades (`monto`, `fecha`). Falta E2E de flujos críticos (Playwright) |
 
 > Áreas históricamente frágiles (ver [`BUGS.md`](../../BUGS.md)): fechas UTC-3, Decimal vs float,
 > compartir por WhatsApp (mobile), detección de banco, light mode, parseo de montos argentinos,
