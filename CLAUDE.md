@@ -174,7 +174,14 @@ multi-tenant funcionando en producción; módulos operativos completos (Cheques,
 Liquidaciones, Contabilidad con cuentas corrientes); 4 módulos de liquidación de impuestos
 (IVA, Monotributo, Ingresos Brutos, Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
 ARCA (facturación electrónica WSFEv1) construido pero desactivado a propósito (ver "Pendiente para
-próximas sesiones" abajo). 440 tests pasando.
+próximas sesiones" abajo). **465 tests backend + 25 tests frontend** pasando.
+
+Profesionalización de ingeniería (jun 2026): base de documentación en `/docs` (arquitectura,
+negocio, API, BD, seguridad, UX, playbooks, ADR — cada doc con su "Pendiente de revisar"),
+`.claude/` (comandos + checklists + templates + memoria de deuda técnica), CI (ruff + pytest +
+eslint + tsc + vitest + build), y `ENGINEERING_AUDIT.md`. Verde de marca unificado en un token
+mode-aware (`--ml-green`: claro `#16A34A` / oscuro `#4ADE80`). Tests de frontend con Testing
+Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) en CI.
 
 ---
 

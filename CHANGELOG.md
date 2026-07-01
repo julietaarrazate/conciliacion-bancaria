@@ -5,6 +5,34 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.25 — Profesionalización de ingeniería + hardening (jun–jul 2026)
+
+Sesión de calidad (no features de negocio): consolidar el sistema como producto mantenible.
+
+- **Base de documentación `/docs`** (Fase 1): 21 docs + índice `README.md` cubriendo arquitectura,
+  negocio, API, BD, seguridad, UX, playbooks (agregar módulo/endpoint/banco/parser/reporte) y ADR.
+  Cada doc documenta el código tal como está y anota discrepancias en su sección "Pendiente de revisar".
+- **Andamiaje `.claude/` + `.github/`** (Fase 2): comandos (`/analyze`, `/bug`, `/feature`,
+  `/refactor`, `/review`, `/release`, `/deploy`, `/docs`), checklists, templates, memoria de deuda
+  técnica (`PROJECT_MEMORY.md`); CI (backend ruff+pytest, frontend eslint+tsc+vitest+build),
+  Dependabot, CODEOWNERS, plantillas de PR/issue, `SECURITY`/`CONTRIBUTING`/`SUPPORT`.
+- **Ciclo de trabajo como Software Architect** (Fase 3): CLAUDE.md formaliza el ciclo obligatorio
+  escalado por tamaño de cambio + ruteo por costo de modelo; `ENGINEERING_AUDIT.md` (madurez ~4/5).
+- **Fixes de producción**: extractos al org correcto + aislamiento multi-tenant, re-subida tras
+  borrar (índice único excluye soft-deleted, migración 020), número de orden por extracto/org,
+  Decimal vs float en re-upload, selector de bancos, compartir foto de OP por WhatsApp.
+- **Performance**: N+1 en historial/contabilidad (selectinload), exports paginados, cachés TTL,
+  lazy-load Sentry, logging de requests lentas (`SLOW`, header `X-Process-Time`).
+- **Deuda técnica saldada**: ruff, eslint (config sobria + react-hooks), `parseMonto`/`fecha`
+  consolidados con tests, convención de paginación fijada en `offset`, `mobile/` eliminado.
+- **Verde de marca mode-aware**: un token `--ml-green` (claro `#16A34A` / oscuro `#4ADE80` "Matrix").
+- **Tests de frontend** (Testing Library + jsdom): smoke de `CuadraLogo`/`Skeleton`/`DonutChart`.
+- **Guard de idempotencia del safety-net DDL**: lista extraída a `app/db_safety.py` + test que
+  exige `IF NOT EXISTS`/`IF EXISTS` en toda sentencia (evita crash del 2º boot en Render).
+- Estado de tests: **465 backend + 25 frontend**.
+
+---
+
 ## Features implementadas (estado actual — v3.12.1)
 
 - Conciliación bancaria multi-extracto con motor de scoring
