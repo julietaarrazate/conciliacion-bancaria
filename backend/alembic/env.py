@@ -9,19 +9,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.database import Base, DATABASE_URL
 
-# Importar todos los modelos para que Base.metadata los conozca
-from app.models.user import User
-from app.models.organizacion import Organizacion
-from app.models.cliente import Cliente
-from app.models.extracto import ExtractoBancario, MovimientoBanco
-from app.models.planilla import Planilla, PlanillaRow
-from app.models.auditoria import AuditoriaLog
-from app.models.patron_aprendido import PatronAprendido
-from app.models.liquidacion import Liquidacion, LiquidacionDetalle, CierrePeriodo
-from app.models.caja import ArqueoDiario, OrdenDePago
-from app.models.cheque import Cheque
-from app.models.pago import Pago, Gasto
-from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
+# Importar TODOS los módulos de modelo para poblar Base.metadata (autogenerate y
+# metadata completa). Importar el módulo basta para registrar sus tablas; hacerlo por
+# módulo (no por clase) evita que un renombre/unificación de clases rompa este import
+# — que corre en CADA comando de alembic, incl. `upgrade`. Ojo: hasta jul 2026 esto
+# importaba clases inexistentes (OrdenDePago/Pago/Gasto, unificadas en Egreso), lo que
+# hacía fallar `alembic upgrade` en silencio (el esquema lo sostenían los safety-nets).
+from app.models import (  # noqa: F401
+    organizacion, user, cliente, extracto, planilla, auditoria, patron_aprendido,
+    liquidacion, caja, egreso, contabilidad, cheque, portador, liquidacion_tarjeta,
+    proyeccion_iva, password_reset, arca, iibb, monotributo, sueldos,
+    login_approval, twofa_code, push_subscription, revoked_token,
+)
 
 config = context.config
 

@@ -47,6 +47,7 @@ Registro vivo. Cada doc de `/docs` tiene además su propia sección `## Pendient
 | D-5 | **Free tier**: cold start de Render (~30s) y Neon que duerme | Alto (latencia percibida) | Mitigado (UptimeRobot + retry); se resuelve pasando Render a paid |
 | D-6 | ~~`mobile/` scaffold React Native sin uso~~ | Bajo | **RESUELTO**: eliminado (la app mobile es la PWA). Si se retoma nativo, se arranca limpio. |
 | D-7 | Cobertura de frontend acotada (utilidades + smoke de componentes; sin E2E) | Bajo-Medio | **Parcial**: vitest + Testing Library (jsdom) con smoke tests de componentes (`CuadraLogo`, `Skeleton`, `DonutChart`) + tests de utilidades (`monto`, `fecha`). Falta E2E de flujos críticos (Playwright) |
+| D-8 | **Cadena Alembic desincronizada del esquema real** (jul 2026): `env.py` importaba clases inexistentes → `upgrade`/`stamp` fallaban → Alembic no corría en prod (el esquema lo sostienen `create_all` + safety-nets). `001` es stamp baseline (no construye desde cero); 007–009 referencian tablas ya dropeadas | Medio | **env.py corregido** (importa módulos, no clases). Camino real (`create_all`+`stamp head`) verificado OK. **Decisión pendiente**: re-baselinear la cadena vs. mantener `create_all`+safety-nets como fuente de verdad y que Alembic solo selle. No tocar migraciones ya aplicadas |
 
 > Áreas históricamente frágiles (ver [`BUGS.md`](../../BUGS.md)): fechas UTC-3, Decimal vs float,
 > compartir por WhatsApp (mobile), detección de banco, light mode, parseo de montos argentinos,
