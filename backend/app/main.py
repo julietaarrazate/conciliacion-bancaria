@@ -90,12 +90,21 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 def _run_alembic():
-    """Aplica migraciones pendientes. Si la DB nunca tuvo Alembic, la sella como baseline."""
+    """Sella la DB en la revisión head de Alembic (no corre `upgrade`).
+
+    El esquema lo mantienen `Base.metadata.create_all()` + los safety-nets DDL
+    idempotentes (`app/db_safety.py`), que ya construyen y mantienen todo. La cadena de
+    migraciones está desincronizada del esquema real (`001` es un stamp baseline; 007–009
+    referencian tablas viejas ya dropeadas — ver DATABASE_RULES / PROJECT_MEMORY D-8), así
+    que correr `upgrade` intentaría migraciones derivadas contra un esquema que ya está al
+    día y fallaría. Por eso solo SELLAMOS head: mantiene `alembic_version` reflejando la
+    realidad (para tooling: history/autogenerate/stamp) sin ejecutar la cadena.
+    `command.stamp(head)` crea la tabla `alembic_version` si no existe y es idempotente.
+    """
     try:
         import os
         from alembic import command
         from alembic.config import Config
-        from sqlalchemy import text
 
         # Path absoluto: backend/alembic.ini (relativo a este archivo: backend/app/main.py)
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -103,19 +112,8 @@ def _run_alembic():
         logger.debug("alembic config: %s", alembic_ini)
 
         alembic_cfg = Config(alembic_ini)
-
-        with engine.connect() as conn:
-            result = conn.execute(text(
-                "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name='alembic_version')"
-            ))
-            ya_tiene_alembic = result.scalar()
-
-        if not ya_tiene_alembic:
-            command.stamp(alembic_cfg, "head")
-            logger.info("DB sellada como baseline v001")
-        else:
-            command.upgrade(alembic_cfg, "head")
-            logger.info("migraciones Alembic aplicadas")
+        command.stamp(alembic_cfg, "head")
+        logger.info("Alembic sellado en head")
     except Exception as ex:
         logger.warning("Alembic error: %s", ex)
 

@@ -59,11 +59,14 @@ aplica un **safety net DDL idempotente** en cada arranque.
 
 ### Por qué existen los safety nets
 
-`_run_alembic()` (`main.py`) intenta correr `command.upgrade(..., "head")` al iniciar, pero
-**está envuelto en try/except y solo loguea un warning si falla**. En Render (free tier, cold
-starts, deploys que pueden interrumpirse) no hay garantía de que Alembic corra hasta el final.
-Si Alembic falla o la DB queda a medias, las columnas/tablas/índices que el código nuevo
-necesita **podrían no existir** y la app rompería al primer query.
+El esquema lo construyen y mantienen `Base.metadata.create_all()` + los safety-nets DDL; la
+cadena de migraciones está desincronizada (ver "Pendiente de revisar"). Por eso `_run_alembic()`
+(`main.py`) **solo hace `command.stamp(head)`** — sella `alembic_version` en head para reflejar la
+realidad y dejar Alembic usable como tooling (history/autogenerate), sin correr `upgrade` (que
+intentaría migraciones derivadas contra un esquema que ya está al día y fallaría). Todo está
+envuelto en try/except y solo loguea un warning si falla. En Render (free tier, cold starts,
+deploys que pueden interrumpirse) tampoco hay garantía de que Alembic corriera hasta el final:
+si faltara alguna columna/tabla/índice, la app rompería al primer query.
 
 Por eso, después de Alembic, `main.py` ejecuta listas de DDL **idempotente** que garantizan el
 esquema mínimo aunque Alembic no haya corrido:
@@ -91,7 +94,7 @@ organización, e igualmente es idempotente (ver [ACCOUNTING_ENGINE](../architect
 ### Orden de arranque (`_init_db`)
 
 1. `Base.metadata.create_all()` — crea tablas faltantes.
-2. `_run_alembic()` — Alembic upgrade (o `stamp head` si la DB nunca tuvo Alembic) + safety
+2. `_run_alembic()` — `stamp head` (sella la versión; no corre `upgrade`) + safety
    net de columnas/tablas.
 3. Índices de performance idempotentes.
 4. Migraciones de columnas legacy (try/except).
@@ -224,9 +227,10 @@ Ver BUGS.md → "Fechas en zona horaria Argentina (UTC-3)".
      esquema moderno (`create_all`) un `upgrade` incremental desde una revisión vieja falla en 007
      porque esas tablas ya no existen. En la DB de producción histórica no falló porque esas tablas
      **sí existían** cuando 007 corrió.
-  → **Decisión pendiente** (ver PROJECT_MEMORY D-3): re-baselinear la cadena (colapsar el esquema
-  actual en un baseline nuevo) o mantener `create_all` + safety-nets como fuente de verdad y que
-  Alembic solo selle. No tocar migraciones históricas ya aplicadas.
+  → **Decisión (jul 2026)**: mantener `create_all` + safety-nets como fuente de verdad y que
+  Alembic **solo selle** (`_run_alembic` hace `stamp head`, no `upgrade`). No se tocan migraciones
+  históricas ya aplicadas. Un re-baseline (colapsar el esquema actual en un baseline nuevo) queda
+  como mejora futura opcional, para una sesión dedicada.
 - **Doble fuente de DDL**: el esquema vive a la vez en migraciones Alembic y en los safety nets
   (`app/db_safety.py`). Son intencionalmente redundantes (resiliencia ante fallos de Alembic en
   Render — que de hecho no corría, ver arriba). El guard `tests/test_db_safety.py` verifica que
