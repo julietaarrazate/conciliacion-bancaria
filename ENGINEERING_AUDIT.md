@@ -46,8 +46,9 @@ templates y memoria de ingeniería (`.claude/`), y un ciclo de trabajo + loops f
   costo marginal de cada feature sube.
 - **Estado en memoria del proceso**: cachés (cartera, sumas-saldo, balance) y cuotas del asistente IA
   se reinician en cada redeploy/cold start.
-- **Inconsistencias menores** que erosionan mantenibilidad: `skip`/`offset`, dos paletas de verde y
-  `.btn-ghost` duplicado, doble fuente de DDL (Alembic + safety-nets).
+- **Inconsistencias menores** que erosionan mantenibilidad: `skip`/`offset`, `.btn-ghost` duplicado,
+  doble fuente de DDL (Alembic + safety-nets). El verde de la app ya se unificó en un token
+  mode-aware (`--ml-green`).
 
 ## 4. Deuda técnica
 
@@ -59,7 +60,7 @@ Registro vivo en [`PROJECT_MEMORY.md §3`](.claude/memory/PROJECT_MEMORY.md). Re
 | Media | Sin tests de frontend | Vitest/Playwright en CI (smoke de flujos críticos) |
 | Media | Doble fuente de DDL (puede divergir) | Alembic como autoritativo; safety-nets documentados como red |
 | Baja | `skip`/`offset` inconsistente | **Convención fijada en `offset`** (API_RULES §4); legacy se migra oportunamente, no en masa |
-| Baja | Design tokens duplicados (verde, `.btn-ghost`) | Unificar paleta y clases |
+| Baja | Design tokens: `.btn-ghost` duplicado (verde de la app ya unificado) | Unificar `.btn-ghost` global vs landing |
 | — | ~~`mobile/` scaffold sin uso~~ | **RESUELTO**: eliminado (la app mobile es la PWA) |
 | Baja | Cachés/cuotas en memoria | Evaluar persistencia si crece el tráfico |
 

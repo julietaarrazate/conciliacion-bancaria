@@ -38,15 +38,23 @@ input, textarea, [contenteditable="true"],
 
 .dark { color-scheme: dark; }
 
+/* ─── Verde de marca (mode-aware) ────────────────────────
+   Un solo token de verde que se adapta al fondo: legible en claro
+   (#16A34A) y brillante "Matrix" en oscuro (#4ADE80). Lo consume Tailwind
+   como `ml-green` y `status-ok` (ver tailwind.config.js). Formato canales
+   "R G B" para soportar opacidad (bg-ml-green/20). */
+:root { --ml-green: 22 163 74; }   /* #16A34A — claro */
+.dark { --ml-green: 74 222 128; }  /* #4ADE80 — oscuro */
+
 /* ─── Titulo app ─────────────────────────────────────── */
 .app-title { color: #18181B; }
-.dark .app-title { color: #22C55E !important; }
+.dark .app-title { color: rgb(var(--ml-green)) !important; }
 
 /* ─── Scrollbar ─────────────────────────────────────── */
 .dark ::-webkit-scrollbar { width: 4px; height: 4px; }
 .dark ::-webkit-scrollbar-track { background: transparent; }
 .dark ::-webkit-scrollbar-thumb { background: #1E1E26; border-radius: 2px; }
-.dark ::-webkit-scrollbar-thumb:hover { background: #22C55E33; }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgb(var(--ml-green) / 0.2); }
 
 /* ─── Componentes ────────────────────────────────────── */
 @layer components {

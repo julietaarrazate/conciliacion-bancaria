@@ -41,7 +41,7 @@ Registro vivo. Cada doc de `/docs` tiene además su propia sección `## Pendient
 | # | Deuda | Riesgo | Estado |
 |---|---|---|---|
 | D-1 | **Paginación inconsistente**: conviven `skip` y `offset` según el router | Bajo (confunde, no rompe) | **Convención fijada en `offset`** ([API_RULES §4](../../docs/api/API_RULES.md)); los `skip` legacy se migran oportunamente, no en masa |
-| D-2 | **Design system**: `.btn-ghost` con dos definiciones y **dos paletas de verde** (app vs landing) | Bajo (cosmético) | Abierta — requiere decisión de diseño |
+| D-2 | **Design system**: `.btn-ghost` con dos definiciones y dos paletas de verde | Bajo (cosmético) | **Verde de la app unificado** en un token mode-aware (`--ml-green`: claro `#16A34A` / oscuro `#4ADE80`); quedan pendientes solo la colisión `.btn-ghost` y el verde propio de la landing |
 | D-3 | **Doble fuente de DDL**: esquema en migraciones Alembic **y** en safety-nets de `main.py` | Medio (pueden divergir) | **Por diseño** (los safety-nets cubren si Render no corre Alembic); documentar al editar |
 | D-4 | **Cachés/cuotas en memoria del proceso** (cartera, sumas-saldo, balance, cuota del agente IA) se reinician en cada redeploy/cold start | Bajo | Aceptado (TTL corto); revisar si se necesita persistencia |
 | D-5 | **Free tier**: cold start de Render (~30s) y Neon que duerme | Alto (latencia percibida) | Mitigado (UptimeRobot + retry); se resuelve pasando Render a paid |

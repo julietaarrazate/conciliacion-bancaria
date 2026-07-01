@@ -2,6 +2,6 @@
   <rect width="128" height="128" rx="28" fill="#16161C"/>
   <!-- Arco centrado en (64,64) radio 36 — antes center=(59,64) -->
   <path d="M89 38 A36 36 0 1 0 89 90" stroke="#2A2A35" stroke-width="14" stroke-linecap="round" fill="none"/>
-  <path d="M89 38 A36 36 0 1 0 89 90" stroke="#22C55E" stroke-width="14" stroke-linecap="round" fill="none" stroke-dasharray="168" stroke-dashoffset="43"/>
+  <path d="M89 38 A36 36 0 1 0 89 90" stroke="#4ADE80" stroke-width="14" stroke-linecap="round" fill="none" stroke-dasharray="168" stroke-dashoffset="43"/>
   <circle cx="89" cy="90" r="8" fill="#5E6AD2"/>
 </svg>

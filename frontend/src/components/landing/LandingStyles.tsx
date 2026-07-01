@@ -37,7 +37,7 @@ export const LandingStyles: React.FC = () => (
       --text-2:       #D4D4D8;
       --muted:        #71717A;
       --muted-2:      #52525B;
-      --accent:       #22C55E;
+      --accent:       #4ADE80;
       --accent-2:     #4ADE80;
       --accent-soft:  #22C55E12;
       --accent-line:  #22C55E30;
