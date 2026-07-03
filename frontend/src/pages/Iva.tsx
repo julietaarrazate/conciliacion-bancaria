@@ -3,7 +3,15 @@ import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
-import type { IvaConfigCuenta, IvaProyeccionPreview, ProyeccionIva } from '@/types'
+import { FileUpload } from '@/components/FileUpload'
+import type {
+  IvaConfigCuenta,
+  IvaProyeccionPreview,
+  ProyeccionIva,
+  ComprobanteIva,
+  LiquidacionIva,
+  LiquidacionIvaCalculoPayload,
+} from '@/types'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const fmt = (n: number) =>
@@ -11,6 +19,10 @@ const fmt = (n: number) =>
 
 const fmtDate = (d?: string | null) =>
   d ? new Date(d).toLocaleString('es-AR') : '—'
+
+/** Fecha corta (sin hora) para columnas de tabla, ej. fecha de emisión de un comprobante. */
+const fmtFecha = (d?: string | null) =>
+  d ? new Date(d).toLocaleDateString('es-AR') : '—'
 
 /** Período actual YYYY-MM en hora local (NO usar toISOString — da el mes de UTC). */
 function periodoActual(): string {
@@ -40,7 +52,7 @@ export const Iva: React.FC = () => {
   const canManageFinance = hasPermission('manage_finance')
   const canAdminAccounting = hasPermission('admin_accounting')
 
-  const [tab, setTab] = useState<'proyeccion' | 'historial' | 'config'>('proyeccion')
+  const [tab, setTab] = useState<'proyeccion' | 'comprobantes' | 'liquidacion' | 'historial' | 'config'>('proyeccion')
   const [msg, setMsg] = useState<{ type: 'error' | 'ok'; text: string } | null>(null)
 
   // ── Tab Proyección ──────────────────────────────────────────────────────
@@ -120,6 +132,188 @@ export const Iva: React.FC = () => {
 
   const saldo = preview?.saldo ?? 0
   const detalle = preview?.detalle ?? []
+
+  // ── Tab Comprobantes ─────────────────────────────────────────────────────
+  const [periodoComp, setPeriodoComp] = useState(periodoActual())
+  const [direccionVista, setDireccionVista] = useState<'emitido' | 'recibido'>('emitido')
+  const [comprobantes, setComprobantes] = useState<ComprobanteIva[]>([])
+  const [totalesComp, setTotalesComp] = useState<{ debito_incluido: number; credito_incluido: number }>({
+    debito_incluido: 0, credito_incluido: 0,
+  })
+  const [comprobantesLoading, setComprobantesLoading] = useState(false)
+  const [importando, setImportando] = useState<'emitido' | 'recibido' | null>(null)
+  const [togglingId, setTogglingId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  const cargarComprobantes = useCallback(async () => {
+    if (!periodoComp) return
+    setComprobantesLoading(true)
+    try {
+      const data = await apiClient.getComprobantesIva({ periodo: periodoComp, orgId: activeOrgId || undefined })
+      setComprobantes(data.items || [])
+      setTotalesComp(data.totales || { debito_incluido: 0, credito_incluido: 0 })
+    } catch {
+      setComprobantes([])
+      setTotalesComp({ debito_incluido: 0, credito_incluido: 0 })
+    } finally {
+      setComprobantesLoading(false)
+    }
+  }, [periodoComp, activeOrgId])
+
+  useEffect(() => { if (tab === 'comprobantes') cargarComprobantes() }, [tab, cargarComprobantes])
+
+  const importarComprobantes = async (direccion: 'emitido' | 'recibido', file: File) => {
+    setImportando(direccion)
+    setMsg(null)
+    try {
+      const res = await apiClient.importarComprobantesIva(file, direccion, periodoComp, activeOrgId || undefined)
+      setMsg({
+        type: 'ok',
+        text: `${direccion === 'emitido' ? 'Ventas' : 'Compras'}: ${res.importados} importados · ${res.duplicados} duplicados · ${res.fuera_de_periodo} fuera del período.`,
+      })
+      await cargarComprobantes()
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail
+      setMsg({ type: 'error', text: typeof detail === 'string' ? detail : 'No se pudo importar el archivo.' })
+    } finally {
+      setImportando(null)
+    }
+  }
+
+  const toggleIncluido = async (c: ComprobanteIva) => {
+    const nuevoValor = !c.incluido
+    setComprobantes(prev => prev.map(x => (x.id === c.id ? { ...x, incluido: nuevoValor } : x)))
+    setTogglingId(c.id)
+    try {
+      await apiClient.setComprobanteIvaIncluido(c.id, nuevoValor, activeOrgId || undefined)
+      await cargarComprobantes()
+    } catch {
+      setComprobantes(prev => prev.map(x => (x.id === c.id ? { ...x, incluido: !nuevoValor } : x)))
+      setMsg({ type: 'error', text: 'No se pudo actualizar el comprobante.' })
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const eliminarComprobante = async (c: ComprobanteIva) => {
+    const ok = await confirmDialog({
+      title: 'Eliminar comprobante',
+      message: `¿Eliminar el comprobante ${c.tipo_desc} ${String(c.punto_venta).padStart(4, '0')}-${c.numero} (${c.denominacion || c.cuit_contraparte || 'sin datos'})? Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    })
+    if (!ok) return
+    setDeletingId(c.id)
+    setMsg(null)
+    try {
+      await apiClient.deleteComprobanteIva(c.id, activeOrgId || undefined)
+      setMsg({ type: 'ok', text: 'Comprobante eliminado.' })
+      await cargarComprobantes()
+    } catch {
+      setMsg({ type: 'error', text: 'No se pudo eliminar el comprobante.' })
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const comprobantesFiltrados = useMemo(
+    () => comprobantes.filter(c => c.direccion === direccionVista),
+    [comprobantes, direccionVista],
+  )
+
+  // ── Tab Liquidación ──────────────────────────────────────────────────────
+  const [periodoLiq, setPeriodoLiq] = useState(periodoActual())
+  const [liquidacion, setLiquidacion] = useState<LiquidacionIva | null>(null)
+  const [liqLoading, setLiqLoading] = useState(false)
+  const [retenciones, setRetenciones] = useState('')
+  const [percepciones, setPercepciones] = useState('')
+  const [ajustesOpen, setAjustesOpen] = useState(false)
+  const [saldoTecnicoAnteriorOv, setSaldoTecnicoAnteriorOv] = useState('')
+  const [saldoLibreAnteriorOv, setSaldoLibreAnteriorOv] = useState('')
+  const [calculandoLiq, setCalculandoLiq] = useState(false)
+  const [presentandoLiq, setPresentandoLiq] = useState(false)
+  const [historialLiq, setHistorialLiq] = useState<LiquidacionIva[]>([])
+  const [historialLiqLoading, setHistorialLiqLoading] = useState(false)
+
+  const cargarLiquidacion = useCallback(async () => {
+    if (!periodoLiq) return
+    setLiqLoading(true)
+    try {
+      const data = await apiClient.getLiquidacionIva(periodoLiq, activeOrgId || undefined)
+      setLiquidacion(data)
+      setRetenciones(data ? String(data.retenciones ?? '') : '')
+      setPercepciones(data ? String(data.percepciones ?? '') : '')
+    } catch {
+      setLiquidacion(null)
+    } finally {
+      setLiqLoading(false)
+    }
+  }, [periodoLiq, activeOrgId])
+
+  const cargarHistorialLiq = useCallback(async () => {
+    setHistorialLiqLoading(true)
+    try {
+      const data = await apiClient.getHistorialLiquidacionIva(activeOrgId || undefined)
+      setHistorialLiq(data.items || [])
+    } catch {
+      setHistorialLiq([])
+    } finally {
+      setHistorialLiqLoading(false)
+    }
+  }, [activeOrgId])
+
+  useEffect(() => { if (tab === 'liquidacion') cargarLiquidacion() }, [tab, cargarLiquidacion])
+  useEffect(() => { if (tab === 'liquidacion') cargarHistorialLiq() }, [tab, cargarHistorialLiq])
+
+  const calcularLiquidacion = async () => {
+    setCalculandoLiq(true)
+    setMsg(null)
+    try {
+      const payload: LiquidacionIvaCalculoPayload = { periodo: periodoLiq }
+      const ret = parseFloat(retenciones.replace(',', '.'))
+      if (!isNaN(ret)) payload.retenciones = ret
+      const perc = parseFloat(percepciones.replace(',', '.'))
+      if (!isNaN(perc)) payload.percepciones = perc
+      if (ajustesOpen) {
+        const sta = parseFloat(saldoTecnicoAnteriorOv.replace(',', '.'))
+        if (!isNaN(sta)) payload.saldo_tecnico_anterior = sta
+        const sla = parseFloat(saldoLibreAnteriorOv.replace(',', '.'))
+        if (!isNaN(sla)) payload.saldo_libre_anterior = sla
+      }
+      const data = await apiClient.calcularLiquidacionIva(payload, activeOrgId || undefined)
+      setLiquidacion(data)
+      setMsg({ type: 'ok', text: 'Liquidación calculada.' })
+      await cargarHistorialLiq()
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail
+      setMsg({ type: 'error', text: typeof detail === 'string' ? detail : 'No se pudo calcular la liquidación.' })
+    } finally {
+      setCalculandoLiq(false)
+    }
+  }
+
+  const presentarLiquidacion = async () => {
+    if (!liquidacion) return
+    const ok = await confirmDialog({
+      title: 'Marcar liquidación como presentada',
+      message: `El período ${liquidacion.periodo} quedará inmutable ante nuevos cálculos. ¿Confirmás que ya presentaste la DDJJ de IVA ante ARCA?`,
+      confirmLabel: 'Marcar como presentada',
+      danger: false,
+    })
+    if (!ok) return
+    setPresentandoLiq(true)
+    setMsg(null)
+    try {
+      await apiClient.presentarLiquidacionIva(liquidacion.id, activeOrgId || undefined)
+      setLiquidacion({ ...liquidacion, estado: 'presentada', fecha_presentacion: new Date().toISOString() })
+      setMsg({ type: 'ok', text: 'Liquidación marcada como presentada.' })
+      await cargarHistorialLiq()
+    } catch {
+      setMsg({ type: 'error', text: 'No se pudo marcar la liquidación como presentada.' })
+    } finally {
+      setPresentandoLiq(false)
+    }
+  }
 
   // ── Tab Historial ────────────────────────────────────────────────────────
   const [historial, setHistorial] = useState<ProyeccionIva[]>([])
@@ -214,6 +408,8 @@ export const Iva: React.FC = () => {
       <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-white/10">
         {([
           ['proyeccion', 'Proyección'],
+          ['comprobantes', 'Comprobantes'],
+          ['liquidacion', 'Liquidación'],
           ['historial', 'Historial'],
           ...(canAdminAccounting ? [['config', 'Config'] as const] : []),
         ] as const).map(([k, label]) => (
@@ -361,6 +557,343 @@ export const Iva: React.FC = () => {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Tab Comprobantes ── */}
+      {tab === 'comprobantes' && (
+        <div className="space-y-4">
+          <div className="w-full sm:w-48">
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Período</label>
+            <input
+              className={inputClass}
+              type="month"
+              value={periodoComp}
+              onChange={e => setPeriodoComp(e.target.value)}
+            />
+          </div>
+
+          {canManageFinance && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 p-4">
+                <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">📤 Ventas (emitidos)</div>
+                <FileUpload
+                  label={importando === 'emitido' ? 'Importando…' : 'Subir Excel de Mis Comprobantes (ventas)'}
+                  accept=".xlsx,.xls"
+                  onFileSelected={file => importarComprobantes('emitido', file)}
+                />
+              </div>
+              <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 p-4">
+                <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">📥 Compras (recibidos)</div>
+                <FileUpload
+                  label={importando === 'recibido' ? 'Importando…' : 'Subir Excel de Mis Comprobantes (compras)'}
+                  accept=".xlsx,.xls"
+                  onFileSelected={file => importarComprobantes('recibido', file)}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-1 border-b border-gray-200 dark:border-white/10">
+            {([
+              ['emitido', 'Emitidos (ventas)'],
+              ['recibido', 'Recibidos (compras)'],
+            ] as const).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setDireccionVista(k)}
+                className={`px-3 py-1.5 text-xs font-medium -mb-px border-b-2 transition-colors ${
+                  direccionVista === k
+                    ? 'border-ml-blue text-ml-blue dark:text-blue-300'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {comprobantesLoading && (
+            <div className="text-sm text-gray-500 dark:text-gray-400">Cargando comprobantes…</div>
+          )}
+
+          {!comprobantesLoading && (
+            <div className="rounded-xl border border-gray-200 dark:border-white/10 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-white/10">
+                    <th className="px-3 py-2 font-medium">Fecha</th>
+                    <th className="px-3 py-2 font-medium">Tipo</th>
+                    <th className="px-3 py-2 font-medium">Nº</th>
+                    <th className="px-3 py-2 font-medium">CUIT</th>
+                    <th className="px-3 py-2 font-medium">Denominación</th>
+                    <th className="px-3 py-2 font-medium text-right">Neto</th>
+                    <th className="px-3 py-2 font-medium text-right">IVA</th>
+                    <th className="px-3 py-2 font-medium text-right">Total</th>
+                    <th className="px-3 py-2 font-medium text-center">Incluir</th>
+                    <th className="px-3 py-2 font-medium w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comprobantesFiltrados.length === 0 && (
+                    <tr><td colSpan={10} className="px-3 py-6 text-center text-gray-400">
+                      Sin comprobantes {direccionVista === 'emitido' ? 'emitidos' : 'recibidos'} importados para este período.
+                    </td></tr>
+                  )}
+                  {comprobantesFiltrados.map((c, i) => (
+                    <tr key={c.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''} ${!c.incluido ? 'opacity-50' : ''}`}>
+                      <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmtFecha(c.fecha)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className="text-gray-700 dark:text-gray-300">{c.tipo_desc}</span>
+                        {c.es_nota_credito && (
+                          <span className="ml-1.5 px-1.5 py-0.5 rounded-md text-2xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">NC</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap font-mono">
+                        {String(c.punto_venta).padStart(4, '0')}-{c.numero}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap font-mono">{c.cuit_contraparte || '—'}</td>
+                      <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[14rem] truncate">{c.denominacion || '—'}</td>
+                      <td className={`px-3 py-2 text-right whitespace-nowrap ${c.es_nota_credito ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {fmt(c.neto_gravado_total)}
+                      </td>
+                      <td className={`px-3 py-2 text-right whitespace-nowrap ${c.es_nota_credito ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {fmt(c.total_iva)}
+                      </td>
+                      <td className={`px-3 py-2 text-right whitespace-nowrap font-medium ${c.es_nota_credito ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                        {fmt(c.imp_total)}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={c.incluido}
+                          disabled={togglingId === c.id || !canManageFinance}
+                          onChange={() => toggleIncluido(c)}
+                          className="w-4 h-4 accent-ml-blue"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {canManageFinance && (
+                          <button
+                            onClick={() => eliminarComprobante(c)}
+                            disabled={deletingId === c.id}
+                            title="Eliminar comprobante"
+                            className="text-gray-400 hover:text-red-500 disabled:opacity-40"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 p-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Débito fiscal incluido (ventas)</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{fmt(totalesComp.debito_incluido)}</div>
+            </div>
+            <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 p-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Crédito fiscal incluido (compras)</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{fmt(totalesComp.credito_incluido)}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tab Liquidación ── */}
+      {tab === 'liquidacion' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+            <div className="w-full sm:w-48">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Período</label>
+              <input
+                className={inputClass}
+                type="month"
+                value={periodoLiq}
+                onChange={e => setPeriodoLiq(e.target.value)}
+              />
+            </div>
+            {liquidacion && (
+              <span className={`px-2 py-1 rounded-md text-xs font-semibold ${ESTADO_BADGE[liquidacion.estado === 'presentada' ? 'presentado' : 'proyectado']}`}>
+                {liquidacion.estado === 'presentada' ? 'Presentada' : 'Borrador'}
+              </span>
+            )}
+          </div>
+
+          {liqLoading && (
+            <div className="text-sm text-gray-500 dark:text-gray-400">Cargando liquidación…</div>
+          )}
+
+          {!liqLoading && (!liquidacion || liquidacion.estado !== 'presentada') && canManageFinance && (
+            <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 p-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Retenciones</label>
+                  <input
+                    className={inputClass}
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={retenciones}
+                    onChange={e => setRetenciones(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Percepciones</label>
+                  <input
+                    className={inputClass}
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={percepciones}
+                    onChange={e => setPercepciones(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <details open={ajustesOpen} onToggle={e => setAjustesOpen((e.target as HTMLDetailsElement).open)}>
+                <summary className="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+                  Ajustes manuales del primer período
+                </summary>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Saldo técnico anterior (override)</label>
+                    <input
+                      className={inputClass}
+                      inputMode="decimal"
+                      placeholder="Dejar vacío para usar el histórico"
+                      value={saldoTecnicoAnteriorOv}
+                      onChange={e => setSaldoTecnicoAnteriorOv(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Saldo libre disponibilidad anterior (override)</label>
+                    <input
+                      className={inputClass}
+                      inputMode="decimal"
+                      placeholder="Dejar vacío para usar el histórico"
+                      value={saldoLibreAnteriorOv}
+                      onChange={e => setSaldoLibreAnteriorOv(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </details>
+
+              <button
+                onClick={calcularLiquidacion}
+                disabled={calculandoLiq}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-ml-blue text-white text-sm font-medium hover:opacity-90 disabled:opacity-50"
+              >
+                <IconCalc />
+                {calculandoLiq ? 'Calculando…' : 'Calcular liquidación'}
+              </button>
+            </div>
+          )}
+
+          {!liqLoading && !liquidacion && (
+            <div className="text-sm text-gray-400">Todavía no hay una liquidación calculada para este período.</div>
+          )}
+
+          {!liqLoading && liquidacion && (
+            <>
+              <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 divide-y divide-gray-100 dark:divide-white/5">
+                <CascadaRow label="IVA Débito fiscal" valor={liquidacion.debito_fiscal} signo="+" />
+                <CascadaRow label="IVA Crédito fiscal" valor={liquidacion.credito_fiscal} signo="−" />
+                <CascadaRow label="Técnico del período" valor={liquidacion.tecnico_periodo} signo="=" destacado />
+                <CascadaRow label="Saldo técnico anterior" valor={liquidacion.saldo_tecnico_anterior} signo="−" />
+                <CascadaRow label="Saldo técnico nuevo" valor={liquidacion.saldo_tecnico_nuevo} signo="=" destacado />
+                <CascadaRow label="Retenciones" valor={liquidacion.retenciones} signo="−" />
+                <CascadaRow label="Percepciones" valor={liquidacion.percepciones} signo="−" />
+                <CascadaRow label="Saldo libre disponibilidad anterior" valor={liquidacion.saldo_libre_anterior} signo="−" />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className={`rounded-xl border p-4 ${
+                  liquidacion.saldo_a_pagar > 0
+                    ? 'border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10'
+                    : 'border-gray-200 dark:border-white/10 bg-white dark:bg-white/5'
+                }`}>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">SALDO A PAGAR</div>
+                  <div className={`text-2xl font-bold truncate ${
+                    liquidacion.saldo_a_pagar > 0
+                      ? 'text-red-700 dark:text-red-300'
+                      : 'text-gray-900 dark:text-gray-100'
+                  }`}>
+                    {fmt(Math.max(0, liquidacion.saldo_a_pagar))}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-green-200 dark:border-green-500/30 bg-green-50 dark:bg-green-500/10 p-4">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Saldo libre disponibilidad nuevo</div>
+                  <div className="text-2xl font-bold text-green-700 dark:text-green-300 truncate">
+                    {fmt(liquidacion.saldo_libre_nuevo)}
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-400">
+                <strong>Técnico</strong>: solo compensa IVA de otros períodos. <strong>Libre disponibilidad</strong>:
+                puede usarse para pagar otros impuestos. {liquidacion.cant_emitidos} comprobante(s) emitido(s) ·
+                {' '}{liquidacion.cant_recibidos} recibido(s).
+              </p>
+
+              {liquidacion.estado === 'presentada' && (
+                <p className="text-xs text-gray-400">Presentada el {fmtDate(liquidacion.fecha_presentacion)}. Este período es de solo lectura.</p>
+              )}
+
+              {canAdminAccounting && liquidacion.estado === 'borrador' && (
+                <button
+                  onClick={presentarLiquidacion}
+                  disabled={presentandoLiq}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-green-300 dark:border-green-500/30 text-green-700 dark:text-green-300 text-sm font-medium hover:bg-green-50 dark:hover:bg-green-500/10 disabled:opacity-50"
+                >
+                  <IconCheck />
+                  {presentandoLiq ? 'Marcando…' : 'Marcar como presentada'}
+                </button>
+              )}
+            </>
+          )}
+
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Historial de liquidaciones</h2>
+            <div className="rounded-xl border border-gray-200 dark:border-white/10 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-white/10">
+                    <th className="px-3 py-2 font-medium">Período</th>
+                    <th className="px-3 py-2 font-medium text-right">Débito</th>
+                    <th className="px-3 py-2 font-medium text-right">Crédito</th>
+                    <th className="px-3 py-2 font-medium text-right">A pagar</th>
+                    <th className="px-3 py-2 font-medium">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historialLiqLoading && (
+                    <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Cargando…</td></tr>
+                  )}
+                  {!historialLiqLoading && historialLiq.length === 0 && (
+                    <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Sin liquidaciones calculadas.</td></tr>
+                  )}
+                  {!historialLiqLoading && historialLiq.map((l, i) => (
+                    <tr key={l.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{l.periodo}</td>
+                      <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(l.debito_fiscal)}</td>
+                      <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(l.credito_fiscal)}</td>
+                      <td className={`px-3 py-2 text-right font-medium whitespace-nowrap ${l.saldo_a_pagar > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {fmt(l.saldo_a_pagar)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${ESTADO_BADGE[l.estado === 'presentada' ? 'presentado' : 'proyectado']}`}>
+                          {l.estado === 'presentada' ? 'Presentada' : 'Borrador'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
@@ -522,6 +1055,27 @@ const ConfigSeccion: React.FC<ConfigSeccionProps> = ({ titulo, cuentas, editValu
         </tbody>
       </table>
     </div>
+  </div>
+)
+
+// ── Subcomponente: fila de la cascada fiscal (Liquidación) ─────────────────
+interface CascadaRowProps {
+  label: string
+  valor: number
+  signo: '+' | '−' | '='
+  destacado?: boolean
+}
+
+const CascadaRow: React.FC<CascadaRowProps> = ({ label, valor, signo, destacado }) => (
+  <div className={`flex items-center justify-between px-4 py-2.5 ${destacado ? 'bg-gray-50 dark:bg-white/[0.03]' : ''}`}>
+    <span className={`text-sm ${destacado ? 'font-semibold text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400'}`}>
+      <span className="inline-block w-4 text-gray-400 dark:text-gray-500">{signo}</span> {label}
+    </span>
+    <span className={`text-sm whitespace-nowrap ${destacado ? 'font-semibold text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'} ${
+      valor < 0 ? 'text-green-600 dark:text-green-400' : ''
+    }`}>
+      {fmt(Math.abs(valor))}
+    </span>
   </div>
 )
 

@@ -290,6 +290,66 @@ export interface ProyeccionIva {
   updated_at: string
 }
 
+// ── IVA — Comprobantes ARCA y Liquidación real ──────────────────────────────
+export interface ComprobanteIva {
+  id: number
+  direccion: 'emitido' | 'recibido'
+  fecha: string
+  tipo_codigo: string
+  tipo_desc: string
+  punto_venta: number
+  numero: string
+  cuit_contraparte: string | null
+  denominacion: string | null
+  neto_gravado_total: number
+  total_iva: number
+  imp_total: number
+  incluido: boolean
+  es_nota_credito: boolean
+}
+
+export interface ComprobantesIvaResponse {
+  items: ComprobanteIva[]
+  totales: {
+    debito_incluido: number
+    credito_incluido: number
+  }
+}
+
+export interface ImportarComprobantesIvaResult {
+  importados: number
+  duplicados: number
+  fuera_de_periodo: number
+  periodo: string
+}
+
+export interface LiquidacionIvaCalculoPayload {
+  periodo: string
+  retenciones?: number
+  percepciones?: number
+  saldo_tecnico_anterior?: number
+  saldo_libre_anterior?: number
+}
+
+export interface LiquidacionIva {
+  id: number
+  periodo: string
+  debito_fiscal: number
+  credito_fiscal: number
+  tecnico_periodo: number
+  saldo_tecnico_anterior: number
+  saldo_tecnico_nuevo: number
+  retenciones: number
+  percepciones: number
+  saldo_libre_anterior: number
+  saldo_libre_nuevo: number
+  saldo_a_pagar: number
+  cant_emitidos: number
+  cant_recibidos: number
+  estado: 'borrador' | 'presentada'
+  fecha_presentacion: string | null
+}
+
 // ── Monotributo — Control Semestral ─────────────────────────────────────────
 export interface MonotributoConfig {
   activo: boolean

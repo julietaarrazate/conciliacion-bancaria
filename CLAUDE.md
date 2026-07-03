@@ -171,8 +171,9 @@ necesitás contexto histórico detallado de una versión puntual, leelo directam
 
 Resumen muy breve de dónde está el sistema hoy: motor de conciliación + multi-banco (16 bancos) +
 multi-tenant funcionando en producción; módulos operativos completos (Cheques, Pagos, Caja,
-Liquidaciones, Contabilidad con cuentas corrientes); 4 módulos de liquidación de impuestos
-(IVA, Monotributo, Ingresos Brutos, Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
+Liquidaciones, Contabilidad con cuentas corrientes); 5 módulos de liquidación de impuestos
+(IVA Proyección, IVA Liquidación real con "Mis Comprobantes" de ARCA, Monotributo, Ingresos Brutos,
+Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
 ARCA (facturación electrónica WSFEv1) construido pero desactivado a propósito (ver "Pendiente para
 próximas sesiones" abajo). **465 tests backend + 25 tests frontend** pasando.
 
@@ -240,6 +241,11 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
 - **v3.20 — Control Semestral Monotributo** ✅ implementado (ver CHANGELOG.md). Segundo módulo del plan.
 - **v3.21 — Ingresos Brutos y Convenio Multilateral** ✅ implementado (ver CHANGELOG.md). Tercer módulo del plan.
 - **v3.22 — Liquidador de Sueldos y F931** ✅ implementado (ver CHANGELOG.md). Cuarto módulo del plan.
+- **v3.26 — IVA Liquidación real ("Mis Comprobantes" de ARCA)** ✅ implementado (ver CHANGELOG.md).
+  Quinto módulo: importa el Excel oficial de ventas/compras de ARCA, depura comprobantes, calcula
+  débito−crédito con saldo técnico arrastrado + retenciones/percepciones + saldo de libre
+  disponibilidad. Pendiente menor: automatizar import del Excel de ret/perc (hoy carga manual —
+  falta un archivo de ejemplo de ARCA para el parser).
 - Pendientes a priorizar: Intake Exportador de Servicios.
 
 ---

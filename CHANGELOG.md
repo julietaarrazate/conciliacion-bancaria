@@ -5,6 +5,37 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.26 — Liquidación REAL de IVA con "Mis Comprobantes" de ARCA (jul 2026)
+
+Quinto módulo del plan de liquidación de impuestos. Complementa la *proyección* de IVA (v3.19,
+que estima desde asientos internos): acá se liquida con los comprobantes oficiales que ARCA
+entrega al contador (no hay API pública; el Excel "Mis Comprobantes" es la vía estándar).
+
+- **Importación de comprobantes** (`mis_comprobantes_parser.py`): parser determinístico del Excel
+  "Mis Comprobantes Emitidos/Recibidos" de ARCA (título fila 1, headers fila 2). Extrae fecha,
+  tipo, PV, número, CUIT/denominación de la contraparte (receptor si emitido, emisor si recibido),
+  neto gravado, Total IVA e Imp. Total + detalle por alícuota. Probado contra archivos reales.
+- **Modelos** (`iva_liquidacion.py`): `ComprobanteIva` (staging re-importable, dedup por
+  org+dirección+tipo+PV+número+CUIT, flag `incluido` para depurar) y `LiquidacionIva` (snapshot
+  mensual, único por org+período). Ambos multi-tenant (`organizacion_id` NOT NULL).
+- **Lógica fiscal** (`iva_liquidacion_service.py`): débito = Σ IVA emitidos incluidos, crédito =
+  Σ IVA recibidos incluidos, las notas de crédito restan. Posición del período vs. **saldo técnico
+  a favor arrastrado** (se auto-hereda del período anterior; solo compensa IVA). Retenciones +
+  percepciones + **saldo de libre disponibilidad** (aplicable a otros impuestos) cancelan el saldo
+  a pagar. Técnico y libre disponibilidad se llevan **separados** (art. 24). Todo en Decimal.
+- **Router** (`/iva/comprobantes/*` + `/iva/liquidacion/*`): importar, listar+totales, toggle
+  incluir/excluir, borrar, calcular (upsert), historial, presentar (inmutable). Permisos en 3
+  capas: `view_accounting` (leer) / `manage_finance` (importar/depurar/calcular) / `admin_accounting`
+  (presentar). Auditoría en cada acción.
+- **Frontend** (`Iva.tsx`): tabs "Comprobantes" (importar ventas/compras por separado, tabla con
+  toggle incluir/excluir, totales en vivo) y "Liquidación" (cascada débito→crédito→técnico→
+  ret/perc→libre→a pagar) + historial. Retenciones/percepciones por carga manual (falta el
+  formato de export de ARCA para automatizar).
+- **14 tests** (parser sobre Excel real, dedup, toggle, herencia de saldo técnico entre períodos,
+  NC que resta, libre disponibilidad, presentada→409, aislamiento multi-tenant). Total: 480 backend.
+
+---
+
 ### v3.25 — Profesionalización de ingeniería + hardening (jun–jul 2026)
 
 Sesión de calidad (no features de negocio): consolidar el sistema como producto mantenible.

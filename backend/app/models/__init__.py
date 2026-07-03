@@ -13,6 +13,7 @@ from .cheque import Cheque
 from .portador import Portador
 from .liquidacion_tarjeta import LiquidacionTarjeta, MarcaTarjeta, EstadoTarjeta
 from .proyeccion_iva import ProyeccionIva
+from .iva_liquidacion import ComprobanteIva, LiquidacionIva
 from .password_reset import PasswordResetToken
 from .arca import ArcaConfig, ComprobanteArca
 
@@ -28,6 +29,7 @@ __all__ = [
     "Cheque", "Portador",
     "LiquidacionTarjeta", "MarcaTarjeta", "EstadoTarjeta",
     "ProyeccionIva",
+    "ComprobanteIva", "LiquidacionIva",
     "PasswordResetToken",
     "ArcaConfig", "ComprobanteArca",
 ]

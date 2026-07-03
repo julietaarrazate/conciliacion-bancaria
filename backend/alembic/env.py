@@ -18,7 +18,7 @@ from app.database import Base, DATABASE_URL
 from app.models import (  # noqa: F401
     organizacion, user, cliente, extracto, planilla, auditoria, patron_aprendido,
     liquidacion, caja, egreso, contabilidad, cheque, portador, liquidacion_tarjeta,
-    proyeccion_iva, password_reset, arca, iibb, monotributo, sueldos,
+    proyeccion_iva, iva_liquidacion, password_reset, arca, iibb, monotributo, sueldos,
     login_approval, twofa_code, push_subscription, revoked_token,
 )
 
