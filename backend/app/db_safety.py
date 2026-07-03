@@ -25,6 +25,8 @@ SAFETY_NET_DDL = [
     "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cuenta_contable_id INTEGER REFERENCES plan_cuentas(id)",
     # v3.25 — perfil aprendido del formato de planilla por cliente (pipeline de estandarización)
     "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS mapeo_planilla JSONB",
+    # total declarado por el cliente (fila resumen/total detectada y excluida de los movimientos)
+    "ALTER TABLE planillas ADD COLUMN IF NOT EXISTS total_declarado NUMERIC(14,2)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_org_ids JSONB DEFAULT '[]'",
     "ALTER TABLE asientos ADD COLUMN IF NOT EXISTS numero_asiento INTEGER",
     # v3.9.2 — portadores + campos cheque

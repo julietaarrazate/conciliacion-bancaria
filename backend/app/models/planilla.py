@@ -23,6 +23,9 @@ class Planilla(Base):
     fecha_carga = Column(DateTime, default=datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True, index=True)  # soft delete: NULL = activo
     porcentaje_comision = Column(Numeric(5, 4), nullable=True)  # % comisión para liquidación
+    # Total declarado por el cliente al final de su planilla (fila de resumen/total
+    # detectada y excluida de los movimientos). None si no la hay. Se usa para cuadre.
+    total_declarado = Column(Numeric(14, 2), nullable=True)
 
     # Relationships
     cliente = relationship("Cliente", back_populates="planillas")

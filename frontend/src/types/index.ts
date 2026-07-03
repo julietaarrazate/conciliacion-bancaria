@@ -124,6 +124,12 @@ export interface ResultadoMapeoPlanilla {
   filas_totales: number
   filas_descartadas: number
   fingerprint: string
+  // Cuadre de totales: la planilla puede traer una fila de TOTAL que el backend
+  // detecta, excluye de los movimientos y usa para validar la suma
+  total_movimientos?: number
+  total_declarado?: number | null
+  total_cuadra?: boolean | null
+  filas_resumen?: number
 }
 
 export interface DeteccionInfo {
@@ -131,6 +137,11 @@ export interface DeteccionInfo {
   confianza: number
   filas_totales: number
   filas_descartadas: number
+  // Cuadre de totales (ver ResultadoMapeoPlanilla)
+  total_movimientos?: number
+  total_declarado?: number | null
+  total_cuadra?: boolean | null
+  filas_resumen?: number
 }
 
 export interface PlanillaHistorialItem {

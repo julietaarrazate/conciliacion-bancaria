@@ -29,6 +29,7 @@ import json
 import hashlib
 import tempfile
 import unicodedata
+from decimal import Decimal
 
 import openpyxl
 
@@ -394,8 +395,90 @@ def _preview(ws, header_row: int, maxcol: int, n: int = 8) -> list:
     return out
 
 
+# ── Detección de filas de resumen / total (declaradas por el cliente) ──────────
+
+# Etiquetas (ya normalizadas con _norm: lower, sin tildes, solo [a-z0-9]) que un
+# cliente suele poner en la columna titular de una fila de total al final de la
+# planilla. "granTotal" → "grantotal".
+_ETIQUETAS_RESUMEN = {
+    "total", "totales", "suma", "subtotal", "bruto", "neto",
+    "comision", "montototal", "totaltransferido", "grantotal",
+}
+
+# Subconjunto preferido al elegir cuál fila resumen es el "total declarado".
+_ETIQUETAS_TOTAL = {"total", "totales", "suma"}
+
+
+def _tolerancia(suma: Decimal) -> Decimal:
+    """1 peso o 0.1% de la suma, lo que sea mayor."""
+    return max(Decimal("1"), suma * Decimal("0.001"))
+
+
+def _detectar_totales(filas):
+    """Detecta y strippea las filas de resumen/total TRAILING de una planilla.
+
+    Recorre desde el final hacia atrás (hasta ~3 filas). Una fila es resumen si NO
+    tiene cuit y además (a) su titular normalizado matchea una etiqueta de resumen,
+    o (b) su monto ≈ la suma de los montos de las OTRAS filas que quedarían como
+    movimientos. Corta en cuanto una fila trailing es un movimiento normal (no borra
+    del medio).
+
+    Devuelve (movimientos, filas_resumen, total_declarado):
+      - movimientos: lista de filas reales (sin las de resumen)
+      - filas_resumen: lista de las filas strippeadas
+      - total_declarado: Decimal|None — de las resumen, la que mejor ≈ suma de
+        movimientos (prefiere una etiquetada total/suma; si solo hay match
+        aritmético, esa).
+    """
+    filas = list(filas)
+    n = len(filas)
+    resumen = []          # filas trailing detectadas como resumen (de fin a inicio)
+    corte = n             # índice: filas[:corte] quedan como movimientos
+    limite = min(3, n)
+
+    for k in range(1, limite + 1):
+        i = n - k
+        fila = filas[i]
+        if fila.get("cuit"):
+            break  # tiene identidad → es un movimiento real, no resumen
+        restantes = filas[:i]  # lo que quedaría como movimientos si strippeamos i..n-1
+        suma = sum((f["monto"] for f in restantes), Decimal("0"))
+        monto = fila.get("monto")
+
+        etiqueta = _norm(fila.get("titular"))
+        por_etiqueta = etiqueta in _ETIQUETAS_RESUMEN
+        por_aritmetica = monto is not None and abs(monto - suma) <= _tolerancia(suma)
+
+        if por_etiqueta or por_aritmetica:
+            resumen.append(fila)
+            corte = i
+        else:
+            break
+
+    movimientos = filas[:corte]
+
+    total_declarado = None
+    if resumen:
+        suma_mov = sum((f["monto"] for f in movimientos), Decimal("0"))
+
+        def _diff(f):
+            return abs((f.get("monto") or Decimal("0")) - suma_mov)
+
+        etiquetados = [f for f in resumen if _norm(f.get("titular")) in _ETIQUETAS_TOTAL]
+        elegido = min(etiquetados or resumen, key=_diff)
+        total_declarado = elegido.get("monto")
+
+    return movimientos, resumen, total_declarado
+
+
 def _armar_resultado(ws, header_row, columnas, maxcol, origen, confianza, fingerprint) -> dict:
     filas, descartadas = _parsear_filas(ws, header_row, columnas)
+    movimientos, resumen, total_declarado = _detectar_totales(filas)
+    total_movimientos = sum((f["monto"] for f in movimientos), Decimal("0"))
+    if total_declarado is None:
+        total_cuadra = None
+    else:
+        total_cuadra = abs(total_declarado - total_movimientos) <= _tolerancia(total_movimientos)
     return {
         "origen": origen,
         "confianza": round(float(confianza), 4),
@@ -403,9 +486,13 @@ def _armar_resultado(ws, header_row, columnas, maxcol, origen, confianza, finger
         "columnas": {f: columnas.get(f) for f in FIELDS},
         "columnas_disponibles": _columnas_disponibles(ws, header_row, maxcol),
         "preview": _preview(ws, header_row, maxcol),
-        "filas": filas,
-        "filas_totales": len(filas),
+        "filas": movimientos,
+        "filas_totales": len(movimientos),
         "filas_descartadas": descartadas,
+        "total_movimientos": total_movimientos,
+        "total_declarado": total_declarado,
+        "total_cuadra": total_cuadra,
+        "filas_resumen": len(resumen),
         "fingerprint": fingerprint,
     }
 

@@ -168,6 +168,82 @@ class TestParseoCanonico:
         assert r["filas_totales"] == 3
 
 
+# ── Tests de detección de filas de resumen / total ───────────────────────────
+
+class TestDeteccionTotales:
+
+    def _rows_base(self):
+        """3 movimientos reales (suma 350000), headers en fila 1."""
+        return [
+            ["Fecha", "Titular de la cuenta", "CUIT/CUIL/DNI", "MONTO"],
+            ["2026-06-04", "Juan Perez", "20940508925", 100000],
+            ["2026-06-05", "Maria Lopez", "27123456784", 200000],
+            ["2026-06-06", "Pedro Gomez", "20111111112", 50000],
+        ]
+
+    def test_total_por_etiqueta_se_excluye(self):
+        rows = self._rows_base()
+        rows.append(["", "TOTAL", None, 350000])  # fila total etiquetada, sin cuit
+        r = estandarizar_planilla(_build_xlsx(rows), usar_ia=False)
+        assert r["filas_totales"] == 3
+        assert r["filas_resumen"] == 1
+        assert r["total_declarado"] == Decimal("350000")
+        assert r["total_movimientos"] == Decimal("350000")
+        assert r["total_cuadra"] is True
+        # la fila total no quedó como movimiento
+        assert all(f["titular"] != "TOTAL" for f in r["filas"])
+
+    def test_total_por_aritmetica_sin_etiqueta_se_excluye(self):
+        rows = self._rows_base()
+        rows.append(["", None, None, 350000])  # sin etiqueta, monto = suma
+        r = estandarizar_planilla(_build_xlsx(rows), usar_ia=False)
+        assert r["filas_totales"] == 3
+        assert r["filas_resumen"] == 1
+        assert r["total_declarado"] == Decimal("350000")
+        assert r["total_cuadra"] is True
+
+    def test_varias_lineas_resumen_trailing_todas_excluidas(self):
+        rows = self._rows_base()
+        rows.append(["", "Suma", None, 350000])
+        rows.append(["", "Comision", None, 3500])
+        rows.append(["", "Bruto", None, 346500])
+        r = estandarizar_planilla(_build_xlsx(rows), usar_ia=False)
+        assert r["filas_totales"] == 3
+        assert r["filas_resumen"] == 3
+        # el total declarado es la fila etiquetada "Suma" (≈ suma de movimientos)
+        assert r["total_declarado"] == Decimal("350000")
+        assert r["total_cuadra"] is True
+
+    def test_sin_total_movimientos_intactos(self):
+        r = estandarizar_planilla(_build_xlsx(self._rows_base()), usar_ia=False)
+        assert r["filas_totales"] == 3
+        assert r["filas_resumen"] == 0
+        assert r["total_declarado"] is None
+        assert r["total_cuadra"] is None
+        assert r["total_movimientos"] == Decimal("350000")
+
+    def test_no_borra_movimiento_real_con_cuit_aunque_monto_coincida(self):
+        """Un movimiento trailing con cuit NO es resumen aunque su monto = suma."""
+        rows = self._rows_base()
+        # fila trailing con cuit y monto = suma de las anteriores (350000)
+        rows.append(["2026-06-07", "Cliente Grande", "30500010753", 350000])
+        r = estandarizar_planilla(_build_xlsx(rows), usar_ia=False)
+        assert r["filas_totales"] == 4  # no se borró
+        assert r["filas_resumen"] == 0
+        assert r["total_declarado"] is None
+        assert any(f["cuit"] == "30500010753" for f in r["filas"])
+
+    def test_descuadre_total_distinto_de_suma(self):
+        rows = self._rows_base()
+        rows.append(["", "TOTAL", None, 999999])  # etiquetada pero no cuadra
+        r = estandarizar_planilla(_build_xlsx(rows), usar_ia=False)
+        assert r["filas_totales"] == 3
+        assert r["filas_resumen"] == 1
+        assert r["total_declarado"] == Decimal("999999")
+        assert r["total_movimientos"] == Decimal("350000")
+        assert r["total_cuadra"] is False
+
+
 # ── Tests de mapeo manual (Capa 1 determinística) ─────────────────────────────
 
 class TestMapeoManual:

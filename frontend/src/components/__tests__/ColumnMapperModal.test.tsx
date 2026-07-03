@@ -64,4 +64,19 @@ describe('ColumnMapperModal', () => {
     render(<ColumnMapperModal resultado={resultado} onConfirm={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.getByText(/3 filas descartadas/)).toBeInTheDocument()
   })
+
+  it('muestra filas de total/resumen excluidas y el total declarado cuando vienen', () => {
+    const resultado = buildResultado({ filas_resumen: 1, total_movimientos: 3800, total_declarado: 3800, total_cuadra: true })
+    render(<ColumnMapperModal resultado={resultado} onConfirm={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByText(/1 fila de total\/resumen excluida/)).toBeInTheDocument()
+    expect(screen.getByText(/Total declarado por el cliente:/)).toBeInTheDocument()
+    expect(screen.getByText('$ 3.800')).toBeInTheDocument()
+  })
+
+  it('no muestra nada de cuadre cuando el backend no lo informa', () => {
+    const resultado = buildResultado()
+    render(<ColumnMapperModal resultado={resultado} onConfirm={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.queryByText(/de total\/resumen excluida/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Total declarado por el cliente:/)).not.toBeInTheDocument()
+  })
 })

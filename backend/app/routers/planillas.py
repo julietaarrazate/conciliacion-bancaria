@@ -124,11 +124,19 @@ async def preview_planilla(
         "fingerprint": resultado["fingerprint"],
         "filas_totales": resultado["filas_totales"],
         "filas_descartadas": resultado["filas_descartadas"],
+        "total_movimientos": resultado["total_movimientos"],
+        "total_declarado": resultado["total_declarado"],
+        "total_cuadra": resultado["total_cuadra"],
+        "filas_resumen": resultado["filas_resumen"],
         "deteccion": {
             "origen": resultado["origen"],
             "confianza": resultado["confianza"],
             "filas_totales": resultado["filas_totales"],
             "filas_descartadas": resultado["filas_descartadas"],
+            "total_movimientos": resultado["total_movimientos"],
+            "total_declarado": resultado["total_declarado"],
+            "total_cuadra": resultado["total_cuadra"],
+            "filas_resumen": resultado["filas_resumen"],
         },
     }
 
@@ -207,6 +215,7 @@ async def upload_planilla(
             nombre_archivo=file.filename,
             organizacion_id=org_id,
             porcentaje_comision=None,
+            total_declarado=resultado.get("total_declarado"),
         )
         db.add(planilla)
         db.flush()
@@ -255,6 +264,10 @@ async def upload_planilla(
             "confianza": resultado["confianza"],
             "filas_totales": resultado["filas_totales"],
             "filas_descartadas": resultado["filas_descartadas"],
+            "total_movimientos": resultado["total_movimientos"],
+            "total_declarado": resultado["total_declarado"],
+            "total_cuadra": resultado["total_cuadra"],
+            "filas_resumen": resultado["filas_resumen"],
         }
         return planilla
 

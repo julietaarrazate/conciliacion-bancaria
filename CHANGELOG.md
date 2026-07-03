@@ -35,6 +35,14 @@ se tocó** — cero riesgo sobre el matcheo).
   los tres parsean con la heurística sola a confianza 1.00 (header en fila distinta, offset de
   columna, trampa del cliente-constante, 1M de filas vacías — todo resuelto). Multi-tenant: el
   perfil vive en `Cliente` (scopeado por org). **20 tests nuevos** (500 backend + 31 frontend).
+- **Detección de fila de total/resumen**: algunos clientes agregan al final de la planilla una fila
+  con el total (suma de los movimientos). Antes se contaba como un movimiento más (sin identidad →
+  "sin datos"). Ahora `_detectar_totales` la reconoce (por etiqueta "total/suma/…" o porque su monto
+  ≈ suma de los movimientos, y solo en filas trailing sin CUIT → no borra movimientos reales), la
+  **excluye** de los movimientos, la guarda como `Planilla.total_declarado` y calcula el **cuadre**:
+  la UI muestra "Total de la planilla" (suma de movimientos) vs. "Declarado por el cliente" con un
+  badge ✓ Cuadra / ⚠ Difiere en $X. Verificado con Tucu real (8 mov + total 5.089.000 detectado
+  correctamente). Migración 023 + safety-net. **+6 tests** (506 backend + 33 frontend).
 
 ---
 

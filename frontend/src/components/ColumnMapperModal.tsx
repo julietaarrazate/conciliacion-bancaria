@@ -32,6 +32,9 @@ function confianzaLabel(confianza: number): string {
   return 'baja'
 }
 
+const fmtMonto = (n: number) =>
+  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n)
+
 export const ColumnMapperModal: React.FC<ColumnMapperModalProps> = ({ resultado, onConfirm, onCancel }) => {
   // Estado local: por cada índice de columna (1-based), qué campo tiene asignado (o null/ignorar)
   const [asignacion, setAsignacion] = useState<Record<number, CampoMapeo | null>>(() => {
@@ -97,6 +100,16 @@ export const ColumnMapperModal: React.FC<ColumnMapperModalProps> = ({ resultado,
           {resultado.filas_descartadas > 0 && (
             <span className="ml-1 text-amber-600 dark:text-amber-400">
               {resultado.filas_descartadas} fila{resultado.filas_descartadas === 1 ? '' : 's'} descartada{resultado.filas_descartadas === 1 ? '' : 's'} (vacías o inválidas).
+            </span>
+          )}
+          {!!resultado.filas_resumen && resultado.filas_resumen > 0 && (
+            <span className="block mt-1 text-ml-text-soft dark:text-zinc-400">
+              {resultado.filas_resumen} fila{resultado.filas_resumen === 1 ? '' : 's'} de total/resumen excluida{resultado.filas_resumen === 1 ? '' : 's'} de los movimientos.
+            </span>
+          )}
+          {resultado.total_declarado != null && (
+            <span className="block mt-1 text-ml-text-soft dark:text-zinc-400">
+              Total declarado por el cliente: <span className="font-semibold text-ml-text dark:text-white">{fmtMonto(resultado.total_declarado)}</span>
             </span>
           )}
         </div>

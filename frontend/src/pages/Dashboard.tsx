@@ -10,6 +10,7 @@ import { useAuthStore } from '@/store/auth'
 import { useThemeStore } from '@/store/theme'
 import {
   ConciliacionResultado,
+  DeteccionInfo,
   ExtractoListItem,
   PlanillaHistorialItem,
   ResultadoMapeoPlanilla,
@@ -225,6 +226,7 @@ export const Dashboard: React.FC = () => {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [resultado, setResultado] = useState<ConciliacionResultado | null>(null)
+  const [deteccionCuadre, setDeteccionCuadre] = useState<DeteccionInfo | null>(null)
   const [panelId, setPanelId] = useState<number | null>(null)
   const [fechaAcred, setFechaAcred] = useState<string>(localIsoDate())
   const [banco, setBanco] = useState('Banco Macro')
@@ -441,6 +443,7 @@ export const Dashboard: React.FC = () => {
     setError('')
     setSuccess('')
     setResultado(null)
+    setDeteccionCuadre(null)
     try {
       const planilla = await apiClient.uploadPlanilla(
         clienteNombre,
@@ -449,6 +452,7 @@ export const Dashboard: React.FC = () => {
         activeOrgId,
         mapeo
       )
+      setDeteccionCuadre(planilla.deteccion ?? null)
       const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred, false, parseFloat(comisionPct) || 0)
       setResultado(r)
       setSuccess(`Conciliación completa: ${r.acreditadas}/${r.filas_procesadas} acreditadas`)
@@ -888,6 +892,36 @@ export const Dashboard: React.FC = () => {
               <div className="pt-2 border-t border-gray-100 dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400 text-center">
                 Total: {resultado.filas_procesadas} filas procesadas
               </div>
+
+              {deteccionCuadre?.total_movimientos != null && (
+                <div className="pt-2 border-t border-gray-100 dark:border-slate-700 space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-500 dark:text-gray-400">Total de la planilla</span>
+                    <span className="font-mono font-semibold text-ml-text dark:text-white">
+                      {fmtMonto(deteccionCuadre.total_movimientos)}
+                    </span>
+                  </div>
+                  {deteccionCuadre.total_declarado != null && (
+                    <div className="flex justify-between items-center text-xs gap-2">
+                      <span className="text-gray-500 dark:text-gray-400 shrink-0">Declarado por el cliente</span>
+                      <span className="flex items-center gap-1.5 flex-wrap justify-end">
+                        <span className="font-mono font-semibold text-ml-text dark:text-white">
+                          {fmtMonto(deteccionCuadre.total_declarado)}
+                        </span>
+                        {deteccionCuadre.total_cuadra === true && (
+                          <span className="badge badge-ok">✓ Cuadra</span>
+                        )}
+                        {deteccionCuadre.total_cuadra === false && (
+                          <span className="badge badge-warn">
+                            ⚠ Difiere en {fmtMonto(Math.abs(deteccionCuadre.total_declarado - deteccionCuadre.total_movimientos))}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={() => setPanelId(resultado.planilla_id)}
                 className="mt-3 w-full px-3 py-2 text-sm font-medium bg-ml-blue text-white rounded-md hover:bg-ml-blue-dark transition-colors flex items-center justify-center gap-2"
