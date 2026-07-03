@@ -136,6 +136,13 @@ Tolerancia fecha: 5 días · UM deduplicación: (orden, monto) o (fecha, monto, 
 `BUGS.md` — son las áreas con bugs recurrentes documentados (causa raíz + cómo evitarlos).
 Bancos soportados: Macro, BBVA, Santander, Galicia, ICBC y genérico.
 
+**Planillas de clientes heterogéneas** (v3.27): la planilla del cliente (distinta del extracto del
+banco) pasa por un embudo de estandarización (`services/planilla_mapper.py`) que la normaliza al
+esquema canónico `{monto, cuit, titular, referencia, fecha}` antes de conciliar. 3 capas: perfil por
+cliente (`Cliente.mapeo_planilla`, se aprende al confirmar el mapeo una vez) → heurística con
+validación de contenido → IA (Gemini) como fallback. Endpoints `/planillas/preview` (+ modal de
+mapeo en frontend) y `/planillas/upload` con `mapeo` opcional. El motor de conciliación no cambia.
+
 IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ confirmaciones → aplica auto).
 
 ---
@@ -380,4 +387,4 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.24
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.27

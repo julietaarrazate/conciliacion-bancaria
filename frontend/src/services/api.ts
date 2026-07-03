@@ -48,6 +48,8 @@ import {
   ArcaConfig,
   ComprobanteArca,
   ComprobanteArcaPayload,
+  ResultadoMapeoPlanilla,
+  MapeoColumnas,
 } from '@/types'
 import { useLockStore } from '@/store/lock'
 
@@ -413,14 +415,37 @@ class ApiClient {
     clienteNombre: string,
     extractoId: number,
     file: File,
-    orgId?: number | null
+    orgId?: number | null,
+    mapeo?: MapeoColumnas & { header_row: number }
   ): Promise<Planilla> {
     const formData = new FormData()
     formData.append('file', file)
+    if (mapeo) formData.append('mapeo', JSON.stringify(mapeo))
 
     const params: any = { cliente_nombre: clienteNombre, extracto_id: extractoId }
     if (orgId) params.org_id = orgId
     const res = await this.client.post('/planillas/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params
+    })
+    return res.data
+  }
+
+  // Preview de mapeo de columnas — no guarda nada, solo analiza el archivo
+  async previewPlanilla(
+    file: File,
+    clienteId?: number,
+    orgId?: number | null,
+    clienteNombre?: string
+  ): Promise<ResultadoMapeoPlanilla> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const params: any = {}
+    if (clienteId) params.cliente_id = clienteId
+    if (clienteNombre) params.cliente_nombre = clienteNombre
+    if (orgId) params.org_id = orgId
+    const res = await this.client.post('/planillas/preview', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       params
     })

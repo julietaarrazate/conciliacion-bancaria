@@ -1,12 +1,13 @@
 import logging
+import json
+from datetime import datetime as _dt_now
 from decimal import Decimal
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query, Request
 from sqlalchemy import func, cast, String, or_
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-import tempfile
 import os
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ from app.models.user import User
 from app.models.organizacion import Organizacion
 from fastapi.responses import StreamingResponse
 from app.schemas.planilla import PlanillaResponse, PlanillaDetalleResponse, ConciliacionResultado
-from app.services.excel_parser import parsear_planilla_cliente
+from app.services.planilla_mapper import estandarizar_planilla
 from app.services.conciliacion import conciliar_planilla
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_planilla_conciliada
@@ -54,6 +55,84 @@ def _planilla_for_user(db: Session, planilla_id: int, current_user: User,
     return p
 
 
+def _cliente_para_org(db: Session, cliente_id: int, org_id: int,
+                      current_user: User) -> Cliente:
+    """Resuelve un cliente con aislamiento multi-tenant. 404 si no existe o es de
+    otra org (salvo superadmin)."""
+    q = db.query(Cliente).filter(Cliente.id == cliente_id)
+    if not current_user.is_superadmin:
+        q = q.filter(Cliente.organizacion_id == org_id)
+    cli = q.first()
+    if not cli:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    return cli
+
+
+@router.post("/preview")
+@limiter.limit("30/minute")
+async def preview_planilla(
+    request: Request,
+    cliente_id: Optional[int] = Query(None, description="Cliente para reusar su perfil aprendido"),
+    cliente_nombre: Optional[str] = Query(None, description="Alternativa a cliente_id: resuelve el cliente por nombre en la org"),
+    org_id: Optional[int] = Query(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_permission("upload_files")),
+):
+    """Estandariza una planilla y devuelve el ResultadoMapeo SIN persistir nada.
+    Usa el perfil aprendido del cliente si el fingerprint coincide."""
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext not in ('.xlsx', '.xls', '.csv'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formatos aceptados: .xlsx, .xls, .csv"
+        )
+
+    org_id = org_id if (org_id and can_switch_org(current_user, org_id)) else (current_user.organizacion_id or 1)
+
+    mapeo_perfil = None
+    if cliente_id:
+        cliente = _cliente_para_org(db, cliente_id, org_id, current_user)
+        mapeo_perfil = cliente.mapeo_planilla
+    elif cliente_nombre:
+        # El Dashboard identifica al cliente por nombre; resolvemos su perfil (mismo
+        # org). Si no existe todavía, no pasa nada → cae a heurística.
+        cli = db.query(Cliente).filter(
+            Cliente.nombre.ilike(cliente_nombre.strip()),
+            Cliente.organizacion_id == org_id,
+        ).first()
+        mapeo_perfil = cli.mapeo_planilla if cli else None
+
+    contents = await file.read()
+    try:
+        resultado = estandarizar_planilla(contents, mapeo=mapeo_perfil)
+    except Exception as e:
+        logger.error("preview error: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se pudo leer la planilla. Verificá el formato del archivo."
+        )
+
+    return {
+        "origen": resultado["origen"],
+        "confianza": resultado["confianza"],
+        "header_row": resultado["header_row"],
+        "columnas": resultado["columnas"],
+        "columnas_disponibles": resultado["columnas_disponibles"],
+        "preview": resultado["preview"],
+        "fingerprint": resultado["fingerprint"],
+        "filas_totales": resultado["filas_totales"],
+        "filas_descartadas": resultado["filas_descartadas"],
+        "deteccion": {
+            "origen": resultado["origen"],
+            "confianza": resultado["confianza"],
+            "filas_totales": resultado["filas_totales"],
+            "filas_descartadas": resultado["filas_descartadas"],
+        },
+    }
+
+
 @router.post("/upload", response_model=PlanillaResponse)
 @limiter.limit("20/minute")
 async def upload_planilla(
@@ -62,6 +141,7 @@ async def upload_planilla(
     extracto_id: int = Query(..., description="ID del extracto a usar"),
     org_id: Optional[int] = Query(None),
     file: UploadFile = File(...),
+    mapeo: Optional[str] = Form(None, description="JSON con {header_row, columnas} — corrección manual del usuario"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permission("upload_files"))
@@ -103,12 +183,22 @@ async def upload_planilla(
         cliente_nombre = cliente.nombre
 
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            contents = await file.read()
-            tmp.write(contents)
-            tmp_path = tmp.name
+        contents = await file.read()
 
-        parsed = parsear_planilla_cliente(tmp_path)
+        # Elegir el mapeo: 1) corrección manual del usuario (form `mapeo`);
+        # 2) perfil aprendido del cliente. Sin ninguno → pipeline heurística/IA.
+        mapeo_manual = None
+        if mapeo:
+            try:
+                mapeo_manual = json.loads(mapeo)
+            except (ValueError, TypeError):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="El campo 'mapeo' no es un JSON válido."
+                )
+        mapeo_arg = mapeo_manual if mapeo_manual is not None else cliente.mapeo_planilla
+
+        resultado = estandarizar_planilla(contents, mapeo=mapeo_arg)
 
         planilla = Planilla(
             cliente_id=cliente.id,
@@ -121,7 +211,7 @@ async def upload_planilla(
         db.add(planilla)
         db.flush()
 
-        for fila_data in parsed["filas"]:
+        for fila_data in resultado["filas"]:
             fila = PlanillaRow(
                 planilla_id=planilla.id,
                 monto=fila_data.get("monto"),
@@ -132,6 +222,15 @@ async def upload_planilla(
                 organizacion_id=org_id
             )
             db.add(fila)
+
+        # Aprender el perfil cuando el usuario corrigió el mapeo manualmente.
+        if mapeo_manual is not None:
+            cliente.mapeo_planilla = {
+                "fingerprint": resultado["fingerprint"],
+                "header_row": resultado["header_row"],
+                "columnas": resultado["columnas"],
+                "actualizado": _dt_now.utcnow().isoformat(),
+            }
 
         db.commit()
         db.refresh(planilla)
@@ -145,13 +244,23 @@ async def upload_planilla(
             cambios={
                 "cliente": cliente_nombre,
                 "extracto_id": extracto_id,
-                "filas": len(parsed["filas"]),
-                "organizacion_id": org_id
+                "filas": len(resultado["filas"]),
+                "organizacion_id": org_id,
+                "origen_deteccion": resultado["origen"],
             }
         )
 
+        planilla.deteccion = {
+            "origen": resultado["origen"],
+            "confianza": resultado["confianza"],
+            "filas_totales": resultado["filas_totales"],
+            "filas_descartadas": resultado["filas_descartadas"],
+        }
         return planilla
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         logger.error("upload error: %s", e)
@@ -159,9 +268,6 @@ async def upload_planilla(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Error al procesar la planilla. Verificá el formato del archivo."
         )
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
 
 
 @router.post("/{planilla_id}/conciliar", response_model=ConciliacionResultado)

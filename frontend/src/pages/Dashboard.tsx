@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FileUpload } from '@/components/FileUpload'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
+import { ColumnMapperModal } from '@/components/ColumnMapperModal'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { confirmDialog } from '@/store/confirm'
@@ -10,7 +11,9 @@ import { useThemeStore } from '@/store/theme'
 import {
   ConciliacionResultado,
   ExtractoListItem,
-  PlanillaHistorialItem
+  PlanillaHistorialItem,
+  ResultadoMapeoPlanilla,
+  MapeoColumnas
 } from '@/types'
 import { localIsoDate } from '@/utils/fecha'
 
@@ -244,6 +247,10 @@ export const Dashboard: React.FC = () => {
   const [umCorteManual, setUmCorteManual] = useState<string>('')
   const [umFile, setUmFile] = useState<File | null>(null)
 
+  // ── Preview / mapeo de columnas de la planilla individual ────
+  const [mapeoPendiente, setMapeoPendiente] = useState<ResultadoMapeoPlanilla | null>(null)
+  const [archivoPendiente, setArchivoPendiente] = useState<File | null>(null)
+
   // ── Carga masiva ──────────────────────────────────────────────
   interface BulkItem {
     id: string; file: File; clienteNombre: string
@@ -425,7 +432,7 @@ export const Dashboard: React.FC = () => {
     setUmCorteManual('')
   }
 
-  const handleUploadPlanilla = async (file: File) => {
+  const handleUploadPlanilla = async (file: File, mapeo?: MapeoColumnas & { header_row: number }) => {
     if (!extractoId || !clienteNombre.trim()) {
       setError('Cargá primero un extracto e ingresá el cliente')
       return
@@ -439,7 +446,8 @@ export const Dashboard: React.FC = () => {
         clienteNombre,
         extractoId,
         file,
-        activeOrgId
+        activeOrgId,
+        mapeo
       )
       const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred, false, parseFloat(comisionPct) || 0)
       setResultado(r)
@@ -451,6 +459,47 @@ export const Dashboard: React.FC = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Al elegir el archivo: previsualiza el mapeo de columnas. Si el perfil del cliente
+  // ya lo conoce o la confianza es alta, sube directo sin fricción; si no, pide confirmación
+  // visual (ColumnMapperModal). Si el preview falla, degrada al upload directo de siempre.
+  const handleFileSelected = async (file: File) => {
+    if (!extractoId || !clienteNombre.trim()) {
+      setError('Cargá primero un extracto e ingresá el cliente')
+      return
+    }
+    setError('')
+    setSuccess('')
+    setLoading(true)
+    try {
+      const resultado = await apiClient.previewPlanilla(file, undefined, activeOrgId, clienteNombre.trim())
+      setLoading(false)
+      if (resultado.origen === 'perfil' || resultado.confianza >= 0.8) {
+        await handleUploadPlanilla(file, { ...resultado.columnas, header_row: resultado.header_row })
+      } else {
+        setArchivoPendiente(file)
+        setMapeoPendiente(resultado)
+      }
+    } catch {
+      setLoading(false)
+      // No se pudo previsualizar (endpoint no disponible, archivo raro, etc.):
+      // no bloquea la carga, sube sin mapeo como antes.
+      await handleUploadPlanilla(file)
+    }
+  }
+
+  const handleConfirmarMapeo = async (mapeo: MapeoColumnas & { header_row: number }) => {
+    const file = archivoPendiente
+    setMapeoPendiente(null)
+    setArchivoPendiente(null)
+    if (!file) return
+    await handleUploadPlanilla(file, mapeo)
+  }
+
+  const handleCancelarMapeo = () => {
+    setMapeoPendiente(null)
+    setArchivoPendiente(null)
   }
 
   // Stats — usa solo el extracto activo para movimientos (no sumar duplicados)
@@ -804,7 +853,7 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <FileUpload
-            onFileSelected={handleUploadPlanilla}
+            onFileSelected={handleFileSelected}
             label={!extractoId ? 'Cargá primero un extracto (Paso 1)' : 'Subir planilla (.xlsx, .xls, .csv)'}
           />
           {!clienteNombre.trim() && extractoId && (
@@ -1053,6 +1102,14 @@ export const Dashboard: React.FC = () => {
             </>
           )}
         </div>
+      )}
+
+      {mapeoPendiente && (
+        <ColumnMapperModal
+          resultado={mapeoPendiente}
+          onConfirm={handleConfirmarMapeo}
+          onCancel={handleCancelarMapeo}
+        />
       )}
     </div>
   )

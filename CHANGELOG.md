@@ -5,6 +5,39 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.27 — Estandarización universal de planillas de clientes (jul 2026)
+
+Cada cliente manda su planilla en un formato distinto (columnas, orden, headers en filas
+distintas). Antes el parser buscaba "monto"/"importe" solo en las filas 1-5, tomaba el primer
+match y caía a un fallback hardcodeado de Banco Macro → degradaba en silencio a "sin datos".
+Ahora hay un **embudo de estandarización** que normaliza cualquier planilla al esquema canónico
+`{monto, cuit, titular, referencia, fecha}` que ya consume el motor de conciliación (**el motor no
+se tocó** — cero riesgo sobre el matcheo).
+
+- **Pipeline de 3 capas** (`services/planilla_mapper.py`, `estandarizar_planilla`): 1) **perfil**
+  por cliente (mapeo guardado + fingerprint de headers → si coincide, parsea directo sin preguntar);
+  2) **heurística** mejorada (detecta la fila de headers escaneando 1..15, soporta offset de columna,
+  diccionario de sinónimos normalizado, y **valida el contenido** de cada columna — monto numérico,
+  CUIT 7-11 dígitos, titular no-constante para evitar la trampa "Cliente=constante", corta tras 3
+  filas sin monto contra planillas con 1M de filas vacías); 3) **IA (Gemini)** solo si la heurística
+  no llega al umbral (degradación total sin API key). Montos en Decimal.
+- **Perfil aprendido**: nueva columna `Cliente.mapeo_planilla` (JSON) — la primera vez que se
+  confirma/corrige el mapeo de un cliente se guarda; las próximas cargas del mismo formato parsean
+  solas. Migración 022 + safety-net.
+- **Endpoints**: `POST /planillas/preview` (detecta sin persistir → alimenta el modal) y
+  `POST /planillas/upload` extendido con `mapeo` opcional (corrección manual, se guarda como perfil)
+  + `deteccion` en la respuesta. Compatible: el upload sin `mapeo` sigue funcionando.
+- **Frontend**: `ColumnMapperModal` — al cargar una planilla, si la detección es de alta confianza
+  o de perfil, sube directo (sin fricción); si duda, muestra un modal con las primeras filas y un
+  desplegable por columna ("Usar como: Monto/CUIT/Titular/Referencia/Fecha/Ignorar") para confirmar
+  o corregir. Avisa cuántas filas detectó (no más filas desaparecidas en silencio).
+- Probado contra **3 formatos reales** (Tucu/Green en Org A/Macro, Dani en Org Prueba/Comercio):
+  los tres parsean con la heurística sola a confianza 1.00 (header en fila distinta, offset de
+  columna, trampa del cliente-constante, 1M de filas vacías — todo resuelto). Multi-tenant: el
+  perfil vive en `Cliente` (scopeado por org). **20 tests nuevos** (500 backend + 31 frontend).
+
+---
+
 ### v3.26 — Liquidación REAL de IVA con "Mis Comprobantes" de ARCA (jul 2026)
 
 Quinto módulo del plan de liquidación de impuestos. Complementa la *proyección* de IVA (v3.19,

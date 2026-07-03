@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime, date
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 
 class PlanillaRowBase(BaseModel):
     monto: float
@@ -26,6 +26,9 @@ class PlanillaResponse(BaseModel):
     extracto_id: int
     fecha_carga: datetime
     rows: List[PlanillaRowResponse]
+    # Metadatos de cómo se detectó/estandarizó la planilla en el upload.
+    # Solo lo llena POST /planillas/upload; en el resto queda None.
+    deteccion: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True

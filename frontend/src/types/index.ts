@@ -88,6 +88,7 @@ export interface Planilla {
   extracto_id: number
   fecha_carga: string
   rows: PlanillaRow[]
+  deteccion?: DeteccionInfo
 }
 
 export interface ConciliacionResultado {
@@ -97,6 +98,39 @@ export interface ConciliacionResultado {
   no_encontradas: number
   duplicadas: number
   sin_datos: number
+}
+
+export interface ColumnaDisponible {
+  idx: number
+  header: string
+  muestras: string[]
+}
+
+export interface MapeoColumnas {
+  monto: number | null
+  cuit: number | null
+  titular: number | null
+  fecha: number | null
+  referencia: number | null
+}
+
+export interface ResultadoMapeoPlanilla {
+  origen: 'perfil' | 'heuristica' | 'ia' | 'manual'
+  confianza: number
+  header_row: number
+  columnas: MapeoColumnas
+  columnas_disponibles: ColumnaDisponible[]
+  preview: { fila: number; valores: string[] }[]
+  filas_totales: number
+  filas_descartadas: number
+  fingerprint: string
+}
+
+export interface DeteccionInfo {
+  origen: string
+  confianza: number
+  filas_totales: number
+  filas_descartadas: number
 }
 
 export interface PlanillaHistorialItem {
