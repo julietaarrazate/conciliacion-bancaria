@@ -22,7 +22,7 @@ if __name__ == "__main__":
     print("=" * 50)
     print("  URLs del backend")
     print("=" * 50)
-    print(f"  Web local (esta PC):    http://localhost:8000")
+    print("  Web local (esta PC):    http://localhost:8000")
     print(f"  Celular (misma WiFi):   http://{ip}:8000")
     print(f"  Swagger:                http://{ip}:8000/docs")
     print("=" * 50)

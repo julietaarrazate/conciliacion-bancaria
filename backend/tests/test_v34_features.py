@@ -15,19 +15,6 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 
-import app.models.organizacion
-import app.models.user
-import app.models.extracto
-import app.models.planilla
-import app.models.cliente
-import app.models.cheque
-import app.models.egreso
-import app.models.caja
-import app.models.liquidacion
-import app.models.contabilidad
-import app.models.auditoria
-import app.models.patron_aprendido
-import app.models.revoked_token
 
 
 # ── Fixture ──────────────────────────────────────────────────────────────────

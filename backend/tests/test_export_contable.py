@@ -262,7 +262,6 @@ def test_regisoft_punto_decimal(db):
     for linea in lineas[1:]:
         partes = linea.split(",")
         debe = partes[3]
-        haber = partes[4]
         assert "." in debe, f"Debe sin punto decimal: {debe}"
 
 

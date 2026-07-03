@@ -4,7 +4,6 @@ Cubre las funciones puras (parseo de importes, normalización de CUIT, extracci�
 y los casos básicos de matching con la config default.
 """
 
-import pytest
 from datetime import date
 from app.services.conciliacion import (
     buscar_match,

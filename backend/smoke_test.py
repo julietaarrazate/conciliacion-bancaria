@@ -48,7 +48,7 @@ def wait_for_backend():
         try:
             r = requests.get(f"{BASE_URL}/health", timeout=2)
             if r.ok and r.json().get("status") == "healthy":
-                ok(f"backend respondiendo")
+                ok("backend respondiendo")
                 return
         except Exception:
             pass

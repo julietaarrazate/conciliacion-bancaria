@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models.organizacion import Organizacion
-from app.models.contabilidad import PlanCuenta, ReglaContable
+from app.models.contabilidad import PlanCuenta
 from app.services.seed_contable import seed_contabilidad_org, PLAN, PLAN_PATCH, REGLAS
 
 

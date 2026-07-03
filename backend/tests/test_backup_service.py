@@ -6,7 +6,7 @@ sea serializable (sin tipos raros tipo datetime sin convertir).
 
 import json
 import pytest
-from datetime import date, datetime
+from datetime import date
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -19,7 +19,7 @@ from app.models.extracto import ExtractoBancario, MovimientoBanco
 from app.models.planilla import Planilla, PlanillaRow
 from app.models.cheque import Cheque
 from app.models.egreso import Egreso
-from app.models.contabilidad import PlanCuenta, ReglaContable
+from app.models.contabilidad import PlanCuenta
 from app.services.backup_service import export_org_backup, BACKUP_VERSION
 
 
