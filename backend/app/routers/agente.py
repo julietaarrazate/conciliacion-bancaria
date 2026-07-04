@@ -220,7 +220,8 @@ def _resumen_financiero(db, org_id, mes=None, año=None):
 
 def _consultar_alertas(db, org_id):
     """Alertas operativas vigentes: cheques por vencer/vencidos, filas atrasadas,
-    movimientos sin asignar. Misma fuente que la campana del Dashboard."""
+    movimientos sin asignar, planillas con descuadre de total y filas ambiguas
+    por revisar. Misma fuente que la campana del Dashboard."""
     from app.services import reportes_service as svc
     return svc.calcular_alertas(db, org_id)
 
@@ -348,7 +349,7 @@ def _run_chat_message(mensaje: str, db: Session, org_id: int, api_key: str) -> s
         },
         {
             "name": "consultar_alertas",
-            "description": "Trae las alertas operativas vigentes: cheques por vencer en 7 días, cheques vencidos, filas de planilla atrasadas +30 días, movimientos bancarios sin asignar en los últimos 30 días. Usala proactivamente al saludar o cuando preguntan 'qué necesito ver hoy' / 'hay algo importante' / 'cómo viene todo'.",
+            "description": "Trae las alertas operativas vigentes: cheques por vencer en 7 días, cheques vencidos, filas de planilla atrasadas +30 días, movimientos bancarios sin asignar en los últimos 30 días, planillas cuyo total declarado por el cliente no cuadra con la suma de sus filas, y filas de planilla marcadas como 'ambiguo' (varios candidatos de conciliación con el mismo puntaje) pendientes de elegir a mano. Usala proactivamente al saludar o cuando preguntan 'qué necesito ver hoy' / 'hay algo importante' / 'cómo viene todo'.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
         {

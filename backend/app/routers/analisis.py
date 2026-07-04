@@ -79,7 +79,8 @@ def alertas(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Alertas operativas del día: cheques urgentes/vencidos, filas atrasadas, movimientos sin asignar."""
+    """Alertas operativas del día: cheques urgentes/vencidos, filas atrasadas, movimientos sin
+    asignar, planillas con descuadre de total y filas ambiguas por revisar."""
     organizacion_id = svc.resolver_org(current_user, org_id)
 
     cache_key = f"alertas:{organizacion_id}"

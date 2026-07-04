@@ -26,12 +26,16 @@ const ALERTA_META: Record<string, { icon: string; color: string; bg: string; bor
   cheques_vencidos:        { icon: '🔴', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' },
   filas_atrasadas:         { icon: '📋', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
   movimientos_sin_asignar: { icon: '🔍', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
+  planillas_descuadre:     { icon: '⚖️', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
+  filas_ambiguas:          { icon: '🤔', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
 }
 const ALERTA_META_DARK: Record<string, { color: string; bg: string; border: string }> = {
   cheques_urgentes:        { color: '#F87171', bg: 'rgba(239,68,68,.1)',  border: 'rgba(239,68,68,.25)' },
   cheques_vencidos:        { color: '#F87171', bg: 'rgba(239,68,68,.1)',  border: 'rgba(239,68,68,.25)' },
   filas_atrasadas:         { color: '#FCD34D', bg: 'rgba(245,158,11,.1)', border: 'rgba(245,158,11,.25)' },
   movimientos_sin_asignar: { color: '#60A5FA', bg: 'rgba(37,99,235,.1)',  border: 'rgba(37,99,235,.25)' },
+  planillas_descuadre:     { color: '#FCD34D', bg: 'rgba(245,158,11,.1)', border: 'rgba(245,158,11,.25)' },
+  filas_ambiguas:          { color: '#60A5FA', bg: 'rgba(37,99,235,.1)',  border: 'rgba(37,99,235,.25)' },
 }
 const AlertasWidget: React.FC<{ orgId: number | null; isDark: boolean }> = ({ orgId, isDark }) => {
   const navigate = useNavigate()

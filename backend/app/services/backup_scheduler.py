@@ -129,10 +129,13 @@ def start_alertas_push_job() -> None:
 
 
 def _run_alertas_push() -> None:
-    """Revisa cheques por vencer y movimientos sin asignar. Manda push si hay urgentes."""
+    """Revisa cheques por vencer, movimientos sin asignar, planillas con descuadre de
+    total y filas ambiguas por revisar. Manda push si hay urgentes."""
     from datetime import datetime
+    from sqlalchemy import func
     from app.models.cheque import Cheque
     from app.models.extracto import MovimientoBanco
+    from app.models.planilla import Planilla, PlanillaRow
 
     db = SessionLocal()
     try:
@@ -162,6 +165,29 @@ def _run_alertas_push() -> None:
             .count()
         )
 
+        _descuadre_subq = (
+            db.query(Planilla.id)
+            .outerjoin(PlanillaRow, PlanillaRow.planilla_id == Planilla.id)
+            .filter(
+                Planilla.deleted_at.is_(None),
+                Planilla.total_declarado.isnot(None),
+            )
+            .group_by(Planilla.id, Planilla.total_declarado)
+            .having(func.abs(Planilla.total_declarado - func.coalesce(func.sum(PlanillaRow.monto), 0)) > 1)
+            .subquery()
+        )
+        planillas_descuadre = db.query(func.count()).select_from(_descuadre_subq).scalar() or 0
+
+        filas_ambiguas = (
+            db.query(PlanillaRow)
+            .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
+            .filter(
+                Planilla.deleted_at.is_(None),
+                PlanillaRow.status.like("ambiguo%"),
+            )
+            .count()
+        )
+
         partes = []
         if cheques_urgentes:
             n = cheques_urgentes
@@ -169,6 +195,12 @@ def _run_alertas_push() -> None:
         if movs_sin_asignar:
             n = movs_sin_asignar
             partes.append(f"{n} movimiento{'s' if n > 1 else ''} sin conciliar (+7 días)")
+        if planillas_descuadre:
+            n = planillas_descuadre
+            partes.append(f"{n} planilla{'s' if n > 1 else ''} con total que no cuadra")
+        if filas_ambiguas:
+            n = filas_ambiguas
+            partes.append(f"{n} fila{'s' if n > 1 else ''} ambigua{'s' if n > 1 else ''} por revisar")
 
         if not partes:
             logger.info("Push alertas: sin novedades urgentes hoy")

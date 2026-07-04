@@ -329,7 +329,8 @@ def calcular_dashboard(
 
 
 def calcular_alertas(db: Session, organizacion_id: int) -> dict:
-    """Alertas operativas del día: cheques urgentes/vencidos, filas atrasadas, movimientos sin asignar."""
+    """Alertas operativas del día: cheques urgentes/vencidos, filas atrasadas, movimientos sin
+    asignar, planillas con descuadre de total y filas ambiguas por revisar."""
     from zoneinfo import ZoneInfo
     hoy = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date()
 
@@ -371,6 +372,37 @@ def calcular_alertas(db: Session, organizacion_id: int) -> dict:
         ),
     ).scalar() or 0
 
+    # Planillas activas cuyo total declarado por el cliente (Planilla.total_declarado)
+    # difiere en mas de $1 de la suma real de sus filas: indicio de fila faltante/de
+    # mas o de un error de carga que conviene revisar antes de cerrar el periodo.
+    _descuadre_subq = (
+        db.query(Planilla.id)
+        .outerjoin(PlanillaRow, PlanillaRow.planilla_id == Planilla.id)
+        .filter(
+            Planilla.organizacion_id == organizacion_id,
+            Planilla.deleted_at.is_(None),
+            Planilla.total_declarado.isnot(None),
+        )
+        .group_by(Planilla.id, Planilla.total_declarado)
+        .having(func.abs(Planilla.total_declarado - func.coalesce(func.sum(PlanillaRow.monto), 0)) > 1)
+        .subquery()
+    )
+    planillas_descuadre = db.query(func.count()).select_from(_descuadre_subq).scalar() or 0
+
+    # Filas que el motor dejo en "ambiguo (...)" (dos o mas candidatos con el mismo
+    # score) porque no puede elegir sin arriesgar un match incorrecto: requieren que
+    # una persona elija a mano el movimiento correcto.
+    filas_ambiguas = (
+        db.query(func.count(PlanillaRow.id))
+        .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
+        .filter(
+            Planilla.organizacion_id == organizacion_id,
+            Planilla.deleted_at.is_(None),
+            PlanillaRow.status.like("ambiguo%"),
+        )
+        .scalar() or 0
+    )
+
     alertas_lista = []
     if cheques_urgentes:
         alertas_lista.append({
@@ -403,6 +435,22 @@ def calcular_alertas(db: Session, organizacion_id: int) -> dict:
             "label": "Movimientos sin asignar",
             "urgencia": "baja",
             "link": "/movimientos",
+        })
+    if planillas_descuadre:
+        alertas_lista.append({
+            "tipo": "planillas_descuadre",
+            "cantidad": planillas_descuadre,
+            "label": "Planillas con total que no cuadra",
+            "urgencia": "media",
+            "link": "/conciliaciones",
+        })
+    if filas_ambiguas:
+        alertas_lista.append({
+            "tipo": "filas_ambiguas",
+            "cantidad": filas_ambiguas,
+            "label": "Filas ambiguas por revisar",
+            "urgencia": "media",
+            "link": "/conciliaciones",
         })
 
     # `total` para el badge de la campana: solo cuenta TIPOS de alerta
