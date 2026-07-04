@@ -244,6 +244,74 @@ class TestDeteccionTotales:
         assert r["total_cuadra"] is False
 
 
+# ── Blindaje Dani: bloque de cálculos del cliente NO contamina los movimientos ─
+
+class TestBlindajeDaniBloqueCalculo:
+    """Regresión (blindaje Dani): una planilla con los movimientos reales, luego un
+    HUECO de filas vacías y después un bloque de liquidación del cliente
+    ("Suma"/"Comi"/"Bruto"/"Transfer 1/2"/"Neto") en otra columna NO debe:
+      - contar el bloque de cálculo como movimientos,
+      - dejar ningún "Transfer N"/"Suma"/"Bruto"/"Neto" en `filas`,
+      - tomar el "Neto"/"Bruto"/"Transfer" del cliente como total_declarado espurio.
+    """
+
+    def _dani_con_bloque_calculo(self):
+        # Movimientos reales: ID (col A), Importe (col B), Fecha, Cuit, Titular.
+        # El monto vive en la col B; el bloque de cálculo del cliente pone sus
+        # etiquetas en la col B (texto → no parsea como monto) y los importes
+        # calculados en la col C.
+        return [
+            ["ID", "Importe", "Fecha", "Cuit", "Titular"],
+            [1, 100000, "2026-06-04", "20940508925", "Juan Perez"],
+            [2, 200000, "2026-06-05", "27123456784", "Maria Lopez"],
+            [3, 50000, "2026-06-06", "20111111112", "Pedro Gomez"],
+            # HUECO de filas vacías entre los movimientos y el bloque de cálculo.
+            [None, None, None, None, None],
+            [None, None, None, None, None],
+            [None, None, None, None, None],
+            # Bloque de liquidación del cliente (col B = etiqueta, col C = monto).
+            [None, "Suma", 350000, None, None],
+            [None, "Comi", 3500, None, None],
+            [None, "Bruto", 346500, None, None],
+            [None, "Transfer 1", 173250, None, None],
+            [None, "Transfer 2", 173250, None, None],
+            [None, "Neto", 346500, None, None],
+        ]
+
+    def test_solo_extrae_los_movimientos_reales(self):
+        r = estandarizar_planilla(_build_xlsx(self._dani_con_bloque_calculo()), usar_ia=False)
+        # Solo los 3 movimientos reales; el bloque de cálculo queda afuera.
+        assert r["filas_totales"] == 3
+        assert r["columnas"]["monto"] == 2  # col B "Importe", no la col del bloque
+        montos = {f["monto"] for f in r["filas"]}
+        assert montos == {Decimal("100000"), Decimal("200000"), Decimal("50000")}
+
+    def test_ninguna_etiqueta_de_calculo_queda_en_filas(self):
+        r = estandarizar_planilla(_build_xlsx(self._dani_con_bloque_calculo()), usar_ia=False)
+        etiquetas_prohibidas = {"suma", "comi", "bruto", "neto",
+                                "transfer 1", "transfer 2"}
+        for f in r["filas"]:
+            # Ni el titular ni ningún valor de texto puede ser una etiqueta de cálculo.
+            titular = (f.get("titular") or "").strip().lower()
+            assert titular not in etiquetas_prohibidas
+            assert not titular.startswith("transfer")
+        # Ninguno de los importes espurios del bloque (comisión, neto/bruto).
+        montos = {f["monto"] for f in r["filas"]}
+        assert Decimal("3500") not in montos      # comisión
+        assert Decimal("346500") not in montos     # bruto / neto
+        assert Decimal("173250") not in montos     # transfers
+
+    def test_total_declarado_no_es_espurio(self):
+        r = estandarizar_planilla(_build_xlsx(self._dani_con_bloque_calculo()), usar_ia=False)
+        # El bloque de cálculo NO debe interpretarse como total declarado.
+        # total_declarado debe ser None (los movimientos reales tienen cuit, no
+        # hay fila de resumen trailing) o, en el peor caso, el total real —
+        # nunca el "Neto"/"Bruto"/"Transfer" del cliente.
+        assert r["total_declarado"] in (None, Decimal("350000"))
+        assert r["total_declarado"] != Decimal("346500")  # no el Neto/Bruto
+        assert r["total_movimientos"] == Decimal("350000")
+
+
 # ── Tests de mapeo manual (Capa 1 determinística) ─────────────────────────────
 
 class TestMapeoManual:

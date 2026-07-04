@@ -9,12 +9,16 @@ En futuras conciliaciones, antes de declarar 'sin datos',
 el motor consulta los patrones aprendidos para ese cliente/org.
 """
 
-import re
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.models.patron_aprendido import PatronAprendido
 from app.models.planilla import PlanillaRow
 from app.models.extracto import MovimientoBanco
+# Extractores canónicos: aprendizaje usa EXACTAMENTE la misma extracción de
+# CUIT/CBU/números que el matcher (services/extractores.py). Antes este módulo
+# tenía copias locales del mismo regex \b\d{6,22}\b; se unificaron para que lo
+# que se aprende coincida con lo que concilia.
+from app.services.extractores import extraer_todos_numeros, numeros_de_planilla
 
 
 def _extraer_fragmento_titular(texto: Optional[str], max_palabras: int = 3) -> str:
@@ -26,13 +30,12 @@ def _extraer_fragmento_titular(texto: Optional[str], max_palabras: int = 3) -> s
 
 
 def _extraer_numeros_clave(cuit: Optional[str], titular: Optional[str], referencia: Optional[str]) -> str:
-    """Extrae todos los numeros significativos (6+ digitos) de los campos de planilla."""
-    nums = set()
-    for campo in [cuit, titular, referencia]:
-        if campo:
-            encontrados = re.findall(r'\b\d{6,22}\b', str(campo))
-            nums.update(encontrados)
-    return ','.join(sorted(nums))
+    """Extrae todos los numeros significativos (6+ digitos) de los campos de planilla.
+
+    Usa `numeros_de_planilla` (extractor canónico) para garantizar la misma
+    extracción que el matcher. El resultado es idéntico al regex local previo
+    (`\\b\\d{6,22}\\b` por campo), serializado como CSV ordenado."""
+    return ','.join(sorted(numeros_de_planilla(cuit, titular, referencia)))
 
 
 def registrar_correccion(
@@ -123,16 +126,13 @@ def buscar_por_patrones(
     if not patrones:
         return None
 
-    numeros_plan = set()
-    for campo in [cuit, titular, referencia]:
-        if campo:
-            numeros_plan.update(re.findall(r'\b\d{6,22}\b', str(campo)))
+    numeros_plan = numeros_de_planilla(cuit, titular, referencia)
 
     for mov in movimientos_libres:
         if mov.id in procesados:
             continue
         titular_mov = (mov.titular or '').lower()
-        nums_mov = set(re.findall(r'\b\d{6,22}\b', mov.titular or ''))
+        nums_mov = extraer_todos_numeros(mov.titular or '')
 
         for patron in patrones:
             # Match por fragmento de titular del extracto
