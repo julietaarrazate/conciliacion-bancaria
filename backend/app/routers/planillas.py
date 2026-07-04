@@ -627,17 +627,14 @@ def delete_row(
 
 # ── Endpoints existentes ──────────────────────────────────────────────────────
 
-@router.get("/{planilla_id}/download")
-def download_planilla_conciliada(
-    planilla_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Descarga xlsx con Hoja1=planilla+estado y Hoja2=movimientos acreditados"""
-    import io
-    from app.models.extracto import MovimientoBanco
+def _build_planilla_export_data(db: Session, p: Planilla) -> tuple[dict, list, object]:
+    """Arma la data de export (Excel y PDF comparten exactamente el mismo contenido).
 
-    p = _planilla_for_user(db, planilla_id, current_user, include_deleted=True)
+    Devuelve (planilla_data, movimientos_acreditados, fecha_ref) donde fecha_ref
+    es la fecha de acreditación más reciente (o hoy si no hay ninguna), usada
+    para el nombre de archivo.
+    """
+    from app.models.extracto import MovimientoBanco
 
     mov_ids = [r.orden_movimiento_acreditado for r in p.rows if r.orden_movimiento_acreditado]
     movs_map = {}
@@ -694,20 +691,62 @@ def download_planilla_conciliada(
         "cliente_nombre": p.cliente.nombre,
         "nombre_archivo": p.nombre_archivo,
         "rows": rows_data,
+        "total_declarado": p.total_declarado,
     }
+
+    fechas_acred = [mov.fecha_acred for mov in movs_map.values() if mov.fecha_acred]
+    fecha_ref = max(fechas_acred) if fechas_acred else hoy_art()
+
+    return planilla_data, movimientos_acreditados, fecha_ref
+
+
+@router.get("/{planilla_id}/download")
+def download_planilla_conciliada(
+    planilla_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Descarga xlsx con Hoja1=planilla+estado y Hoja2=movimientos acreditados"""
+    import io
+
+    p = _planilla_for_user(db, planilla_id, current_user, include_deleted=True)
+    planilla_data, movimientos_acreditados, fecha_ref = _build_planilla_export_data(db, p)
 
     xlsx = export_planilla_conciliada(planilla_data, movimientos_acreditados)
 
     # Nombre: "{cliente} acreditado {d.m}.xlsx" — ej "alojando acreditado 8.5.xlsx"
     # Fecha = la mas reciente de las acreditaciones; si no hay, fecha de hoy
-    fechas_acred = [mov.fecha_acred for mov in movs_map.values() if mov.fecha_acred]
-    fecha_ref = max(fechas_acred) if fechas_acred else hoy_art()
     fecha_str = f"{fecha_ref.day}.{fecha_ref.month}"
     cliente_slug = (p.cliente.nombre or "cliente").strip().lower()
     fname = f"{cliente_slug} acreditado {fecha_str}.xlsx"
     return StreamingResponse(
         io.BytesIO(xlsx),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'}
+    )
+
+
+@router.get("/{planilla_id}/export-pdf")
+def export_planilla_conciliada_pdf_endpoint(
+    planilla_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Descarga PDF con la misma data que el Excel de /download: título, detalle
+    de filas y bloque de totales/cuadre (incluyendo total declarado si existe)."""
+    import io
+    from app.services.pdf_export import export_planilla_conciliada_pdf
+
+    p = _planilla_for_user(db, planilla_id, current_user, include_deleted=True)
+    planilla_data, _movimientos_acreditados, fecha_ref = _build_planilla_export_data(db, p)
+
+    pdf = export_planilla_conciliada_pdf(planilla_data, generado_por=current_user.full_name or current_user.email)
+
+    cliente_slug = (p.cliente.nombre or "cliente").strip().lower().replace(" ", "_")
+    fname = f"planilla_{cliente_slug}_{fecha_ref.strftime('%Y-%m-%d')}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'}
     )
 

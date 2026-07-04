@@ -647,6 +647,18 @@ class ApiClient {
     URL.revokeObjectURL(url)
   }
 
+  // Exportar PDF (misma data que el Excel: detalle de filas + totales/cuadre)
+  async exportPlanillaPdf(planillaId: number): Promise<void> {
+    _suppressLockForDownload()
+    const res = await this.client.get(`/planillas/${planillaId}/export-pdf`, { responseType: 'blob' })
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `planilla_conciliada_${planillaId}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async exportMovimientos(extractoId: number, filters: MovimientosFiltros = {}): Promise<void> {
     _suppressLockForDownload()
     const params: Record<string, string | number | boolean> = {}

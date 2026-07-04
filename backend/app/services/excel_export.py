@@ -1,6 +1,7 @@
 """Generacion de archivos Excel para download (movimientos, historial)"""
 
 import io
+from decimal import Decimal
 from typing import List
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -20,6 +21,19 @@ HDR_FONT = Font(color="FFFFFF", bold=True, size=11)
 HDR_FILL = PatternFill("solid", fgColor="3483FA")
 ML_YELLOW = PatternFill("solid", fgColor="FFE600")
 TITLE_FONT = Font(bold=True, size=14, color="333333")
+
+# ── Paleta de marca Cuadra (verde) — usada en el export de planilla conciliada ──
+CUADRA_GREEN = "16A34A"        # verde de marca
+CUADRA_GREEN_DARK = "15803D"   # verde oscuro para headers (contraste con texto blanco)
+CUADRA_GREEN_TINT = "DCFCE7"   # verde muy claro para fila de total
+AMBER_TINT = "FFF3CD"          # ámbar claro (diferencia / estado ambiguo)
+AMBER_FONT = "92650A"
+RED_TINT = "F8D7DA"
+RED_FONT = "842029"
+GREEN_FONT = "155724"
+HDR_FILL_CUADRA = PatternFill("solid", fgColor=CUADRA_GREEN_DARK)
+MONEY_FMT_ARS = '"$ "#,##0.00'   # formato es-AR: $ 1.234.567,89 (Excel adapta separadores al locale)
+TOTAL_BORDER = Border(top=Side(style="medium", color=CUADRA_GREEN_DARK))
 
 
 def _mes_a_int(v):
@@ -111,8 +125,14 @@ def export_planilla_conciliada(planilla_data: dict, movimientos_acreditados: Lis
     Genera un xlsx con 2 hojas:
       Hoja 1 - Planilla del cliente con columna de estado (ok / no esta / faltan datos / etc.)
       Hoja 2 - Movimientos bancarios acreditados a esta planilla
+
+    `planilla_data` puede incluir opcionalmente "total_declarado" (Decimal | None):
+    el total que el cliente declaró en su planilla, usado para la fila de cuadre
+    al final de la hoja 1. No cambia columnas ni orden existentes (compatibilidad
+    con el contador) — solo agrega encabezado de marca, formato y fila de totales.
     """
     wb = openpyxl.Workbook()
+    now = _now()
 
     # ── HOJA 1: planilla del cliente con estado ──────────────────────────────
     ws1 = wb.active
@@ -120,22 +140,39 @@ def export_planilla_conciliada(planilla_data: dict, movimientos_acreditados: Lis
 
     ws1.cell(row=1, column=1, value=f"Cliente: {planilla_data['cliente_nombre']}").font = TITLE_FONT
     ws1.cell(row=2, column=1, value=f"Archivo: {planilla_data['nombre_archivo']}").font = Font(italic=True, color="666666")
-    ws1.cell(row=3, column=1, value=f"Generado: {_now().strftime('%d/%m/%Y %H:%M')}").font = Font(italic=True, color="666666")
+    ws1.cell(row=3, column=1, value=f"Generado: {now.strftime('%d/%m/%Y %H:%M')}").font = Font(italic=True, color="666666")
+    marca = ws1.cell(row=1, column=9, value="Cuadra")
+    marca.font = Font(italic=True, bold=True, size=10, color=CUADRA_GREEN)
+    marca.alignment = Alignment(horizontal="right")
 
     # Hoja 1: columnas del cliente + movimiento del extracto + Estado AL FINAL
     h1 = ["#", "Importe", "CUIT", "Titular planilla", "Orden mov.", "Titular extracto", "Fecha mov.", "Fecha acred.", "Estado"]
-    _hdr(ws1, 5, h1)
+    for col, h in enumerate(h1, start=1):
+        c = ws1.cell(row=5, column=col, value=h)
+        c.font = Font(color="FFFFFF", bold=True, size=11)
+        c.fill = HDR_FILL_CUADRA
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.border = BORDER
 
     STATUS_COLORS = {
-        "ok": "D4EDDA",
-        "no está": "F8D7DA",
-        "faltan datos": "D1ECF1",
-        "duplicado": "FFF3CD",
+        "ok": ("D4EDDA", GREEN_FONT),
+        "ok (aprendido)": ("D4EDDA", GREEN_FONT),
+        "no está": (RED_TINT, RED_FONT),
+        "VENCIDO": (RED_TINT, RED_FONT),
+        "faltan datos": (AMBER_TINT, AMBER_FONT),
+        "EN_REVISION": (AMBER_TINT, AMBER_FONT),
+        "duplicado": (AMBER_TINT, AMBER_FONT),
+        "PAGO_PARCIAL": (AMBER_TINT, AMBER_FONT),
+        "CONCILIADO_CON_DIFERENCIA": (AMBER_TINT, AMBER_FONT),
     }
 
-    for i, row in enumerate(planilla_data["rows"], start=6):
+    rows_data = planilla_data["rows"]
+    total_monto = Decimal("0")
+    for i, row in enumerate(rows_data, start=6):
+        monto = row["monto"] if row.get("monto") is not None else Decimal("0")
+        total_monto += Decimal(str(monto))
         ws1.cell(row=i, column=1, value=i - 5)
-        ws1.cell(row=i, column=2, value=row["monto"]).number_format = '"$"#,##0.00'
+        ws1.cell(row=i, column=2, value=monto).number_format = MONEY_FMT_ARS
         ws1.cell(row=i, column=3, value=row.get("cuit") or "")
         ws1.cell(row=i, column=4, value=row.get("titular") or "")
         ws1.cell(row=i, column=5, value=row.get("orden_movimiento_acreditado"))
@@ -147,13 +184,46 @@ def export_planilla_conciliada(planilla_data: dict, movimientos_acreditados: Lis
         # Estado ULTIMA columna con color
         st = row["status"]
         status_cell = ws1.cell(row=i, column=9, value=st)
-        color = STATUS_COLORS.get(st, "FFFFFF")
+        fill_color, font_color = STATUS_COLORS.get(st, ("FFFFFF", "333333"))
         if isinstance(st, str) and st.startswith("acreditado"):
-            color = STATUS_COLORS["duplicado"]
-        status_cell.fill = PatternFill("solid", fgColor=color)
+            fill_color, font_color = STATUS_COLORS["duplicado"]
+        status_cell.fill = PatternFill("solid", fgColor=fill_color)
+        status_cell.font = Font(color=font_color)
         for col in range(1, 10):
             ws1.cell(row=i, column=col).border = BORDER
 
+    # ── Fila de TOTAL ─────────────────────────────────────────────────────────
+    last_data_row = 5 + len(rows_data)
+    total_row = last_data_row + 1
+    ws1.cell(row=total_row, column=1, value="TOTAL").font = Font(bold=True)
+    tc = ws1.cell(row=total_row, column=2, value=total_monto)
+    tc.number_format = MONEY_FMT_ARS
+    tc.font = Font(bold=True)
+    for col in range(1, 10):
+        cell = ws1.cell(row=total_row, column=col)
+        cell.fill = PatternFill("solid", fgColor=CUADRA_GREEN_TINT)
+        cell.border = TOTAL_BORDER
+
+    total_declarado = planilla_data.get("total_declarado")
+    if total_declarado is not None:
+        total_declarado = Decimal(str(total_declarado))
+        fila_decl = total_row + 1
+        ws1.cell(row=fila_decl, column=1, value="Total declarado por el cliente").font = Font(italic=True)
+        dc = ws1.cell(row=fila_decl, column=2, value=total_declarado)
+        dc.number_format = MONEY_FMT_ARS
+        dc.font = Font(italic=True)
+
+        diferencia = total_declarado - total_monto
+        fila_dif = fila_decl + 1
+        ws1.cell(row=fila_dif, column=1, value="Diferencia").font = Font(bold=True)
+        difc = ws1.cell(row=fila_dif, column=2, value=diferencia)
+        difc.number_format = MONEY_FMT_ARS
+        difc.font = Font(bold=True, color=GREEN_FONT if diferencia == 0 else AMBER_FONT)
+        color_dif = CUADRA_GREEN_TINT if diferencia == 0 else AMBER_TINT
+        for col in range(1, 10):
+            ws1.cell(row=fila_dif, column=col).fill = PatternFill("solid", fgColor=color_dif)
+
+    ws1.auto_filter.ref = f"A5:I{last_data_row}"
     ws1.freeze_panes = "A6"
     _autosize(ws1, 9)
 

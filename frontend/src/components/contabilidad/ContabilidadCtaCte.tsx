@@ -216,7 +216,10 @@ export const ContabilidadCtaCteDetalle: React.FC<{ c: ContabilidadCtx }> = ({ c 
                             <a href={`/movimientos?extracto=${m.origen.extracto_id}`} className="text-ml-blue hover:underline mr-2" title="Movimiento bancario">🏦</a>
                           )}
                           {m.origen.planilla_id && (
-                            <button onClick={async () => { try { await apiClient.downloadPlanillaConciliada(m.origen.planilla_id!) } catch { toast.error('No se pudo descargar') } }} className="text-ml-blue hover:underline" title="Descargar Excel planilla">📄</button>
+                            <>
+                              <button onClick={async () => { try { await apiClient.downloadPlanillaConciliada(m.origen.planilla_id!) } catch { toast.error('No se pudo descargar') } }} className="text-ml-blue hover:underline mr-2" title="Descargar Excel planilla">📄</button>
+                              <button onClick={async () => { try { await apiClient.exportPlanillaPdf(m.origen.planilla_id!) } catch { toast.error('No se pudo descargar') } }} className="text-ml-blue hover:underline" title="Descargar PDF planilla">📕</button>
+                            </>
                           )}
                         </td>
                       </tr>
