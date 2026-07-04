@@ -211,6 +211,7 @@ def list_extractos(
                 total_movimientos=len(e.movimientos),
                 acreditados=acred,
                 banco=e.banco or "Banco Macro",
+                archivado=e.archivado_at is not None,
             )
         )
 

@@ -542,6 +542,18 @@ class ApiClient {
     return res.data
   }
 
+  async archivarExtracto(id: number): Promise<{ ok: boolean; archivado: boolean; mensaje: string }> {
+    const res = await this.client.patch(`/extractos/${id}/archivar`)
+    this.invalidateCache('/extractos')
+    return res.data
+  }
+
+  async desarchivarExtracto(id: number): Promise<{ ok: boolean; archivado: boolean; mensaje: string }> {
+    const res = await this.client.patch(`/extractos/${id}/desarchivar`)
+    this.invalidateCache('/extractos')
+    return res.data
+  }
+
   async getMovimientos(
     extractoId: number,
     filters: MovimientosFiltros = {}

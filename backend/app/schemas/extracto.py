@@ -41,6 +41,10 @@ class ExtractoListItem(BaseModel):
     nombre_archivo: str
     fecha_creacion: datetime
     total_movimientos: int
+    # sin estos campos declarados, response_model los filtraba y el frontend no
+    # los recibía (banco era un bug preexistente silencioso del listado)
+    banco: Optional[str] = None
+    archivado: bool = False
 
     class Config:
         from_attributes = True

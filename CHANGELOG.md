@@ -56,6 +56,16 @@ se tocó** — cero riesgo sobre el matcheo).
   **fecha de pago** de la planilla (`PlanillaRow.fecha`, antes se descartaba; migración 024) para el
   cálculo del período. **+10 tests** (536 backend + 37 frontend).
 
+- **Archivar extractos (cierre de período)**: `archivado_at` en ExtractoBancario (migración 025;
+  distinto de borrar) — un extracto archivado conserva TODO lo conciliado (consultable y exportable
+  por id: movimientos, filtros por cliente/fecha y export siguen funcionando), pero sale del listado
+  por defecto (`GET /extractos?incluir_archivados=true` los muestra con flag `archivado`) y rechaza
+  nuevos UM (409 con mensaje claro). Endpoints `PATCH /extractos/{id}/archivar|desarchivar`
+  (permiso `delete_records`, auditados, idempotentes). UI: botón "📦 Archivar / ↩️ Reabrir" + badge
+  en Extractos. Resuelve "el extracto se pone pesado": cerrás el mes y subís uno nuevo del mismo
+  banco. De paso: `ExtractoListItem` ahora declara `banco` (bug preexistente: el response_model lo
+  filtraba y el frontend nunca lo recibía). **+4 tests** (558 backend).
+
 ---
 
 ### v3.26 — Liquidación REAL de IVA con "Mis Comprobantes" de ARCA (jul 2026)

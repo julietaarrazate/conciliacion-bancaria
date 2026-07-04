@@ -29,6 +29,8 @@ SAFETY_NET_DDL = [
     "ALTER TABLE planillas ADD COLUMN IF NOT EXISTS total_declarado NUMERIC(14,2)",
     # fecha de pago declarada en la planilla (para diagnóstico de período de conciliación)
     "ALTER TABLE planilla_rows ADD COLUMN IF NOT EXISTS fecha DATE",
+    # archivado de extractos (cierre de período — distinto de deleted_at)
+    "ALTER TABLE extractos_bancarios ADD COLUMN IF NOT EXISTS archivado_at TIMESTAMP",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_org_ids JSONB DEFAULT '[]'",
     "ALTER TABLE asientos ADD COLUMN IF NOT EXISTS numero_asiento INTEGER",
     # v3.9.2 — portadores + campos cheque

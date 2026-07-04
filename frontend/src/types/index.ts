@@ -176,6 +176,7 @@ export interface ExtractoHistorialItem {
   total_movimientos: number
   acreditados: number
   banco?: string
+  archivado?: boolean
 }
 
 export interface AuditoriaLog {
@@ -201,6 +202,7 @@ export interface ExtractoListItem {
   fecha_creacion: string
   total_movimientos: number
   banco?: string
+  archivado?: boolean
 }
 
 export interface MovimientoFiltrado {

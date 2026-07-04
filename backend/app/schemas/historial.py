@@ -29,6 +29,7 @@ class ExtractoHistorialItem(BaseModel):
     total_movimientos: int
     acreditados: int = 0
     banco: Optional[str] = "Banco Macro"
+    archivado: bool = False
 
     class Config:
         from_attributes = True

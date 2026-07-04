@@ -87,9 +87,14 @@ def _fingerprint(movimientos: list) -> str:
 @router.get("", response_model=ExtractoListResponse)
 def list_extractos(skip: int = 0, limit: int = 50,
                    org_id: Optional[int] = Query(None),
+                   incluir_archivados: bool = Query(False),
                    db: Session = Depends(get_db),
                    current_user: User = Depends(get_current_user)):
     q = db.query(ExtractoBancario).filter(ExtractoBancario.deleted_at.is_(None))
+    # Archivados (período cerrado): fuera del listado por defecto. Siguen siendo
+    # accesibles por id (movimientos/export) — solo la lista los oculta.
+    if not incluir_archivados:
+        q = q.filter(ExtractoBancario.archivado_at.is_(None))
     # Superadmin puede filtrar por org; usuarios normales ven solo su org
     if can_switch_org(current_user, org_id) and org_id:
         q = q.filter(ExtractoBancario.organizacion_id == org_id)
@@ -99,7 +104,8 @@ def list_extractos(skip: int = 0, limit: int = 50,
     rows = q.order_by(desc(ExtractoBancario.fecha_creacion)).offset(skip).limit(limit).all()
     items = [{"id": e.id, "nombre_archivo": e.nombre_archivo,
               "fecha_creacion": e.fecha_creacion, "total_movimientos": len(e.movimientos),
-              "banco": e.banco or "Banco Macro"} for e in rows]
+              "banco": e.banco or "Banco Macro",
+              "archivado": e.archivado_at is not None} for e in rows]
     return {"total": total, "items": items}
 
 
@@ -263,6 +269,36 @@ def renombrar_extracto(extracto_id: int, payload: dict,
     return {"ok": True, "nombre_archivo": extracto.nombre_archivo}
 
 
+@router.patch("/{extracto_id}/archivar")
+def archivar_extracto(extracto_id: int, db: Session = Depends(get_db),
+                      current_user: User = Depends(require_permission("delete_records"))):
+    """Archiva el extracto (cierre de período). Distinto de borrar: todo lo
+    conciliado queda guardado y consultable/exportable por id; solo sale del
+    listado por defecto y rechaza nuevos UM. Idempotente."""
+    extracto = _extracto_for_user(db, extracto_id, current_user)
+    if extracto.archivado_at is None:
+        extracto.archivado_at = datetime.now(_ARG).replace(tzinfo=None)
+        db.commit()
+        registrar_log(db, current_user.id, "extractos_bancarios", extracto_id,
+                      "ARCHIVAR", {"nombre": extracto.nombre_archivo})
+    return {"ok": True, "archivado": True,
+            "mensaje": f"Extracto #{extracto_id} archivado. Lo conciliado queda guardado; podés subir un extracto nuevo del banco."}
+
+
+@router.patch("/{extracto_id}/desarchivar")
+def desarchivar_extracto(extracto_id: int, db: Session = Depends(get_db),
+                         current_user: User = Depends(require_permission("delete_records"))):
+    """Reabre un extracto archivado (vuelve al listado y acepta UM). Idempotente."""
+    extracto = _extracto_for_user(db, extracto_id, current_user)
+    if extracto.archivado_at is not None:
+        extracto.archivado_at = None
+        db.commit()
+        registrar_log(db, current_user.id, "extractos_bancarios", extracto_id,
+                      "DESARCHIVAR", {"nombre": extracto.nombre_archivo})
+    return {"ok": True, "archivado": False,
+            "mensaje": f"Extracto #{extracto_id} reabierto."}
+
+
 @router.delete("/{extracto_id}")
 def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
                     current_user: User = Depends(require_permission("delete_records"))):
@@ -411,6 +447,8 @@ async def agregar_ultimos_movimientos(
     current_user: User = Depends(get_current_user),
 ):
     extracto = _extracto_for_user(db, extracto_id, current_user)
+    if extracto.archivado_at is not None:
+        raise HTTPException(409, "El extracto está archivado (período cerrado) — desarchivalo o subí un extracto nuevo.")
     ext = os.path.splitext(file.filename or '')[1].lower()
     if ext not in ('.xlsx', '.xls', '.csv'):
         raise HTTPException(400, "Formatos aceptados: .xlsx, .xls, .csv")
