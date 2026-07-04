@@ -44,6 +44,18 @@ se tocó** — cero riesgo sobre el matcheo).
   badge ✓ Cuadra / ⚠ Difiere en $X. Verificado con Tucu real (8 mov + total 5.089.000 detectado
   correctamente). Migración 023 + safety-net. **+6 tests** (506 backend + 33 frontend).
 
+- **Capa de diagnóstico de conciliación** (por qué las filas no matchean, sin tocar el matcher —
+  Org A intacta): tras conciliar, `diagnostico_conciliacion` calcula y devuelve (aditivo, read-only)
+  (a) **`banco_trae_identidad`**: si el extracto trae nombre/CUIT del que pagó (muchos bancos, ej.
+  Comercio, solo dicen "CRÉDITO POR TRANSFERENCIA" → conciliación solo por monto); (b) **cobertura
+  de montos**: cuántos montos de la planilla aparecen en el extracto ("12 de 33"); (c) **solape de
+  fechas** planilla vs. período del extracto. El frontend (`DiagnosticoPanel`) lo muestra en el
+  resultado: "este banco no trae identidad → solo por monto", "faltan N montos, ¿extracto correcto?",
+  "las fechas no coinciden". Resuelve el falso "está roto" cuando en realidad el banco no da el dato.
+  Verificado con datos reales de Dani/Comercio (banco sin identidad, 12/33). Además se persiste la
+  **fecha de pago** de la planilla (`PlanillaRow.fecha`, antes se descartaba; migración 024) para el
+  cálculo del período. **+10 tests** (536 backend + 37 frontend).
+
 ---
 
 ### v3.26 — Liquidación REAL de IVA con "Mis Comprobantes" de ARCA (jul 2026)

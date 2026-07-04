@@ -308,6 +308,121 @@ def buscar_match(
     return None, f"no coincide ({n} mov. del mismo monto — revisar CUIT/CBU/titular)"
 
 
+# Palabras genéricas de bancos que NO constituyen identidad del pagador.
+# Ej: Banco Comercio acredita todo como "CRÉDITO POR CREDIN" / "CRÉDITO POR
+# TRANSFERENCIA" — no dice quién pagó, solo se puede conciliar por monto.
+_PALABRAS_GENERICAS_BANCO = frozenset({
+    "credito", "transferencia", "credin", "deposito", "pago", "transf",
+    "cuenta", "proveedores", "haberes", "varios", "sircreb", "imp", "ley",
+})
+
+
+def _mov_tiene_identidad(titular: Optional[str]) -> bool:
+    """True si el titular del movimiento identifica a quién pagó.
+
+    Tiene identidad si aparece un CUIT, o si el titular normalizado tiene >=2
+    palabras alfabéticas de >=3 letras que NO sean palabras genéricas de banco.
+    Read-only: no muta nada.
+    """
+    if not titular:
+        return False
+    if extraer_cuit(titular):
+        return True
+    norm = normalizar_nombre(titular)
+    palabras = [
+        p for p in norm.split()
+        if len(p) >= 3 and p.isalpha() and p not in _PALABRAS_GENERICAS_BANCO
+    ]
+    return len(palabras) >= 2
+
+
+def diagnostico_conciliacion(rows, movimientos) -> Dict[str, Any]:
+    """Diagnóstico read-only del contexto de una conciliación.
+
+    Se calcula DESPUÉS de conciliar para explicar en la UI por qué muchas filas
+    pueden quedar sin conciliar (banco sin identidad, monto ausente del extracto,
+    fechas que no solapan). NO altera qué fila matchea ni los status: es 100%
+    aditivo y no tiene efectos secundarios (no toca rows, movimientos ni la DB).
+
+    Args:
+        rows: PlanillaRow con .monto, .cuit, .titular, .fecha (o .fecha_acred).
+        movimientos: MovimientoBanco del extracto con .titular, .monto, .fecha.
+
+    Returns dict con:
+        banco_trae_identidad: bool | None (None si no hay movimientos)
+        cobertura_montos: {"en_extracto": int, "total": int}
+        periodo_planilla / periodo_extracto: {"desde": date|None, "hasta": date|None}
+        solapan_fechas: bool
+    """
+    movs = list(movimientos or [])
+    lista_rows = list(rows or [])
+
+    # ── banco_trae_identidad ───────────────────────────────────────
+    if not movs:
+        banco_trae_identidad: Optional[bool] = None
+    else:
+        con_identidad = sum(1 for m in movs if _mov_tiene_identidad(getattr(m, "titular", None)))
+        fraccion = con_identidad / len(movs)
+        banco_trae_identidad = fraccion >= 0.30
+
+    # ── cobertura_montos (Decimal, tolerancia 1 peso) ──────────────
+    tol = Decimal("1")
+    montos_mov = []
+    for m in movs:
+        mm = getattr(m, "monto", None)
+        if mm is not None:
+            try:
+                montos_mov.append(abs(Decimal(str(mm))))
+            except Exception:
+                pass
+
+    total = 0
+    en_extracto = 0
+    for r in lista_rows:
+        rm = getattr(r, "monto", None)
+        if rm is None:
+            continue
+        total += 1
+        try:
+            monto_row = abs(Decimal(str(rm)))
+        except Exception:
+            continue
+        if any(abs(monto_row - mv) <= tol for mv in montos_mov):
+            en_extracto += 1
+
+    # ── periodos ───────────────────────────────────────────────────
+    def _rango(objetos, *attrs):
+        fechas = []
+        for o in objetos:
+            f = None
+            for a in attrs:
+                f = getattr(o, a, None)
+                if f is not None:
+                    break
+            if f is not None:
+                fechas.append(f)
+        if not fechas:
+            return None, None
+        return min(fechas), max(fechas)
+
+    plan_desde, plan_hasta = _rango(lista_rows, "fecha", "fecha_acred")
+    ext_desde, ext_hasta = _rango(movs, "fecha")
+
+    # ── solapan_fechas (si falta algún dato → True, no alarmar) ─────
+    if None in (plan_desde, plan_hasta, ext_desde, ext_hasta):
+        solapan = True
+    else:
+        solapan = plan_desde <= ext_hasta and ext_desde <= plan_hasta
+
+    return {
+        "banco_trae_identidad": banco_trae_identidad,
+        "cobertura_montos": {"en_extracto": en_extracto, "total": total},
+        "periodo_planilla": {"desde": plan_desde, "hasta": plan_hasta},
+        "periodo_extracto": {"desde": ext_desde, "hasta": ext_hasta},
+        "solapan_fechas": solapan,
+    }
+
+
 # Config por defecto (org principal — comportamiento original)
 CONFIG_DEFAULT_ORG = {
     "match_rules": ["monto_cuit"],

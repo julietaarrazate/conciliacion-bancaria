@@ -47,6 +47,7 @@ class PlanillaRow(Base):
     cuit = Column(String, nullable=True)
     titular = Column(String, nullable=True)
     referencia = Column(String, nullable=True)  # para match_rule "referencia"
+    fecha = Column(Date, nullable=True)  # fecha de pago declarada en la planilla (no la de acreditación)
 
     # Resultado de la conciliación
     # Estados base: "pendiente", "ok", "no está", "duplicado", "faltan datos", "acreditado DD/MM"

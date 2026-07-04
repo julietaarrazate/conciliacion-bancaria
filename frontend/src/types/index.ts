@@ -91,6 +91,14 @@ export interface Planilla {
   deteccion?: DeteccionInfo
 }
 
+export interface DiagnosticoConciliacion {
+  banco_trae_identidad: boolean | null
+  cobertura_montos: { en_extracto: number; total: number }
+  periodo_planilla: { desde: string | null; hasta: string | null }   // 'YYYY-MM-DD'
+  periodo_extracto: { desde: string | null; hasta: string | null }
+  solapan_fechas: boolean
+}
+
 export interface ConciliacionResultado {
   planilla_id: number
   filas_procesadas: number
@@ -98,6 +106,7 @@ export interface ConciliacionResultado {
   no_encontradas: number
   duplicadas: number
   sin_datos: number
+  diagnostico?: DiagnosticoConciliacion | null
 }
 
 export interface ColumnaDisponible {

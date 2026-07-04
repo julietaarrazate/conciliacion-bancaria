@@ -21,7 +21,7 @@ from app.models.organizacion import Organizacion
 from fastapi.responses import StreamingResponse
 from app.schemas.planilla import PlanillaResponse, PlanillaDetalleResponse, ConciliacionResultado
 from app.services.planilla_mapper import estandarizar_planilla
-from app.services.conciliacion import conciliar_planilla
+from app.services.conciliacion import conciliar_planilla, diagnostico_conciliacion
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_planilla_conciliada
 from app.services.tz import hoy_art
@@ -227,6 +227,7 @@ async def upload_planilla(
                 cuit=fila_data.get("cuit"),
                 titular=fila_data.get("titular"),
                 referencia=fila_data.get("referencia"),
+                fecha=fila_data.get("fecha"),  # fecha de pago declarada (para diagnóstico de período)
                 status="pendiente",
                 organizacion_id=org_id
             )
@@ -361,9 +362,15 @@ def conciliar(
         # um_reclass (No identificado D / Cliente X H con cuentas hoja correctas).
         # registrar_planilla() usaba cuentas madre y duplicaba con um_reclass.
 
+        # Diagnóstico read-only (aditivo): calculado DESPUÉS de conciliar para
+        # explicar en la UI por qué pueden quedar filas sin conciliar. No altera
+        # el flujo de conciliación ni los status.
+        diagnostico = diagnostico_conciliacion(planilla.rows, movimientos)
+
         return {
             "planilla_id": planilla_id,
-            **resultado
+            **resultado,
+            "diagnostico": diagnostico,
         }
 
     except Exception as e:

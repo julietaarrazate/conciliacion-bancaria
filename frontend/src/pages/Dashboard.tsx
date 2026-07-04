@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FileUpload } from '@/components/FileUpload'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { ColumnMapperModal } from '@/components/ColumnMapperModal'
+import { DiagnosticoPanel } from '@/components/DiagnosticoPanel'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { confirmDialog } from '@/store/confirm'
@@ -892,6 +893,8 @@ export const Dashboard: React.FC = () => {
               <div className="pt-2 border-t border-gray-100 dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400 text-center">
                 Total: {resultado.filas_procesadas} filas procesadas
               </div>
+
+              <DiagnosticoPanel diagnostico={resultado.diagnostico} />
 
               {deteccionCuadre?.total_movimientos != null && (
                 <div className="pt-2 border-t border-gray-100 dark:border-slate-700 space-y-1.5">

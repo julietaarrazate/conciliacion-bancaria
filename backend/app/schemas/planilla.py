@@ -59,3 +59,7 @@ class ConciliacionResultado(BaseModel):
     no_encontradas: int
     duplicadas: int
     sin_datos: int
+    # Diagnóstico read-only calculado DESPUÉS de conciliar (aditivo). Explica en
+    # la UI por qué pueden quedar filas sin conciliar (banco sin identidad, monto
+    # ausente del extracto, fechas que no solapan). None en el resto de endpoints.
+    diagnostico: Optional[Dict[str, Any]] = None

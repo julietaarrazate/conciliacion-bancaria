@@ -21,3 +21,16 @@ export function isoHaceNDias(n: number): string {
   d.setDate(d.getDate() - n)
   return localIsoDate(d)
 }
+
+/**
+ * Formatea una fecha 'YYYY-MM-DD' (calendario, sin hora) como "3 jun".
+ * Parsea los componentes a mano en vez de `new Date(iso)` para no depender
+ * del timezone del navegador (new Date('YYYY-MM-DD') se interpreta en UTC).
+ */
+export function fmtFechaCorta(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return '—'
+  const fecha = new Date(y, m - 1, d)
+  return fecha.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }).replace('.', '')
+}

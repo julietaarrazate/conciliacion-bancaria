@@ -336,6 +336,31 @@ class TestConciliar:
         # Puede tener filas ok o no, pero el endpoint no debe crashear
         assert "total_filas" in data or "ok" in data or isinstance(data, dict)
 
+    def test_conciliar_respuesta_incluye_diagnostico(self, client, db):
+        """La respuesta trae 'diagnostico' con las keys correctas y los conteos
+        de acreditadas/no_encontradas NO cambian por el diagnóstico (es aditivo)."""
+        extracto = _seed_extracto_con_movimientos(db, montos=[Decimal("5000")])
+        planilla, _ = _seed_planilla_con_filas(db, extracto.id, "ClienteDiag", n_filas=1)
+
+        token = _token(db, "admin@plan.test")
+        r = client.post(f"/planillas/{planilla.id}/conciliar", headers=_auth(token))
+        assert r.status_code == 200
+        data = r.json()
+
+        # Conteos base intactos: 1 fila (5000) matchea el único movimiento de 5000
+        assert data["acreditadas"] == 1
+        assert data["no_encontradas"] == 0
+        assert data["filas_procesadas"] == 1
+
+        diag = data["diagnostico"]
+        assert diag is not None
+        assert set(diag.keys()) == {
+            "banco_trae_identidad", "cobertura_montos",
+            "periodo_planilla", "periodo_extracto", "solapan_fechas",
+        }
+        assert diag["cobertura_montos"] == {"en_extracto": 1, "total": 1}
+        assert isinstance(diag["solapan_fechas"], bool)
+
     def test_conciliar_planilla_inexistente_retorna_404(self, client, db):
         token = _token(db, "admin@plan.test")
         r = client.post("/planillas/99999/conciliar", headers=_auth(token))
