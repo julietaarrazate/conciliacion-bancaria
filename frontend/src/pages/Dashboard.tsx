@@ -740,7 +740,7 @@ export const Dashboard: React.FC = () => {
               </button>
               <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
                 <p className="text-xs text-ml-text-soft dark:text-gray-400 mb-2">
-                  ¿Tenés Últimos Movimientos del banco? Sumalos sin duplicar:
+                  ¿Tenés <abbr title="El Excel diario que manda el banco/contador con los movimientos nuevos" className="no-underline border-b border-dotted border-gray-400 cursor-help">Últimos Movimientos (UM)</abbr> del banco? Sumalos sin duplicar:
                 </p>
                 <div className="flex gap-2 items-center">
                   <div className="flex-1">
@@ -779,9 +779,9 @@ export const Dashboard: React.FC = () => {
                       }
                     }}
                     className="text-xs px-2 py-1.5 text-red-500 border border-red-300 dark:border-red-800 rounded hover:bg-red-50 dark:hover:bg-red-900/20 whitespace-nowrap"
-                    title="Limpiar UM para re-subir desde cero"
+                    title="Borra los Últimos Movimientos agregados, para re-subirlos desde cero"
                   >
-                    🗑 UM
+                    🗑 Limpiar UM
                   </button>
                 </div>
                 {umCorteDetectado && (
@@ -941,9 +941,12 @@ export const Dashboard: React.FC = () => {
               </p>
             </div>
           ) : (
-            <p className="text-sm text-ml-text-soft py-8 text-center">
-              Esperando carga de planilla...
-            </p>
+            <div className="text-sm text-ml-text-soft py-8 text-center space-y-1.5">
+              <p className="font-medium text-ml-text dark:text-gray-300">Todavía no hay resultado</p>
+              <p className="text-xs">1. Elegí el extracto del banco</p>
+              <p className="text-xs">2. Escribí el nombre del cliente</p>
+              <p className="text-xs">3. Subí su planilla — la conciliación sale sola</p>
+            </div>
           )}
         </div>
       </div>

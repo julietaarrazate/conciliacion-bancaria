@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
+import { statusLabel } from '@/utils/status'
 
 interface Row {
   id: number
@@ -369,6 +370,9 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
 
         {meta && (
           <div className="flex-1 overflow-auto min-h-0">
+            <p className="px-3 py-1.5 text-[10px] text-gray-400 dark:text-gray-500 border-b border-ml-gray/50 dark:border-ml-dark-border">
+              ✓ Acreditado · ✕ No encontrado · ⚠ Duplicado · ? Sin datos — tocá un estado para corregirlo
+            </p>
             <table className="w-full text-xs min-w-[780px]">
               <thead className="sticky top-0 z-10">
                 <tr>
@@ -480,8 +484,8 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                             onClick={() => startEdit(row)}
                             className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer active:scale-95 transition-transform"
                           >
-                            <span className={`inline-flex px-2 py-0.5 rounded-full ${statusStyle(row.status)}`}>
-                              {row.status}
+                            <span className={`inline-flex px-2 py-0.5 rounded-full ${statusStyle(row.status)}`} title={row.status}>
+                              {statusLabel(row.status)}
                             </span>
                           </button>
                         )}

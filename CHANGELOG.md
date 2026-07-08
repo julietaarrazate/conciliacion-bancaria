@@ -66,6 +66,14 @@ se tocó** — cero riesgo sobre el matcheo).
   banco. De paso: `ExtractoListItem` ahora declara `banco` (bug preexistente: el response_model lo
   filtraba y el frontend nunca lo recibía). **+4 tests** (558 backend).
 
+- **UX para usuarios nuevos** (de una auditoría de fricciones como "usuario que entra por primera
+  vez"): estados de conciliación con labels humanos en toda la UI vía `utils/status.ts::statusLabel`
+  ("ok"→"Acreditado ✓", "no está"→"No encontrado ✕", "ambiguo (…)"→"Ambiguo — elegir a mano", etc.;
+  los valores de API no cambian, solo lo que se muestra) + leyenda de estados en el panel de
+  planilla; "UM" explicado inline (Últimos Movimientos, con tooltip); botón "🗑 UM"→"🗑 Limpiar UM";
+  estado vacío del resultado con los 3 pasos en vez de "Esperando carga…"; filtros de monto
+  "Desde $ / Hasta $". **+3 tests** (40 frontend).
+
 ---
 
 ### v3.26 — Liquidación REAL de IVA con "Mis Comprobantes" de ARCA (jul 2026)

@@ -149,11 +149,11 @@ export const Conciliaciones: React.FC = () => {
           <input type="date" className="input-field" value={hasta} onChange={e => setHasta(e.target.value)} />
         </div>
         <div>
-          <label className="label text-xs">Monto mín.</label>
+          <label className="label text-xs">Desde $</label>
           <input className="input-field" placeholder="0" value={montoMin} onChange={e => setMontoMin(e.target.value)} />
         </div>
         <div>
-          <label className="label text-xs">Monto máx.</label>
+          <label className="label text-xs">Hasta $</label>
           <input className="input-field" placeholder="999999999" value={montoMax} onChange={e => setMontoMax(e.target.value)} />
         </div>
       </div>
