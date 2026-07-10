@@ -7,6 +7,11 @@
 > Fecha: junio 2026 · Versión de producto: v3.24 · Complementa a
 > [`.claude/memory/PROJECT_MEMORY.md`](.claude/memory/PROJECT_MEMORY.md) y [`docs/`](docs/README.md).
 
+> **Re-auditoría 2026-07-10 (formato EKP)**: ver
+> [`docs/AUDITORIA_EKP_2026-07.md`](docs/AUDITORIA_EKP_2026-07.md) — 558 tests
+> verdes medidos (+97 desde esta foto), veredicto *conditionally ready* con 3
+> bloqueadores operativos (infra paga, restore ensayado, branch protection).
+
 ## 1. Estado general
 
 Cuadra es un SaaS financiero multi-tenant en producción real (Vercel + Render + Neon), con un
