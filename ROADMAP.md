@@ -1,5 +1,10 @@
 # Roadmap — Sistema de Conciliación Bancaria
 
+> ⚠️ **DESACTUALIZADO** (auditoría 2026-07-10): varios ítems ya están hechos
+> (multi-banco con detección automática, monitoreo, backups) — no planificar
+> sesiones contra este archivo hasta reescribirlo. Estado real y prioridades
+> vigentes: [`docs/AUDITORIA_EKP_2026-07.md`](docs/AUDITORIA_EKP_2026-07.md) §8.
+
 Plan de evolución del producto pensando en clientes piloto y venta a
 financieras, cooperativas y estudios contables.
 
