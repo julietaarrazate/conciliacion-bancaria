@@ -21,9 +21,13 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
       - name: Instalar dependencias
-        run: pip install -r requirements.txt ruff
+        # requirements-dev.txt trae pytest/pytest-asyncio/httpx — sin él, el
+        # paso "Tests" muere con "No module named pytest".
+        run: pip install -r requirements.txt -r requirements-dev.txt ruff
       - name: Lint (ruff — reglas de bugs reales, ver ruff.toml)
         run: ruff check .
       - name: Tests

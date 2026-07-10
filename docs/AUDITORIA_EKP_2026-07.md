@@ -63,7 +63,7 @@ se reporta dirección, no número).
 | Performance | 2 (provisional) | = | Cold start Render ~30s + Neon dormido (ENGINEERING_AUDIT §3, sin refutar); cachés en memoria se pierden por redeploy | Infra paga + números reales de Sentry/logs SLOW decidiendo optimizaciones |
 | UX (incl. a11y) | 3 | ↑ | v3.28: labels humanos + estados vacíos guiados (`dafc918`); PWA probada en celular (PROBAR_EN_CELULAR.md) | A11y sistematizada (lint/checklist) y tests de UI de los flujos core |
 | Testing | 3 | ↑ | **558 backend verdes medidos acá** (+97 desde junio); vitest 40 en CI; sin E2E | E2E de los 3 flujos críticos (login, extracto→conciliación, pagos) |
-| CI/CD | 3 | = | `ci.yml`: ruff+pytest+eslint+tsc+vitest+build en cada push/PR (verificado) | Branch protection en `main` + staging o canary + runbook de rollback |
+| CI/CD | 2 | ↓ | `ci.yml` corre ruff+pytest+eslint+tsc+vitest+build en cada push/PR, **pero el job de backend estaba roto en `main`**: instala solo `requirements.txt` y pytest vive en `requirements-dev.txt` → "No module named pytest" (descubierto en vivo: el CI de este mismo PR falló; fix incluido acá). Sin branch protection, el rojo pasó inadvertido | Fix mergeado + branch protection en `main` + staging o canary + runbook de rollback |
 | Infraestructura | 2 | = | Free tier Render+Neon; keep-alive UptimeRobot como mitigación (CLAUDE.md §producción) | Plan pago, sin dormidas, con SLA declarable a clientes |
 | Documentación | 4 | = | `/docs` 10 áreas + BUGS.md con causa raíz + CLAUDE.md operativo + memoria de proyecto; honestidad explícita ("Pendiente de revisar") | Poco: mantener la regla "todo cambio actualiza su doc" (ya institucionalizada) |
 | Escalabilidad | 2 | = | Schedulers APScheduler en proceso + cachés en memoria (ENGINEERING_AUDIT §3) — single instance by design | Estado compartido externalizable (Redis o equivalente) cuando el tráfico lo pida |
@@ -125,7 +125,15 @@ Agrupados por causa raíz. Sin escenario de falla concreto no hay hallazgo.
 - **[S2·E1] Sin branch protection.** Escenario: push directo a `main` con
   tests rojos (humano o agente) → auto-deploy roto en producción con datos
   reales. Ruta: activar en GitHub Settings (5 minutos, operadora; los checks
-  de CI ya existen y quedan como required).
+  de CI ya existen y quedan como required). **El escenario ya ocurrió en
+  versión leve**: ver el hallazgo siguiente.
+- **[S2·E1, ✅ corregido en este PR] CI de backend roto en `main` sin que
+  nadie lo note.** `ci.yml` instalaba solo `requirements.txt`; pytest vive en
+  `requirements-dev.txt` → el paso "Tests" moría con "No module named
+  pytest" en todo push/PR. Descubierto en vivo porque el CI de esta misma
+  auditoría falló. Escenario materializado: el gate que debía proteger
+  producción no corría ningún test, y sin branch protection el rojo no
+  bloqueaba nada. Es la demostración empírica del bloqueador 3 del veredicto.
 
 **Causa raíz: fuente de verdad divergente**
 - **[S3·E2] Doble fuente de DDL** (Alembic + safety-nets idempotentes en
