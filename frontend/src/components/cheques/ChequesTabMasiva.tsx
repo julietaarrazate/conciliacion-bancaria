@@ -61,7 +61,7 @@ export const ChequesTabMasiva: React.FC<Props> = ({
       <p className="text-sm text-gray-500">
         📷 Arrastrá fotos aquí o <span className="text-indigo-600 dark:text-indigo-400 font-medium">hacé clic para seleccionar</span>
       </p>
-      <p className="text-xs text-gray-400 mt-1">Máximo 30 imágenes por lote · JPG, PNG, HEIC</p>
+      <p className="text-xs text-gray-400 mt-1">Podés poner varios cheques en una misma foto · Máximo 30 imágenes por lote · JPG, PNG, HEIC</p>
     </div>
 
     {/* Thumbnails de fotos seleccionadas */}

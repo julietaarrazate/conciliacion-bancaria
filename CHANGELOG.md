@@ -5,6 +5,29 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.29 — Carga masiva de cheques: varios cheques por foto (jul 2026)
+
+La carga masiva de cheques por foto ya existía (tab "Carga masiva" en Cheques → `POST /cheques/bulk-ocr`),
+pero asumía **1 foto = 1 cheque**: el prompt de OCR pedía "los datos de *este* cheque" (singular) y
+devolvía un único cheque por imagen. Al fotografiar un lote de cheques sobre la mesa (varios en una
+sola foto) se extraía solo uno y se perdían el resto.
+
+- **Detección multi-cheque** (`routers/cheques_crud.py`, `bulk-ocr`): el prompt ahora pide un
+  **array JSON** con *todos* los cheques visibles en la imagen; los resultados de todas las fotos se
+  aplanan en una única lista `items`, cada uno con el `index` de su foto de origen (para mapear el
+  preview). **Retrocompatible**: una foto con un solo cheque devuelve un array de 1 → el modo actual
+  (una foto por cheque) sigue igual. Tope defensivo de 120 cheques por lote.
+- **Funciones puras testeables** (`routers/cheques_common.py`): `_parse_ocr_response` (acepta array
+  u objeto único, limpia fences markdown, descarta objetos todo-null) y `_normalize_ocr_cheque` +
+  `_parse_monto_ocr` (casteo de monto tolerante al formato argentino: `"350.000,00"` → 350000,
+  sin romper decimales planos como `"1005282.00"` — área de bugs recurrentes de montos). 17 tests nuevos.
+- **Frontend**: el flujo (dropzone → OCR → tabla editable para revisar/corregir → asignar cliente →
+  guardar) no cambió; la tabla ya renderiza N filas y manda cada foto a resolución completa. Solo se
+  actualizó el texto: "Podés poner varios cheques en una misma foto". El modo **individual** (modal de
+  alta con foto vía `/agente/ocr-cheque`) queda intacto.
+
+---
+
 ### v3.27 — Estandarización universal de planillas de clientes (jul 2026)
 
 Cada cliente manda su planilla en un formato distinto (columnas, orden, headers en filas
