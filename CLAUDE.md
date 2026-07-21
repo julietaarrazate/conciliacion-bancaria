@@ -19,7 +19,8 @@ Lee el CLAUDE.md del repo julietaarrazate/conciliacion-bancaria para entender el
 - Backend (FastAPI): Render — https://conciliacion-api.onrender.com
 - Base de datos: Neon PostgreSQL — ep-ancient-hall-anz4pezn.c-6.us-east-1.aws.neon.tech
 - Código: GitHub — julietaarrazate/conciliacion-bancaria (PRIVADO)
-- Keep-alive: UptimeRobot pinguea /health cada 5 min
+- Keep-alive: UptimeRobot pinguea /health cada 5 min (mantiene despierto a Render). Neon lo
+  mantiene despierto un job interno `db_keepalive` (SELECT 1 cada 4 min) — ver "Schedulers".
 
 IDs públicos: Render service `srv-d7pqt81j2pic73c0c6fg` · Vercel `prj_cVINkspVm6j3B1fxOrdU81B0ehWg`
 
@@ -157,7 +158,12 @@ IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ con
 
 ## Schedulers (APScheduler en proceso FastAPI)
 
+- **cada 4 min** — `db_keepalive`: `SELECT 1` para que Neon (free tier) no autosuspenda. UptimeRobot
+  pinguea `/health` (no toca la DB) → mantiene despierto a Render pero dejaba dormir a Neon, y cada
+  módulo pagaba el wake-up de Neon en su primera query. Este job lo evita. Siempre activo.
 - **03:00 ART** — backup completo JSON gzipeado por email (Resend). Activo si `RESEND_API_KEY` está seteada.
+- **03:30 ART** — purga de tokens revocados / login approvals / códigos 2FA vencidos. Siempre activo.
+- **09:00 ART** — alerta si el uso de R2 supera ~8 GB. Activa si `S3_*` está configurado.
 - **10:00 ART** — push alertas: cheques que vencen en ≤3 días + movimientos sin conciliar >7 días. Activo si `VAPID_PRIVATE_KEY` y `VAPID_PUBLIC_KEY` están seteadas.
 
 ---
@@ -172,9 +178,14 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ## Estado actual y changelog
 
-**Versión actual: v3.24.** Historial completo de versiones (v3.6 a v3.24, con detalle de cada
+**Versión actual: v3.29.** Historial completo de versiones (v3.6 a v3.29, con detalle de cada
 feature/fix/PR) en **`CHANGELOG.md`** — no se carga automáticamente en cada sesión, así que si
 necesitás contexto histórico detallado de una versión puntual, leelo directamente.
+
+Últimas versiones: **v3.27** estandarización universal de planillas de clientes (embudo de mapeo) +
+capa de diagnóstico de conciliación · **v3.28** archivar extractos (cierre de período) + exports
+estéticos con PDF de planilla conciliada + alertas de descuadre/filas ambiguas + UX de estados
+(labels humanos) · **v3.29** carga masiva de cheques (varios cheques por foto en el OCR).
 
 Resumen muy breve de dónde está el sistema hoy: motor de conciliación + multi-banco (16 bancos) +
 multi-tenant funcionando en producción; módulos operativos completos (Cheques, Pagos, Caja,
@@ -182,7 +193,7 @@ Liquidaciones, Contabilidad con cuentas corrientes); 5 módulos de liquidación 
 (IVA Proyección, IVA Liquidación real con "Mis Comprobantes" de ARCA, Monotributo, Ingresos Brutos,
 Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
 ARCA (facturación electrónica WSFEv1) construido pero desactivado a propósito (ver "Pendiente para
-próximas sesiones" abajo). **465 tests backend + 25 tests frontend** pasando.
+próximas sesiones" abajo). **~575 tests backend + ~40 tests frontend** pasando.
 
 Profesionalización de ingeniería (jun 2026): base de documentación en `/docs` (arquitectura,
 negocio, API, BD, seguridad, UX, playbooks, ADR — cada doc con su "Pendiente de revisar"),
@@ -387,4 +398,4 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.27
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.29
