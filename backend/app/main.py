@@ -622,11 +622,13 @@ async def lifespan(app: FastAPI):
         from app.services.backup_scheduler import (
             start_backup_scheduler, stop_backup_scheduler,
             start_alertas_push_job, start_token_cleanup_job, start_r2_storage_alert_job,
+            start_db_keepalive_job,
         )
         start_backup_scheduler()
         start_alertas_push_job()       # 10:00 ART — push cheques/movs urgentes
         start_token_cleanup_job()      # 03:30 ART — purga tokens revocados
         start_r2_storage_alert_job()   # 09:00 ART — alerta si R2 > 8 GB
+        start_db_keepalive_job()       # cada 4 min — SELECT 1 para que Neon no se duerma
     except Exception as ex:
         logger.warning("No se pudo iniciar schedulers: %s", ex)
     yield
@@ -638,7 +640,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="3.24.0",
+    version="3.29.0",
     debug=settings.debug,
     lifespan=lifespan,
     default_response_class=JSONResponse,

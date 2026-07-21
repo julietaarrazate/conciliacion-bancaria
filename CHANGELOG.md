@@ -28,6 +28,40 @@ sola foto) se extraía solo uno y se perdían el resto.
 
 ---
 
+### v3.28 — Archivar extractos + exports estéticos + alertas de alto valor + UX de estados (jul 2026)
+
+Cuatro mejoras que salieron juntas bajo la etiqueta v3.28 (de una auditoría de fricciones para
+usuarios nuevos no técnicos y del ciclo de cierre mensual):
+
+- **Archivar extractos (cierre de período)** (`ExtractoBancario.archivado_at`, migración 025 +
+  safety-net): los UM se acumulan en el mismo extracto y el histórico se vuelve pesado. Ahora se
+  puede **archivar** un extracto: todo lo conciliado queda guardado y consultable/exportable por id
+  (movimientos, filtros cliente/fecha, export), pero sale del listado por defecto y rechaza nuevos UM
+  (409 claro). Después se sube un extracto nuevo del mismo banco y se arranca liviano. `PATCH
+  /extractos/{id}/archivar` y `/desarchivar` (permiso `delete_records`, auditados, idempotentes);
+  `GET /extractos` oculta archivados salvo `incluir_archivados=true`. Fix preexistente: `ExtractoListItem`
+  no declaraba `banco` → el `response_model` lo filtraba y el frontend nunca lo recibía. UI: botón
+  📦 Archivar / ↩️ Reabrir + badge Archivado.
+- **Exports estéticos + PDF de planilla conciliada**: Excel de planilla conciliada con marca Cuadra
+  discreta, headers verde oscuro, autofiltro + freeze panes, formato es-AR, fila TOTAL en negrita con
+  "Total declarado por el cliente" + "Diferencia" (columnas y orden intactos — compatibilidad
+  contador). PDF nuevo (`export_planilla_conciliada_pdf`, `GET /planillas/{id}/export-pdf`, mismo
+  aislamiento multi-tenant, armado compartido en `_build_planilla_export_data`). Frontend:
+  `exportPlanillaPdf` + botón PDF junto al Excel en Clientes y Cuenta Corriente.
+- **Alertas de alto valor**: dos alertas nuevas en las 3 superficies (widget Dashboard, push diario
+  10:00 ART, tool `consultar_alertas` del asistente IA): "Planillas con total que no cuadra" (⚖️,
+  descuadre >$1 entre `total_declarado` y la suma de rows, outerjoin) y "Filas ambiguas por revisar"
+  (🤔, rows con status LIKE `ambiguo%`). Scopeado por org.
+- **UX de estados** (`utils/status.ts` → `statusLabel`): traduce los status de conciliación a texto
+  humano en toda la UI ("ok"→"Acreditado ✓", "no está"→"No encontrado ✕", "ambiguo (…)"→"Ambiguo —
+  elegir a mano"). Los VALORES de la API no cambian, solo lo mostrado. Leyenda de estados sobre la
+  tabla, "UM" explicado con tooltip (Últimos Movimientos), "🗑 UM"→"🗑 Limpiar UM", estado vacío
+  guiado con los 3 pasos, filtros "Desde $ / Hasta $".
+
+558 tests backend + 37–40 frontend, todo verde (ruff + pytest + tsc + eslint + vitest + build).
+
+---
+
 ### v3.27 — Estandarización universal de planillas de clientes (jul 2026)
 
 Cada cliente manda su planilla en un formato distinto (columnas, orden, headers en filas
