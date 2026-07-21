@@ -14,15 +14,15 @@ export const ConciliacionMockup: React.FC = () => {
   const [step, setStep] = useState(-1)
   const started = useRef(false)
 
+  // Corre una sola vez al entrar al viewport y queda en el estado final —
+  // reveal sutil, no una animación en loop (landing sobria, sin motion continuo).
+  // Se detiene antes de la última fila a propósito: el producto no promete
+  // 100% automático, deja la diferencia real para que el contador la revise.
   const run = (s: React.MutableRefObject<boolean>, setter: (n: number) => void) => {
     if (s.current) return
     s.current = true
     setter(-1)
-    CONCIL_ROWS.forEach((_, i) => setTimeout(() => setter(i), 600 + i * 650))
-    setTimeout(() => {
-      s.current = false
-      setTimeout(() => run(s, setter), 1500)
-    }, 600 + CONCIL_ROWS.length * 650 + 2200)
+    CONCIL_ROWS.slice(0, -1).forEach((_, i) => setTimeout(() => setter(i), 500 + i * 550))
   }
 
   useEffect(() => {
@@ -74,7 +74,9 @@ export const ConciliacionMockup: React.FC = () => {
         })}
       </div>
       <div style={{ padding: '10px 16px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 11, color: 'var(--muted-2)' }}>Motor de conciliación corriendo…</span>
+        <span style={{ fontSize: 11, color: 'var(--muted-2)' }}>
+          {step >= CONCIL_ROWS.length - 2 ? '1 diferencia para revisar' : 'Cruzando por CUIT, CBU y referencia…'}
+        </span>
         <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>↓ Exportar Excel</span>
       </div>
     </div>
