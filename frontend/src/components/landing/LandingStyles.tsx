@@ -56,20 +56,23 @@ export const LandingStyles: React.FC = () => (
       overflow-x: hidden;
     }
 
+    /* Reveal al entrar al viewport — única animación permitida en la landing,
+       dispara una sola vez y queda fija (ver docs/ux/UX_RULES.md, tono sobrio). */
     .land-reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease calc(var(--d,0ms)), transform 0.6s ease calc(var(--d,0ms)); }
     .land-reveal[data-visible="true"] { opacity: 1; transform: none; }
     @media (max-width: 719px) { .land-reveal { opacity: 1 !important; transform: none !important; transition: none !important; } }
-
-    .grad-text {
-      background: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 50%, var(--accent-2) 100%);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    }
 
     .em-serif {
       font-family: 'Cormorant Garamond', Georgia, serif;
       font-style: italic; font-weight: 600;
       color: var(--accent);
-      -webkit-text-fill-color: var(--accent);
+    }
+
+    /* Badge estático del hero — sin animación, sin gradiente */
+    .eyebrow-badge {
+      display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px;
+      background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent);
+      font-size: 12px; font-weight: 600; margin-bottom: 24px;
     }
 
     /* Section label */
@@ -79,17 +82,6 @@ export const LandingStyles: React.FC = () => (
       color: var(--muted-2); margin-bottom: 20px;
     }
     .sec-label::before { content: ''; display: inline-block; width: 18px; height: 1px; background: var(--muted-2); }
-
-    /* Animations */
-    @keyframes glowPulse { 0%,100%{opacity:.2;transform:scale(1)} 50%{opacity:.45;transform:scale(1.05)} }
-    .glow-orb { animation: glowPulse 6s ease-in-out infinite; }
-    @keyframes floatMock { 0%{transform:translateY(0)} 100%{transform:translateY(-9px)} }
-    .mock-float { animation: floatMock 3.5s ease-in-out infinite alternate; }
-    @keyframes flowMove { 0%{transform:translateX(0);opacity:0} 15%{opacity:1} 85%{opacity:1} 100%{transform:translateX(calc(100% + 16px));opacity:0} }
-    .flow-dot { animation: flowMove 3s ease-in-out infinite; }
-    @keyframes badgeFade { 0%,100%{opacity:1} 50%{opacity:.5} }
-    .live-badge { animation: badgeFade 2.5s ease-in-out infinite; }
-    @keyframes scanLine { 0%{top:0;opacity:1} 100%{top:100%;opacity:0} }
 
     /* Cards */
     .grad-border { position:relative; background:var(--card); border-radius:16px; border:1px solid var(--border); transition:border-color .2s,transform .2s,box-shadow .2s; }
@@ -119,8 +111,6 @@ export const LandingStyles: React.FC = () => (
     .dark .btn-green { color:#000; }
     .btn-green:hover { background:var(--accent-2); }
     .btn-green:active { transform:scale(0.97); }
-    .btn-green.large { padding:14px 28px; font-size:15px; border-radius:12px; }
-    @media (min-width:640px) { .btn-green.large { padding:14px 32px; font-size:16px; } }
 
     .btn-ghost { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:10px; background:transparent; color:var(--muted); font-weight:500; font-size:13px; border:1px solid var(--border); cursor:pointer; transition:all .15s; text-decoration:none; white-space:nowrap; }
     .btn-ghost:hover { background:var(--bg-soft); color:var(--text); border-color:var(--accent-line); }
@@ -129,14 +119,6 @@ export const LandingStyles: React.FC = () => (
     .theme-toggle { width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; background:transparent; border:1px solid var(--border); cursor:pointer; font-size:15px; transition:background .15s,transform .1s; color:var(--text); flex-shrink:0; }
     .theme-toggle:hover { background:var(--bg-soft); }
     .theme-toggle:active { transform:scale(0.92); }
-
-    /* Form */
-    .land-input { width:100%; background:var(--card-2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; color:var(--text); font-size:14px; outline:none; transition:border .15s; font-family:inherit; box-sizing:border-box; }
-    .land-input:focus { border-color:var(--accent-line); box-shadow:0 0 0 3px var(--accent-soft); }
-    .land-input::placeholder { color:var(--muted-2); }
-
-    /* Pills */
-    .pill { display:inline-block; padding:5px 14px; border-radius:999px; background:var(--accent-soft); border:1px solid var(--accent-line); color:var(--accent); font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
 
     /* WA */
     .wa-btn { display:inline-flex; align-items:center; gap:10px; padding:13px 24px; border-radius:12px; background:#25D366; color:#fff; font-weight:600; font-size:15px; border:none; cursor:pointer; text-decoration:none; transition:background .15s,transform .1s,box-shadow .15s; box-shadow:0 4px 24px #25D36633; }
@@ -147,37 +129,15 @@ export const LandingStyles: React.FC = () => (
     .footer-link { font-size:12px; color:var(--muted-2); text-decoration:none; transition:color .15s; }
     .footer-link:hover { color:var(--text-2); }
 
-    /* FAQ */
-    .faq-item { border:1px solid var(--border); border-radius:12px; background:var(--card); overflow:hidden; transition:border-color .15s; }
-    .faq-item:hover { border-color:var(--accent-line); }
-    .faq-q { width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 20px; background:transparent; border:none; cursor:pointer; text-align:left; font-size:15px; font-weight:600; color:var(--text); font-family:inherit; }
-    .faq-q-icon { width:22px; height:22px; display:flex; align-items:center; justify-content:center; color:var(--accent); font-size:20px; transition:transform .25s; flex-shrink:0; }
-    .faq-q-icon.open { transform:rotate(45deg); }
-    .faq-a { padding:0 20px 18px; font-size:14px; line-height:1.65; color:var(--muted); border-top:1px solid var(--border-soft); padding-top:14px; }
-
-    /* Table */
-    .compare-table { width:100%; border-collapse:collapse; background:var(--card); border-radius:12px; overflow:hidden; border:1px solid var(--border); }
-    .compare-table th { padding:14px 18px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--muted-2); text-align:left; background:var(--card-2); border-bottom:1px solid var(--border); }
-    .compare-table th:last-child { color:var(--accent); }
-    .compare-table td { padding:13px 18px; font-size:14px; color:var(--text-2); border-bottom:1px solid var(--border-soft); }
-    .compare-table tr:last-child td { border-bottom:none; }
-    .compare-table td.feature { font-weight:500; color:var(--text); }
-    .compare-table td.excel { color:var(--muted); }
-    .compare-table td.cuadra { color:var(--accent); font-weight:600; }
-
-    /* Stats grid */
-    .stats-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:var(--border); border-radius:16px; overflow:hidden; border:1px solid var(--border); }
-    @media (min-width:720px) { .stats-grid { grid-template-columns:repeat(4,1fr); } }
-
     /* Step num */
     .step-num { display:inline-flex; width:44px; height:44px; border-radius:50%; background:var(--step-num-bg); border:2px solid var(--step-num-bd); align-items:center; justify-content:center; font-weight:800; font-size:13px; color:var(--accent); margin-bottom:16px; flex-shrink:0; }
 
 
-    /* Hero */
-    .hero-section { position:relative; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:90px 20px 56px; text-align:center; overflow:hidden; }
-    .hero-title { font-size:clamp(38px,10vw,84px); font-weight:700; line-height:1.06; letter-spacing:-2px; max-width:820px; margin-bottom:22px; }
-    .hero-sub { font-size:clamp(15px,3.5vw,20px); color:var(--muted); max-width:500px; line-height:1.65; margin-bottom:36px; padding:0 8px; }
-    .mockup-wrap { width:100%; max-width:560px; padding:0 4px; }
+    /* Hero — sin min-height:100vh a propósito: no es una pantalla de splash
+       inmersiva, es un título + CTA seguido inmediatamente por el producto. */
+    .hero-section { padding:128px 20px 64px; text-align:center; }
+    .hero-title { font-size:clamp(32px,7vw,58px); font-weight:700; line-height:1.12; letter-spacing:-1.5px; max-width:760px; margin:0 auto 20px; }
+    .hero-sub { font-size:clamp(15px,2.6vw,18px); color:var(--muted); max-width:520px; margin:0 auto 32px; line-height:1.65; padding:0 8px; }
 
     /* Sections */
     .section { padding:72px 20px; }
@@ -187,17 +147,12 @@ export const LandingStyles: React.FC = () => (
     /* Feature spotlight */
     .spotlight { display:grid; grid-template-columns:1fr; gap:48px; align-items:center; max-width:960px; margin:0 auto; }
     @media (min-width:820px) { .spotlight { grid-template-columns:1fr 1fr; } }
-    .spotlight.reverse { }
-    @media (min-width:820px) { .spotlight.reverse .spotlight-text { order:2; } .spotlight.reverse .spotlight-mock { order:1; } }
 
-    /* Range input */
-    .calc-range { -webkit-appearance:none; appearance:none; height:5px; background:var(--border); border-radius:3px; outline:none; cursor:pointer; }
-    .calc-range::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:20px; height:20px; border-radius:50%; background:var(--accent); cursor:pointer; border:2px solid var(--bg); box-shadow:0 2px 8px rgba(0,0,0,.18); }
-    .calc-range::-moz-range-thumb { width:20px; height:20px; border-radius:50%; background:var(--accent); cursor:pointer; border:2px solid var(--bg); }
+    /* Cómo funciona — pasos */
+    .steps-grid { display:grid; grid-template-columns:1fr; gap:28px; max-width:960px; margin:0 auto; }
+    @media (min-width:720px) { .steps-grid { grid-template-columns:repeat(3,1fr); gap:32px; } }
 
-    /* Closing CTA card */
-    .cta-card { background:var(--accent); border-radius:24px; padding:56px 32px; text-align:center; position:relative; overflow:hidden; }
-    .cta-card::before { content:''; position:absolute; top:-60px; right:-60px; width:300px; height:300px; border-radius:50%; background:rgba(255,255,255,.06); pointer-events:none; }
-    .cta-card::after { content:''; position:absolute; bottom:-80px; left:-40px; width:240px; height:240px; border-radius:50%; background:rgba(255,255,255,.04); pointer-events:none; }
+    /* Closing CTA card — color sólido de marca, sin gradiente */
+    .cta-card { background:var(--accent); border-radius:24px; padding:56px 32px; text-align:center; }
   `}</style>
 )
