@@ -14,9 +14,10 @@ export const Nav: React.FC<{
     <>
       {menuOpen && (
         <div className="mobile-menu-overlay">
-          <a href="#producto"      onClick={closeMenu}>✦ Producto</a>
-          <a href="#confianza"     onClick={closeMenu}>✦ Por qué confiar</a>
           <a href="#como-funciona" onClick={closeMenu}>✦ Cómo funciona</a>
+          <a href="#seguridad"     onClick={closeMenu}>✦ Seguridad</a>
+          <a href="#faq"           onClick={closeMenu}>✦ FAQ</a>
+          <a href="#contacto"      onClick={closeMenu}>✦ Contacto</a>
         </div>
       )}
 
@@ -27,9 +28,10 @@ export const Nav: React.FC<{
         </a>
         <div className="nav-actions">
           <div className="nav-links">
-            <a href="#producto"      className="btn-ghost" style={{ padding: '7px 12px', fontSize: 13 }}>Producto</a>
-            <a href="#confianza"     className="btn-ghost" style={{ padding: '7px 12px', fontSize: 13 }}>Por qué confiar</a>
             <a href="#como-funciona" className="btn-ghost" style={{ padding: '7px 12px', fontSize: 13 }}>Cómo funciona</a>
+            <a href="#seguridad"     className="btn-ghost" style={{ padding: '7px 12px', fontSize: 13 }}>Seguridad</a>
+            <a href="#faq"           className="btn-ghost" style={{ padding: '7px 12px', fontSize: 13 }}>FAQ</a>
+            <a href="#contacto"      className="btn-ghost" style={{ padding: '7px 12px', fontSize: 13 }}>Contacto</a>
           </div>
           <button onClick={toggle} className="theme-toggle" title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'} aria-label="Cambiar tema">
             {theme === 'dark' ? '☀' : '☾'}
