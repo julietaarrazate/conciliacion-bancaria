@@ -8,7 +8,7 @@ export const ClosingCTA: React.FC = () => (
         <div className="cta-card">
           <div style={{ position: 'relative', zIndex: 1 }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginBottom: 16 }}>Empezá hoy</div>
-            <h2 style={{ fontSize: 'clamp(28px,6vw,52px)', fontWeight: 700, letterSpacing: '-1.5px', lineHeight: 1.08, color: '#fff', marginBottom: 16 }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(28px,6vw,52px)', fontWeight: 600, letterSpacing: '-0.015em', lineHeight: 1.1, color: '#fff', marginBottom: 16 }}>
               Tu empresa operativa<br />en menos de 24 horas.
             </h2>
             <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.75)', maxWidth: 420, margin: '0 auto 32px', lineHeight: 1.65 }}>
