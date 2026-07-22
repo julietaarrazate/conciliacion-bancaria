@@ -17,7 +17,9 @@ Lee el CLAUDE.md del repo julietaarrazate/conciliacion-bancaria para entender el
 
 - Frontend (React + PWA): Vercel — https://conciliacion-bancaria-ten.vercel.app
 - Backend (FastAPI): Render — https://conciliacion-api.onrender.com
-- Base de datos: Neon PostgreSQL — ep-ancient-hall-anz4pezn.c-6.us-east-1.aws.neon.tech
+- Base de datos: Neon PostgreSQL — ep-ancient-hall-anz4pezn.c-6.us-east-1.aws.neon.tech.
+  `DATABASE_URL` es `sync: false` en `render.yaml` (Render no la autogenera — está seteada a mano
+  en el dashboard de Render, apuntando a Neon; no tocar ese valor desde acá).
 - Código: GitHub — julietaarrazate/conciliacion-bancaria (PRIVADO)
 - Keep-alive: UptimeRobot pinguea /health cada 5 min (mantiene despierto a Render). Neon lo
   mantiene despierto un job interno `db_keepalive` (SELECT 1 cada 4 min) — ver "Schedulers".
@@ -47,7 +49,17 @@ Render free tier (cold start ~30s, mitigado con UptimeRobot + retry en frontend)
 Backend: FastAPI + SQLAlchemy + PostgreSQL (Neon) + Python 3.11
 Frontend: React 18 + TypeScript + Vite + TailwindCSS + PWA instalable
 Auth: JWT 8h · pbkdf2_sha256 · Rate limiting (slowapi) · Headers de seguridad
-Diseño: Linear-inspired · Inter font · dark mode (#0B0B0F)
+Diseño (app autenticada): Linear-inspired · Inter font · dark mode (#0B0B0F)
+Diseño (landing pública `/`): estilo marketing con efectos — gradiente en el título, glow-orb,
+mockup animado en loop, badge parpadeante, StatCounter, Calculadora, Comparativa, Testimoniales,
+Pricing, FAQ (~14 secciones) — más titulares en **Fraunces** (serif display) + acento itálico en
+Cormorant Garamond; Inter sigue siendo el body font en toda la plataforma. Es un estilo DISTINTO
+a propósito del resto de la app: la operadora revirtió (jul 2026) un rediseño sobrio de la landing
+porque "antes era mejor" y porque el copy técnico no lo entiende el cliente — **el copy visible de
+la landing no debe usar jerga interna** ("Decimal punta a punta", "asientos inmutables", "Ley
+25.326"); esos términos son correctos como documentación INTERNA para desarrolladores (ver
+"Fortalezas" en `docs/AUDITORIA_EKP_2026-07.md`), no como copy de cara al cliente. No volver a
+tocar la landing hacia un estilo "sobrio/profesional" sin pedido explícito de la operadora.
 
 ---
 
@@ -75,6 +87,12 @@ es la referencia profunda. **Consultá el doc correspondiente ANTES de tocar su 
 - Diseño / tokens / componentes → `docs/ux/DESIGN_SYSTEM.md` y `docs/ux/UX_RULES.md`
 - Agregar módulo/endpoint/banco/parser/reporte/módulo-contable → `docs/playbooks/`
 - Mapa general y entidades → `docs/architecture/SYSTEM_MAP.md`, `DOMAIN_MODEL.md` · Índice: `docs/README.md`
+- Auditoría de due-diligence EKP (bandas de madurez, veredicto, roadmap por evidencia) →
+  `docs/AUDITORIA_EKP_2026-07.md` (jul 2026, re-audita `ENGINEERING_AUDIT.md` de junio)
+- Gates de Product Genesis (viabilidad de ideas nuevas evaluadas con el generador del EKP) →
+  `docs/ekp/GENESIS_COPILOTO_IMPOSITIVO.md` (condicionalmente viable, no construir sin validar
+  primero) y `docs/ekp/GENESIS_BILLETERAS.md` (NOT VIABLE como producto standalone; VIABLE
+  reencuadrado como feature de Cuadra — parser de billeteras en el motor multi-banco)
 
 Cada doc tiene una sección `## Pendiente de revisar` con discrepancias código↔doc detectadas.
 Si cambiás el código de un área, actualizá su doc (la doc describe el código tal como está).
@@ -135,7 +153,9 @@ Tolerancia fecha: 5 días · UM deduplicación: (orden, monto) o (fecha, monto, 
 
 **Antes de tocar fechas, montos (Decimal), compartir por WhatsApp o detección de banco**: revisar
 `BUGS.md` — son las áreas con bugs recurrentes documentados (causa raíz + cómo evitarlos).
-Bancos soportados: Macro, BBVA, Santander, Galicia, ICBC y genérico.
+Bancos soportados (16, `detectar_banco` en `excel_parser.py`): Macro, BBVA, Santander, Galicia,
+ICBC, Nación, Provincia, Ciudad, HSBC, Mercado Pago (por headers, no por texto), Credicoop,
+Supervielle, Patagonia, Bancor, Rioja, La Pampa — más genérico como fallback.
 
 **Planillas de clientes heterogéneas** (v3.27): la planilla del cliente (distinta del extracto del
 banco) pasa por un embudo de estandarización (`services/planilla_mapper.py`) que la normaliza al
@@ -186,6 +206,11 @@ necesitás contexto histórico detallado de una versión puntual, leelo directam
 capa de diagnóstico de conciliación · **v3.28** archivar extractos (cierre de período) + exports
 estéticos con PDF de planilla conciliada + alertas de descuadre/filas ambiguas + UX de estados
 (labels humanos) · **v3.29** carga masiva de cheques (varios cheques por foto en el OCR).
+
+Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,
+sin efectos) y la operadora la rechazó — se revirtió a la landing anterior completa (gradiente,
+glow-orb, mockup animado, Calculadora, Comparativa, Testimoniales, Pricing, FAQ) más un refresco
+tipográfico (Fraunces en titulares) pedido aparte. Ver "Diseño" arriba antes de tocar `/landing`.
 
 Resumen muy breve de dónde está el sistema hoy: motor de conciliación + multi-banco (16 bancos) +
 multi-tenant funcionando en producción; módulos operativos completos (Cheques, Pagos, Caja,
