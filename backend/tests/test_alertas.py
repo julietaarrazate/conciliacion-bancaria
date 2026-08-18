@@ -16,13 +16,35 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from datetime import timedelta
+from zoneinfo import ZoneInfo
+
 from app.database import Base
 from app.models.organizacion import Organizacion
 from app.models.user import User
 from app.models.cliente import Cliente
+from app.models.cheque import Cheque
 from app.models.planilla import Planilla, PlanillaRow
 from app.services.auth import get_password_hash
 from app.services import reportes_service as svc
+
+
+def _hoy_art():
+    return datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date()
+
+
+def _cheque(db, org_id, cliente_id, fecha_deposito, estado="registrado", monto="1000.00"):
+    ch = Cheque(
+        organizacion_id=org_id,
+        cliente_id=cliente_id,
+        monto=Decimal(monto),
+        estado=estado,
+        fecha_deposito=fecha_deposito,
+    )
+    db.add(ch)
+    db.commit()
+    db.refresh(ch)
+    return ch
 
 
 @pytest.fixture
@@ -193,3 +215,73 @@ class TestFilasAmbiguas:
 
         result_org2 = svc.calcular_alertas(db, 2)
         assert _tipo(result_org2["alertas"], "filas_ambiguas") is not None
+
+
+class TestAlertasCheques:
+    """Regresión del bug: las alertas contaban cheques por estado == 'pendiente', pero
+    el estado canónico es 'registrado' (el backfill migra 'pendiente' -> 'registrado'),
+    así que SIEMPRE daban 0. Ahora cuentan los estados 'en cartera' (registrado/pendiente)."""
+
+    def test_cheque_registrado_por_vencer_dispara_urgente(self, db):
+        """El bug: un cheque en el estado canónico 'registrado' antes NO se contaba."""
+        cli = _cliente(db, 1)
+        _cheque(db, 1, cli.id, _hoy_art() + timedelta(days=3), estado="registrado")
+
+        result = svc.calcular_alertas(db, 1)
+        a = _tipo(result["alertas"], "cheques_urgentes")
+        assert a is not None
+        assert a["cantidad"] == 1
+        assert a["link"] == "/cheques"
+
+    def test_cheque_pendiente_legacy_tambien_cuenta(self, db):
+        cli = _cliente(db, 1)
+        _cheque(db, 1, cli.id, _hoy_art() + timedelta(days=2), estado="pendiente")
+
+        result = svc.calcular_alertas(db, 1)
+        assert _tipo(result["alertas"], "cheques_urgentes") is not None
+
+    def test_cheque_vencido_dispara_vencidos(self, db):
+        cli = _cliente(db, 1)
+        _cheque(db, 1, cli.id, _hoy_art() - timedelta(days=5), estado="registrado")
+
+        result = svc.calcular_alertas(db, 1)
+        a = _tipo(result["alertas"], "cheques_vencidos")
+        assert a is not None
+        assert a["cantidad"] == 1
+
+    def test_cheque_acreditado_no_dispara_alerta(self, db):
+        """Un cheque ya acreditado/rechazado/anulado está resuelto: no es urgente ni vencido."""
+        cli = _cliente(db, 1)
+        _cheque(db, 1, cli.id, _hoy_art() + timedelta(days=2), estado="acreditado")
+        _cheque(db, 1, cli.id, _hoy_art() - timedelta(days=2), estado="rechazado")
+        _cheque(db, 1, cli.id, _hoy_art() - timedelta(days=2), estado="anulado")
+
+        result = svc.calcular_alertas(db, 1)
+        assert _tipo(result["alertas"], "cheques_urgentes") is None
+        assert _tipo(result["alertas"], "cheques_vencidos") is None
+
+    def test_cheque_lejano_no_es_urgente(self, db):
+        cli = _cliente(db, 1)
+        # fecha_deposito a 30 días: fuera de la ventana de 7 días de "urgente"
+        _cheque(db, 1, cli.id, _hoy_art() + timedelta(days=30), estado="registrado")
+
+        result = svc.calcular_alertas(db, 1)
+        assert _tipo(result["alertas"], "cheques_urgentes") is None
+
+    def test_multitenant_cheque_de_otra_org_no_aparece(self, db):
+        cli2 = _cliente(db, 2)
+        _cheque(db, 2, cli2.id, _hoy_art() + timedelta(days=2), estado="registrado")
+
+        result_org1 = svc.calcular_alertas(db, 1)
+        assert _tipo(result_org1["alertas"], "cheques_urgentes") is None
+
+        result_org2 = svc.calcular_alertas(db, 2)
+        assert _tipo(result_org2["alertas"], "cheques_urgentes") is not None
+
+    def test_proximos_vencimiento_incluye_registrado(self, db):
+        """_cheques_proximos_vencimiento (dashboard resumen) tenía el mismo bug."""
+        cli = _cliente(db, 1)
+        _cheque(db, 1, cli.id, _hoy_art() + timedelta(days=10), estado="registrado")
+
+        proximos = svc._cheques_proximos_vencimiento(db, 1, dias=30)
+        assert len(proximos) == 1

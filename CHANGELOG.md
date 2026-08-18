@@ -5,6 +5,26 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.29 — Fix alertas/saldos de cheques que siempre daban 0 (estado "pendiente" vs "registrado")
+
+Las alertas de cheques (urgentes/vencidos) del dashboard **nunca se disparaban**, aunque hubiera
+cheques por vencer. Causa: filtraban por `estado == "pendiente"`, pero el estado canónico es
+`"registrado"` y un backfill de arranque migra `"pendiente" → "registrado"` — o sea, en producción
+no hay cheques con estado `"pendiente"`, así que el filtro daba siempre 0 (silenciosamente).
+
+- **5 lugares afectados** (todos devolvían vacío): `calcular_alertas` (cheques urgentes/vencidos),
+  `_cheques_proximos_vencimiento` (resumen del dashboard), saldo de cheques por cliente del estado
+  de cuenta, push de alertas de `backup_scheduler.py` (10:00 ART — nunca notificaba cheques por
+  vencer), y dos queries del asistente IA (`agente.py`).
+- **Fix**: constantes en `reportes_service.py` — `CHEQUE_EN_CARTERA = ("registrado", "pendiente")`
+  (no depositado aún) y `CHEQUE_PENDIENTE_COBRO = ("registrado", "pendiente", "depositado")`
+  (importe aún no cobrado). Se reemplazó `estado == "pendiente"` por `estado.in_(...)` según el
+  caso. Documentado en `BUGS.md`.
+- **Tests**: `test_alertas.py` +7 (un cheque `registrado` por vencer ahora dispara la alerta;
+  `acreditado`/`rechazado`/`anulado` no; aislamiento multi-tenant).
+
+---
+
 ### v3.29 — Fix deadlock de Postgres en deploy en caliente (DDL de arranque)
 
 Producción reportó `OperationalError: deadlock detected` en `GET /analisis/alertas` (contando

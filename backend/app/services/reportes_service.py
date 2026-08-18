@@ -35,6 +35,17 @@ STATUS_OK = {"ok", "OK", "PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA"}
 # Status que cuentan como pendientes (no contamos "duplicado" ni vacios)
 STATUS_PENDIENTE = {"pendiente", "no está", "no esta", "faltan datos", "VENCIDO", "EN_REVISION"}
 
+# Estados de CHEQUE (distinto de status de fila de planilla). El estado canónico de un
+# cheque recién cargado es "registrado"; "pendiente" es un sinónimo legacy (ver frontend
+# `esRegistrado`) y el backfill de arranque migra "pendiente" -> "registrado". Por eso
+# filtrar cheques solo por estado == "pendiente" daba SIEMPRE 0 (bug corregido): las
+# alertas de cheques y el saldo de cheques por cliente quedaban vacíos.
+# Cheque "en cartera" = todavía no depositado (para alertas por fecha_deposito):
+CHEQUE_EN_CARTERA = ("registrado", "pendiente")
+# Cheque cuyo importe sigue pendiente de cobro = en cartera + depositado (entregado al
+# banco pero aún no acreditado); excluye acreditado/rechazado/anulado:
+CHEQUE_PENDIENTE_COBRO = ("registrado", "pendiente", "depositado")
+
 
 def resolver_org(current_user: User, org_id_param: Optional[int]) -> int:
     """Si es superadmin permite override de org via query param; si no, usa la suya."""
@@ -225,7 +236,7 @@ def _cheques_proximos_vencimiento(db: Session, org_id: int, dias: int = 30) -> l
         db.query(Cheque)
         .filter(
             Cheque.organizacion_id == org_id,
-            Cheque.estado == "pendiente",
+            Cheque.estado.in_(CHEQUE_EN_CARTERA),
             Cheque.fecha_deposito.isnot(None),
             Cheque.fecha_deposito >= hoy,
             Cheque.fecha_deposito <= limite,
@@ -336,7 +347,7 @@ def calcular_alertas(db: Session, organizacion_id: int) -> dict:
 
     cheques_urgentes = db.query(func.count(Cheque.id)).filter(
         Cheque.organizacion_id == organizacion_id,
-        Cheque.estado == "pendiente",
+        Cheque.estado.in_(CHEQUE_EN_CARTERA),
         Cheque.fecha_deposito.isnot(None),
         Cheque.fecha_deposito >= hoy,
         Cheque.fecha_deposito <= hoy + timedelta(days=7),
@@ -344,7 +355,7 @@ def calcular_alertas(db: Session, organizacion_id: int) -> dict:
 
     cheques_vencidos = db.query(func.count(Cheque.id)).filter(
         Cheque.organizacion_id == organizacion_id,
-        Cheque.estado == "pendiente",
+        Cheque.estado.in_(CHEQUE_EN_CARTERA),
         Cheque.fecha_deposito.isnot(None),
         Cheque.fecha_deposito < hoy,
     ).scalar() or 0
@@ -542,7 +553,7 @@ def calcular_clientes_aging(db: Session, organizacion_id: int, limit: int, offse
         .join(Cliente, Cheque.cliente_id == Cliente.id)
         .filter(
             Cheque.organizacion_id == organizacion_id,
-            Cheque.estado == "pendiente",
+            Cheque.estado.in_(CHEQUE_PENDIENTE_COBRO),
         )
         .group_by(Cliente.id, Cliente.nombre)
         .all()

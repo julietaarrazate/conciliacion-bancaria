@@ -32,6 +32,30 @@ versión real, reconstruida a partir del historial de fixes documentado ahí.
 
 ---
 
+## Estado de cheque: filtrar por `"pendiente"` en vez de `"registrado"` → siempre 0
+
+**Patrón:** el estado canónico de un cheque recién cargado es **`"registrado"`** (`"pendiente"` es un
+sinónimo legacy — ver frontend `esRegistrado`). Un backfill de arranque (`main.py`) migra
+`UPDATE cheques SET estado='registrado' WHERE estado='pendiente'`, así que en producción **no
+existen** filas con `estado == "pendiente"`. Cualquier query que filtre cheques por
+`estado == "pendiente"` devuelve **siempre 0/vacío**, silenciosamente.
+
+- **Detectado (v3.29):** 5 lugares filtraban por `estado == "pendiente"` → todos devolvían vacío:
+  `reportes_service.calcular_alertas` (alertas de cheques urgentes/vencidos del dashboard —
+  nunca disparaban), `_cheques_proximos_vencimiento` (resumen), el saldo de cheques por cliente
+  del estado de cuenta, el push de alertas de `backup_scheduler.py` (10:00 ART, nunca notificaba),
+  y dos queries del asistente IA (`agente.py`).
+- **Fix (v3.29):** constantes en `reportes_service.py` — `CHEQUE_EN_CARTERA = ("registrado",
+  "pendiente")` (no depositado aún, para alertas por `fecha_deposito`) y `CHEQUE_PENDIENTE_COBRO =
+  ("registrado", "pendiente", "depositado")` (importe aún no cobrado, para el saldo por cliente).
+  Se reemplazó `estado == "pendiente"` por `estado.in_(...)` en los 5 lugares.
+
+**Cómo evitarlo:** nunca filtrar cheques por `estado == "pendiente"`. Usar las constantes
+`CHEQUE_EN_CARTERA` / `CHEQUE_PENDIENTE_COBRO` (backend) o el helper `esRegistrado` (frontend). El
+único uso legítimo de `== estado` es cuando `estado` es un parámetro elegido por el usuario.
+
+---
+
 ## Deadlock de Postgres en deploy en caliente (DDL de arranque vs requests en vuelo)
 
 **Patrón:** el DDL de arranque (`app/db_safety.py::SAFETY_NET_DDL` + los loops `indexes`/
