@@ -5,6 +5,24 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.29 — Fix deadlock de Postgres en deploy en caliente (DDL de arranque)
+
+Producción reportó `OperationalError: deadlock detected` en `GET /analisis/alertas` (contando
+cheques): el DDL de arranque competía por locks con requests en vuelo durante un deploy. El
+safety-net (`db_safety.py`, ~100 sentencias) corría en **una sola transacción** que retenía
+`AccessExclusiveLock` sobre ~15 tablas hasta el commit final, sin `lock_timeout` → deadlock contra
+los `AccessShareLock` de las lecturas.
+
+- **Helper `main.py::_exec_startup_ddl(conn, sql)`**: cada sentencia DDL de arranque en su propia
+  transacción con `SET LOCAL lock_timeout = '4s'` (solo Postgres), commit por sentencia (libera el
+  lock de la tabla de inmediato), reintento ante contención de lock/deadlock, y aislamiento de
+  errores (una sentencia que falla ya no aborta las siguientes — bug latente previo). Aplicado a
+  los 3 loops de DDL de arranque (safety-net + índices + migraciones de columnas).
+- **Tests**: `test_startup_ddl.py` (4 tests, sqlite en memoria) verifica el aislamiento de errores
+  y el commit-por-sentencia. Documentado en `BUGS.md` como área de bug recurrente.
+
+---
+
 ### v3.29 — Carga masiva de cheques: varios cheques por foto (jul 2026)
 
 La carga masiva de cheques por foto ya existía (tab "Carga masiva" en Cheques → `POST /cheques/bulk-ocr`),

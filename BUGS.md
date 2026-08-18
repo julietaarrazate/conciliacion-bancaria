@@ -32,6 +32,32 @@ versión real, reconstruida a partir del historial de fixes documentado ahí.
 
 ---
 
+## Deadlock de Postgres en deploy en caliente (DDL de arranque vs requests en vuelo)
+
+**Patrón:** el DDL de arranque (`app/db_safety.py::SAFETY_NET_DDL` + los loops `indexes`/
+`migrations` en `main.py::_init_db`) corre en un thread al bootear la instancia nueva, que **ya
+está sirviendo requests**. Un `ALTER TABLE`/`DROP INDEX` toma `AccessExclusiveLock` sobre la tabla;
+si un request en vuelo (p. ej. `GET /analisis/alertas` contando `cheques`) sostiene un
+`AccessShareLock`, se forma un deadlock y Postgres mata una de las dos transacciones →
+`OperationalError: deadlock detected` (500 al usuario, o arranque incompleto).
+
+- **Causa raíz (v3.29):** las ~100 sentencias del safety-net corrían en **una sola transacción**
+  (un `connect()`, un `commit()` al final). Esa transacción retenía el `AccessExclusiveLock` de
+  ~15 tablas **hasta el commit final**, maximizando la ventana de deadlock. Sin `lock_timeout`, el
+  DDL esperaba indefinidamente. Bonus bug: si una sentencia fallaba, el lote entero se abortaba y
+  las siguientes no se aplicaban.
+- **Fix (v3.29):** helper `main.py::_exec_startup_ddl(conn, sql)` — cada sentencia va en su propia
+  transacción con `SET LOCAL lock_timeout = '4s'` (solo Postgres), commit por sentencia (libera el
+  lock de la tabla al toque), reintento ante contención de lock/deadlock, y aislamiento de errores
+  (una sentencia que falla no aborta las siguientes). Usado en los 3 loops de DDL de arranque.
+
+**Cómo evitarlo:** cualquier DDL que corra en el arranque (o en caliente) debe ir por
+`_exec_startup_ddl` (o replicar el patrón: `lock_timeout` + commit por sentencia). Nunca agrupar
+muchos `ALTER TABLE`/`CREATE INDEX`/`DROP INDEX` en una transacción larga que sirva de barrera de
+locks contra el tráfico de lectura.
+
+---
+
 ## Decimal vs float en cálculos monetarios
 
 **Patrón:** columnas `Numeric(12,2)` de SQLAlchemy llegan como `Decimal` a Python, pero código que
