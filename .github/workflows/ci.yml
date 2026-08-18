@@ -3,14 +3,48 @@ name: CI
 # Corre los tests del backend y el type-check + build del frontend en cada push
 # a main y en cada pull request. Los tests usan SQLite en memoria, así que no
 # necesitan servicios externos (no toca Neon/Render).
+#
+# Optimizado para gastar POCOS minutos de Actions (cuota 2000/mes en repos
+# privados), sin sacar ninguna verificación:
+#   1. concurrency + cancel-in-progress: cancela corridas de commits ya superados.
+#   2. job "changes" (dorny/paths-filter, ~10s): detecta qué área cambió, y solo
+#      corre backend y/o frontend si esa área tiene cambios (un PR solo-backend NO
+#      corre el build de frontend, y viceversa; un PR solo-docs no corre ninguno).
 on:
   push:
     branches: [main]
   pull_request:
 
+# Cancela la corrida anterior del mismo PR/rama cuando llega un push nuevo: no
+# gastar minutos terminando tests de un commit que ya quedó viejo.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  changes:
+    name: Detectar áreas cambiadas
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+
   backend:
     name: Backend · ruff + pytest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -35,6 +69,8 @@ jobs:
 
   frontend:
     name: Frontend · type-check + build
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
