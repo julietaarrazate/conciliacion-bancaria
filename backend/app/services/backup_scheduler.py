@@ -144,10 +144,11 @@ def _run_alertas_push() -> None:
         en_3_dias = hoy + timedelta(days=3)
         hace_7_dias = hoy - timedelta(days=7)
 
+        from app.services.reportes_service import CHEQUE_EN_CARTERA
         cheques_urgentes = (
             db.query(Cheque)
             .filter(
-                Cheque.estado == "pendiente",
+                Cheque.estado.in_(CHEQUE_EN_CARTERA),
                 Cheque.fecha_deposito != None,
                 Cheque.fecha_deposito >= hoy,
                 Cheque.fecha_deposito <= en_3_dias,

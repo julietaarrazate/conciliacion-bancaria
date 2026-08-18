@@ -137,8 +137,9 @@ def _consultar_cheques(db, org_id, estado=None):
     total_cheques = sum(v["cantidad"] for v in por_estado.values())
     total_monto = sum(v["total"] for v in por_estado.values())
 
+    from app.services.reportes_service import CHEQUE_EN_CARTERA
     proximos_rows = (
-        base.filter(Cheque.estado == "pendiente")
+        base.filter(Cheque.estado.in_(CHEQUE_EN_CARTERA))
         .order_by(Cheque.fecha_deposito.asc().nullslast())
         .limit(5)
         .all()
@@ -206,9 +207,10 @@ def _resumen_financiero(db, org_id, mes=None, año=None):
         func.extract("year", PlanillaRow.fecha_acred) == año,
     ).scalar() or 0
 
+    from app.services.reportes_service import CHEQUE_EN_CARTERA
     cartera_cheques = db.query(func.sum(Cheque.monto)).filter(
         Cheque.organizacion_id == org_id,
-        Cheque.estado == "pendiente"
+        Cheque.estado.in_(CHEQUE_EN_CARTERA),
     ).scalar() or 0
 
     return {
