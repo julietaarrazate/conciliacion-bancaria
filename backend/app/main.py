@@ -89,6 +89,45 @@ if settings.sentry_dsn:
 limiter = Limiter(key_func=get_remote_address)
 
 
+def _exec_startup_ddl(conn, sql, retries=3):
+    """Ejecuta una sentencia DDL de arranque de forma resiliente y la commitea al toque.
+
+    Motivación (deadlock en deploy en caliente — ver BUGS.md): el DDL de arranque
+    (safety-net, índices, migraciones de columnas) corre mientras la instancia nueva
+    ya sirve requests. Un `ALTER TABLE`/`DROP INDEX` toma AccessExclusiveLock sobre la
+    tabla; si un request en vuelo (p. ej. /analisis/alertas contando cheques) tiene un
+    AccessShareLock, se puede formar un deadlock. Dos defensas:
+      1. `SET LOCAL lock_timeout` (solo Postgres): el DDL no espera indefinidamente por
+         el lock — cede rápido y reintenta, en vez de quedar en un abrazo mortal.
+      2. commit por sentencia: libera el lock de esa tabla de inmediato (no lo retiene
+         hasta el final de un lote), y aísla el error (una sentencia que falla no aborta
+         las siguientes).
+
+    Devuelve None si aplicó OK, o la excepción final si no pudo (el caller decide si
+    loguear como warning/debug — muchas fallan a propósito con "ya existe").
+    """
+    is_pg = conn.dialect.name == "postgresql"
+    last_ex = None
+    for attempt in range(retries):
+        try:
+            if is_pg:
+                conn.execute(text("SET LOCAL lock_timeout = '4s'"))
+            conn.execute(text(sql))
+            conn.commit()
+            return None
+        except Exception as ex:
+            last_ex = ex
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            transient = is_pg and ("lock" in str(ex).lower() or "deadlock" in str(ex).lower())
+            if transient and attempt < retries - 1:
+                continue
+            return last_ex
+    return last_ex
+
+
 def _run_alembic():
     """Sella la DB en la revisión head de Alembic (no corre `upgrade`).
 
@@ -119,13 +158,14 @@ def _run_alembic():
 
     # Safety net: DDL mínimo que debe existir aunque Alembic falle.
     # Fuente única e importable en app/db_safety.py (testeada en test_db_safety.py).
-    _safety_cols = SAFETY_NET_DDL
+    # Cada sentencia se aplica con lock_timeout + commit inmediato (ver
+    # _exec_startup_ddl y BUGS.md — deadlock en deploy en caliente).
     try:
-        from sqlalchemy import text as _text
         with engine.connect() as _conn:
-            for _sql in _safety_cols:
-                _conn.execute(_text(_sql))
-            _conn.commit()
+            for _sql in SAFETY_NET_DDL:
+                _err = _exec_startup_ddl(_conn, _sql)
+                if _err is not None:
+                    logger.warning("Safety net DDL (%s…): %s", _sql[:60], _err)
     except Exception as ex:
         logger.warning("Safety net columnas: %s", ex)
 
@@ -168,13 +208,14 @@ def _init_db():
         # Asientos — numero_asiento se usa en ordenamiento y numeración correlativa
         "CREATE INDEX IF NOT EXISTS idx_asientos_numero ON asientos(numero_asiento DESC)",
     ]
-    for sql in indexes:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text(sql))
-                conn.commit()
-        except Exception as ex:
-            logger.debug("Index ya existe (ignorado): %s", ex)
+    try:
+        with engine.connect() as conn:
+            for sql in indexes:
+                err = _exec_startup_ddl(conn, sql)
+                if err is not None:
+                    logger.debug("Index ya existe (ignorado): %s", err)
+    except Exception as ex:
+        logger.debug("Índices de arranque: %s", ex)
 
     # 3. Migraciones de columnas — todas idempotentes (IF NOT EXISTS no disponible en todos los Postgres,
     #    se usa try/except para ignorar "column already exists")
@@ -207,13 +248,12 @@ def _init_db():
         "ALTER TABLE liquidaciones ALTER COLUMN cerrado_by DROP NOT NULL",
         "ALTER TABLE arqueos_diarios ALTER COLUMN creado_por DROP NOT NULL",
     ]
-    for sql in migrations:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text(sql))
-                conn.commit()
-        except Exception:
-            pass  # columna ya existe
+    try:
+        with engine.connect() as conn:
+            for sql in migrations:
+                _exec_startup_ddl(conn, sql)  # falla a propósito si la columna ya existe
+    except Exception as ex:
+        logger.debug("Migraciones de columnas de arranque: %s", ex)
 
     # 2.5. Normalizar campo "mes" de movimientos: dejar solo el numero (1-12).
     # Casos viejos: "Mayo 2026", "May 2026", "5", "05/2026", etc.
