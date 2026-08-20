@@ -10,6 +10,9 @@ estado actual del sistema basándose exclusivamente en el código.
 
 ## Índice
 
+### Panorama general
+- [ESTADO_SISTEMA.md](./ESTADO_SISTEMA.md) — snapshot completo y autocontenido de todo lo construido (módulos, deuda técnica, pendientes); pensado para revisión externa
+
 ### Arquitectura (`architecture/`)
 - [ARCHITECTURE.md](./architecture/ARCHITECTURE.md) — stack, capas, topología de producción, ciclo de request, schedulers
 - [SYSTEM_MAP.md](./architecture/SYSTEM_MAP.md) — mapa módulo → router → service → modelo → página
