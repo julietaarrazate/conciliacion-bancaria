@@ -16,6 +16,15 @@ auditoría, **conservando** clientes, usuarios, plan de cuentas + reglas y toda 
 organización: `app/services/reset_operativo.py` + `scripts/reset_operativo.py` (con `--dry-run`,
 confirmación, y flag para conservar auditoría) + tests. Runbook: `docs/playbooks/RESET_OPERATIVO.md`.
 
+Complemento del arranque limpio: se **eliminó el backfill de arranque** (`main.py`, paso 9b) que
+re-sembraba en cada boot 3 asientos "lápida" (`numero_asiento` 518/519/520, `modulo=ajuste_manual`,
+sin detalle, "sin impacto contable") para tapar los huecos que dejó la baja física de esos asientos
+en la migración v3.9 y mantener la correlatividad del Libro Diario. Tras vaciar el Libro Diario a
+cero ese relleno ya no aplica y además forzaba a que el primer asiento real se numerara 521 en vez
+de 1 (`_next_numero_asiento` = max+1). Se borraron las 3 filas y se reinició `asientos_id_seq` →
+el próximo asiento real arranca en `id` 1 y `numero_asiento` 1. También se versionó
+`docs/ESTADO_SISTEMA.md` (snapshot autocontenido del sistema).
+
 ---
 
 ### v3.29 — Fix alertas/saldos de cheques que siempre daban 0 (estado "pendiente" vs "registrado")

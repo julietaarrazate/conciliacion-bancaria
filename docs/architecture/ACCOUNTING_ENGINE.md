@@ -284,6 +284,11 @@ asiento `*_reverso` como su original (detecta `Asiento.modulo.like("%_reverso")`
   Es número de visualización; el `id` sigue siendo la PK real. Indexado (migración 011 /
   safety net `idx_asientos_numero`).
 - `GET /contabilidad/asientos/gaps` reporta huecos en la secuencia (auditoría de saltos).
+- **Sin tombstones de huecos legacy** (desde ago 2026): hasta el reset operativo, el arranque
+  (`main.py` paso 9b) re-sembraba 3 asientos "lápida" (`numero_asiento` 518/519/520, sin detalle)
+  para tapar los huecos de la baja física de la migración v3.9. Ese backfill se eliminó al vaciar
+  el Libro Diario a cero — ya no hay huecos que tapar y evitaba que el primer asiento nuevo se
+  numerara 521 en vez de 1. No reintroducir salvo que se restaure el histórico.
 - `POST /contabilidad/reset-y-rebuild` (solo superadmin, `dry_run` por defecto) **borra todos
   los asientos de la org y los reconstruye** desde los datos reales: un `um_lote` por lote de
   UM importado + un `um_reclass_planilla` por planilla conciliada (agrupado), luego renumera
