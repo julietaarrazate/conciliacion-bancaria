@@ -49,6 +49,7 @@ estado actual del sistema basándose exclusivamente en el código.
 - [NEW_PARSER.md](./playbooks/NEW_PARSER.md) — extender el parser de Excel
 - [NEW_REPORT.md](./playbooks/NEW_REPORT.md) — agregar un reporte/export
 - [NEW_ACCOUNTING_MODULE.md](./playbooks/NEW_ACCOUNTING_MODULE.md) — integrar con el motor contable
+- [RESET_OPERATIVO.md](./playbooks/RESET_OPERATIVO.md) — vaciar lo transaccional (arrancar limpio) conservando maestros
 
 ## Convención
 

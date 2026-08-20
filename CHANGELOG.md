@@ -5,6 +5,19 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Mantenimiento (ago 2026) — Reset de datos operativos para arrancar limpio
+
+A pedido de la operadora se vació todo lo transaccional (extractos, movimientos, planillas,
+conciliaciones, asientos ⇒ saldos de cuenta corriente en cero, cheques, egresos, arqueos,
+liquidaciones, comprobantes/proyecciones impositivas, órdenes de pago legacy) y el log de
+auditoría, **conservando** clientes, usuarios, plan de cuentas + reglas y toda la config, en las
+2 organizaciones. Se hizo backup previo con un branch de Neon. La ejecución inicial fue un
+`TRUNCATE ... RESTART IDENTITY`; quedó además una herramienta **reutilizable** y scopeada por
+organización: `app/services/reset_operativo.py` + `scripts/reset_operativo.py` (con `--dry-run`,
+confirmación, y flag para conservar auditoría) + tests. Runbook: `docs/playbooks/RESET_OPERATIVO.md`.
+
+---
+
 ### v3.29 — Fix alertas/saldos de cheques que siempre daban 0 (estado "pendiente" vs "registrado")
 
 Las alertas de cheques (urgentes/vencidos) del dashboard **nunca se disparaban**, aunque hubiera
