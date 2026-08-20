@@ -5,6 +5,34 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Mantenimiento (ago 2026) — Bloqueo de planillas duplicadas + feedback visual al conciliar
+
+Detectado en la primera prueba real post-reset: el contador reenvió la misma planilla de un
+cliente (una vez sin % de comisión, otra con) y quedó **duplicada** — ambas corridas conciliaron
+contra el mismo extracto sin ninguna protección, porque `Planilla` (a diferencia de
+`ExtractoBancario`) no tenía fingerprint ni chequeo de duplicados. Además, el botón de subir
+planilla no daba ningún indicio visual mientras se subía y conciliaba (variable de loading
+declarada pero nunca renderizada), lo que invita a reintentar pensando que no funcionó.
+
+- **Backend**: `Planilla.fingerprint` (sha1 del archivo, migración 026 + safety net) +
+  índice único parcial `uq_planilla_fp_cliente_org` por `(cliente_id, fingerprint,
+  organizacion_id)` excluyendo borradas — mismo patrón que `uq_extracto_fp_org`.
+  `POST /planillas/upload` rechaza con 409 si el mismo archivo ya está cargado y activo para
+  ese cliente, con mensaje que sugiere re-conciliar la planilla existente con otro % en vez de
+  re-subir (el % de comisión se tipea al conciliar, no viaja en el archivo). Borrar la planilla
+  existente libera el fingerprint. Tests de regresión (duplicado bloqueado, mismo archivo para
+  otro cliente no bloquea, borrar+re-subir no bloquea).
+- **Frontend**: `FileUpload` ahora acepta `loading`/`loadingLabel` — muestra spinner, texto de
+  progreso y bloquea clicks/drop mientras sube+concilia. Conectado en los 3 uploads de
+  `Dashboard.tsx` (extracto, UM, planilla individual — la variable de loading que existía sin
+  usar se activó).
+- Ver `docs/business/BUSINESS_RULES.md` §1.7 (regla del bloqueo) y §4.1 (aclaración: el % de
+  comisión de la planilla y el % del cliente son campos independientes — Liquidaciones usa uno,
+  Estado de Cuenta el otro, no se duplican ni se suman, pero pueden divergir si no se mantienen
+  iguales a mano).
+
+---
+
 ### Mantenimiento (ago 2026) — Reset de datos operativos para arrancar limpio
 
 A pedido de la operadora se vació todo lo transaccional (extractos, movimientos, planillas,

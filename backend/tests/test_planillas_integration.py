@@ -499,3 +499,85 @@ class TestUploadPlanilla:
         r = client.post("/planillas/upload?cliente_nombre=X&extracto_id=1",
                         files={"file": ("p.xlsx", b"data", "application/octet-stream")})
         assert r.status_code in (401, 403)
+
+    def test_upload_planilla_duplicada_mismo_cliente_retorna_409(self, client, db):
+        """Subir el MISMO archivo dos veces para el mismo cliente → 409, no crea
+        una segunda planilla (regresión del duplicado real: Green quedó cargado
+        dos veces porque el contador reenvió el archivo)."""
+        extracto = _seed_extracto_con_movimientos(db)
+        xlsx_bytes = _make_xlsx_bytes([(5000.0, "20123456789", "CLIENTE TEST SA", "REF001")])
+        token = _token(db, "admin@plan.test")
+
+        r1 = client.post(
+            f"/planillas/upload?cliente_nombre=Duplicado&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r1.status_code == 200, r1.text
+
+        r2 = client.post(
+            f"/planillas/upload?cliente_nombre=Duplicado&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r2.status_code == 409, r2.text
+        assert "ya fue cargada" in r2.json()["detail"]
+
+        cliente = db.query(Cliente).filter(Cliente.nombre == "Duplicado").first()
+        planillas = db.query(Planilla).filter(Planilla.cliente_id == cliente.id).all()
+        assert len(planillas) == 1
+
+    def test_upload_planilla_mismo_archivo_otro_cliente_no_bloquea(self, client, db):
+        """El bloqueo es por (cliente, archivo) — el mismo archivo para OTRO
+        cliente no debe chocar (ej. dos clientes que casualmente mandan una
+        planilla con la misma estructura/montos)."""
+        extracto = _seed_extracto_con_movimientos(db)
+        xlsx_bytes = _make_xlsx_bytes([(5000.0, "20123456789", "CLIENTE TEST SA", "REF001")])
+        token = _token(db, "admin@plan.test")
+
+        r1 = client.post(
+            f"/planillas/upload?cliente_nombre=ClienteA&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r1.status_code == 200, r1.text
+
+        r2 = client.post(
+            f"/planillas/upload?cliente_nombre=ClienteB&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r2.status_code == 200, r2.text
+
+    def test_upload_planilla_duplicada_tras_borrar_la_anterior_no_bloquea(self, client, db):
+        """Soft-delete de la planilla existente libera el fingerprint: volver a
+        subir el mismo archivo para el mismo cliente ya no choca."""
+        extracto = _seed_extracto_con_movimientos(db)
+        xlsx_bytes = _make_xlsx_bytes([(5000.0, "20123456789", "CLIENTE TEST SA", "REF001")])
+        token = _token(db, "admin@plan.test")
+
+        r1 = client.post(
+            f"/planillas/upload?cliente_nombre=Reintento&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r1.status_code == 200, r1.text
+        planilla_id = r1.json()["id"]
+
+        planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
+        planilla.deleted_at = datetime.utcnow()
+        db.commit()
+
+        r2 = client.post(
+            f"/planillas/upload?cliente_nombre=Reintento&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["id"] != planilla_id

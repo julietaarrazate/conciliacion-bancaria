@@ -142,6 +142,27 @@ Estados base que produce el motor (`buscar_match` + `conciliar_planilla`):
   `conciliacion.py:104-107`) o ya pertenece al mismo cliente
   (`conciliacion.py:288-292`).
 
+### 1.7. Bloqueo de planillas duplicadas (por cliente) — desde ago 2026
+
+Archivo: `backend/app/routers/planillas.py` (`upload_planilla`), migración 026.
+
+- `POST /planillas/upload` calcula `fingerprint = sha1(contenido_del_archivo)` y
+  rechaza con **409** si ya existe una planilla **activa** (no borrada) con el
+  mismo `(cliente_id, fingerprint, organizacion_id)`. Mismo patrón que
+  `ExtractoBancario.fingerprint` (§ arquitectura, índice único parcial
+  `uq_extracto_fp_org`), acá `uq_planilla_fp_cliente_org` — `WHERE fingerprint
+  IS NOT NULL AND deleted_at IS NULL`, así borrar la planilla existente libera
+  el fingerprint para re-subir.
+- El bloqueo es por **archivo idéntico para el mismo cliente**, no por cliente
+  solo: dos clientes distintos pueden subir un archivo con bytes idénticos sin
+  problema; el mismo cliente con datos distintos (mes siguiente) tampoco choca
+  porque el contenido cambia.
+- El mensaje de error incluye el id/fecha de la planilla existente y sugiere el
+  camino correcto para el caso de uso real que motivó esto: si lo que cambió es
+  el **% de comisión** (se tipea al conciliar, no viaja en el archivo — ver §4.1),
+  no hace falta re-subir el archivo — hay que re-conciliar la planilla ya cargada
+  con el % correcto.
+
 ---
 
 ## 2. Deduplicación de Últimos Movimientos (UM)
@@ -222,6 +243,22 @@ Archivo: `backend/app/routers/liquidaciones.py`.
   (`liquidaciones.py:106`, `167`).
 - Solo cubre planillas (TT). **Los cheques se liquidan por separado** en su
   módulo (`liquidaciones.py:55`).
+
+> **No hay doble cobro posible entre el % de la planilla y el % del cliente** —
+> son dos números que ni siquiera se suman: son **campos independientes que
+> alimentan pantallas distintas** y pueden mostrar valores diferentes para el
+> mismo cliente/período si no coinciden:
+> - **Liquidaciones** (arriba) usa exclusivamente `Planilla.porcentaje_comision`
+>   (el % tipeado al conciliar esa planilla puntual). Nunca lee `Cliente.porcentaje_comision`.
+> - **Estado de Cuenta** (`reportes_service.calcular_estado_cuenta_cliente`,
+>   `reportes_service.py:737-745`) — incluida la página pública compartida
+>   (`/p/:token`) — usa `Cliente.porcentaje_comision` si está seteado, si no el
+>   default de la org (`comisiones.porcentaje_default`, 1.5%). Nunca lee
+>   `Planilla.porcentaje_comision`.
+>
+> Si el % "de siempre" de un cliente está en su ficha (`Clientes.porcentaje_comision`,
+> ej. 2%) y además se tipea un % al conciliar cada planilla, mantenerlos iguales es
+> responsabilidad manual — el sistema no los sincroniza ni los valida entre sí.
 
 ### 4.2. Comisión de cheques (local / interior)
 

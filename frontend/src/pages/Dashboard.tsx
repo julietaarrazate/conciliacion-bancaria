@@ -227,7 +227,7 @@ export const Dashboard: React.FC = () => {
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [_extractoNombre, setExtractoNombre] = useState<string>('')
   const [clienteNombre, setClienteNombre] = useState('')
-  const [_loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [resultado, setResultado] = useState<ConciliacionResultado | null>(null)
@@ -713,6 +713,8 @@ export const Dashboard: React.FC = () => {
           <FileUpload
             onFileSelected={handleUploadExtraco}
             label="Subir extracto (.xlsx, .xls, .csv)"
+            loading={loading}
+            loadingLabel="Subiendo extracto..."
           />
 
           {extractoId && (
@@ -744,7 +746,7 @@ export const Dashboard: React.FC = () => {
                 </p>
                 <div className="flex gap-2 items-center">
                   <div className="flex-1">
-                    <FileUpload onFileSelected={(f) => handleUploadUM(f)} label="+ Agregar UM" />
+                    <FileUpload onFileSelected={(f) => handleUploadUM(f)} label="+ Agregar UM" loading={loading} loadingLabel="Agregando UM..." />
                   </div>
                   <button
                     onClick={async () => {
@@ -864,6 +866,8 @@ export const Dashboard: React.FC = () => {
           <FileUpload
             onFileSelected={handleFileSelected}
             label={!extractoId ? 'Cargá primero un extracto (Paso 1)' : 'Subir planilla (.xlsx, .xls, .csv)'}
+            loading={loading}
+            loadingLabel="Subiendo y conciliando... no vuelvas a cargar el archivo"
           />
           {!clienteNombre.trim() && extractoId && (
             <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">

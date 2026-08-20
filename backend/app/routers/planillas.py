@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import json
 from datetime import datetime as _dt_now
@@ -5,6 +6,7 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query, Request
 from sqlalchemy import func, cast, String, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -193,6 +195,31 @@ async def upload_planilla(
     try:
         contents = await file.read()
 
+        # Bloquea re-subir la MISMA planilla (mismo contenido de archivo) para el
+        # mismo cliente mientras la anterior siga activa (no borrada). Evita el
+        # duplicado clásico: el contador reenvía el archivo (para corregir algo
+        # que se hace en el paso de conciliar, como el % de comisión) y termina
+        # con dos planillas idénticas conciliadas contra el mismo extracto.
+        fingerprint = hashlib.sha1(contents).hexdigest()
+        existente = db.query(Planilla).filter(
+            Planilla.cliente_id == cliente.id,
+            Planilla.organizacion_id == org_id,
+            Planilla.fingerprint == fingerprint,
+            Planilla.deleted_at.is_(None),
+        ).first()
+        if existente:
+            fecha_s = existente.fecha_carga.strftime('%d/%m %H:%M') if existente.fecha_carga else '?'
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Esta planilla ya fue cargada para {cliente_nombre} el {fecha_s} "
+                    f"(planilla #{existente.id}, archivo \"{existente.nombre_archivo}\"). "
+                    "Si necesitás cambiar el % de comisión, no hace falta volver a subir el "
+                    "archivo: buscá la planilla en Conciliaciones/Historial y re-conciliala con "
+                    "el % correcto. Si de verdad es una carga distinta, borrá primero la anterior."
+                )
+            )
+
         # Elegir el mapeo: 1) corrección manual del usuario (form `mapeo`);
         # 2) perfil aprendido del cliente. Sin ninguno → pipeline heurística/IA.
         mapeo_manual = None
@@ -216,9 +243,20 @@ async def upload_planilla(
             organizacion_id=org_id,
             porcentaje_comision=None,
             total_declarado=resultado.get("total_declarado"),
+            fingerprint=fingerprint,
         )
         db.add(planilla)
-        db.flush()
+        try:
+            db.flush()
+        except IntegrityError:
+            # Carrera: dos requests concurrentes con el mismo archivo pasaron el
+            # chequeo de arriba a la vez. El índice único parcial (migración 026)
+            # es la garantía real; esto solo da un mensaje claro en vez de un 500.
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Esta planilla ya fue cargada para {cliente_nombre}."
+            )
 
         for fila_data in resultado["filas"]:
             fila = PlanillaRow(
