@@ -580,44 +580,13 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error verificando asientos legacy: %s", ex)
 
-    # 9b. Crear asientos de documentación para los 3 gaps de migración v3.9
-    # Los asientos #518, #519, #520 fueron eliminados físicamente en la migración v3.9
-    # (módulos extracto/planilla con cuentas incorrectas). Se registran 3 asientos
-    # ajuste_manual con numero_asiento = 518/519/520 para mantener la correlatividad.
-    try:
-        from app.database import SessionLocal as SL
-        from app.models.contabilidad import Asiento
-        _db = SL()
-        try:
-            for _num_orig in [518, 519, 520]:
-                _existe = _db.query(Asiento).filter(
-                    Asiento.organizacion_id == 1,
-                    Asiento.numero_asiento == _num_orig,
-                ).first()
-                if not _existe:
-                    _a = Asiento(
-                        fecha=__import__('datetime').date(2026, 6, 3),
-                        descripcion=f"BAJA LEGACY migración v3.9 — asiento #{_num_orig} (módulo extracto/planilla) fue eliminado físicamente al sanear el Libro Diario. Sin impacto contable.",
-                        modulo="ajuste_manual",
-                        organizacion_id=1,
-                        numero_asiento=_num_orig,
-                    )
-                    _db.add(_a)
-            _db.commit()
-
-            # Eliminar los registros mal-numerados (888/889/890) si existen
-            _db.query(Asiento).filter(
-                Asiento.organizacion_id == 1,
-                Asiento.modulo == "ajuste_manual",
-                Asiento.descripcion.like("BAJA LEGACY migración v3.9%"),
-                Asiento.numero_asiento > 520,
-            ).delete(synchronize_session=False)
-            _db.commit()
-            logger.info("Asientos documentación gaps v3.9 en posiciones 518/519/520 (correlativos)")
-        finally:
-            _db.close()
-    except Exception as ex:
-        logger.warning("Error creando asientos documentación gaps: %s", ex)
+    # 9b. (Removido en el reset operativo de ago-2026) — antes este bloque re-sembraba en
+    # cada arranque 3 asientos "lápida" (numero_asiento 518/519/520, sin detalle, "sin impacto
+    # contable") para tapar los huecos que dejó la baja física de esos asientos en la migración
+    # v3.9 y mantener la correlatividad del Libro Diario. Tras vaciar por completo los datos
+    # operativos (incluidos todos los asientos), el Libro Diario arranca de cero: ya no hay
+    # huecos que tapar y esos tombstone forzarían el primer asiento real a numerarse 521 en vez
+    # de 1. Por eso el backfill se eliminó. No reintroducir salvo que se restaure el histórico.
 
     # 9. Fix numero_asiento NULL — asigna correlativo a asientos sin numerar
     try:
