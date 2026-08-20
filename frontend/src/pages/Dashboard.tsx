@@ -227,7 +227,12 @@ export const Dashboard: React.FC = () => {
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [_extractoNombre, setExtractoNombre] = useState<string>('')
   const [clienteNombre, setClienteNombre] = useState('')
-  const [loading, setLoading] = useState(false)
+  // `accionCarga` indica qué carga está en curso, para que el spinner se muestre
+  // SOLO en el botón que corresponde (antes los 3 FileUpload compartían un único
+  // `loading` y se prendían todos a la vez). El setter global se mantiene para el
+  // estado de "ocupado" de otros flujos; su valor no se lee directamente.
+  const [, setLoading] = useState(false)
+  const [accionCarga, setAccionCarga] = useState<null | 'extracto' | 'um' | 'planilla'>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [resultado, setResultado] = useState<ConciliacionResultado | null>(null)
@@ -380,6 +385,7 @@ export const Dashboard: React.FC = () => {
 
   const handleUploadExtraco = async (file: File) => {
     setLoading(true)
+    setAccionCarga('extracto')
     setError('')
     setSuccess('')
     try {
@@ -402,6 +408,7 @@ export const Dashboard: React.FC = () => {
       }
     } finally {
       setLoading(false)
+      setAccionCarga(null)
     }
   }
 
@@ -411,6 +418,7 @@ export const Dashboard: React.FC = () => {
       return
     }
     setLoading(true)
+    setAccionCarga('um')
     setError('')
     setSuccess('')
     try {
@@ -428,6 +436,7 @@ export const Dashboard: React.FC = () => {
       setError(err.response?.data?.detail || 'Error al cargar UM')
     } finally {
       setLoading(false)
+      setAccionCarga(null)
     }
   }
 
@@ -445,6 +454,7 @@ export const Dashboard: React.FC = () => {
       return
     }
     setLoading(true)
+    setAccionCarga('planilla')
     setError('')
     setSuccess('')
     setResultado(null)
@@ -467,6 +477,7 @@ export const Dashboard: React.FC = () => {
       setError(err.response?.data?.detail || 'Error en la conciliación')
     } finally {
       setLoading(false)
+      setAccionCarga(null)
     }
   }
 
@@ -481,19 +492,20 @@ export const Dashboard: React.FC = () => {
     setError('')
     setSuccess('')
     setLoading(true)
+    setAccionCarga('planilla')
     try {
       const resultado = await apiClient.previewPlanilla(file, undefined, activeOrgId, clienteNombre.trim())
-      setLoading(false)
       if (resultado.origen === 'perfil' || resultado.confianza >= 0.8) {
         await handleUploadPlanilla(file, { ...resultado.columnas, header_row: resultado.header_row })
       } else {
+        setLoading(false)
+        setAccionCarga(null)
         setArchivoPendiente(file)
         setMapeoPendiente(resultado)
       }
     } catch {
-      setLoading(false)
       // No se pudo previsualizar (endpoint no disponible, archivo raro, etc.):
-      // no bloquea la carga, sube sin mapeo como antes.
+      // no bloquea la carga, sube sin mapeo — handleUploadPlanilla maneja loading.
       await handleUploadPlanilla(file)
     }
   }
@@ -713,7 +725,7 @@ export const Dashboard: React.FC = () => {
           <FileUpload
             onFileSelected={handleUploadExtraco}
             label="Subir extracto (.xlsx, .xls, .csv)"
-            loading={loading}
+            loading={accionCarga === 'extracto'}
             loadingLabel="Subiendo extracto..."
           />
 
@@ -746,7 +758,7 @@ export const Dashboard: React.FC = () => {
                 </p>
                 <div className="flex gap-2 items-center">
                   <div className="flex-1">
-                    <FileUpload onFileSelected={(f) => handleUploadUM(f)} label="+ Agregar UM" loading={loading} loadingLabel="Agregando UM..." />
+                    <FileUpload onFileSelected={(f) => handleUploadUM(f)} label="+ Agregar UM" loading={accionCarga === 'um'} loadingLabel="Agregando UM..." />
                   </div>
                   <button
                     onClick={async () => {
@@ -866,7 +878,7 @@ export const Dashboard: React.FC = () => {
           <FileUpload
             onFileSelected={handleFileSelected}
             label={!extractoId ? 'Cargá primero un extracto (Paso 1)' : 'Subir planilla (.xlsx, .xls, .csv)'}
-            loading={loading}
+            loading={accionCarga === 'planilla'}
             loadingLabel="Subiendo y conciliando... no vuelvas a cargar el archivo"
           />
           {!clienteNombre.trim() && extractoId && (

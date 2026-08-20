@@ -5,6 +5,27 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Mantenimiento (ago 2026) — Errores de conciliación visibles + spinner por acción
+
+Seguimiento del anterior. Al seguir probando, subir una planilla mostraba "Error en la
+conciliación" sin ninguna pista de la causa, y el spinner se prendía en los **tres** botones de
+carga a la vez (extracto, UM, planilla). Se reprodujo el flujo completo (`estandarizar_planilla`
+→ insert → `conciliar_planilla` con motor contable) con el archivo real del cliente y los
+movimientos reales del extracto: concilia 7/7 sin excepción, o sea el error no es de datos/lógica
+sino que quedaba **invisible** (los endpoints devolvían un mensaje genérico y no hay acceso a los
+logs de Render desde el entorno de trabajo).
+
+- **Backend** (`routers/planillas.py`): `preview`, `upload` y `conciliar` ahora incluyen el
+  **motivo real** de la excepción (tipo + mensaje truncado, helper `_motivo`) en el `detail` del
+  error, además de loguear con `logger.exception` (stacktrace). Son endpoints de staff
+  autenticado; el detalle no expone secretos (errores de parseo/DB/timeout). Test de regresión:
+  `.xlsx` corrupto → 400 con el motivo entre paréntesis.
+- **Frontend** (`Dashboard.tsx`): estado `accionCarga` (`'extracto' | 'um' | 'planilla'`) —
+  el spinner de `FileUpload` se muestra SOLO en el botón de la acción en curso (antes los 3
+  compartían un único `loading`).
+
+---
+
 ### Mantenimiento (ago 2026) — Bloqueo de planillas duplicadas + feedback visual al conciliar
 
 Detectado en la primera prueba real post-reset: el contador reenvió la misma planilla de un

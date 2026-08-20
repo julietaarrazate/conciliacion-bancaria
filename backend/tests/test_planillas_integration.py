@@ -500,6 +500,29 @@ class TestUploadPlanilla:
                         files={"file": ("p.xlsx", b"data", "application/octet-stream")})
         assert r.status_code in (401, 403)
 
+    def test_upload_xlsx_corrupto_muestra_motivo_real(self, client, db):
+        """Un .xlsx corrupto (header PK pero contenido roto) → 400 cuyo detalle
+        incluye el MOTIVO real de la excepción, no solo el mensaje genérico.
+        Regresión de la falta de visibilidad: antes el error se tragaba y no se
+        podía diagnosticar sin los logs de Render."""
+        extracto = _seed_extracto_con_movimientos(db)
+        token = _token(db, "admin@plan.test")
+        # Empieza con "PK" (firma zip/xlsx) para que el loader intente abrirlo como
+        # xlsx y falle al descomprimir, en vez de tratarlo como CSV.
+        basura = b"PK\x03\x04" + b"esto no es un xlsx valido" * 20
+
+        r = client.post(
+            f"/planillas/upload?cliente_nombre=Corrupto&extracto_id={extracto.id}",
+            files={"file": ("roto.xlsx", basura,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r.status_code == 400, r.text
+        detail = r.json()["detail"]
+        # El detalle ahora lleva el motivo entre paréntesis (tipo de excepción).
+        assert "Error al procesar la planilla (" in detail
+        assert detail.rstrip().endswith(").")
+
     def test_upload_planilla_duplicada_mismo_cliente_retorna_409(self, client, db):
         """Subir el MISMO archivo dos veces para el mismo cliente → 409, no crea
         una segunda planilla (regresión del duplicado real: Green quedó cargado

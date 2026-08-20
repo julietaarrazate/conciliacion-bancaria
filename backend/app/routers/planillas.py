@@ -42,6 +42,19 @@ def _get_org_config(db: Session, organizacion_id: int) -> dict:
     return CONFIG_DEFAULT_ORG
 
 
+def _motivo(e: Exception, limite: int = 240) -> str:
+    """Motivo corto y seguro de una excepción, para mostrar en pantalla.
+
+    Estos endpoints son de staff autenticado (superadmin/admin) y hoy devuelven
+    un mensaje genérico que esconde la causa real — imposible de diagnosticar sin
+    los logs de Render. Incluir el tipo + mensaje (truncado) hace que el error se
+    vea en la UI y sea accionable. No expone secretos (son errores de parseo/DB)."""
+    detalle = str(e).strip().replace("\n", " ")
+    if len(detalle) > limite:
+        detalle = detalle[:limite] + "…"
+    return f"{type(e).__name__}: {detalle}" if detalle else type(e).__name__
+
+
 def _planilla_for_user(db: Session, planilla_id: int, current_user: User,
                        include_deleted: bool = False) -> Planilla:
     """Resuelve una planilla con aislamiento multi-tenant.
@@ -110,10 +123,10 @@ async def preview_planilla(
     try:
         resultado = estandarizar_planilla(contents, mapeo=mapeo_perfil)
     except Exception as e:
-        logger.error("preview error: %s", e)
+        logger.exception("preview error")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se pudo leer la planilla. Verificá el formato del archivo."
+            detail=f"No se pudo leer la planilla ({_motivo(e)})."
         )
 
     return {
@@ -315,10 +328,10 @@ async def upload_planilla(
         raise
     except Exception as e:
         db.rollback()
-        logger.error("upload error: %s", e)
+        logger.exception("upload error")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Error al procesar la planilla. Verificá el formato del archivo."
+            detail=f"Error al procesar la planilla ({_motivo(e)})."
         )
 
 
@@ -413,10 +426,10 @@ def conciliar(
 
     except Exception as e:
         db.rollback()
-        logger.error("conciliar error: %s", e)
+        logger.exception("conciliar error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error en la conciliación. Revisá los datos e intentá de nuevo."
+            detail=f"Error en la conciliación ({_motivo(e)}). Revisá los datos e intentá de nuevo."
         )
 
 
