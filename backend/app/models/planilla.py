@@ -23,6 +23,11 @@ class Planilla(Base):
     fecha_carga = Column(DateTime, default=datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True, index=True)  # soft delete: NULL = activo
     porcentaje_comision = Column(Numeric(5, 4), nullable=True)  # % comisión para liquidación
+    # sha1 del contenido del archivo. Bloquea re-subir la MISMA planilla para el
+    # mismo cliente (mismo patrón que ExtractoBancario.fingerprint): único por
+    # (cliente_id, fingerprint, organizacion_id) entre planillas activas (no
+    # borradas) — ver índice parcial en el safety net / migración 026.
+    fingerprint = Column(String, nullable=True, index=True)
     # Total declarado por el cliente al final de su planilla (fila de resumen/total
     # detectada y excluida de los movimientos). None si no la hay. Se usa para cuadre.
     total_declarado = Column(Numeric(14, 2), nullable=True)

@@ -369,4 +369,9 @@ SAFETY_NET_DDL = [
     "updated_at TIMESTAMP DEFAULT NOW(), "
     "CONSTRAINT uq_liquidacion_iva_org_periodo UNIQUE (organizacion_id, periodo))",
     "CREATE INDEX IF NOT EXISTS ix_liquidacion_iva_org ON liquidaciones_iva (organizacion_id)",
+    # migración 026 — bloquear re-subir la misma planilla para un cliente
+    # (mismo patrón que uq_extracto_fp_org): índice único parcial, excluye
+    # borradas, así borrar y re-subir libera el fingerprint.
+    "ALTER TABLE planillas ADD COLUMN IF NOT EXISTS fingerprint VARCHAR",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_planilla_fp_cliente_org ON planillas (cliente_id, fingerprint, organizacion_id) WHERE fingerprint IS NOT NULL AND deleted_at IS NULL",
 ]

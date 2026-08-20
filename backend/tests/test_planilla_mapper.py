@@ -510,8 +510,14 @@ class TestUploadConPipeline:
         client.post(args["url"], files=args["files"],
                     data={"mapeo": _json.dumps(mapeo)}, headers=_auth(token))
 
-        # Segundo upload del MISMO formato, sin mapeo → debe usar el perfil.
-        args2 = _upload("ClienteReuso", extracto.id, _build_xlsx(_tucu_rows()))
+        # Segundo upload del MISMO formato (misma estructura de columnas), pero con
+        # datos distintos — como el envío real del mes siguiente. Reusar el mismo
+        # contenido byte a byte chocaría con el bloqueo de planillas duplicadas
+        # (misma planilla ya cargada para este cliente).
+        rows_mes_2 = _tucu_rows()
+        rows_mes_2[-1] = ["2026-07-04", "Caneland", "00099999", "Mercado Pago",
+                           "Otro Cliente", "20222222223", 75000]
+        args2 = _upload("ClienteReuso", extracto.id, _build_xlsx(rows_mes_2))
         r2 = client.post(args2["url"], files=args2["files"], headers=_auth(token))
         assert r2.status_code == 200, r2.text
         assert r2.json()["deteccion"]["origen"] == "perfil"
