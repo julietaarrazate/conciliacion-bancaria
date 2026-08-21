@@ -380,17 +380,31 @@ def _columnas_disponibles(ws, header_row: int, maxcol: int) -> list:
 
 
 def _preview(ws, header_row: int, maxcol: int, n: int = 8) -> list:
-    """Primeras ~n filas de datos crudas (para mostrar en el modal)."""
+    """Primeras ~n filas de datos crudas (para mostrar en el modal).
+
+    Corta tras una racha de filas vacías (igual que `_parsear_filas`): sin este
+    corte, una planilla con menos de `n` filas de datos escanea hasta `ws.max_row`
+    — y muchas planillas de clientes declaran una dimensión de ~1.048.576 filas
+    (openpyxl la reporta en `max_row`), lo que hacía tardar >20s por archivo y
+    disparaba timeouts al subir/previsualizar. Ver también MAX_DATA_ROWS."""
     out = []
     r = header_row + 1
     limite = (ws.max_row or header_row) + 1
-    while r < limite and len(out) < n:
+    vacias = 0
+    scanned = 0
+    while r < limite and len(out) < n and scanned < MAX_DATA_ROWS:
+        scanned += 1
         valores = [
             ("" if (v := ws.cell(r, c).value) is None else str(v))
             for c in range(1, maxcol + 1)
         ]
         if any(x.strip() for x in valores):
             out.append({"fila": r, "valores": valores})
+            vacias = 0
+        else:
+            vacias += 1
+            if vacias >= CORTE_FILAS_VACIAS:
+                break
         r += 1
     return out
 
