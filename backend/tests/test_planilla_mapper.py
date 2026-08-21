@@ -43,6 +43,40 @@ def _build_xlsx(rows, sheet_title="Hoja1") -> bytes:
     return buf.getvalue()
 
 
+class _FakeCell:
+    def __init__(self, value):
+        self.value = value
+
+
+class _FakeWS:
+    """Worksheet falso que declara 1.048.576 filas (como las planillas reales que
+    traen la dimensión inflada) pero solo tiene datos en las primeras. Cuenta los
+    accesos a celdas para verificar que el escaneo NO recorre toda la hoja."""
+    def __init__(self, data_rows, max_row=1_048_576):
+        self._data = data_rows  # {fila_1based: [valores por col]}
+        self.max_row = max_row
+        self.cell_calls = 0
+
+    def cell(self, r, c):
+        self.cell_calls += 1
+        fila = self._data.get(r)
+        return _FakeCell(fila[c - 1] if fila and c - 1 < len(fila) else None)
+
+
+def test_preview_corta_en_planilla_corta_con_dimension_inflada():
+    """Regresión del timeout real (Alojando, 7 filas): _preview no debe escanear
+    hasta max_row cuando la planilla tiene menos filas que `n`. Antes recorría
+    ~1.048.576 filas (>20s) y disparaba timeout al subir/previsualizar."""
+    from app.services.planilla_mapper import _preview
+    # header en fila 1, 5 filas de datos, resto vacío (menos que n=8)
+    data = {2: ["a", 1], 3: ["b", 2], 4: ["c", 3], 5: ["d", 4], 6: ["e", 5]}
+    ws = _FakeWS(data)
+    out = _preview(ws, header_row=1, maxcol=2, n=8)
+    assert len(out) == 5  # devuelve las filas reales
+    # Debe haber cortado poco después de la última fila con datos, no en 1M.
+    assert ws.cell_calls < 1000, f"escaneó demasiadas celdas: {ws.cell_calls}"
+
+
 def _tucu_rows(extra_empty=0):
     rows = [
         ["TRANSFERENCIAS", None, None, None, None, None, None],

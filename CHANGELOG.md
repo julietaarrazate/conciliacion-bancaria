@@ -5,6 +5,25 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Fix (ago 2026) — Timeout al subir planillas cortas (dimensión de hoja inflada)
+
+**Causa raíz del "Error en la conciliación" de Alojando** (que los PRs anteriores hicieron visible
+y descartaron como problema de datos): `_preview` en `planilla_mapper.py` juntaba hasta `n=8` filas
+no vacías para el modal, pero **sin corte por filas vacías**. Una planilla con menos de 8 filas de
+datos hacía que el loop escaneara hasta `ws.max_row` — y muchas planillas de clientes (Excel de
+Google Sheets / exportados) declaran una dimensión de ~1.048.576 filas, que openpyxl reporta como
+`max_row`. Resultado: `estandarizar_planilla` tardaba **~25 s por archivo** (medido con el archivo
+real), y como se llama dos veces (endpoint `/preview` + `/upload`), superaba el timeout de 60 s del
+cliente → el frontend mostraba "error" sin `detail` (error de red, no del backend) y no quedaba
+planilla persistida. Explicaba por qué Green (47 filas) conciliaba y Alojando (7 filas) no.
+
+- **Fix** (`services/planilla_mapper.py`): `_preview` corta tras `CORTE_FILAS_VACIAS` filas vacías
+  consecutivas y respeta `MAX_DATA_ROWS`, igual que `_parsear_filas`. Con el archivo real:
+  25.42 s → 0.009 s. Test de regresión con worksheet falso de `max_row=1.048.576` que verifica que
+  el escaneo se corta (no recorre toda la hoja).
+
+---
+
 ### Mantenimiento (ago 2026) — Errores de conciliación visibles + spinner por acción
 
 Seguimiento del anterior. Al seguir probando, subir una planilla mostraba "Error en la
