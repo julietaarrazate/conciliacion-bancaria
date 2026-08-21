@@ -166,7 +166,11 @@ class ApiClient {
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
-      timeout: 60000,
+      // 120s: subir+conciliar una planilla encadena preview→upload→conciliar, y el
+      // free tier de Render/Neon puede pagar arranque en frío (~30-50s) en la primera
+      // request. Con 60s el navegador cortaba ANTES de que el server terminara (el
+      // trabajo quedaba hecho pero se mostraba "error"). 120s cubre el cold start.
+      timeout: 120000,
       headers: {
         'Content-Type': 'application/json'
       }

@@ -5,6 +5,24 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Fix (ago 2026) — "Error en la conciliación" fantasma por timeout del cliente
+
+Tras el fix del timeout de parseo, subir la planilla de Alojando seguía mostrando "Error en la
+conciliación" — pero en la base la planilla quedaba **conciliada 7/7** (todas las filas en `ok` con
+su movimiento acreditado). Se reprodujo el endpoint completo con la config real de la org: devuelve
+200. El "error" venía del **timeout de 60 s del cliente axios**: subir+conciliar encadena
+preview→upload→conciliar y, con el arranque en frío de Render/Neon (free tier), la primera request
+pagaba ~30-50 s; el navegador cortaba antes de recibir la respuesta aunque el servidor terminaba el
+trabajo. La operadora veía "error", reintentaba, y el reintento chocaba con el bloqueo de duplicados.
+
+- **Frontend** (`services/api.ts`): timeout del cliente 60 s → **120 s** (cubre el cold start).
+- **Frontend** (`Dashboard.tsx`): si el `conciliar` falla por red *después* de que el `upload` ya
+  creó la planilla, no se muestra un "error" seco — se avisa que la planilla quedó cargada (#id),
+  se refresca el historial y se le pide revisar el resultado en vez de re-subir (que chocaría con
+  el bloqueo de duplicados).
+
+---
+
 ### Fix (ago 2026) — Timeout al subir planillas cortas (dimensión de hoja inflada)
 
 **Causa raíz del "Error en la conciliación" de Alojando** (que los PRs anteriores hicieron visible

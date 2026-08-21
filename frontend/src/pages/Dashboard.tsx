@@ -459,6 +459,7 @@ export const Dashboard: React.FC = () => {
     setSuccess('')
     setResultado(null)
     setDeteccionCuadre(null)
+    let planillaSubida: number | null = null
     try {
       const planilla = await apiClient.uploadPlanilla(
         clienteNombre,
@@ -467,6 +468,7 @@ export const Dashboard: React.FC = () => {
         activeOrgId,
         mapeo
       )
+      planillaSubida = planilla.id
       setDeteccionCuadre(planilla.deteccion ?? null)
       const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred, false, parseFloat(comisionPct) || 0)
       setResultado(r)
@@ -474,7 +476,23 @@ export const Dashboard: React.FC = () => {
       apiClient.invalidateCache('/analisis')
       apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then((d) => setPlanillas(d.items))
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error en la conciliación')
+      // Si la planilla YA se subió y falló recién el conciliar, el servidor pudo
+      // haber terminado igual (el corte suele ser un timeout de red del navegador
+      // en el arranque en frío, no un fallo real). No dejar a la operadora a ciegas:
+      // refrescar el historial y avisar que quedó cargada, en vez de un "error" seco
+      // que la lleva a re-subir y chocar con el bloqueo de duplicados.
+      const detalle = err.response?.data?.detail
+      if (planillaSubida && !err.response) {
+        setError(
+          `La planilla se subió (#${planillaSubida}) pero la conciliación tardó más de lo esperado ` +
+          `(posible arranque en frío del servidor). Revisá el resultado en Conciliaciones/Historial: ` +
+          `es muy probable que haya quedado conciliada. No la vuelvas a subir.`
+        )
+        apiClient.invalidateCache('/analisis')
+        apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then((d) => setPlanillas(d.items))
+      } else {
+        setError(detalle || 'Error en la conciliación')
+      }
     } finally {
       setLoading(false)
       setAccionCarga(null)
