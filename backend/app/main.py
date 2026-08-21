@@ -371,22 +371,24 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error seed contabilidad: %s", ex)
 
-    # 7. Backfill contabilidad — genera asientos para extractos/planillas existentes
+    # 7. Backfill contabilidad — genera asientos de extracto para los existentes.
+    #
+    # El backfill de PLANILLAS se eliminó (ago 2026): usaba la función vieja
+    # `registrar_planilla` (regla `carga_planilla` → cuenta genérica 2-1-2-0
+    # "Cliente", no la cuenta corriente propia de cada cliente), recorría también
+    # planillas borradas (deleted_at) y, al correr en cada arranque, generaba
+    # asientos de planilla duplicados y mal imputados (cuentas corrientes por
+    # cliente vacías). El asiento por cliente correcto se genera en el flujo de
+    # conciliación con el tratamiento contable que defina la operadora; no
+    # reintroducir este backfill.
     try:
         from app.database import SessionLocal as SL
         from app.models.extracto import ExtractoBancario as Ext
-        from app.models.planilla import Planilla as Plan
         from app.models.contabilidad import Asiento as A
-        from app.services.motor_contable import registrar_extracto, registrar_planilla
-        from app.services.tz import hoy_art
+        from app.services.motor_contable import registrar_extracto
 
         db = SL()
-
-        # IDs que ya tienen asiento (para no duplicar)
-        ids_ext  = {r[0] for r in db.query(A.referencia_id).filter(A.modulo == "extracto").all()}
-        ids_plan = {r[0] for r in db.query(A.referencia_id).filter(A.modulo == "planilla").all()}
-
-        # Backfill extractos
+        ids_ext = {r[0] for r in db.query(A.referencia_id).filter(A.modulo == "extracto").all()}
         n_ext = 0
         for e in db.query(Ext).filter(Ext.organizacion_id == 1).all():
             if e.id not in ids_ext:
@@ -398,30 +400,7 @@ def _init_db():
                     movimientos=e.movimientos,
                 )
                 n_ext += 1
-
-        # Backfill planillas
-        n_plan = 0
-        for p in db.query(Plan).filter(Plan.organizacion_id == 1).all():
-            if p.id not in ids_plan:
-                try:
-                    fecha = p.fecha_carga.date() if p.fecha_carga else hoy_art()
-                except Exception:
-                    fecha = hoy_art()
-                registrar_planilla(
-                    db=db, planilla_id=p.id,
-                    org_id=p.organizacion_id or 1,
-                    usuario_id=p.usuario_id,
-                    cliente_nombre=p.cliente.nombre if p.cliente else "",
-                    nombre_archivo=p.nombre_archivo or "",
-                    rows=p.rows,
-                    fecha_acred=fecha,
-                )
-                n_plan += 1
-
-        if n_ext or n_plan:
-            logger.info("Backfill contabilidad: %d extracto(s), %d planilla(s)", n_ext, n_plan)
-        else:
-            logger.info("Backfill contabilidad: todo al dia")
+        logger.info("Backfill contabilidad: %d extracto(s)", n_ext)
         db.close()
     except Exception as ex:
         logger.warning("Error backfill contabilidad: %s", ex)
