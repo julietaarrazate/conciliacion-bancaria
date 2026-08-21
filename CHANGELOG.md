@@ -5,6 +5,25 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Fix (ago 2026) — Asientos de planilla duplicados / mal imputados (backfill viejo)
+
+Al revisar el Libro Diario tras el arranque limpio aparecían: (a) el asiento de Green **duplicado**,
+(b) **ninguna** cuenta corriente de cliente con movimientos, y (c) planillas sin asiento (Alojando).
+Causa raíz única: el **backfill de arranque** (`main.py` paso 7) usaba la función vieja
+`registrar_planilla` (regla `carga_planilla` → cuenta **genérica** `2-1-2-0 "Cliente"`, no la cuenta
+corriente propia de cada cliente), recorría **también planillas borradas** (no filtraba `deleted_at`)
+y, al correr en cada boot, generaba asientos duplicados y mal imputados. Como imputaba a la cuenta
+madre genérica, los saldos por cliente (que leen la cuenta propia `2-1-2-X`) salían vacíos.
+
+- **Fix**: se eliminó el backfill de planillas del arranque (se mantiene solo el de extractos, que
+  usa `registrar_extracto`, correcto). La función `registrar_planilla` queda en el motor (aún cubierta
+  por tests) pero ya no se invoca desde el arranque. El asiento por cliente correcto se generará en el
+  flujo de conciliación con el tratamiento contable que defina la operadora con su contador (pendiente).
+- **Datos**: se limpiaron los asientos de planilla mal armados de producción (genéricos/huérfanos).
+  La regeneración por cliente queda pendiente de la definición del tratamiento.
+
+---
+
 ### Fix (ago 2026) — "Error en la conciliación" fantasma por timeout del cliente
 
 Tras el fix del timeout de parseo, subir la planilla de Alojando seguía mostrando "Error en la
