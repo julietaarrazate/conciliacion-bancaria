@@ -5,6 +5,45 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Feature (ago 2026) — Asiento por cliente al conciliar: neto + comisión aparte (cuentas corrientes)
+
+Seguimiento del fix de asientos duplicados/mal imputados: con el backfill viejo eliminado, las
+cuentas corrientes por cliente (Alojando, Green, ...) seguían en cero — el flujo vivo de
+conciliación nunca generaba asiento para pagos conciliados contra el **extracto bancario
+principal** (solo lo hacía para "Últimos Movimientos"). Se definió el tratamiento contable con el
+contador y se implementó:
+
+- **Cliente (Haber) = NETO** (total conciliado menos comisión) — lo que se ve como "Total Crédito"
+  en Cuentas Corrientes. La comisión se separa en un **asiento aparte**: Comisiones ganadas (H),
+  no ensucia el débito/crédito del cliente.
+- **Contrapartida (Debe) según el ORIGEN del movimiento** — no es intercambiable, porque es de ahí
+  de donde salió la plata realmente: **Pasivo Corriente** (2-1-0-0) para el extracto principal,
+  **No identificado** (2-1-1-1) para UM. Una planilla con filas de ambos orígenes genera dos pares
+  de asientos independientes (uno por origen), cada uno neteando su propia comisión.
+- `motor_contable.registrar_reclasificacion_planilla` — generalizada: acepta `cuenta_origen_codigo`
+  y `comision_pct`; upsert por `(modulo, planilla_id, org_id)` sigue idempotente en re-conciliación,
+  y si la comisión baja a 0 borra el asiento de comisión (no lo deja huérfano).
+- `conciliacion.conciliar_planilla` — nuevo param `comision_pct`; agrupa el total conciliado por
+  origen del movimiento (`extracto` / `um`) y llama al motor una vez por bucket.
+- `routers/planillas.py::conciliar` — resuelve el % efectivo (el del request si es > 0, si no el
+  ya guardado en `Planilla.porcentaje_comision`) y lo pasa al motor.
+- `routers/ctb_libro.py::reset_y_rebuild_asientos` — el botón admin "Reset Libro Diario" se
+  actualizó al mismo criterio dual (antes solo reconstruía UM con el monto bruto sin comisión;
+  quedaba inconsistente con el flujo vivo tras este cambio).
+- Tests: 4 nuevos en `test_motor_contable.py` (split neto/comisión, sin comisión, comisión→0 borra
+  el asiento, dos orígenes en la misma planilla sin pisarse) + 1 de integración
+  `conciliacion.conciliar_planilla` end-to-end + 2 en `test_contabilidad_integration.py` para el
+  reset-y-rebuild. 606 tests backend en verde.
+- Ver `docs/business/BUSINESS_RULES.md` §4.1bis y `docs/architecture/ACCOUNTING_ENGINE.md` §5/§7.
+
+**Pendiente / conocido**: `reset-y-rebuild` borra TODOS los asientos de la org, incluido el de
+`extracto` (Banco D / Pasivo Corriente H), y no lo reconstruye — gap preexistente, no introducido
+acá. Para backfillear el asiento por cliente de planillas ya conciliadas (Alojando, Green) sin
+riesgo, alcanza con volver a apretar "Conciliar" una vez desplegado (upsert idempotente); no hace
+falta tocar el botón de reset.
+
+---
+
 ### Fix (ago 2026) — Asientos de planilla duplicados / mal imputados (backfill viejo)
 
 Al revisar el Libro Diario tras el arranque limpio aparecían: (a) el asiento de Green **duplicado**,

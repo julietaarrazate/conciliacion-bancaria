@@ -260,6 +260,52 @@ Archivo: `backend/app/routers/liquidaciones.py`.
 > ej. 2%) y además se tipea un % al conciliar cada planilla, mantenerlos iguales es
 > responsabilidad manual — el sistema no los sincroniza ni los valida entre sí.
 
+### 4.1bis. Asiento contable al conciliar una planilla (cuenta corriente del cliente)
+
+Archivos: `backend/app/services/conciliacion.py` (`conciliar_planilla`) +
+`backend/app/services/motor_contable.py` (`registrar_reclasificacion_planilla`).
+Tratamiento acordado con el contador (ago 2026).
+
+Al conciliar filas de una planilla contra el banco, además de actualizar el
+`status` de cada fila, se postea un asiento que reclasifica la plata del banco
+a la cuenta corriente del cliente:
+
+- **Cliente (Haber) = NETO** (total conciliado **menos** la comisión de esa
+  planilla) — es lo que se ve como "Total Crédito" en Cuentas Corrientes.
+- **Pagos al cliente** (efectivo/transferencia, eventos `pago_cliente_banco` /
+  `pago_cliente_efectivo`) siguen siendo lo único que entra en "Total Débito".
+  La comisión **no** pasa por el débito del cliente — se separa a un asiento
+  distinto, no ensucia su cuenta corriente.
+- **Comisión** → asiento aparte: **Comisiones ganadas** (3-1-1-0) al Haber, se
+  reconoce como ingreso nuestro independiente de la cuenta del cliente.
+
+**Contrapartida (Debe) según el ORIGEN del movimiento** — de dónde salió la
+plata realmente, no es intercambiable:
+| Origen del movimiento (`MovimientoBanco.source`) | Cuenta de origen (Debe) | Por qué |
+|---|---|---|
+| `"extracto"` (extracto bancario principal) | **Pasivo Corriente** (2-1-0-0) | Ahí quedó la plata al importar el extracto (`registrar_extracto`: Banco D / Pasivo Corriente H). |
+| `"um"` (Últimos Movimientos) | **No identificado** (2-1-1-1) | Ahí quedó la plata al importar el UM (`registrar_um_import`: Banco D / No identificado H). |
+
+Una planilla con filas conciliadas contra **ambos** orígenes genera **dos
+asientos principales independientes** (uno por origen, módulos
+`reclass_planilla_extracto` / `um_reclass_planilla`) — cada uno neteando su
+propia comisión proporcional — para no dejar ninguna de las dos cuentas de
+origen mal (una nunca se cancelaría, la otra quedaría negativa).
+
+- El **% de comisión efectivo** es el que se manda en el request de conciliar
+  si es `> 0`, o si no vino, el que ya tenía guardado `Planilla.porcentaje_comision`
+  (re-conciliar sin re-tipear el % no lo pierde) — resuelto en el router
+  (`planillas.py::conciliar`), no en `conciliar_planilla`.
+- **Upsert por `(modulo, planilla_id, organizacion_id)`**: re-conciliar
+  recalcula sobre TODAS las filas `ok` (no solo las de esa pasada) y actualiza
+  los asientos existentes — idempotente. Si el % de comisión baja a 0, el
+  asiento de comisión se borra (no queda huérfano con un monto que ya no
+  corresponde).
+- La cuenta del cliente se resuelve/crea/vincula vía `_get_o_crear_cuenta_cliente`
+  — **nunca** la cuenta madre genérica "Cliente" (2-1-2-0). Ese fue el bug de un
+  backfill de arranque ya eliminado (ver CHANGELOG ago 2026): usaba la cuenta
+  genérica y el monto bruto, dejando las cuentas corrientes por cliente vacías.
+
 ### 4.2. Comisión de cheques (local / interior)
 
 Archivos: `backend/app/routers/cheques_common.py` y `cheques_crud.py`,

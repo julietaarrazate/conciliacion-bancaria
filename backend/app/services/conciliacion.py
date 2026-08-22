@@ -443,6 +443,7 @@ def conciliar_planilla(
     org_id: int = 1,
     solo_pendientes: bool = False,
     cliente_id: Optional[int] = None,
+    comision_pct: Decimal = Decimal("0"),
 ) -> dict:
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
@@ -553,42 +554,64 @@ def conciliar_planilla(
             else:
                 res["sin_datos"] += 1
 
-    # Asiento agrupado por planilla: se recomputa el total sobre TODAS las filas
-    # ya conciliadas contra movimientos UM (no solo las de esta pasada). Así el
-    # upsert refleja el total real en re-conciliaciones y es idempotente —
-    # mismo criterio que usa "Empezar limpio" (reset-y-rebuild).
+    # Asiento agrupado por planilla, separado por ORIGEN del movimiento: la
+    # cuenta de donde sale la plata depende de dónde quedó parqueada al entrar
+    # — Pasivo Corriente para el extracto bancario principal (registrar_extracto:
+    # Banco D / Pasivo Corriente H), No identificado para Últimos Movimientos
+    # (registrar_um_import: Banco D / No identificado H). Mezclar el origen
+    # dejaría una de las dos mal (nunca se cancela, o queda negativa). El % de
+    # comisión se aplica en cada bucket por igual, así el cliente queda
+    # acreditado por el NETO total sin importar de qué origen vino cada pago
+    # (ver BUSINESS_RULES.md §4.1). Se recomputa el total sobre TODAS las filas
+    # ya conciliadas (no solo las de esta pasada). Así el upsert refleja el
+    # total real en re-conciliaciones y es idempotente — mismo criterio que usa
+    # "Empezar limpio" (reset-y-rebuild).
     if cliente_id and planilla_rows:
         try:
-            um_mov_ids = {m.id for m in movimientos if getattr(m, "source", None) == "um"}
-            total_um = Decimal("0")
-            fecha_ref = None
+            from app.services.motor_contable import registrar_reclasificacion_planilla
+            from app.services.tz import hoy_art as _hoy_art
+
+            planilla_id = planilla_rows[0].planilla_id
+            nombre_archivo = ""
+            try:
+                if getattr(planilla_rows[0], "planilla", None):
+                    nombre_archivo = planilla_rows[0].planilla.nombre_archivo or ""
+            except Exception:
+                pass
+
+            origen_por_mov = {
+                m.id: ("um" if getattr(m, "source", None) == "um" else "extracto")
+                for m in movimientos
+            }
+            cuenta_origen_por_bucket = {"um": "2-1-1-1", "extracto": "2-1-0-0"}
+            totales = {"um": Decimal("0"), "extracto": Decimal("0")}
+            fechas_ref = {"um": None, "extracto": None}
             for r in planilla_rows:
-                if (r.status or "") == "ok" and getattr(r, "orden_movimiento_acreditado", None) in um_mov_ids:
-                    total_um += abs(Decimal(str(r.monto or 0)))
-                    rf = getattr(r, "fecha_acred", None)
-                    if rf and (fecha_ref is None or rf > fecha_ref):
-                        fecha_ref = rf
-            if total_um > 0:
-                from app.services.motor_contable import registrar_reclasificacion_planilla
-                from app.services.tz import hoy_art as _hoy_art
-                planilla_id = planilla_rows[0].planilla_id
-                nombre_archivo = ""
-                try:
-                    if getattr(planilla_rows[0], "planilla", None):
-                        nombre_archivo = planilla_rows[0].planilla.nombre_archivo or ""
-                except Exception:
-                    pass
-                registrar_reclasificacion_planilla(
-                    db=db,
-                    planilla_id=planilla_id,
-                    org_id=org_id,
-                    usuario_id=None,
-                    cliente_id=cliente_id,
-                    cliente_nombre=cliente_nombre,
-                    total_monto=total_um,
-                    fecha=fecha_ref or _hoy_art(),
-                    nombre_archivo=nombre_archivo,
-                )
+                if (r.status or "") != "ok":
+                    continue
+                origen = origen_por_mov.get(getattr(r, "orden_movimiento_acreditado", None))
+                if origen is None:
+                    continue
+                totales[origen] += abs(Decimal(str(r.monto or 0)))
+                rf = getattr(r, "fecha_acred", None)
+                if rf and (fechas_ref[origen] is None or rf > fechas_ref[origen]):
+                    fechas_ref[origen] = rf
+
+            for bucket, total in totales.items():
+                if total > 0:
+                    registrar_reclasificacion_planilla(
+                        db=db,
+                        planilla_id=planilla_id,
+                        org_id=org_id,
+                        usuario_id=None,
+                        cliente_id=cliente_id,
+                        cliente_nombre=cliente_nombre,
+                        total_monto=total,
+                        fecha=fechas_ref[bucket] or _hoy_art(),
+                        nombre_archivo=nombre_archivo,
+                        cuenta_origen_codigo=cuenta_origen_por_bucket[bucket],
+                        comision_pct=comision_pct,
+                    )
         except Exception as _ex:
             import logging
             logging.getLogger(__name__).warning("Error asiento agrupado planilla: %s", _ex)
