@@ -349,3 +349,128 @@ class TestReportesCache:
                 assert regla[lado] is not None
                 for campo in ("id", "codigo", "nombre"):
                     assert campo in regla[lado]
+
+
+class TestResetYRebuild:
+    """POST /contabilidad/reset-y-rebuild — reconstruye el Libro Diario desde
+    los datos reales, separado por ORIGEN del movimiento (extracto principal
+    vs Últimos Movimientos) y con la comisión de la planilla aparte."""
+
+    def _superadmin_token(self, db):
+        from app.services.auth import get_password_hash as _hash, create_access_token as _tok
+        sa = User(
+            email="sa@ctb.test", full_name="Superadmin Ctb",
+            hashed_password=_hash("pw123"),
+            organizacion_id=1, is_active=True, role="admin", is_superadmin=True,
+        )
+        db.add(sa)
+        db.commit()
+        return _tok({"sub": sa.email, "user_id": sa.id, "role": sa.role})
+
+    def _seed_planilla_dos_origenes(self, db, comision_pct=None):
+        """Extracto con 1 mov 'extracto' + 1 mov 'um', y una planilla con una
+        fila conciliada contra cada uno. Retorna (planilla, mov_extracto, mov_um)."""
+        from datetime import date, datetime
+        from decimal import Decimal
+        from app.models.cliente import Cliente
+        from app.models.extracto import ExtractoBancario, MovimientoBanco
+        from app.models.planilla import Planilla, PlanillaRow
+
+        cliente = Cliente(nombre="Alojando", organizacion_id=1)
+        db.add(cliente)
+        db.flush()
+
+        extracto = ExtractoBancario(
+            nombre_archivo="extracto.xlsx", organizacion_id=1, creado_por=1,
+            fecha_creacion=datetime.utcnow(),
+        )
+        db.add(extracto)
+        db.flush()
+
+        mov_extracto = MovimientoBanco(
+            extracto_id=extracto.id, orden=1, fecha=date(2026, 8, 19),
+            titular="Alojando", monto=Decimal("98000"), source="extracto",
+            cliente_acreditado="Alojando", organizacion_id=1,
+        )
+        mov_um = MovimientoBanco(
+            extracto_id=extracto.id, orden=2, fecha=date(2026, 8, 19),
+            titular="Alojando", monto=Decimal("49000"), source="um",
+            cliente_acreditado="Alojando", organizacion_id=1,
+        )
+        db.add_all([mov_extracto, mov_um])
+        db.flush()
+
+        planilla = Planilla(
+            cliente_id=cliente.id, extracto_id=extracto.id, usuario_id=1,
+            nombre_archivo="alojando.xlsx", organizacion_id=1,
+            fecha_carga=datetime.utcnow(),
+            porcentaje_comision=Decimal(str(comision_pct)) if comision_pct else None,
+        )
+        db.add(planilla)
+        db.flush()
+
+        row_extracto = PlanillaRow(
+            planilla_id=planilla.id, monto=Decimal("98000"), titular="Alojando",
+            status="ok", orden_movimiento_acreditado=mov_extracto.id,
+            fecha_acred=date(2026, 8, 20), organizacion_id=1,
+        )
+        row_um = PlanillaRow(
+            planilla_id=planilla.id, monto=Decimal("49000"), titular="Alojando",
+            status="ok", orden_movimiento_acreditado=mov_um.id,
+            fecha_acred=date(2026, 8, 20), organizacion_id=1,
+        )
+        db.add_all([row_extracto, row_um])
+        db.commit()
+        return planilla
+
+    def test_rebuild_separa_por_origen_y_comision(self, client, db):
+        from app.models.contabilidad import Asiento
+
+        planilla = self._seed_planilla_dos_origenes(db, comision_pct=2)
+        token = self._superadmin_token(db)
+
+        r = client.post("/contabilidad/reset-y-rebuild?dry_run=false", headers=_auth(token))
+        assert r.status_code == 200, r.text
+
+        def _asientos(modulo):
+            return db.query(Asiento).filter(
+                Asiento.modulo == modulo, Asiento.referencia_id == planilla.id,
+                Asiento.organizacion_id == 1,
+            ).all()
+
+        principal_extracto = _asientos("reclass_planilla_extracto")
+        comision_extracto = _asientos("reclass_planilla_extracto_comision")
+        principal_um = _asientos("um_reclass_planilla")
+        comision_um = _asientos("um_reclass_planilla_comision")
+        assert len(principal_extracto) == 1 and len(comision_extracto) == 1
+        assert len(principal_um) == 1 and len(comision_um) == 1
+
+        origen_pe = next(l for l in principal_extracto[0].lineas if l.debe > 0)
+        assert origen_pe.debe == pytest.approx(96040.0)  # 98000 - 2%
+        origen_pu = next(l for l in principal_um[0].lineas if l.debe > 0)
+        assert origen_pu.debe == pytest.approx(48020.0)  # 49000 - 2%
+
+        cuenta_pasivo = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-0-0", PlanCuenta.organizacion_id == 1).first()
+        cuenta_no_id = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-1-1", PlanCuenta.organizacion_id == 1).first()
+        assert origen_pe.cuenta_id == cuenta_pasivo.id
+        assert origen_pu.cuenta_id == cuenta_no_id.id
+
+    def test_rebuild_sin_comision_no_crea_asiento_comision(self, client, db):
+        from app.models.contabilidad import Asiento
+
+        planilla = self._seed_planilla_dos_origenes(db, comision_pct=None)
+        token = self._superadmin_token(db)
+
+        r = client.post("/contabilidad/reset-y-rebuild?dry_run=false", headers=_auth(token))
+        assert r.status_code == 200, r.text
+
+        def _asientos(modulo):
+            return db.query(Asiento).filter(
+                Asiento.modulo == modulo, Asiento.referencia_id == planilla.id,
+                Asiento.organizacion_id == 1,
+            ).all()
+
+        assert len(_asientos("reclass_planilla_extracto")) == 1
+        assert len(_asientos("reclass_planilla_extracto_comision")) == 0
+        assert len(_asientos("um_reclass_planilla")) == 1
+        assert len(_asientos("um_reclass_planilla_comision")) == 0

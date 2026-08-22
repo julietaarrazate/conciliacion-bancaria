@@ -382,6 +382,14 @@ def conciliar(
     org_id = planilla.organizacion_id or 1
     org_config = _get_org_config(db, org_id)
 
+    # % efectivo: el param explícito de este request, o si no vino (re-conciliar
+    # sin re-tipear el %), el que ya tenía guardado la planilla. NO se hereda el
+    # % del cliente (cada planilla tiene el suyo — ver BUSINESS_RULES.md §4.1).
+    comision_pct_efectivo = (
+        Decimal(str(comision_pct)) if comision_pct > 0
+        else (planilla.porcentaje_comision or Decimal("0"))
+    )
+
     try:
         resultado = conciliar_planilla(
             db=db,
@@ -393,6 +401,7 @@ def conciliar(
             org_id=org_id,
             solo_pendientes=solo_pendientes,
             cliente_id=planilla.cliente_id,
+            comision_pct=comision_pct_efectivo,
         )
 
         # Save commission %: explicit param only (no fallback to client default)
@@ -409,9 +418,11 @@ def conciliar(
             cambios=resultado
         )
 
-        # La planilla NO genera asiento propio: la reclasificación ya la maneja
-        # um_reclass (No identificado D / Cliente X H con cuentas hoja correctas).
-        # registrar_planilla() usaba cuentas madre y duplicaba con um_reclass.
+        # La planilla no genera un asiento propio: la reclasificación por
+        # cliente la maneja registrar_reclasificacion_planilla — un asiento por
+        # origen del movimiento (Pasivo Corriente para el extracto principal,
+        # No identificado para Últimos Movimientos), acreditando al cliente por
+        # el NETO y separando la comisión como ingreso (ver BUSINESS_RULES.md §4.1).
 
         # Diagnóstico read-only (aditivo): calculado DESPUÉS de conciliar para
         # explicar en la UI por qué pueden quedar filas sin conciliar. No altera

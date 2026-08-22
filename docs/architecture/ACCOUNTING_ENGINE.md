@@ -193,14 +193,18 @@ docstring de cada una. Resumen:
 |---------|-----------|---------|
 | `registrar_um_import` | `um_lote` (agrupado) / `um_mov` (individual) | Banco Macro D / No identificado H (ingreso); invertido si egreso. Modo según config org `modo_asiento_um` |
 | `registrar_reclasificacion_um` | `um_reclass` | No identificado D / Cliente X H (per-fila, legacy) |
-| `registrar_reclasificacion_planilla` | `um_reclass_planilla` | No identificado D / Cliente X H (agrupado por planilla, **upsert** en re-conciliación) |
-| `registrar_planilla` | `planilla` / `planilla_comision` | Pasivo Corriente D / Cliente H (+ comisión opcional). Legacy |
+| `registrar_reclasificacion_planilla` | `um_reclass_planilla` (+ `_comision`) — origen UM<br>`reclass_planilla_extracto` (+ `_comision`) — origen extracto principal | Origen D / Cliente X H por el **NETO** + Origen D / Comisiones ganadas H por la comisión (asiento aparte, solo si `comision_pct > 0`). Agrupado por planilla, **upsert** en re-conciliación. Tratamiento acordado con el contador (ago 2026) — ver `BUSINESS_RULES.md` §4.1bis. |
+| `registrar_planilla` | `planilla` / `planilla_comision` | Pasivo Corriente D / Cliente **madre genérica** H (+ comisión opcional). **Dead code**: ya no la llama nada (el backfill de arranque que la invocaba se eliminó, ago 2026, por duplicar asientos y no resolver la cuenta por cliente) — queda solo por sus tests, no reintroducir su uso. |
 | `registrar_extracto` | `extracto` | Banco D / Pasivo Corriente H (total del extracto) |
 | `registrar_cc_inicial` | `cc_inicial` | Banco Macro D / Cliente H — backfill histórico de cta. cte. |
 
-El flujo vivo es: `um_lote` deja el dinero en **No identificado** (2-1-1-1); al conciliar
-una planilla, `um_reclass_planilla` reclasifica de No identificado → la cuenta del cliente.
-Por eso el reset-y-rebuild solo reconstruye estos dos módulos (ver §7).
+El flujo vivo es: `um_lote` deja el dinero en **No identificado** (2-1-1-1) y `extracto` lo
+deja en **Pasivo Corriente** (2-1-0-0); al conciliar una planilla, `registrar_reclasificacion_planilla`
+reclasifica CADA origen por separado hacia la cuenta del cliente (neto) + Comisiones ganadas
+(comisión), según de qué cuenta salió realmente la plata — mezclar el origen dejaría una de
+las dos cuentas mal (nunca se cancela, o queda negativa). Una planilla con filas de ambos
+orígenes genera dos pares de asientos independientes. Por eso el reset-y-rebuild solo
+reconstruye estos módulos (ver §7).
 
 ### Egresos / Pagos (`registrar_egreso`, módulo `egreso`)
 
@@ -291,11 +295,15 @@ asiento `*_reverso` como su original (detecta `Asiento.modulo.like("%_reverso")`
   numerara 521 en vez de 1. No reintroducir salvo que se restaure el histórico.
 - `POST /contabilidad/reset-y-rebuild` (solo superadmin, `dry_run` por defecto) **borra todos
   los asientos de la org y los reconstruye** desde los datos reales: un `um_lote` por lote de
-  UM importado + un `um_reclass_planilla` por planilla conciliada (agrupado), luego renumera
-  correlativamente 1..N por `(fecha, id)`. Solo reconstruye filas conciliadas contra
-  movimientos UM (las conciliadas contra el extracto mensual no tienen contrapartida en No
-  identificado, mismo criterio que el flujo vivo). Incluye self-heal de la columna
-  `numero_asiento` por si Render no corrió el safety net.
+  UM importado + un bucket de reclasificación por `(planilla, origen del movimiento)` — mismo
+  criterio dual que el flujo vivo (extracto principal → Pasivo Corriente, UM → No identificado),
+  neteando la comisión de la planilla en un asiento aparte cuando corresponde — luego renumera
+  correlativamente 1..N por `(fecha, id)`. Incluye self-heal de la columna `numero_asiento` por
+  si Render no corrió el safety net.
+  > **Ojo**: borra TODOS los asientos de la org, incluidos los de módulo `extracto` (Banco D /
+  > Pasivo Corriente H al importar el extracto bancario) — y **no los reconstruye** (este
+  > endpoint no toca ese módulo). Usarlo asume que se puede re-generar `extracto` de otra forma
+  > o que se acepta perderlo. Gap preexistente, no introducido por el cambio de ago 2026.
 
 ---
 
