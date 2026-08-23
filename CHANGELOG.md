@@ -5,6 +5,29 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Feature (ago 2026) — Contador ya no requiere aprobación en vivo para loguearse
+
+El login por aprobación (v3.7, mayo 2026) se diseñó para **contadores de prueba** en una org de
+test: cada login de un usuario `contador` quedaba bloqueado hasta que el superadmin lo aprobaba
+en vivo desde `/aprobaciones` — **en cada login, no solo el primero**. A pedido de la operadora
+(los contadores reales necesitan entrar con su cuenta sin depender de su disponibilidad para
+aprobar cada vez), se sacó esa rama del login: `POST /auth/login` ya no distingue `contador` —
+recibe token directo (8h, la sesión estándar) igual que `operador`/`admin`, sujeto a 2FA solo si
+es admin/superadmin.
+
+- **No cambia**: el superadmin sigue siendo el único que puede **crear** la cuenta del contador
+  (`POST /auth/register`, `require_superadmin`) — lo que se sacó es la aprobación de cada login
+  posterior a esa alta, no el alta en sí.
+- El mecanismo de `LoginApproval` (endpoints `/login-approval/*`, `/pending-approvals`, página
+  `/aprobaciones`) queda en el código sin caller activo — nada vuelve a crear un pending. No se
+  borró en este cambio (bajo riesgo dejarlo dormido); se puede limpiar aparte si se confirma que
+  no hace falta para nada más.
+- Test de regresión: `test_auth.py::test_login_contador_recibe_token_directo_sin_aprobacion`
+  (login real vía TestClient, confirma 200 + `access_token`, no 202 `pending_approval`).
+- Ver `docs/security/SECURITY_MODEL.md` §1 y §6.
+
+---
+
 ### Feature (ago 2026) — Asiento por cliente al conciliar: neto + comisión aparte (cuentas corrientes)
 
 Seguimiento del fix de asientos duplicados/mal imputados: con el backfill viejo eliminado, las
