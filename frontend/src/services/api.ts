@@ -616,6 +616,20 @@ class ApiClient {
     await this.client.delete(`/planillas/rows/${rowId}`)
   }
 
+  async candidatosMovimiento(rowId: number): Promise<{
+    row_id: number
+    monto: number
+    candidatos: { id: number; fecha: string | null; titular: string; cliente_acreditado: string | null; es_libre: boolean; es_este_cliente: boolean }[]
+  }> {
+    const { data } = await this.client.get(`/planillas/rows/${rowId}/candidatos-movimiento`)
+    return data
+  }
+
+  async asignarMovimiento(rowId: number, movimientoId: number): Promise<{ ok: boolean; row_id: number; movimiento_id: number; status: string }> {
+    const { data } = await this.client.post(`/planillas/rows/${rowId}/asignar-movimiento`, { movimiento_id: movimientoId })
+    return data
+  }
+
   async appendUM(extractoId: number, file: File, corteSaldo?: number, modoAsiento?: string): Promise<MergeUMResult> {
     const formData = new FormData()
     formData.append('file', file)
