@@ -131,6 +131,24 @@ Estados base que produce el motor (`buscar_match` + `conciliar_planilla`):
 > El monto duplicado y el monto ya acreditado se contabilizan ambos como
 > `duplicadas` en el resumen (`conciliacion.py:485-486`).
 
+### 1.5bis. Resolución manual de filas ambiguas
+
+Cuando el scoring automático no puede desempatar (`no coincide`, `ambiguo`,
+`sin datos`), hay **dos** caminos manuales distintos según el caso — no son
+intercambiables:
+
+| Caso | Dónde | Qué hace | Endpoint |
+|---|---|---|---|
+| La fila **ya existe** en una planilla del cliente y solo falta elegir cuál de los movimientos candidatos es | Botón "🔗" en la fila (Historial/PlanillaPanel) | Resuelve **esa fila en su lugar**: `status="ok"`, linkea `orden_movimiento_acreditado`, sincroniza `mov.cliente_acreditado` y dispara `registrar_reclasificacion_planilla` — mismo criterio que "Re-conciliar". No crea filas nuevas. | `GET /planillas/rows/{id}/candidatos-movimiento`, `POST /planillas/rows/{id}/asignar-movimiento` (`routers/planillas.py`) |
+| El movimiento es realmente **huérfano** — plata que llegó al banco sin que el cliente la declarara en ninguna planilla | Vista Movimientos (extracto) → "acreditar a cliente" | Marca `mov.cliente_acreditado` y agrega una fila a la planilla original del cliente para ese extracto (o crea una planilla "acreditación manual {d}.{m}" si no existe ninguna) | `POST /clientes/movimientos/{mov_id}/acreditar` (`routers/clientes_dir.py:429-559`) |
+
+> **Regresión ago 2026 (caso real SMT):** antes solo existía el segundo
+> camino. Usarlo para resolver una fila ya existente (monto duplicado
+> ambiguo) dejaba la fila original huérfana en "no coincide" para siempre y
+> agregaba una fila nueva — funcionaba para el total de la cuenta corriente,
+> pero era confuso y no reflejaba qué pasó. El botón "🔗" cubre ese caso
+> correctamente.
+
 ### 1.6. Configuración por organización
 
 `CONFIG_DEFAULT_ORG` (`conciliacion.py:361-367`) — comportamiento de la org base:

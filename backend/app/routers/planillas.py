@@ -23,7 +23,7 @@ from app.models.organizacion import Organizacion
 from fastapi.responses import StreamingResponse
 from app.schemas.planilla import PlanillaResponse, PlanillaDetalleResponse, ConciliacionResultado
 from app.services.planilla_mapper import estandarizar_planilla
-from app.services.conciliacion import conciliar_planilla, diagnostico_conciliacion
+from app.services.conciliacion import conciliar_planilla, diagnostico_conciliacion, montos_iguales
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_planilla_conciliada
 from app.services.tz import hoy_art
@@ -40,6 +40,26 @@ def _get_org_config(db: Session, organizacion_id: int) -> dict:
     if org and org.configuracion:
         return org.configuracion
     return CONFIG_DEFAULT_ORG
+
+
+def _resolver_extracto_planilla(db: Session, planilla: Planilla) -> ExtractoBancario:
+    """Devuelve el extracto vinculado a la planilla. Si no tiene uno (fue
+    borrado o nunca se asignó), re-vincula al más reciente de la org."""
+    extracto = None
+    if planilla.extracto_id:
+        extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == planilla.extracto_id).first()
+    if not extracto:
+        extracto = (
+            db.query(ExtractoBancario)
+            .filter(ExtractoBancario.organizacion_id == (planilla.organizacion_id or 1))
+            .order_by(ExtractoBancario.fecha_creacion.desc())
+            .first()
+        )
+        if not extracto:
+            raise HTTPException(status_code=400, detail="No hay extractos cargados para esta organización. Cargá un extracto primero.")
+        planilla.extracto_id = extracto.id
+        db.flush()
+    return extracto
 
 
 def _motivo(e: Exception, limite: int = 240) -> str:
@@ -348,35 +368,7 @@ def conciliar(
     _ = Depends(require_permission("reconcile"))
 ):
     planilla = _planilla_for_user(db, planilla_id, current_user)
-
-    # Si la planilla no tiene extracto (fue borrado), usar el más reciente de la org
-    if not planilla.extracto_id:
-        extracto = (
-            db.query(ExtractoBancario)
-            .filter(ExtractoBancario.organizacion_id == (planilla.organizacion_id or 1))
-            .order_by(ExtractoBancario.fecha_creacion.desc())
-            .first()
-        )
-        if not extracto:
-            raise HTTPException(status_code=400, detail="No hay extractos cargados para esta organización. Cargá un extracto primero.")
-        # Re-vincular la planilla al extracto activo
-        planilla.extracto_id = extracto.id
-        db.flush()
-    else:
-        extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == planilla.extracto_id).first()
-        if not extracto:
-            # extracto_id apunta a algo borrado → buscar el más reciente
-            extracto = (
-                db.query(ExtractoBancario)
-                .filter(ExtractoBancario.organizacion_id == (planilla.organizacion_id or 1))
-                .order_by(ExtractoBancario.fecha_creacion.desc())
-                .first()
-            )
-            if not extracto:
-                raise HTTPException(status_code=400, detail="El extracto ya no existe y no hay otros cargados.")
-            planilla.extracto_id = extracto.id
-            db.flush()
-
+    extracto = _resolver_extracto_planilla(db, planilla)
     movimientos = extracto.movimientos
 
     org_id = planilla.organizacion_id or 1
@@ -442,6 +434,148 @@ def conciliar(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error en la conciliación ({_motivo(e)}). Revisá los datos e intentá de nuevo."
         )
+
+
+# ── Resolución manual de filas ambiguas (monto duplicado, sin datos, etc.) ────
+# Distinto de "acreditar a cliente" desde Movimientos (clientes_dir.py): esto
+# resuelve una fila que YA existe en la planilla, en su lugar — no crea una
+# fila nueva. Pensado para cuando el scoring automático no pudo desempatar
+# entre 2+ movimientos del mismo monto y hace falta elegir a mano cuál es.
+
+@router.get("/rows/{row_id}/candidatos-movimiento")
+def candidatos_movimiento(
+    row_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lista los movimientos del extracto con el mismo monto que la fila,
+    para elegir manualmente cuál le corresponde."""
+    row = db.query(PlanillaRow).filter(PlanillaRow.id == row_id).first()
+    if not row:
+        raise HTTPException(404, "Fila no encontrada")
+    planilla = _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
+    extracto = _resolver_extracto_planilla(db, planilla)
+
+    tolerancia = _get_org_config(db, planilla.organizacion_id or 1).get("tolerancia_monto", 0.01)
+    candidatos = [
+        m for m in extracto.movimientos
+        if montos_iguales(m.monto, row.monto, tolerancia)
+    ]
+    candidatos.sort(key=lambda m: m.fecha or _dt_now.min.date())
+
+    return {
+        "row_id": row_id,
+        "monto": row.monto,
+        "candidatos": [
+            {
+                "id": m.id,
+                "fecha": m.fecha.isoformat() if m.fecha else None,
+                "titular": m.titular,
+                "cliente_acreditado": m.cliente_acreditado,
+                "es_libre": not m.cliente_acreditado or m.cliente_acreditado.strip().lower() in ("no identificado", ""),
+                "es_este_cliente": (m.cliente_acreditado or "").strip().lower() == (planilla.cliente.nombre or "").strip().lower(),
+            }
+            for m in candidatos
+        ],
+    }
+
+
+@router.post("/rows/{row_id}/asignar-movimiento")
+def asignar_movimiento(
+    row_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_permission("reconcile")),
+):
+    """
+    Resuelve UNA fila (típicamente "no coincide"/"ambiguo"/"sin datos") con el
+    movimiento elegido a mano. Sincroniza extracto + fila + dispara la misma
+    contabilidad que "Re-conciliar" (registrar_reclasificacion_planilla), sin
+    tocar ni re-matchear el resto de las filas de la planilla.
+    Body: {"movimiento_id": int}
+    """
+    from app.models.extracto import MovimientoBanco
+    from app.services.cierre_periodo import periodo_esta_cerrado
+
+    movimiento_id = payload.get("movimiento_id")
+    if not movimiento_id:
+        raise HTTPException(400, "Falta movimiento_id")
+
+    row = db.query(PlanillaRow).filter(PlanillaRow.id == row_id).first()
+    if not row:
+        raise HTTPException(404, "Fila no encontrada")
+    planilla = _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
+    org_id = planilla.organizacion_id or 1
+
+    fecha_check = row.fecha_acred or (planilla.fecha_carga.date() if planilla.fecha_carga else None)
+    if periodo_esta_cerrado(db, org_id, fecha_check):
+        raise HTTPException(409, "El periodo ya está cerrado — esta fila no se puede modificar")
+
+    mov = db.query(MovimientoBanco).filter(
+        MovimientoBanco.id == movimiento_id,
+        MovimientoBanco.organizacion_id == org_id,
+    ).first()
+    if not mov:
+        raise HTTPException(404, "Movimiento no encontrado")
+
+    tolerancia = _get_org_config(db, org_id).get("tolerancia_monto", 0.01)
+    if not montos_iguales(mov.monto, row.monto, tolerancia):
+        raise HTTPException(400, "El monto del movimiento no coincide con el de la fila")
+
+    cliente_nombre = planilla.cliente.nombre
+    ya_libre = not mov.cliente_acreditado or mov.cliente_acreditado.strip().lower() in ("no identificado", "")
+    es_este_cliente = (mov.cliente_acreditado or "").strip().lower() == cliente_nombre.strip().lower()
+    if not ya_libre and not es_este_cliente:
+        raise HTTPException(409, f"Este movimiento ya está acreditado a {mov.cliente_acreditado}")
+
+    # Si la fila tenía otro movimiento asignado antes, liberarlo (solo si
+    # seguía acreditado a este mismo cliente — no pisar datos de terceros).
+    if row.orden_movimiento_acreditado and row.orden_movimiento_acreditado != mov.id:
+        mov_anterior = db.query(MovimientoBanco).filter(MovimientoBanco.id == row.orden_movimiento_acreditado).first()
+        if mov_anterior and (mov_anterior.cliente_acreditado or "").strip().lower() == cliente_nombre.strip().lower():
+            mov_anterior.cliente_acreditado = None
+            mov_anterior.fecha_acred = None
+
+    fecha_acred = mov.fecha_acred or mov.fecha or hoy_art()
+    mov.cliente_acreditado = cliente_nombre
+    mov.fecha_acred = fecha_acred
+    row.status = "ok"
+    row.orden_movimiento_acreditado = mov.id
+    row.fecha_acred = fecha_acred
+    db.commit()
+
+    registrar_log(
+        db=db,
+        usuario_id=current_user.id,
+        tabla="planilla_rows",
+        registro_id=row.id,
+        accion="ASIGNAR_MOVIMIENTO_MANUAL",
+        cambios={"movimiento_id": mov.id, "cliente": cliente_nombre},
+    )
+
+    # Recalcular la contabilidad de la planilla (mismo criterio que
+    # "Re-conciliar"): solo_pendientes=True no toca ni re-matchea las demás
+    # filas, pero recalcula el asiento de reclasificación con el total real.
+    try:
+        extracto = _resolver_extracto_planilla(db, planilla)
+        org_config = _get_org_config(db, org_id)
+        conciliar_planilla(
+            db=db,
+            planilla_rows=planilla.rows,
+            movimientos=extracto.movimientos,
+            cliente_nombre=cliente_nombre,
+            fecha_acred_str="hoy",
+            org_config=org_config,
+            org_id=org_id,
+            solo_pendientes=True,
+            cliente_id=planilla.cliente_id,
+            comision_pct=planilla.porcentaje_comision or Decimal("0"),
+        )
+    except Exception as ex:
+        logger.warning("asignar_movimiento: error al recalcular contabilidad (%s): %s", row_id, ex)
+
+    return {"ok": True, "row_id": row_id, "movimiento_id": mov.id, "status": row.status}
 
 
 # ── Cola de revisión manual ───────────────────────────────────────────────────

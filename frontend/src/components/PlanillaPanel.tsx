@@ -15,6 +15,15 @@ interface Row {
   mov_fecha_acred?: string
 }
 
+interface Candidato {
+  id: number
+  fecha: string | null
+  titular: string
+  cliente_acreditado: string | null
+  es_libre: boolean
+  es_este_cliente: boolean
+}
+
 interface MetaDetalle {
   id: number
   nombre_archivo: string
@@ -94,6 +103,11 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
   const [bulkStatus, setBulkStatus] = useState('')
   const [page, setPage] = useState(0)
+  const [asignarRowId, setAsignarRowId] = useState<number | null>(null)
+  const [candidatos, setCandidatos] = useState<Candidato[]>([])
+  const [loadingCandidatos, setLoadingCandidatos] = useState(false)
+  const [asignandoMovId, setAsignandoMovId] = useState<number | null>(null)
+  const [asignarError, setAsignarError] = useState('')
 
   // Debounce text filter inputs → apply after 350ms of no changes
   useEffect(() => {
@@ -105,19 +119,10 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
   }, [filtersDraft])
 
   // Fetch from server on planillaId, page, or applied filters change
-  useEffect(() => {
-    if (!planillaId) {
-      setMeta(null)
-      setRows([])
-      setFetchError('')
-      setFiltersDraft(EMPTY_FILTERS)
-      setFilters(EMPTY_FILTERS)
-      setSelectedRows(new Set())
-      return
-    }
+  const reload = useCallback(() => {
+    if (!planillaId) return
     setLoading(true)
     setFetchError('')
-    setSelectedRows(new Set())
 
     const params: Record<string, string | number> = {
       limit: PAGE_SIZE,
@@ -144,6 +149,21 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
         setFetchError(err.response?.data?.detail || `Error al cargar planilla #${planillaId}`)
       })
       .finally(() => setLoading(false))
+  }, [planillaId, page, filters])
+
+  useEffect(() => {
+    if (!planillaId) {
+      setMeta(null)
+      setRows([])
+      setFetchError('')
+      setFiltersDraft(EMPTY_FILTERS)
+      setFilters(EMPTY_FILTERS)
+      setSelectedRows(new Set())
+      return
+    }
+    setSelectedRows(new Set())
+    reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planillaId, page, filters])
 
   const totalPages = meta ? Math.ceil(meta.total_filtered / PAGE_SIZE) : 0
@@ -243,6 +263,44 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
       } : prev)
       setSelectedRows(new Set())
     } finally { setSavingRow(false) }
+  }
+
+  const openAsignar = async (row: Row) => {
+    setAsignarRowId(row.id)
+    setAsignarError('')
+    setCandidatos([])
+    setLoadingCandidatos(true)
+    try {
+      const data = await apiClient.candidatosMovimiento(row.id)
+      setCandidatos(data.candidatos)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setAsignarError(msg || 'No se pudieron cargar los movimientos candidatos')
+    } finally {
+      setLoadingCandidatos(false)
+    }
+  }
+
+  const closeAsignar = () => {
+    setAsignarRowId(null)
+    setCandidatos([])
+    setAsignarError('')
+  }
+
+  const elegirMovimiento = async (movimientoId: number) => {
+    if (!asignarRowId) return
+    setAsignandoMovId(movimientoId)
+    setAsignarError('')
+    try {
+      await apiClient.asignarMovimiento(asignarRowId, movimientoId)
+      closeAsignar()
+      reload()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setAsignarError(msg || 'No se pudo asignar el movimiento')
+    } finally {
+      setAsignandoMovId(null)
+    }
   }
 
   // Derived values
@@ -490,7 +548,14 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                           </button>
                         )}
                       </td>
-                      <td className="px-1 py-px text-center">
+                      <td className="px-1 py-px text-center whitespace-nowrap">
+                        {row.status !== 'ok' && (
+                          <button
+                            onClick={() => openAsignar(row)}
+                            className="text-gray-300 hover:text-ml-blue dark:text-gray-600 dark:hover:text-ml-blue text-[10px] transition-colors mr-2"
+                            title="Asignar movimiento manualmente"
+                          >🔗</button>
+                        )}
                         <button
                           onClick={() => deleteRow(row.id)}
                           className="text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 text-[10px] transition-colors"
@@ -521,6 +586,63 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
           </div>
         )}
       </div>
+
+      {asignarRowId !== null && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeAsignar} />
+          <div className="relative bg-white dark:bg-ml-dark-surface rounded-2xl shadow-xl border border-gray-200 dark:border-ml-dark-border p-6 w-full max-w-md">
+            <h3 className="text-base font-semibold text-ml-text dark:text-white mb-1">Asignar movimiento</h3>
+            <p className="text-xs text-ml-text-soft dark:text-zinc-400 mb-4">
+              Elegí a qué movimiento del extracto corresponde esta fila. Resuelve la fila en su lugar — no crea una fila nueva.
+            </p>
+
+            {loadingCandidatos && (
+              <p className="text-sm text-ml-text-soft dark:text-zinc-400 py-4 text-center">Buscando movimientos del mismo monto…</p>
+            )}
+
+            {!loadingCandidatos && asignarError && (
+              <p className="text-sm text-red-500 mb-3">{asignarError}</p>
+            )}
+
+            {!loadingCandidatos && !asignarError && candidatos.length === 0 && (
+              <p className="text-sm text-ml-text-soft dark:text-zinc-400 py-4 text-center">
+                No hay movimientos en el extracto con ese monto.
+              </p>
+            )}
+
+            {!loadingCandidatos && candidatos.length > 0 && (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {candidatos.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => elegirMovimiento(c.id)}
+                    disabled={asignandoMovId !== null || (!c.es_libre && !c.es_este_cliente)}
+                    className="w-full text-left px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-600 hover:border-ml-blue hover:bg-ml-gray-bg dark:hover:bg-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm dark:text-gray-200 truncate" title={c.titular}>{c.titular || '—'}</span>
+                      <span className="text-xs font-mono text-ml-text-soft dark:text-zinc-400 shrink-0">{fmtDate(c.fecha)}</span>
+                    </div>
+                    {!c.es_libre && (
+                      <span className="text-2xs text-yellow-600 dark:text-yellow-400">
+                        {c.es_este_cliente ? 'Ya acreditado a este cliente' : `Ya acreditado a ${c.cliente_acreditado}`}
+                      </span>
+                    )}
+                    {asignandoMovId === c.id && <span className="text-2xs text-ml-blue"> Asignando…</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end mt-5">
+              <button
+                onClick={closeAsignar}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-ml-dark-border text-ml-text dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+              >Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

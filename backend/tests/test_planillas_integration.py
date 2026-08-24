@@ -419,6 +419,160 @@ class TestPatchRowStatus:
         assert r.status_code == 404
 
 
+# ── Tests: resolución manual de filas ambiguas (asignar-movimiento) ───────────
+# Regresión ago 2026: antes, la única forma de resolver a mano un "no coincide"
+# (monto duplicado sin identidad suficiente) era "acreditar a cliente" desde
+# Movimientos, que agrega una fila NUEVA en vez de resolver la existente. Estos
+# endpoints resuelven la fila en su lugar, como hace "Re-conciliar".
+
+def _seed_extracto_monto_duplicado(db, monto=Decimal("24675")):
+    """2 movimientos con el MISMO monto — el caso ambiguo real."""
+    extracto = ExtractoBancario(
+        nombre_archivo="extracto_dup.xlsx", organizacion_id=1,
+        creado_por=1, fecha_creacion=datetime.utcnow(),
+    )
+    db.add(extracto)
+    db.flush()
+    mov_correcto = MovimientoBanco(
+        extracto_id=extracto.id, orden=1, fecha=date(2026, 8, 19), mes="agosto",
+        titular="TRANSF DIAZ, FAB 23419881279", monto=monto, saldo=monto,
+        source="extracto", organizacion_id=1,
+    )
+    mov_otro = MovimientoBanco(
+        extracto_id=extracto.id, orden=2, fecha=date(2026, 8, 7), mes="agosto",
+        titular="ING TRANSF XIMENA BELLOFA-27314529583", monto=monto, saldo=monto,
+        source="extracto", organizacion_id=1,
+    )
+    db.add_all([mov_correcto, mov_otro])
+    db.commit()
+    db.refresh(mov_correcto)
+    db.refresh(mov_otro)
+    return extracto, mov_correcto, mov_otro
+
+
+def _seed_planilla_fila_ambigua(db, extracto_id, cliente_nombre, monto=Decimal("24675")):
+    cliente = Cliente(nombre=cliente_nombre, organizacion_id=1)
+    db.add(cliente)
+    db.flush()
+    planilla = Planilla(
+        cliente_id=cliente.id, extracto_id=extracto_id, usuario_id=1,
+        nombre_archivo="planilla_ambigua.xlsx", organizacion_id=1,
+        fecha_carga=datetime.utcnow(),
+    )
+    db.add(planilla)
+    db.flush()
+    row = PlanillaRow(
+        planilla_id=planilla.id, monto=monto, cuit="41988127", titular="Fabio Diaz",
+        status="no coincide (2 mov. del mismo monto — revisar CUIT/CBU/titular)",
+        organizacion_id=1,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(planilla)
+    return planilla, cliente, row
+
+
+class TestCandidatosMovimiento:
+
+    def test_lista_los_movimientos_del_mismo_monto(self, client, db):
+        extracto, mov_correcto, mov_otro = _seed_extracto_monto_duplicado(db)
+        planilla, _, row = _seed_planilla_fila_ambigua(db, extracto.id, "ClienteCandidatos")
+
+        token = _token(db, "admin@plan.test")
+        r = client.get(f"/planillas/rows/{row.id}/candidatos-movimiento", headers=_auth(token))
+        assert r.status_code == 200
+        data = r.json()
+        ids = {c["id"] for c in data["candidatos"]}
+        assert ids == {mov_correcto.id, mov_otro.id}
+        assert all(c["es_libre"] for c in data["candidatos"])
+
+    def test_fila_inexistente_retorna_404(self, client, db):
+        token = _token(db, "admin@plan.test")
+        r = client.get("/planillas/rows/99999/candidatos-movimiento", headers=_auth(token))
+        assert r.status_code == 404
+
+
+class TestAsignarMovimiento:
+
+    def test_asignar_resuelve_fila_y_sincroniza_extracto_sin_crear_filas(self, client, db):
+        """El caso real SMT: elegir el movimiento correcto resuelve la fila EN
+        SU LUGAR (no crea una fila nueva) y acredita en el extracto."""
+        extracto, mov_correcto, mov_otro = _seed_extracto_monto_duplicado(db)
+        planilla, cliente, row = _seed_planilla_fila_ambigua(db, extracto.id, "ClienteAsignar")
+        filas_antes = len(planilla.rows)
+
+        token = _token(db, "admin@plan.test")
+        r = client.post(
+            f"/planillas/rows/{row.id}/asignar-movimiento",
+            json={"movimiento_id": mov_correcto.id},
+            headers=_auth(token),
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["status"] == "ok"
+        assert data["movimiento_id"] == mov_correcto.id
+
+        db.refresh(row)
+        db.refresh(mov_correcto)
+        db.refresh(mov_otro)
+        db.refresh(planilla)
+
+        assert row.status == "ok"
+        assert row.orden_movimiento_acreditado == mov_correcto.id
+        assert mov_correcto.cliente_acreditado == cliente.nombre
+        # El OTRO candidato no se toca
+        assert mov_otro.cliente_acreditado is None
+        # No se crearon filas nuevas
+        assert len(planilla.rows) == filas_antes
+
+    def test_asignar_monto_no_coincide_retorna_400(self, client, db):
+        extracto, mov_correcto, _ = _seed_extracto_monto_duplicado(db)
+        planilla, _, row = _seed_planilla_fila_ambigua(db, extracto.id, "ClienteMontoMal", monto=Decimal("999"))
+
+        token = _token(db, "admin@plan.test")
+        r = client.post(
+            f"/planillas/rows/{row.id}/asignar-movimiento",
+            json={"movimiento_id": mov_correcto.id},
+            headers=_auth(token),
+        )
+        assert r.status_code == 400
+
+    def test_asignar_movimiento_ya_acreditado_a_otro_cliente_retorna_409(self, client, db):
+        extracto, mov_correcto, _ = _seed_extracto_monto_duplicado(db)
+        mov_correcto.cliente_acreditado = "OtroClienteYaDueño"
+        db.commit()
+        planilla, _, row = _seed_planilla_fila_ambigua(db, extracto.id, "ClienteRobaMov")
+
+        token = _token(db, "admin@plan.test")
+        r = client.post(
+            f"/planillas/rows/{row.id}/asignar-movimiento",
+            json={"movimiento_id": mov_correcto.id},
+            headers=_auth(token),
+        )
+        assert r.status_code == 409
+
+    def test_asignar_fila_inexistente_retorna_404(self, client, db):
+        token = _token(db, "admin@plan.test")
+        r = client.post(
+            "/planillas/rows/99999/asignar-movimiento",
+            json={"movimiento_id": 1},
+            headers=_auth(token),
+        )
+        assert r.status_code == 404
+
+    def test_asignar_sin_movimiento_id_retorna_400(self, client, db):
+        extracto, _, _ = _seed_extracto_monto_duplicado(db)
+        planilla, _, row = _seed_planilla_fila_ambigua(db, extracto.id, "ClienteSinId")
+
+        token = _token(db, "admin@plan.test")
+        r = client.post(
+            f"/planillas/rows/{row.id}/asignar-movimiento",
+            json={},
+            headers=_auth(token),
+        )
+        assert r.status_code == 400
+
+
 # ── Tests: upload de planilla (xlsx real mínimo) ──────────────────────────────
 
 class TestUploadPlanilla:
