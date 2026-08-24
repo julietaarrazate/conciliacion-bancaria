@@ -4,7 +4,7 @@ from datetime import datetime
 from app.database import Base
 
 # Denominaciones de billetes argentinos
-DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 200, 100]
+DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 200, 100, 50, 20, 10]
 
 
 def denominaciones_vacias() -> dict:

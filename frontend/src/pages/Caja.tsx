@@ -5,7 +5,7 @@ import { useAuthStore } from '@/store/auth'
 import { confirmDialog } from '@/store/confirm'
 import { localIsoDate } from '@/utils/fecha'
 
-const DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 200, 100]
+const DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 200, 100, 50, 20, 10]
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
