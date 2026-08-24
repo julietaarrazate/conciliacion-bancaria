@@ -26,6 +26,7 @@ suma el **bonus por fecha** (§1.2). Las señales son **excluyentes y ordenadas*
 | CUIT exacto (10-11 dígitos) | **12** | `conciliacion.py:174-176` |
 | CUIT de planilla como substring de dígitos del movimiento | **12** | `conciliacion.py:180-184` |
 | CBU/CVU exacto (22 dígitos) | **10** | `conciliacion.py:188-189` |
+| DNI de planilla (7-8 dígitos) embebido en el CUIT/CUIL del movimiento | **9** | `conciliacion.py:138-146` |
 | Número en común de longitud ≥ 22 (CBU/CVU por longitud) | **10** | `conciliacion.py:198-199` |
 | Número de cuenta largo (≥ 10 dígitos) en común | **8** | `conciliacion.py:200-201` |
 | Número de referencia/operación (6-9 dígitos) en común | **6** | `conciliacion.py:202-203` |
@@ -35,6 +36,14 @@ suma el **bonus por fecha** (§1.2). Las señales son **excluyentes y ordenadas*
 | Titular: única palabra presente | **3** | `conciliacion.py:225-227` |
 
 Notas fieles al código:
+- El caso DNI-embebido-en-CUIT (ago 2026, caso real cliente SMT) cubre planillas
+  que solo anotan el DNI del titular (8 dígitos) en vez del CUIT/CUIL completo
+  (11). Como el CUIT argentino es 2 dígitos de tipo + DNI + 1 verificador, el DNI
+  aparece como substring contigua dentro de los dígitos del movimiento. Antes de
+  este fix, ese caso puntuaba 0 (ni el chequeo de CUIT-substring, que solo corre
+  con `cuit_plan` de 10-11 dígitos, ni el cruce de números, que exige match
+  exacto de todo el token) — la fila quedaba en "no coincide" pese a tener
+  identidad suficiente para desempatar sin ambigüedad.
 - Solo se consideran "palabras" de titular las **alfabéticas de ≥ 3 caracteres**
   (`conciliacion.py:212`), para no filtrar nombres cortos (Ana, Leo, Sol).
 - Los números significativos que se cruzan son los de **6 a 22 dígitos**

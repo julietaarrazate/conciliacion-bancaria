@@ -101,6 +101,7 @@ def _score_identidad(
     Identidad (quien pago):
       12 = CUIT exacto
       10 = CBU/CVU exacto (22 digitos)
+       9 = DNI de planilla (7-8 digitos) embebido en el CUIT/CUIL del movimiento
        8 = numero de cuenta largo (10+ digitos) en comun
        6 = numero de referencia/operacion (6-9 digitos) en comun
        5 = titular (primeras 2 palabras)
@@ -132,6 +133,17 @@ def _score_identidad(
         digitos_mov = re.sub(r'\D', '', titular_mov)
         if cuit_plan in digitos_mov:
             score = 12 + _bonus_fecha(fecha_planilla, mov.fecha, dias_tolerancia)
+            return score
+
+    # ── DNI de planilla embebido en el CUIT/CUIL del movimiento ──
+    # El CUIT/CUIL argentino es 2 digitos de tipo + DNI (7-8 digitos) + 1
+    # verificador. Si la planilla solo trae el DNI (no el CUIT completo),
+    # buscarlo dentro de los digitos del movimiento sigue siendo identidad
+    # fuerte — solo no se puede confirmar con el checksum completo.
+    if cuit_plan and 7 <= len(cuit_plan) <= 8:
+        digitos_mov = re.sub(r'\D', '', titular_mov)
+        if cuit_plan in digitos_mov:
+            score = 9 + _bonus_fecha(fecha_planilla, mov.fecha, dias_tolerancia)
             return score
 
     # ── CBU/CVU exacto ─────────────────────────────────────────

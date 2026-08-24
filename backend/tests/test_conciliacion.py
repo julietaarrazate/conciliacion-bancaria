@@ -142,6 +142,32 @@ def test_buscar_match_monto_duplicado_con_cuit_correcto_acredita():
     assert status == "ok"
 
 
+def test_buscar_match_monto_duplicado_con_dni_embebido_en_cuit_del_mov_acredita():
+    """Regresión ago 2026 (caso real SMT): la planilla trae solo el DNI (8 dígitos,
+    no el CUIT/CUIL completo de 11). Con monto duplicado, el DNI embebido en el
+    CUIT del movimiento correcto debe desempatar — el otro candidato, sin ninguna
+    coincidencia de identidad, no debe competir."""
+    movimientos = [
+        _mov(24675.0, titular="ING TRANSF:XIMENA NATALIA BELLOFA-27314529583", id=858,
+             fecha=date(2026, 8, 7)),
+        _mov(24675.0, titular="TRANSF DIAZ, FAB 23419881279 VAR VARIOS VARIO", id=87,
+             fecha=date(2026, 8, 19)),
+    ]
+    resultado, status = buscar_match(
+        monto=24675.0,
+        cuit_planilla="41988127",   # DNI, no CUIT completo
+        titular_planilla="Fabio Joel Diaz",
+        referencia_planilla=None,
+        fecha_planilla=date(2026, 8, 19),
+        movimientos=movimientos,
+        procesados=set(),
+        org_config=CONFIG_DEFAULT_ORG,
+    )
+    assert resultado is not None, "el DNI embebido en el CUIT del movimiento debe alcanzar para acreditar"
+    assert resultado.id == 87
+    assert status == "ok"
+
+
 # ─── Regresión: asiento agrupado en re-conciliación (v3.13) ───────────────────
 # Verifica que re-conciliar una planilla (solo_pendientes=True) deje el asiento
 # um_reclass_planilla con el TOTAL de todas las filas ok, no solo el delta nuevo.
