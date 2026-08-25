@@ -496,9 +496,23 @@ export const Pagos: React.FC = () => {
   const [editForm, setEditForm] = useState({ monto: '', fecha: '', beneficiario: '', concepto: '', referencia: '', categoria: '', forma_pago: 'banco' })
   const [editSaving, setEditSaving] = useState(false)
   const [editMsg, setEditMsg] = useState('')
+  // undefined = sin tocar el comprobante (no se manda en el PATCH), null = se quitó
+  const [editFoto, setEditFoto] = useState<string | null | undefined>(undefined)
+  const [editFotoPreview, setEditFotoPreview] = useState<string | null>(null)
+  const [editFotoLoading, setEditFotoLoading] = useState(false)
+  const editFileInputRef = useRef<HTMLInputElement>(null)
 
   const abrirEdit = (e: Egreso) => {
     setEditItem(e)
+    setEditFoto(undefined)
+    setEditFotoPreview(null)
+    if (e.tiene_foto) {
+      setEditFotoLoading(true)
+      apiClient.client.get(`/pagos/${e.id}/comprobante`)
+        .then(r => setEditFotoPreview(r.data.foto_base64 || null))
+        .catch(() => {})
+        .finally(() => setEditFotoLoading(false))
+    }
     setEditForm({
       monto: String(e.monto),
       fecha: e.fecha || localIsoDate(),
@@ -511,13 +525,45 @@ export const Pagos: React.FC = () => {
     setEditMsg('')
   }
 
+  const handleEditFoto = (ev: React.ChangeEvent<HTMLInputElement>) => {
+    const file = ev.target.files?.[0]
+    if (!file) return
+    const esPdf = file.type === 'application/pdf'
+    const reader = new FileReader()
+    reader.onload = e2 => {
+      const base64 = (e2.target?.result as string) || ''
+      setEditFotoPreview(base64)
+      if (esPdf) {
+        // Un PDF no se puede pasar por <canvas> — va tal cual.
+        setEditFoto(base64)
+        return
+      }
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const MAX = 1200
+        let w = img.width, h = img.height
+        if (w > MAX) { h = h * MAX / w; w = MAX }
+        if (h > MAX) { w = w * MAX / h; h = MAX }
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')!
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h)
+        ctx.filter = 'grayscale(1) contrast(1.4) brightness(1.1)'
+        ctx.drawImage(img, 0, 0, w, h)
+        setEditFoto(canvas.toDataURL('image/jpeg', 0.7))
+      }
+      img.src = base64
+    }
+    reader.readAsDataURL(file)
+  }
+
   const guardarEdit = async () => {
     if (!editItem) return
     const m = parseFloat(editForm.monto)
     if (!m || m <= 0) { setEditMsg('Ingresá un monto válido'); return }
     setEditSaving(true); setEditMsg('')
     try {
-      await apiClient.client.patch(`/pagos/${editItem.id}`, {
+      const payload: Record<string, unknown> = {
         monto: m,
         fecha: editForm.fecha,
         beneficiario: editForm.beneficiario || undefined,
@@ -525,7 +571,9 @@ export const Pagos: React.FC = () => {
         referencia: editForm.referencia || undefined,
         categoria: editForm.categoria || undefined,
         forma_pago: editForm.forma_pago,
-      })
+      }
+      if (editFoto !== undefined) payload.foto_base64 = editFoto
+      await apiClient.client.patch(`/pagos/${editItem.id}`, payload)
       setEditItem(null)
       cargarLista()
     } catch (err: any) {
@@ -892,6 +940,35 @@ export const Pagos: React.FC = () => {
                 value={editForm.concepto}
                 onChange={e => setEditForm(p => ({ ...p, concepto: e.target.value }))}
               />
+            </div>
+
+            <div>
+              <label className="label">Comprobante (foto o PDF)</label>
+              {editFotoLoading ? (
+                <p className="text-sm text-ml-text-soft dark:text-zinc-400 py-2">Cargando comprobante…</p>
+              ) : editFotoPreview ? (
+                <div className="space-y-2">
+                  {editFotoPreview.startsWith('data:application/pdf') ? (
+                    <div className="flex items-center justify-center gap-2 py-6 px-4 rounded-lg border border-ml-gray dark:border-ml-dark-border text-sm text-ml-text-soft dark:text-zinc-400">
+                      <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+                      PDF adjunto
+                    </div>
+                  ) : (
+                    <img src={editFotoPreview} alt="comprobante" className="max-h-48 mx-auto rounded-lg object-contain border border-ml-gray dark:border-ml-dark-border" />
+                  )}
+                  <button type="button" onClick={() => { setEditFoto(null); setEditFotoPreview(null) }} className="btn-secondary text-sm w-full">
+                    Quitar {editFotoPreview.startsWith('data:application/pdf') ? 'PDF' : 'foto'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input ref={editFileInputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleEditFoto} />
+                  <button type="button" onClick={() => editFileInputRef.current?.click()} className="btn-secondary w-full text-sm flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg>
+                    Subir foto o PDF
+                  </button>
+                </>
+              )}
             </div>
 
             {editMsg && (

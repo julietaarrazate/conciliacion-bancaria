@@ -248,6 +248,37 @@ class TestEditarEgreso:
         assert e.concepto == "Compra materiales"
         assert e.referencia == "OP-001"
 
+    def test_editar_foto_base64_actualiza_comprobante(self, db):
+        """Regresión ago 2026: el modal de editar pago no tenía forma de
+        adjuntar/reemplazar el comprobante — el PATCH ya lo soporta."""
+        from app.routers.pagos import editar_egreso
+        _crear_egreso(db, egreso_id=33)
+        foto = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+        editar_egreso(
+            egreso_id=33,
+            payload={"foto_base64": foto},
+            db=db,
+            current_user=_mock_user(),
+        )
+        e = db.query(Egreso).filter(Egreso.id == 33).first()
+        assert e.foto_comprobante == foto  # sin S3 configurado, guarda el data URL tal cual
+
+    def test_editar_foto_base64_null_quita_comprobante(self, db):
+        from app.routers.pagos import editar_egreso
+        e = _crear_egreso(db, egreso_id=34)
+        e.foto_comprobante = "data:image/png;base64,algo"
+        db.commit()
+
+        editar_egreso(
+            egreso_id=34,
+            payload={"foto_base64": None},
+            db=db,
+            current_user=_mock_user(),
+        )
+        db.refresh(e)
+        assert e.foto_comprobante is None
+
     def test_editar_forma_pago_banco_a_efectivo_engancha_arqueo(self, db):
         """Regresión ago 2026: se cargó 'banco' por error siendo 'efectivo' —
         debe poder corregirse y quedar enganchado al arqueo del día."""
