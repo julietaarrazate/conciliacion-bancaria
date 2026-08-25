@@ -8,7 +8,7 @@ Para purgar definitivamente (borrar de verdad), usar el endpoint /purgar.
 """
 
 import logging
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func

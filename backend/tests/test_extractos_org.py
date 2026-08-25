@@ -251,3 +251,99 @@ class TestUploadExtractoOrg:
         # numerado desde 1 (per-extracto)
         ordenes = sorted(m.orden for m in db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id == eid2).all())
         assert ordenes == [1, 2], f"esperaba [1, 2], obtuve {ordenes}"
+
+    def test_listar_movimientos_default_acota_a_100(self, client, db):
+        """GET /extractos/{id}/movimientos sin `limit` acota a 100 (default), para que
+        un consumidor que olvide paginar no se lleve el extracto entero. `limit=0` es
+        el opt-in explícito de 'sin límite' (lo usa Movimientos.tsx para paginar en
+        cliente). Regresión: antes el default era 0 = sin límite."""
+        token = _token(db, "super@org.test")
+        # 105 movimientos únicos (titular/monto/saldo distintos → no colapsan por dedup)
+        filas = [(f"2026-06-{(i % 28) + 1:02d}", f"Cli {i}", 1000 + i, 100000 + i)
+                 for i in range(105)]
+        r = client.post("/extractos/upload?org_id=2",
+                        files={"file": ("grande.xlsx", _xlsx_bytes(filas),
+                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                        headers=_auth(token))
+        assert r.status_code == 200, r.text
+        eid = r.json()["id"]
+
+        # sin limit → default 100, pero total refleja los 105
+        d = client.get(f"/extractos/{eid}/movimientos", headers=_auth(token)).json()
+        assert d["total"] == 105
+        assert len(d["items"]) == 100, "el default debe acotar a 100"
+
+        # limit explícito
+        d10 = client.get(f"/extractos/{eid}/movimientos?limit=10", headers=_auth(token)).json()
+        assert len(d10["items"]) == 10
+
+        # limit=0 = escape hatch sin límite → trae los 105
+        d0 = client.get(f"/extractos/{eid}/movimientos?limit=0", headers=_auth(token)).json()
+        assert len(d0["items"]) == 105, "limit=0 debe traer todo (opt-in)"
+
+
+class TestArchivadoExtracto:
+    """Archivar = cierre de período. Todo lo conciliado queda guardado y accesible
+    por id; solo el listado por defecto lo oculta y rechaza nuevos UM."""
+
+    MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    def _subir(self, client, token, org=2, nombre="periodo1.xlsx"):
+        xlsx = _xlsx_bytes([("2026-06-01", "Cli A", 5000, 10000),
+                            ("2026-06-02", "Cli B", 6000, 16000)])
+        r = client.post(f"/extractos/upload?org_id={org}",
+                        files={"file": (nombre, xlsx, self.MIME)}, headers=_auth(token))
+        assert r.status_code == 200, r.text
+        return r.json()["id"]
+
+    def test_archivar_oculta_del_listado_pero_no_borra(self, client, db):
+        token = _token(db, "super@org.test")
+        eid = self._subir(client, token)
+
+        r = client.patch(f"/extractos/{eid}/archivar", headers=_auth(token))
+        assert r.status_code == 200 and r.json()["archivado"] is True
+
+        # fuera del listado default
+        ids = {e["id"] for e in client.get("/extractos?org_id=2", headers=_auth(token)).json()["items"]}
+        assert eid not in ids
+        # visible con incluir_archivados, con flag archivado=true
+        data = client.get("/extractos?org_id=2&incluir_archivados=true", headers=_auth(token)).json()
+        item = next(e for e in data["items"] if e["id"] == eid)
+        assert item["archivado"] is True
+        # los movimientos siguen accesibles (lo conciliado queda guardado)
+        movs = client.get(f"/extractos/{eid}/movimientos", headers=_auth(token))
+        assert movs.status_code == 200 and movs.json()["total"] == 2
+        # el export sigue funcionando
+        exp = client.get(f"/extractos/{eid}/movimientos/export", headers=_auth(token))
+        assert exp.status_code == 200
+
+    def test_um_sobre_archivado_409_y_desarchivar_lo_reabre(self, client, db):
+        token = _token(db, "super@org.test")
+        eid = self._subir(client, token, nombre="periodo2.xlsx")
+        client.patch(f"/extractos/{eid}/archivar", headers=_auth(token))
+
+        um = _xlsx_bytes([("2026-06-03", "Cli C", 7000, 23000),
+                          ("2026-06-04", "Cli D", 8000, 31000)])
+        r = client.post(f"/extractos/{eid}/agregar-um",
+                        files={"file": ("um.xlsx", um, self.MIME)}, headers=_auth(token))
+        assert r.status_code == 409, r.text
+
+        r = client.patch(f"/extractos/{eid}/desarchivar", headers=_auth(token))
+        assert r.status_code == 200 and r.json()["archivado"] is False
+        r = client.post(f"/extractos/{eid}/agregar-um",
+                        files={"file": ("um.xlsx", um, self.MIME)}, headers=_auth(token))
+        assert r.status_code == 200, r.text
+
+    def test_archivar_es_idempotente(self, client, db):
+        token = _token(db, "super@org.test")
+        eid = self._subir(client, token, nombre="periodo3.xlsx")
+        assert client.patch(f"/extractos/{eid}/archivar", headers=_auth(token)).status_code == 200
+        assert client.patch(f"/extractos/{eid}/archivar", headers=_auth(token)).status_code == 200
+
+    def test_multi_tenant_archivar_extracto_ajeno_404(self, client, db):
+        token = _token(db, "super@org.test")
+        eid = self._subir(client, token, org=2, nombre="periodo4.xlsx")
+        # el contador (org 1, no superadmin) no puede archivar un extracto de la org 2
+        t1 = _token(db, "contador@org.test")
+        r = client.patch(f"/extractos/{eid}/archivar", headers=_auth(t1))
+        assert r.status_code == 404

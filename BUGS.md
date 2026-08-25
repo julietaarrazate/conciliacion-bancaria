@@ -32,6 +32,56 @@ versión real, reconstruida a partir del historial de fixes documentado ahí.
 
 ---
 
+## Estado de cheque: filtrar por `"pendiente"` en vez de `"registrado"` → siempre 0
+
+**Patrón:** el estado canónico de un cheque recién cargado es **`"registrado"`** (`"pendiente"` es un
+sinónimo legacy — ver frontend `esRegistrado`). Un backfill de arranque (`main.py`) migra
+`UPDATE cheques SET estado='registrado' WHERE estado='pendiente'`, así que en producción **no
+existen** filas con `estado == "pendiente"`. Cualquier query que filtre cheques por
+`estado == "pendiente"` devuelve **siempre 0/vacío**, silenciosamente.
+
+- **Detectado (v3.29):** 5 lugares filtraban por `estado == "pendiente"` → todos devolvían vacío:
+  `reportes_service.calcular_alertas` (alertas de cheques urgentes/vencidos del dashboard —
+  nunca disparaban), `_cheques_proximos_vencimiento` (resumen), el saldo de cheques por cliente
+  del estado de cuenta, el push de alertas de `backup_scheduler.py` (10:00 ART, nunca notificaba),
+  y dos queries del asistente IA (`agente.py`).
+- **Fix (v3.29):** constantes en `reportes_service.py` — `CHEQUE_EN_CARTERA = ("registrado",
+  "pendiente")` (no depositado aún, para alertas por `fecha_deposito`) y `CHEQUE_PENDIENTE_COBRO =
+  ("registrado", "pendiente", "depositado")` (importe aún no cobrado, para el saldo por cliente).
+  Se reemplazó `estado == "pendiente"` por `estado.in_(...)` en los 5 lugares.
+
+**Cómo evitarlo:** nunca filtrar cheques por `estado == "pendiente"`. Usar las constantes
+`CHEQUE_EN_CARTERA` / `CHEQUE_PENDIENTE_COBRO` (backend) o el helper `esRegistrado` (frontend). El
+único uso legítimo de `== estado` es cuando `estado` es un parámetro elegido por el usuario.
+
+---
+
+## Deadlock de Postgres en deploy en caliente (DDL de arranque vs requests en vuelo)
+
+**Patrón:** el DDL de arranque (`app/db_safety.py::SAFETY_NET_DDL` + los loops `indexes`/
+`migrations` en `main.py::_init_db`) corre en un thread al bootear la instancia nueva, que **ya
+está sirviendo requests**. Un `ALTER TABLE`/`DROP INDEX` toma `AccessExclusiveLock` sobre la tabla;
+si un request en vuelo (p. ej. `GET /analisis/alertas` contando `cheques`) sostiene un
+`AccessShareLock`, se forma un deadlock y Postgres mata una de las dos transacciones →
+`OperationalError: deadlock detected` (500 al usuario, o arranque incompleto).
+
+- **Causa raíz (v3.29):** las ~100 sentencias del safety-net corrían en **una sola transacción**
+  (un `connect()`, un `commit()` al final). Esa transacción retenía el `AccessExclusiveLock` de
+  ~15 tablas **hasta el commit final**, maximizando la ventana de deadlock. Sin `lock_timeout`, el
+  DDL esperaba indefinidamente. Bonus bug: si una sentencia fallaba, el lote entero se abortaba y
+  las siguientes no se aplicaban.
+- **Fix (v3.29):** helper `main.py::_exec_startup_ddl(conn, sql)` — cada sentencia va en su propia
+  transacción con `SET LOCAL lock_timeout = '4s'` (solo Postgres), commit por sentencia (libera el
+  lock de la tabla al toque), reintento ante contención de lock/deadlock, y aislamiento de errores
+  (una sentencia que falla no aborta las siguientes). Usado en los 3 loops de DDL de arranque.
+
+**Cómo evitarlo:** cualquier DDL que corra en el arranque (o en caliente) debe ir por
+`_exec_startup_ddl` (o replicar el patrón: `lock_timeout` + commit por sentencia). Nunca agrupar
+muchos `ALTER TABLE`/`CREATE INDEX`/`DROP INDEX` en una transacción larga que sirva de barrera de
+locks contra el tráfico de lectura.
+
+---
+
 ## Decimal vs float en cálculos monetarios
 
 **Patrón:** columnas `Numeric(12,2)` de SQLAlchemy llegan como `Decimal` a Python, pero código que

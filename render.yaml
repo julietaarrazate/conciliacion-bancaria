@@ -18,3 +18,5 @@ services:
         value: "480"
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: SENTRY_DSN
+        sync: false

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import calendar
 import logging
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy.orm import Session

@@ -21,7 +21,7 @@ Qué reporta:
 import os
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import date, timedelta
 
 # Permitir importar app.services.* corriendo desde la raíz del repo
@@ -31,7 +31,7 @@ sys.path.insert(0, _BACKEND)
 import openpyxl  # noqa: E402
 from app.services.excel_parser import (  # noqa: E402
     preparar_archivo, detectar_banco, detectar_columnas,
-    parsear_generico, _parse_fecha, _parse_monto, _normalizar,
+    parsear_generico, _normalizar,
 )
 
 _CUIT_RE = re.compile(r"\b\d{2}[-\s]?\d{8}[-\s]?\d\b")        # 11 dígitos (con o sin guiones)

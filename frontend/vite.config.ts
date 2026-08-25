@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
@@ -8,6 +9,13 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') }
+  },
+  // Tests: jsdom para poder montar componentes (smoke tests con Testing Library).
+  // Los tests de utilidades puras también corren bajo este entorno sin problema.
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
   },
   server: {
     port: 3000,

@@ -821,29 +821,65 @@ def registrar_reclasificacion_planilla(
     total_monto: Decimal,
     fecha: date,
     nombre_archivo: str = "",
+    cuenta_origen_codigo: str = "2-1-1-1",
+    comision_pct: Decimal = Decimal("0"),
 ) -> None:
-    """Asiento agrupado por planilla: No identificado (D) / Cliente X (H).
-    Un solo asiento por planilla con el total conciliado (en lugar de uno por fila).
-    Upsert: si ya existe un asiento previo para esta planilla, actualiza el monto
-    (para re-conciliaciones que acreditan filas adicionales en una segunda pasada)."""
+    """Asiento(s) agrupado(s) por planilla al conciliar pagos identificados a un
+    cliente. Un asiento principal — cuenta de origen (D) / Cliente (H) — por el
+    NETO (total menos comisión). Si comision_pct > 0, un segundo asiento
+    separado — cuenta de origen (D) / Comisiones ganadas (H) — por la comisión.
+    Así el cliente queda acreditado por el neto y la comisión se reconoce como
+    ingreso aparte (tratamiento acordado con el contador, ago 2026).
+
+    La cuenta de origen depende de DÓNDE quedó parqueada la plata al entrar —
+    mezclar el origen dejaría una de las dos cuentas mal (nunca se cancela, o
+    queda negativa), porque no es de ahí de donde salió la plata realmente:
+      - "2-1-0-0" Pasivo Corriente — movimientos del extracto bancario
+        principal (ver registrar_extracto: Banco D / Pasivo Corriente H).
+      - "2-1-1-1" No identificado (default) — movimientos de Últimos
+        Movimientos (ver registrar_um_import: Banco D / No identificado H).
+
+    La cuenta del cliente se resuelve/crea/vincula vía _get_o_crear_cuenta_cliente
+    (nunca la cuenta madre genérica "Cliente" 2-1-2-0 — eso fue el bug del
+    backfill viejo, ver CHANGELOG ago 2026).
+
+    Upsert por (modulo, planilla_id, org_id): si ya existe un asiento previo,
+    actualiza el monto — para re-conciliaciones que acreditan filas adicionales
+    o cambian el % de comisión en una segunda pasada. Si la comisión pasó a ser
+    0 (se sacó), borra el asiento de comisión existente en vez de dejarlo con
+    un monto que ya no corresponde."""
     try:
         total_monto = abs(round(_monto(total_monto), 2))
         if total_monto <= 0:
             return
-        no_id = _get_cuenta_por_codigo(db, "2-1-1-1", org_id)
+        origen = _get_cuenta_por_codigo(db, cuenta_origen_codigo, org_id)
         cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_id, org_id) if cliente_id else None
-        if not no_id or not cuenta_cliente:
-            logger.warning("Cuentas reclasificación planilla no encontradas org %s (cliente_id=%s)", org_id, cliente_id)
+        if not origen or not cuenta_cliente:
+            logger.warning(
+                "Cuentas reclasificación planilla no encontradas org %s (cliente_id=%s, origen=%s)",
+                org_id, cliente_id, cuenta_origen_codigo,
+            )
             return
+
+        comision_pct = Decimal(str(comision_pct or 0))
+        comision_monto = round(total_monto * comision_pct / 100, 2) if comision_pct > 0 else Decimal("0")
+        neto = total_monto - comision_monto
+
         fecha_asiento = fecha if isinstance(fecha, date) else hoy_art()
         desc = f"TT {cliente_nombre}"
         if nombre_archivo:
             desc += f" — {nombre_archivo}"
 
+        # "um_reclass_planilla" se mantiene tal cual para UM (compatibilidad con
+        # asientos ya existentes en producción); el bucket de extracto principal
+        # usa un módulo propio para no chocar con UM en la misma planilla.
+        modulo = "um_reclass_planilla" if cuenta_origen_codigo == "2-1-1-1" else "reclass_planilla_extracto"
+        modulo_com = modulo + "_comision"
+
         existente = (
             db.query(Asiento)
             .filter(
-                Asiento.modulo == "um_reclass_planilla",
+                Asiento.modulo == modulo,
                 Asiento.referencia_id == planilla_id,
                 Asiento.organizacion_id == org_id,
             )
@@ -851,18 +887,18 @@ def registrar_reclasificacion_planilla(
         )
         if existente:
             for linea in existente.lineas:
-                if linea.cuenta_id == no_id.id:
-                    linea.debe = total_monto
+                if linea.cuenta_id == origen.id:
+                    linea.debe = neto
                     linea.haber = Decimal("0")
                 else:
-                    linea.haber = total_monto
+                    linea.haber = neto
                     linea.debe = Decimal("0")
             existente.fecha = fecha_asiento
         else:
             a = Asiento(
                 fecha=fecha_asiento,
                 descripcion=desc,
-                modulo="um_reclass_planilla",
+                modulo=modulo,
                 referencia_id=planilla_id,
                 organizacion_id=org_id,
                 usuario_id=usuario_id,
@@ -870,8 +906,58 @@ def registrar_reclasificacion_planilla(
             )
             db.add(a)
             db.flush()
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id,            debe=total_monto,    haber=Decimal("0")))
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cliente.id,   debe=Decimal("0"),   haber=total_monto))
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=origen.id,          debe=neto,         haber=Decimal("0")))
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cliente.id,  debe=Decimal("0"), haber=neto))
+
+        if comision_monto > 0:
+            comisiones = _get_cuenta_por_codigo(db, "3-1-1-0", org_id)
+            if not comisiones:
+                logger.warning("Cuenta Comisiones ganadas (3-1-1-0) no encontrada org %s", org_id)
+            else:
+                existente_com = (
+                    db.query(Asiento)
+                    .filter(
+                        Asiento.modulo == modulo_com,
+                        Asiento.referencia_id == planilla_id,
+                        Asiento.organizacion_id == org_id,
+                    )
+                    .first()
+                )
+                if existente_com:
+                    for linea in existente_com.lineas:
+                        if linea.cuenta_id == origen.id:
+                            linea.debe = comision_monto
+                            linea.haber = Decimal("0")
+                        else:
+                            linea.haber = comision_monto
+                            linea.debe = Decimal("0")
+                    existente_com.fecha = fecha_asiento
+                else:
+                    a2 = Asiento(
+                        fecha=fecha_asiento,
+                        descripcion=f"Comisión {comision_pct}% — {cliente_nombre}",
+                        modulo=modulo_com,
+                        referencia_id=planilla_id,
+                        organizacion_id=org_id,
+                        usuario_id=usuario_id,
+                        numero_asiento=_next_numero_asiento(db, org_id),
+                    )
+                    db.add(a2)
+                    db.flush()
+                    db.add(AsientoDetalle(asiento_id=a2.id, cuenta_id=origen.id,     debe=comision_monto, haber=Decimal("0")))
+                    db.add(AsientoDetalle(asiento_id=a2.id, cuenta_id=comisiones.id, debe=Decimal("0"),   haber=comision_monto))
+        else:
+            ids_com = [
+                r[0] for r in db.query(Asiento.id).filter(
+                    Asiento.modulo == modulo_com,
+                    Asiento.referencia_id == planilla_id,
+                    Asiento.organizacion_id == org_id,
+                ).all()
+            ]
+            if ids_com:
+                db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id.in_(ids_com)).delete(synchronize_session=False)
+                db.query(Asiento).filter(Asiento.id.in_(ids_com)).delete(synchronize_session=False)
+
         db.commit()
     except Exception as ex:
         db.rollback()

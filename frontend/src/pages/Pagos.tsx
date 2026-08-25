@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/auth'
 import { confirmDialog } from '@/store/confirm'
 import { useLockStore } from '@/store/lock'
 import { localIsoDate } from '@/utils/fecha'
+import { parseMonto } from '@/utils/monto'
 
 // Evita que el share sheet nativo dispare el bloqueo PIN (el share sheet
 // hace perder foco; puede tardar hasta ~15s si el usuario tarda en elegir la app).
@@ -24,26 +25,6 @@ interface EgresoResultado { id: number }
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 
-// Parse monto from OCR: handles number OR string (incl. Argentine "15.000,00" / US "15,000.00")
-const parseMonto = (raw: unknown): number | null => {
-  if (raw == null) return null
-  if (typeof raw === 'number') return isNaN(raw) ? null : raw
-  // quitar símbolo $ y espacios, luego analizar formato
-  const s = String(raw).trim().replace(/[$\s]/g, '')
-  if (!s) return null
-  // formato argentino: 1.200.000,50 o 15.000,50
-  if (/^\d{1,3}(\.\d{3})+(,\d{0,2})?$/.test(s))
-    return parseFloat(s.replace(/\./g, '').replace(',', '.'))
-  // formato con coma de miles: 1,200,000.50
-  if (/^\d{1,3}(,\d{3})+(\.\d{0,2})?$/.test(s))
-    return parseFloat(s.replace(/,/g, ''))
-  // número con coma decimal: 15000,50
-  if (/^\d+(,\d{1,2})$/.test(s))
-    return parseFloat(s.replace(',', '.'))
-  // número plano con o sin punto decimal
-  const n = parseFloat(s.replace(',', '.'))
-  return isNaN(n) ? null : n
-}
 
 interface Cliente { id: number; nombre: string }
 interface Categoria { id: number; nombre: string }
@@ -334,7 +315,7 @@ export const Pagos: React.FC = () => {
         setVista('nuevo')
         setStep('datos')
       } catch {}
-      ;['destino', 'archivos', 'titulo', 'texto', 'ts'].forEach(k =>
+      ['destino', 'archivos', 'titulo', 'texto', 'ts'].forEach(k =>
         sessionStorage.removeItem(`compartido:${k}`))
     }
     const sp = new URLSearchParams(searchParams)

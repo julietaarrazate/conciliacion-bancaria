@@ -1,12 +1,15 @@
+import hashlib
 import logging
+import json
+from datetime import datetime as _dt_now
 from decimal import Decimal
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query, Request
 from sqlalchemy import func, cast, String, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-import tempfile
 import os
 
 logger = logging.getLogger(__name__)
@@ -19,8 +22,8 @@ from app.models.user import User
 from app.models.organizacion import Organizacion
 from fastapi.responses import StreamingResponse
 from app.schemas.planilla import PlanillaResponse, PlanillaDetalleResponse, ConciliacionResultado
-from app.services.excel_parser import parsear_planilla_cliente
-from app.services.conciliacion import conciliar_planilla
+from app.services.planilla_mapper import estandarizar_planilla
+from app.services.conciliacion import conciliar_planilla, diagnostico_conciliacion, montos_iguales
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_planilla_conciliada
 from app.services.tz import hoy_art
@@ -39,6 +42,39 @@ def _get_org_config(db: Session, organizacion_id: int) -> dict:
     return CONFIG_DEFAULT_ORG
 
 
+def _resolver_extracto_planilla(db: Session, planilla: Planilla) -> ExtractoBancario:
+    """Devuelve el extracto vinculado a la planilla. Si no tiene uno (fue
+    borrado o nunca se asignó), re-vincula al más reciente de la org."""
+    extracto = None
+    if planilla.extracto_id:
+        extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == planilla.extracto_id).first()
+    if not extracto:
+        extracto = (
+            db.query(ExtractoBancario)
+            .filter(ExtractoBancario.organizacion_id == (planilla.organizacion_id or 1))
+            .order_by(ExtractoBancario.fecha_creacion.desc())
+            .first()
+        )
+        if not extracto:
+            raise HTTPException(status_code=400, detail="No hay extractos cargados para esta organización. Cargá un extracto primero.")
+        planilla.extracto_id = extracto.id
+        db.flush()
+    return extracto
+
+
+def _motivo(e: Exception, limite: int = 240) -> str:
+    """Motivo corto y seguro de una excepción, para mostrar en pantalla.
+
+    Estos endpoints son de staff autenticado (superadmin/admin) y hoy devuelven
+    un mensaje genérico que esconde la causa real — imposible de diagnosticar sin
+    los logs de Render. Incluir el tipo + mensaje (truncado) hace que el error se
+    vea en la UI y sea accionable. No expone secretos (son errores de parseo/DB)."""
+    detalle = str(e).strip().replace("\n", " ")
+    if len(detalle) > limite:
+        detalle = detalle[:limite] + "…"
+    return f"{type(e).__name__}: {detalle}" if detalle else type(e).__name__
+
+
 def _planilla_for_user(db: Session, planilla_id: int, current_user: User,
                        include_deleted: bool = False) -> Planilla:
     """Resuelve una planilla con aislamiento multi-tenant.
@@ -54,6 +90,92 @@ def _planilla_for_user(db: Session, planilla_id: int, current_user: User,
     return p
 
 
+def _cliente_para_org(db: Session, cliente_id: int, org_id: int,
+                      current_user: User) -> Cliente:
+    """Resuelve un cliente con aislamiento multi-tenant. 404 si no existe o es de
+    otra org (salvo superadmin)."""
+    q = db.query(Cliente).filter(Cliente.id == cliente_id)
+    if not current_user.is_superadmin:
+        q = q.filter(Cliente.organizacion_id == org_id)
+    cli = q.first()
+    if not cli:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    return cli
+
+
+@router.post("/preview")
+@limiter.limit("30/minute")
+async def preview_planilla(
+    request: Request,
+    cliente_id: Optional[int] = Query(None, description="Cliente para reusar su perfil aprendido"),
+    cliente_nombre: Optional[str] = Query(None, description="Alternativa a cliente_id: resuelve el cliente por nombre en la org"),
+    org_id: Optional[int] = Query(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_permission("upload_files")),
+):
+    """Estandariza una planilla y devuelve el ResultadoMapeo SIN persistir nada.
+    Usa el perfil aprendido del cliente si el fingerprint coincide."""
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext not in ('.xlsx', '.xls', '.csv'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formatos aceptados: .xlsx, .xls, .csv"
+        )
+
+    org_id = org_id if (org_id and can_switch_org(current_user, org_id)) else (current_user.organizacion_id or 1)
+
+    mapeo_perfil = None
+    if cliente_id:
+        cliente = _cliente_para_org(db, cliente_id, org_id, current_user)
+        mapeo_perfil = cliente.mapeo_planilla
+    elif cliente_nombre:
+        # El Dashboard identifica al cliente por nombre; resolvemos su perfil (mismo
+        # org). Si no existe todavía, no pasa nada → cae a heurística.
+        cli = db.query(Cliente).filter(
+            Cliente.nombre.ilike(cliente_nombre.strip()),
+            Cliente.organizacion_id == org_id,
+        ).first()
+        mapeo_perfil = cli.mapeo_planilla if cli else None
+
+    contents = await file.read()
+    try:
+        resultado = estandarizar_planilla(contents, mapeo=mapeo_perfil)
+    except Exception as e:
+        logger.exception("preview error")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se pudo leer la planilla ({_motivo(e)})."
+        )
+
+    return {
+        "origen": resultado["origen"],
+        "confianza": resultado["confianza"],
+        "header_row": resultado["header_row"],
+        "columnas": resultado["columnas"],
+        "columnas_disponibles": resultado["columnas_disponibles"],
+        "preview": resultado["preview"],
+        "fingerprint": resultado["fingerprint"],
+        "filas_totales": resultado["filas_totales"],
+        "filas_descartadas": resultado["filas_descartadas"],
+        "total_movimientos": resultado["total_movimientos"],
+        "total_declarado": resultado["total_declarado"],
+        "total_cuadra": resultado["total_cuadra"],
+        "filas_resumen": resultado["filas_resumen"],
+        "deteccion": {
+            "origen": resultado["origen"],
+            "confianza": resultado["confianza"],
+            "filas_totales": resultado["filas_totales"],
+            "filas_descartadas": resultado["filas_descartadas"],
+            "total_movimientos": resultado["total_movimientos"],
+            "total_declarado": resultado["total_declarado"],
+            "total_cuadra": resultado["total_cuadra"],
+            "filas_resumen": resultado["filas_resumen"],
+        },
+    }
+
+
 @router.post("/upload", response_model=PlanillaResponse)
 @limiter.limit("20/minute")
 async def upload_planilla(
@@ -62,6 +184,7 @@ async def upload_planilla(
     extracto_id: int = Query(..., description="ID del extracto a usar"),
     org_id: Optional[int] = Query(None),
     file: UploadFile = File(...),
+    mapeo: Optional[str] = Form(None, description="JSON con {header_row, columnas} — corrección manual del usuario"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permission("upload_files"))
@@ -103,12 +226,47 @@ async def upload_planilla(
         cliente_nombre = cliente.nombre
 
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            contents = await file.read()
-            tmp.write(contents)
-            tmp_path = tmp.name
+        contents = await file.read()
 
-        parsed = parsear_planilla_cliente(tmp_path)
+        # Bloquea re-subir la MISMA planilla (mismo contenido de archivo) para el
+        # mismo cliente mientras la anterior siga activa (no borrada). Evita el
+        # duplicado clásico: el contador reenvía el archivo (para corregir algo
+        # que se hace en el paso de conciliar, como el % de comisión) y termina
+        # con dos planillas idénticas conciliadas contra el mismo extracto.
+        fingerprint = hashlib.sha1(contents).hexdigest()
+        existente = db.query(Planilla).filter(
+            Planilla.cliente_id == cliente.id,
+            Planilla.organizacion_id == org_id,
+            Planilla.fingerprint == fingerprint,
+            Planilla.deleted_at.is_(None),
+        ).first()
+        if existente:
+            fecha_s = existente.fecha_carga.strftime('%d/%m %H:%M') if existente.fecha_carga else '?'
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Esta planilla ya fue cargada para {cliente_nombre} el {fecha_s} "
+                    f"(planilla #{existente.id}, archivo \"{existente.nombre_archivo}\"). "
+                    "Si necesitás cambiar el % de comisión, no hace falta volver a subir el "
+                    "archivo: buscá la planilla en Conciliaciones/Historial y re-conciliala con "
+                    "el % correcto. Si de verdad es una carga distinta, borrá primero la anterior."
+                )
+            )
+
+        # Elegir el mapeo: 1) corrección manual del usuario (form `mapeo`);
+        # 2) perfil aprendido del cliente. Sin ninguno → pipeline heurística/IA.
+        mapeo_manual = None
+        if mapeo:
+            try:
+                mapeo_manual = json.loads(mapeo)
+            except (ValueError, TypeError):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="El campo 'mapeo' no es un JSON válido."
+                )
+        mapeo_arg = mapeo_manual if mapeo_manual is not None else cliente.mapeo_planilla
+
+        resultado = estandarizar_planilla(contents, mapeo=mapeo_arg)
 
         planilla = Planilla(
             cliente_id=cliente.id,
@@ -117,21 +275,43 @@ async def upload_planilla(
             nombre_archivo=file.filename,
             organizacion_id=org_id,
             porcentaje_comision=None,
+            total_declarado=resultado.get("total_declarado"),
+            fingerprint=fingerprint,
         )
         db.add(planilla)
-        db.flush()
+        try:
+            db.flush()
+        except IntegrityError:
+            # Carrera: dos requests concurrentes con el mismo archivo pasaron el
+            # chequeo de arriba a la vez. El índice único parcial (migración 026)
+            # es la garantía real; esto solo da un mensaje claro en vez de un 500.
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Esta planilla ya fue cargada para {cliente_nombre}."
+            )
 
-        for fila_data in parsed["filas"]:
+        for fila_data in resultado["filas"]:
             fila = PlanillaRow(
                 planilla_id=planilla.id,
                 monto=fila_data.get("monto"),
                 cuit=fila_data.get("cuit"),
                 titular=fila_data.get("titular"),
                 referencia=fila_data.get("referencia"),
+                fecha=fila_data.get("fecha"),  # fecha de pago declarada (para diagnóstico de período)
                 status="pendiente",
                 organizacion_id=org_id
             )
             db.add(fila)
+
+        # Aprender el perfil cuando el usuario corrigió el mapeo manualmente.
+        if mapeo_manual is not None:
+            cliente.mapeo_planilla = {
+                "fingerprint": resultado["fingerprint"],
+                "header_row": resultado["header_row"],
+                "columnas": resultado["columnas"],
+                "actualizado": _dt_now.utcnow().isoformat(),
+            }
 
         db.commit()
         db.refresh(planilla)
@@ -145,23 +325,34 @@ async def upload_planilla(
             cambios={
                 "cliente": cliente_nombre,
                 "extracto_id": extracto_id,
-                "filas": len(parsed["filas"]),
-                "organizacion_id": org_id
+                "filas": len(resultado["filas"]),
+                "organizacion_id": org_id,
+                "origen_deteccion": resultado["origen"],
             }
         )
 
+        planilla.deteccion = {
+            "origen": resultado["origen"],
+            "confianza": resultado["confianza"],
+            "filas_totales": resultado["filas_totales"],
+            "filas_descartadas": resultado["filas_descartadas"],
+            "total_movimientos": resultado["total_movimientos"],
+            "total_declarado": resultado["total_declarado"],
+            "total_cuadra": resultado["total_cuadra"],
+            "filas_resumen": resultado["filas_resumen"],
+        }
         return planilla
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
-        logger.error("upload error: %s", e)
+        logger.exception("upload error")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Error al procesar la planilla. Verificá el formato del archivo."
+            detail=f"Error al procesar la planilla ({_motivo(e)})."
         )
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
 
 
 @router.post("/{planilla_id}/conciliar", response_model=ConciliacionResultado)
@@ -177,39 +368,19 @@ def conciliar(
     _ = Depends(require_permission("reconcile"))
 ):
     planilla = _planilla_for_user(db, planilla_id, current_user)
-
-    # Si la planilla no tiene extracto (fue borrado), usar el más reciente de la org
-    if not planilla.extracto_id:
-        extracto = (
-            db.query(ExtractoBancario)
-            .filter(ExtractoBancario.organizacion_id == (planilla.organizacion_id or 1))
-            .order_by(ExtractoBancario.fecha_creacion.desc())
-            .first()
-        )
-        if not extracto:
-            raise HTTPException(status_code=400, detail="No hay extractos cargados para esta organización. Cargá un extracto primero.")
-        # Re-vincular la planilla al extracto activo
-        planilla.extracto_id = extracto.id
-        db.flush()
-    else:
-        extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == planilla.extracto_id).first()
-        if not extracto:
-            # extracto_id apunta a algo borrado → buscar el más reciente
-            extracto = (
-                db.query(ExtractoBancario)
-                .filter(ExtractoBancario.organizacion_id == (planilla.organizacion_id or 1))
-                .order_by(ExtractoBancario.fecha_creacion.desc())
-                .first()
-            )
-            if not extracto:
-                raise HTTPException(status_code=400, detail="El extracto ya no existe y no hay otros cargados.")
-            planilla.extracto_id = extracto.id
-            db.flush()
-
+    extracto = _resolver_extracto_planilla(db, planilla)
     movimientos = extracto.movimientos
 
     org_id = planilla.organizacion_id or 1
     org_config = _get_org_config(db, org_id)
+
+    # % efectivo: el param explícito de este request, o si no vino (re-conciliar
+    # sin re-tipear el %), el que ya tenía guardado la planilla. NO se hereda el
+    # % del cliente (cada planilla tiene el suyo — ver BUSINESS_RULES.md §4.1).
+    comision_pct_efectivo = (
+        Decimal(str(comision_pct)) if comision_pct > 0
+        else (planilla.porcentaje_comision or Decimal("0"))
+    )
 
     try:
         resultado = conciliar_planilla(
@@ -222,6 +393,7 @@ def conciliar(
             org_id=org_id,
             solo_pendientes=solo_pendientes,
             cliente_id=planilla.cliente_id,
+            comision_pct=comision_pct_efectivo,
         )
 
         # Save commission %: explicit param only (no fallback to client default)
@@ -238,22 +410,172 @@ def conciliar(
             cambios=resultado
         )
 
-        # La planilla NO genera asiento propio: la reclasificación ya la maneja
-        # um_reclass (No identificado D / Cliente X H con cuentas hoja correctas).
-        # registrar_planilla() usaba cuentas madre y duplicaba con um_reclass.
+        # La planilla no genera un asiento propio: la reclasificación por
+        # cliente la maneja registrar_reclasificacion_planilla — un asiento por
+        # origen del movimiento (Pasivo Corriente para el extracto principal,
+        # No identificado para Últimos Movimientos), acreditando al cliente por
+        # el NETO y separando la comisión como ingreso (ver BUSINESS_RULES.md §4.1).
+
+        # Diagnóstico read-only (aditivo): calculado DESPUÉS de conciliar para
+        # explicar en la UI por qué pueden quedar filas sin conciliar. No altera
+        # el flujo de conciliación ni los status.
+        diagnostico = diagnostico_conciliacion(planilla.rows, movimientos)
 
         return {
             "planilla_id": planilla_id,
-            **resultado
+            **resultado,
+            "diagnostico": diagnostico,
         }
 
     except Exception as e:
         db.rollback()
-        logger.error("conciliar error: %s", e)
+        logger.exception("conciliar error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error en la conciliación. Revisá los datos e intentá de nuevo."
+            detail=f"Error en la conciliación ({_motivo(e)}). Revisá los datos e intentá de nuevo."
         )
+
+
+# ── Resolución manual de filas ambiguas (monto duplicado, sin datos, etc.) ────
+# Distinto de "acreditar a cliente" desde Movimientos (clientes_dir.py): esto
+# resuelve una fila que YA existe en la planilla, en su lugar — no crea una
+# fila nueva. Pensado para cuando el scoring automático no pudo desempatar
+# entre 2+ movimientos del mismo monto y hace falta elegir a mano cuál es.
+
+@router.get("/rows/{row_id}/candidatos-movimiento")
+def candidatos_movimiento(
+    row_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lista los movimientos del extracto con el mismo monto que la fila,
+    para elegir manualmente cuál le corresponde."""
+    row = db.query(PlanillaRow).filter(PlanillaRow.id == row_id).first()
+    if not row:
+        raise HTTPException(404, "Fila no encontrada")
+    planilla = _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
+    extracto = _resolver_extracto_planilla(db, planilla)
+
+    tolerancia = _get_org_config(db, planilla.organizacion_id or 1).get("tolerancia_monto", 0.01)
+    candidatos = [
+        m for m in extracto.movimientos
+        if montos_iguales(m.monto, row.monto, tolerancia)
+    ]
+    candidatos.sort(key=lambda m: m.fecha or _dt_now.min.date())
+
+    return {
+        "row_id": row_id,
+        "monto": row.monto,
+        "candidatos": [
+            {
+                "id": m.id,
+                "fecha": m.fecha.isoformat() if m.fecha else None,
+                "titular": m.titular,
+                "cliente_acreditado": m.cliente_acreditado,
+                "es_libre": not m.cliente_acreditado or m.cliente_acreditado.strip().lower() in ("no identificado", ""),
+                "es_este_cliente": (m.cliente_acreditado or "").strip().lower() == (planilla.cliente.nombre or "").strip().lower(),
+            }
+            for m in candidatos
+        ],
+    }
+
+
+@router.post("/rows/{row_id}/asignar-movimiento")
+def asignar_movimiento(
+    row_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_permission("reconcile")),
+):
+    """
+    Resuelve UNA fila (típicamente "no coincide"/"ambiguo"/"sin datos") con el
+    movimiento elegido a mano. Sincroniza extracto + fila + dispara la misma
+    contabilidad que "Re-conciliar" (registrar_reclasificacion_planilla), sin
+    tocar ni re-matchear el resto de las filas de la planilla.
+    Body: {"movimiento_id": int}
+    """
+    from app.models.extracto import MovimientoBanco
+    from app.services.cierre_periodo import periodo_esta_cerrado
+
+    movimiento_id = payload.get("movimiento_id")
+    if not movimiento_id:
+        raise HTTPException(400, "Falta movimiento_id")
+
+    row = db.query(PlanillaRow).filter(PlanillaRow.id == row_id).first()
+    if not row:
+        raise HTTPException(404, "Fila no encontrada")
+    planilla = _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
+    org_id = planilla.organizacion_id or 1
+
+    fecha_check = row.fecha_acred or (planilla.fecha_carga.date() if planilla.fecha_carga else None)
+    if periodo_esta_cerrado(db, org_id, fecha_check):
+        raise HTTPException(409, "El periodo ya está cerrado — esta fila no se puede modificar")
+
+    mov = db.query(MovimientoBanco).filter(
+        MovimientoBanco.id == movimiento_id,
+        MovimientoBanco.organizacion_id == org_id,
+    ).first()
+    if not mov:
+        raise HTTPException(404, "Movimiento no encontrado")
+
+    tolerancia = _get_org_config(db, org_id).get("tolerancia_monto", 0.01)
+    if not montos_iguales(mov.monto, row.monto, tolerancia):
+        raise HTTPException(400, "El monto del movimiento no coincide con el de la fila")
+
+    cliente_nombre = planilla.cliente.nombre
+    ya_libre = not mov.cliente_acreditado or mov.cliente_acreditado.strip().lower() in ("no identificado", "")
+    es_este_cliente = (mov.cliente_acreditado or "").strip().lower() == cliente_nombre.strip().lower()
+    if not ya_libre and not es_este_cliente:
+        raise HTTPException(409, f"Este movimiento ya está acreditado a {mov.cliente_acreditado}")
+
+    # Si la fila tenía otro movimiento asignado antes, liberarlo (solo si
+    # seguía acreditado a este mismo cliente — no pisar datos de terceros).
+    if row.orden_movimiento_acreditado and row.orden_movimiento_acreditado != mov.id:
+        mov_anterior = db.query(MovimientoBanco).filter(MovimientoBanco.id == row.orden_movimiento_acreditado).first()
+        if mov_anterior and (mov_anterior.cliente_acreditado or "").strip().lower() == cliente_nombre.strip().lower():
+            mov_anterior.cliente_acreditado = None
+            mov_anterior.fecha_acred = None
+
+    fecha_acred = mov.fecha_acred or mov.fecha or hoy_art()
+    mov.cliente_acreditado = cliente_nombre
+    mov.fecha_acred = fecha_acred
+    row.status = "ok"
+    row.orden_movimiento_acreditado = mov.id
+    row.fecha_acred = fecha_acred
+    db.commit()
+
+    registrar_log(
+        db=db,
+        usuario_id=current_user.id,
+        tabla="planilla_rows",
+        registro_id=row.id,
+        accion="ASIGNAR_MOVIMIENTO_MANUAL",
+        cambios={"movimiento_id": mov.id, "cliente": cliente_nombre},
+    )
+
+    # Recalcular la contabilidad de la planilla (mismo criterio que
+    # "Re-conciliar"): solo_pendientes=True no toca ni re-matchea las demás
+    # filas, pero recalcula el asiento de reclasificación con el total real.
+    try:
+        extracto = _resolver_extracto_planilla(db, planilla)
+        org_config = _get_org_config(db, org_id)
+        conciliar_planilla(
+            db=db,
+            planilla_rows=planilla.rows,
+            movimientos=extracto.movimientos,
+            cliente_nombre=cliente_nombre,
+            fecha_acred_str="hoy",
+            org_config=org_config,
+            org_id=org_id,
+            solo_pendientes=True,
+            cliente_id=planilla.cliente_id,
+            comision_pct=planilla.porcentaje_comision or Decimal("0"),
+        )
+    except Exception as ex:
+        logger.warning("asignar_movimiento: error al recalcular contabilidad (%s): %s", row_id, ex)
+
+    return {"ok": True, "row_id": row_id, "movimiento_id": mov.id, "status": row.status}
 
 
 # ── Cola de revisión manual ───────────────────────────────────────────────────
@@ -501,18 +823,14 @@ def delete_row(
 
 # ── Endpoints existentes ──────────────────────────────────────────────────────
 
-@router.get("/{planilla_id}/download")
-def download_planilla_conciliada(
-    planilla_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Descarga xlsx con Hoja1=planilla+estado y Hoja2=movimientos acreditados"""
-    import io
-    from datetime import datetime
-    from app.models.extracto import MovimientoBanco
+def _build_planilla_export_data(db: Session, p: Planilla) -> tuple[dict, list, object]:
+    """Arma la data de export (Excel y PDF comparten exactamente el mismo contenido).
 
-    p = _planilla_for_user(db, planilla_id, current_user, include_deleted=True)
+    Devuelve (planilla_data, movimientos_acreditados, fecha_ref) donde fecha_ref
+    es la fecha de acreditación más reciente (o hoy si no hay ninguna), usada
+    para el nombre de archivo.
+    """
+    from app.models.extracto import MovimientoBanco
 
     mov_ids = [r.orden_movimiento_acreditado for r in p.rows if r.orden_movimiento_acreditado]
     movs_map = {}
@@ -569,20 +887,62 @@ def download_planilla_conciliada(
         "cliente_nombre": p.cliente.nombre,
         "nombre_archivo": p.nombre_archivo,
         "rows": rows_data,
+        "total_declarado": p.total_declarado,
     }
+
+    fechas_acred = [mov.fecha_acred for mov in movs_map.values() if mov.fecha_acred]
+    fecha_ref = max(fechas_acred) if fechas_acred else hoy_art()
+
+    return planilla_data, movimientos_acreditados, fecha_ref
+
+
+@router.get("/{planilla_id}/download")
+def download_planilla_conciliada(
+    planilla_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Descarga xlsx con Hoja1=planilla+estado y Hoja2=movimientos acreditados"""
+    import io
+
+    p = _planilla_for_user(db, planilla_id, current_user, include_deleted=True)
+    planilla_data, movimientos_acreditados, fecha_ref = _build_planilla_export_data(db, p)
 
     xlsx = export_planilla_conciliada(planilla_data, movimientos_acreditados)
 
     # Nombre: "{cliente} acreditado {d.m}.xlsx" — ej "alojando acreditado 8.5.xlsx"
     # Fecha = la mas reciente de las acreditaciones; si no hay, fecha de hoy
-    fechas_acred = [mov.fecha_acred for mov in movs_map.values() if mov.fecha_acred]
-    fecha_ref = max(fechas_acred) if fechas_acred else hoy_art()
     fecha_str = f"{fecha_ref.day}.{fecha_ref.month}"
     cliente_slug = (p.cliente.nombre or "cliente").strip().lower()
     fname = f"{cliente_slug} acreditado {fecha_str}.xlsx"
     return StreamingResponse(
         io.BytesIO(xlsx),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'}
+    )
+
+
+@router.get("/{planilla_id}/export-pdf")
+def export_planilla_conciliada_pdf_endpoint(
+    planilla_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Descarga PDF con la misma data que el Excel de /download: título, detalle
+    de filas y bloque de totales/cuadre (incluyendo total declarado si existe)."""
+    import io
+    from app.services.pdf_export import export_planilla_conciliada_pdf
+
+    p = _planilla_for_user(db, planilla_id, current_user, include_deleted=True)
+    planilla_data, _movimientos_acreditados, fecha_ref = _build_planilla_export_data(db, p)
+
+    pdf = export_planilla_conciliada_pdf(planilla_data, generado_por=current_user.full_name or current_user.email)
+
+    cliente_slug = (p.cliente.nombre or "cliente").strip().lower().replace(" ", "_")
+    fname = f"planilla_{cliente_slug}_{fecha_ref.strftime('%Y-%m-%d')}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'}
     )
 

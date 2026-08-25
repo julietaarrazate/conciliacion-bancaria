@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FileUpload } from '@/components/FileUpload'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
+import { ColumnMapperModal } from '@/components/ColumnMapperModal'
+import { DiagnosticoPanel } from '@/components/DiagnosticoPanel'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { confirmDialog } from '@/store/confirm'
@@ -9,8 +11,11 @@ import { useAuthStore } from '@/store/auth'
 import { useThemeStore } from '@/store/theme'
 import {
   ConciliacionResultado,
+  DeteccionInfo,
   ExtractoListItem,
-  PlanillaHistorialItem
+  PlanillaHistorialItem,
+  ResultadoMapeoPlanilla,
+  MapeoColumnas
 } from '@/types'
 import { localIsoDate } from '@/utils/fecha'
 
@@ -21,12 +26,16 @@ const ALERTA_META: Record<string, { icon: string; color: string; bg: string; bor
   cheques_vencidos:        { icon: '🔴', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' },
   filas_atrasadas:         { icon: '📋', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
   movimientos_sin_asignar: { icon: '🔍', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
+  planillas_descuadre:     { icon: '⚖️', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
+  filas_ambiguas:          { icon: '🤔', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
 }
 const ALERTA_META_DARK: Record<string, { color: string; bg: string; border: string }> = {
   cheques_urgentes:        { color: '#F87171', bg: 'rgba(239,68,68,.1)',  border: 'rgba(239,68,68,.25)' },
   cheques_vencidos:        { color: '#F87171', bg: 'rgba(239,68,68,.1)',  border: 'rgba(239,68,68,.25)' },
   filas_atrasadas:         { color: '#FCD34D', bg: 'rgba(245,158,11,.1)', border: 'rgba(245,158,11,.25)' },
   movimientos_sin_asignar: { color: '#60A5FA', bg: 'rgba(37,99,235,.1)',  border: 'rgba(37,99,235,.25)' },
+  planillas_descuadre:     { color: '#FCD34D', bg: 'rgba(245,158,11,.1)', border: 'rgba(245,158,11,.25)' },
+  filas_ambiguas:          { color: '#60A5FA', bg: 'rgba(37,99,235,.1)',  border: 'rgba(37,99,235,.25)' },
 }
 const AlertasWidget: React.FC<{ orgId: number | null; isDark: boolean }> = ({ orgId, isDark }) => {
   const navigate = useNavigate()
@@ -218,10 +227,16 @@ export const Dashboard: React.FC = () => {
   const [extractoId, setExtractoId] = useState<number | null>(null)
   const [_extractoNombre, setExtractoNombre] = useState<string>('')
   const [clienteNombre, setClienteNombre] = useState('')
-  const [_loading, setLoading] = useState(false)
+  // `accionCarga` indica qué carga está en curso, para que el spinner se muestre
+  // SOLO en el botón que corresponde (antes los 3 FileUpload compartían un único
+  // `loading` y se prendían todos a la vez). El setter global se mantiene para el
+  // estado de "ocupado" de otros flujos; su valor no se lee directamente.
+  const [, setLoading] = useState(false)
+  const [accionCarga, setAccionCarga] = useState<null | 'extracto' | 'um' | 'planilla'>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [resultado, setResultado] = useState<ConciliacionResultado | null>(null)
+  const [deteccionCuadre, setDeteccionCuadre] = useState<DeteccionInfo | null>(null)
   const [panelId, setPanelId] = useState<number | null>(null)
   const [fechaAcred, setFechaAcred] = useState<string>(localIsoDate())
   const [banco, setBanco] = useState('Banco Macro')
@@ -243,6 +258,10 @@ export const Dashboard: React.FC = () => {
   const [umCorteDetectado, setUmCorteDetectado] = useState<number | null>(null)
   const [umCorteManual, setUmCorteManual] = useState<string>('')
   const [umFile, setUmFile] = useState<File | null>(null)
+
+  // ── Preview / mapeo de columnas de la planilla individual ────
+  const [mapeoPendiente, setMapeoPendiente] = useState<ResultadoMapeoPlanilla | null>(null)
+  const [archivoPendiente, setArchivoPendiente] = useState<File | null>(null)
 
   // ── Carga masiva ──────────────────────────────────────────────
   interface BulkItem {
@@ -366,6 +385,7 @@ export const Dashboard: React.FC = () => {
 
   const handleUploadExtraco = async (file: File) => {
     setLoading(true)
+    setAccionCarga('extracto')
     setError('')
     setSuccess('')
     try {
@@ -388,6 +408,7 @@ export const Dashboard: React.FC = () => {
       }
     } finally {
       setLoading(false)
+      setAccionCarga(null)
     }
   }
 
@@ -397,6 +418,7 @@ export const Dashboard: React.FC = () => {
       return
     }
     setLoading(true)
+    setAccionCarga('um')
     setError('')
     setSuccess('')
     try {
@@ -414,6 +436,7 @@ export const Dashboard: React.FC = () => {
       setError(err.response?.data?.detail || 'Error al cargar UM')
     } finally {
       setLoading(false)
+      setAccionCarga(null)
     }
   }
 
@@ -425,32 +448,97 @@ export const Dashboard: React.FC = () => {
     setUmCorteManual('')
   }
 
-  const handleUploadPlanilla = async (file: File) => {
+  const handleUploadPlanilla = async (file: File, mapeo?: MapeoColumnas & { header_row: number }) => {
     if (!extractoId || !clienteNombre.trim()) {
       setError('Cargá primero un extracto e ingresá el cliente')
       return
     }
     setLoading(true)
+    setAccionCarga('planilla')
     setError('')
     setSuccess('')
     setResultado(null)
+    setDeteccionCuadre(null)
+    let planillaSubida: number | null = null
     try {
       const planilla = await apiClient.uploadPlanilla(
         clienteNombre,
         extractoId,
         file,
-        activeOrgId
+        activeOrgId,
+        mapeo
       )
+      planillaSubida = planilla.id
+      setDeteccionCuadre(planilla.deteccion ?? null)
       const r = await apiClient.conciliarPlanilla(planilla.id, fechaAcred, false, parseFloat(comisionPct) || 0)
       setResultado(r)
       setSuccess(`Conciliación completa: ${r.acreditadas}/${r.filas_procesadas} acreditadas`)
       apiClient.invalidateCache('/analisis')
       apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then((d) => setPlanillas(d.items))
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error en la conciliación')
+      // Si la planilla YA se subió y falló recién el conciliar, el servidor pudo
+      // haber terminado igual (el corte suele ser un timeout de red del navegador
+      // en el arranque en frío, no un fallo real). No dejar a la operadora a ciegas:
+      // refrescar el historial y avisar que quedó cargada, en vez de un "error" seco
+      // que la lleva a re-subir y chocar con el bloqueo de duplicados.
+      const detalle = err.response?.data?.detail
+      if (planillaSubida && !err.response) {
+        setError(
+          `La planilla se subió (#${planillaSubida}) pero la conciliación tardó más de lo esperado ` +
+          `(posible arranque en frío del servidor). Revisá el resultado en Conciliaciones/Historial: ` +
+          `es muy probable que haya quedado conciliada. No la vuelvas a subir.`
+        )
+        apiClient.invalidateCache('/analisis')
+        apiClient.getHistorialPlanillas({ limit: 5, org_id: activeOrgId }).then((d) => setPlanillas(d.items))
+      } else {
+        setError(detalle || 'Error en la conciliación')
+      }
     } finally {
       setLoading(false)
+      setAccionCarga(null)
     }
+  }
+
+  // Al elegir el archivo: previsualiza el mapeo de columnas. Si el perfil del cliente
+  // ya lo conoce o la confianza es alta, sube directo sin fricción; si no, pide confirmación
+  // visual (ColumnMapperModal). Si el preview falla, degrada al upload directo de siempre.
+  const handleFileSelected = async (file: File) => {
+    if (!extractoId || !clienteNombre.trim()) {
+      setError('Cargá primero un extracto e ingresá el cliente')
+      return
+    }
+    setError('')
+    setSuccess('')
+    setLoading(true)
+    setAccionCarga('planilla')
+    try {
+      const resultado = await apiClient.previewPlanilla(file, undefined, activeOrgId, clienteNombre.trim())
+      if (resultado.origen === 'perfil' || resultado.confianza >= 0.8) {
+        await handleUploadPlanilla(file, { ...resultado.columnas, header_row: resultado.header_row })
+      } else {
+        setLoading(false)
+        setAccionCarga(null)
+        setArchivoPendiente(file)
+        setMapeoPendiente(resultado)
+      }
+    } catch {
+      // No se pudo previsualizar (endpoint no disponible, archivo raro, etc.):
+      // no bloquea la carga, sube sin mapeo — handleUploadPlanilla maneja loading.
+      await handleUploadPlanilla(file)
+    }
+  }
+
+  const handleConfirmarMapeo = async (mapeo: MapeoColumnas & { header_row: number }) => {
+    const file = archivoPendiente
+    setMapeoPendiente(null)
+    setArchivoPendiente(null)
+    if (!file) return
+    await handleUploadPlanilla(file, mapeo)
+  }
+
+  const handleCancelarMapeo = () => {
+    setMapeoPendiente(null)
+    setArchivoPendiente(null)
   }
 
   // Stats — usa solo el extracto activo para movimientos (no sumar duplicados)
@@ -655,6 +743,8 @@ export const Dashboard: React.FC = () => {
           <FileUpload
             onFileSelected={handleUploadExtraco}
             label="Subir extracto (.xlsx, .xls, .csv)"
+            loading={accionCarga === 'extracto'}
+            loadingLabel="Subiendo extracto..."
           />
 
           {extractoId && (
@@ -682,11 +772,11 @@ export const Dashboard: React.FC = () => {
               </button>
               <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
                 <p className="text-xs text-ml-text-soft dark:text-gray-400 mb-2">
-                  ¿Tenés Últimos Movimientos del banco? Sumalos sin duplicar:
+                  ¿Tenés <abbr title="El Excel diario que manda el banco/contador con los movimientos nuevos" className="no-underline border-b border-dotted border-gray-400 cursor-help">Últimos Movimientos (UM)</abbr> del banco? Sumalos sin duplicar:
                 </p>
                 <div className="flex gap-2 items-center">
                   <div className="flex-1">
-                    <FileUpload onFileSelected={(f) => handleUploadUM(f)} label="+ Agregar UM" />
+                    <FileUpload onFileSelected={(f) => handleUploadUM(f)} label="+ Agregar UM" loading={accionCarga === 'um'} loadingLabel="Agregando UM..." />
                   </div>
                   <button
                     onClick={async () => {
@@ -721,9 +811,9 @@ export const Dashboard: React.FC = () => {
                       }
                     }}
                     className="text-xs px-2 py-1.5 text-red-500 border border-red-300 dark:border-red-800 rounded hover:bg-red-50 dark:hover:bg-red-900/20 whitespace-nowrap"
-                    title="Limpiar UM para re-subir desde cero"
+                    title="Borra los Últimos Movimientos agregados, para re-subirlos desde cero"
                   >
-                    🗑 UM
+                    🗑 Limpiar UM
                   </button>
                 </div>
                 {umCorteDetectado && (
@@ -804,8 +894,10 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <FileUpload
-            onFileSelected={handleUploadPlanilla}
+            onFileSelected={handleFileSelected}
             label={!extractoId ? 'Cargá primero un extracto (Paso 1)' : 'Subir planilla (.xlsx, .xls, .csv)'}
+            loading={accionCarga === 'planilla'}
+            loadingLabel="Subiendo y conciliando... no vuelvas a cargar el archivo"
           />
           {!clienteNombre.trim() && extractoId && (
             <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
@@ -839,6 +931,38 @@ export const Dashboard: React.FC = () => {
               <div className="pt-2 border-t border-gray-100 dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400 text-center">
                 Total: {resultado.filas_procesadas} filas procesadas
               </div>
+
+              <DiagnosticoPanel diagnostico={resultado.diagnostico} />
+
+              {deteccionCuadre?.total_movimientos != null && (
+                <div className="pt-2 border-t border-gray-100 dark:border-slate-700 space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-500 dark:text-gray-400">Total de la planilla</span>
+                    <span className="font-mono font-semibold text-ml-text dark:text-white">
+                      {fmtMonto(deteccionCuadre.total_movimientos)}
+                    </span>
+                  </div>
+                  {deteccionCuadre.total_declarado != null && (
+                    <div className="flex justify-between items-center text-xs gap-2">
+                      <span className="text-gray-500 dark:text-gray-400 shrink-0">Declarado por el cliente</span>
+                      <span className="flex items-center gap-1.5 flex-wrap justify-end">
+                        <span className="font-mono font-semibold text-ml-text dark:text-white">
+                          {fmtMonto(deteccionCuadre.total_declarado)}
+                        </span>
+                        {deteccionCuadre.total_cuadra === true && (
+                          <span className="badge badge-ok">✓ Cuadra</span>
+                        )}
+                        {deteccionCuadre.total_cuadra === false && (
+                          <span className="badge badge-warn">
+                            ⚠ Difiere en {fmtMonto(Math.abs(deteccionCuadre.total_declarado - deteccionCuadre.total_movimientos))}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={() => setPanelId(resultado.planilla_id)}
                 className="mt-3 w-full px-3 py-2 text-sm font-medium bg-ml-blue text-white rounded-md hover:bg-ml-blue-dark transition-colors flex items-center justify-center gap-2"
@@ -851,9 +975,12 @@ export const Dashboard: React.FC = () => {
               </p>
             </div>
           ) : (
-            <p className="text-sm text-ml-text-soft py-8 text-center">
-              Esperando carga de planilla...
-            </p>
+            <div className="text-sm text-ml-text-soft py-8 text-center space-y-1.5">
+              <p className="font-medium text-ml-text dark:text-gray-300">Todavía no hay resultado</p>
+              <p className="text-xs">1. Elegí el extracto del banco</p>
+              <p className="text-xs">2. Escribí el nombre del cliente</p>
+              <p className="text-xs">3. Subí su planilla — la conciliación sale sola</p>
+            </div>
           )}
         </div>
       </div>
@@ -1053,6 +1180,14 @@ export const Dashboard: React.FC = () => {
             </>
           )}
         </div>
+      )}
+
+      {mapeoPendiente && (
+        <ColumnMapperModal
+          resultado={mapeoPendiente}
+          onConfirm={handleConfirmarMapeo}
+          onCancel={handleCancelarMapeo}
+        />
       )}
     </div>
   )

@@ -15,14 +15,13 @@ from app.database import get_db
 from app.models.revoked_token import RevokedToken
 from app.models.user import User, RoleEnum
 from app.models.login_approval import LoginApproval
-from app.schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse
+from app.schemas.user import UserRegister, UserLogin, UserResponse
 from app.services.auth import register_user, authenticate_user, create_access_token
 from app.services.password_reset import (
     crear_token_y_enviar_email,
     validar_y_cambiar_password,
 )
 from app.services.auditoria import registrar_log
-from app.services.push_service import send_push_to_user
 from app.middleware.auth import require_superadmin
 from app.config import get_settings
 
@@ -74,10 +73,14 @@ def register(
 def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db)):
     """Autentica un usuario y retorna JWT token.
 
-    Para el rol `contador` no devuelve token directo: crea un pedido de
-    aprobación (202) que el superadmin debe aceptar en vivo. El cliente del
-    contador hace polling a /auth/login-approval/{id} hasta recibir el token
-    (sesión de 4h). Pasadas las 4h el token expira y se repite la aprobación.
+    Todos los roles reciben token directo (sujeto a 2FA por email para
+    admin/superadmin, ver abajo). El rol `contador` ya no requiere aprobación
+    en vivo del superadmin en cada login (se sacó ago 2026: era para
+    contadores de prueba en org de test, no para uso operativo real — el
+    superadmin sigue siendo el único que puede crear la cuenta del contador,
+    vía `/auth/register`). El mecanismo de LoginApproval queda en el código
+    (endpoints /login-approval/*, /pending-approvals) sin ningún caller activo
+    — no reintroducir el gate salvo pedido explícito.
     """
     user = authenticate_user(db, credentials.email, credentials.password)
     if not user:
@@ -123,40 +126,6 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
         except Exception as _2fa_ex:
             logger.error("2FA: error al crear código para %s — fallback a login directo: %s", user.email, _2fa_ex)
             db.rollback()
-
-    # Contador → flujo de aprobación en vivo
-    if user.role == RoleEnum.CONTADOR.value and not user.is_superadmin:
-        secret = secrets.token_urlsafe(32)
-        ap = LoginApproval(
-            user_id=user.id,
-            status="pending",
-            poll_secret_hash=hashlib.sha256(secret.encode()).hexdigest(),
-            ip=get_remote_address(request),
-            request_expires_at=datetime.utcnow() + timedelta(minutes=APPROVAL_REQUEST_TTL_MINUTES),
-        )
-        db.add(ap)
-        db.commit()
-        db.refresh(ap)
-        # Notificar a los superadmins (best-effort)
-        try:
-            for sa in db.query(User).filter(User.is_superadmin == True).all():  # noqa: E712
-                send_push_to_user(
-                    db, sa.id, "Solicitud de ingreso",
-                    f"{user.full_name} ({user.email}) quiere ingresar", "/aprobaciones",
-                )
-        except Exception:
-            logger.exception("No se pudo notificar la solicitud de ingreso")
-        try:
-            registrar_log(db, user.id, "auth", ap.id, "LOGIN_PENDING",
-                          {"email": user.email, "ip": ap.ip})
-        except Exception:
-            pass
-        return JSONResponse(status_code=202, content={
-            "pending_approval": True,
-            "approval_id": ap.id,
-            "poll_secret": secret,
-            "expires_at": ap.request_expires_at.isoformat(),
-        })
 
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(

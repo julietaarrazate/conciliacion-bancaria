@@ -81,5 +81,8 @@ El borrado de varias entidades (extractos, planillas, etc.) es **soft** (`delete
 
 - El inventario de acciones que llaman `registrar_log` se basa en el patrón general; una auditoría
   exhaustiva endpoint-por-endpoint queda para una fase posterior.
-- Confirmar si `registrar_liquidacion_sueldos` y la emisión ARCA están cableadas en sus routers o
-  solo disponibles como helpers del motor.
+- ~~Confirmar si `registrar_liquidacion_sueldos` y la emisión ARCA están cableadas en sus routers~~
+  → **Confirmado (jul 2026)**: ambas están cableadas. Sueldos: `POST /liquidacion/{id}/aprobar` →
+  `aprobar_liquidacion` (service) → `registrar_liquidacion_sueldos` (asiento agrupado) + audit
+  `APROBAR`. ARCA: `POST /comprobantes/{id}/emitir` → `registrar_factura_arca` (asiento) + audit
+  `EMITIR`. Ambos módulos auditan además CRUD y transiciones de estado.

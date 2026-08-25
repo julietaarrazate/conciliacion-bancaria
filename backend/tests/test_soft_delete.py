@@ -8,7 +8,7 @@ Verifica:
 """
 
 import pytest
-from datetime import date, datetime
+from datetime import datetime
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

@@ -1,13 +1,13 @@
 """Endpoints públicos (sin autenticación) — estado de cuenta compartido."""
 import logging
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, selectinload, joinedload
+from sqlalchemy.orm import Session, selectinload
 from jose import jwt as jose_jwt, JWTError
 
 from app.config import get_settings
 from app.database import get_db
 from app.models.cliente import Cliente
-from app.models.planilla import Planilla, PlanillaRow
+from app.models.planilla import Planilla
 from app.models.cheque import Cheque
 from app.models.egreso import Egreso
 

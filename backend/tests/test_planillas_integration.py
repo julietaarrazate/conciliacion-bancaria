@@ -336,6 +336,31 @@ class TestConciliar:
         # Puede tener filas ok o no, pero el endpoint no debe crashear
         assert "total_filas" in data or "ok" in data or isinstance(data, dict)
 
+    def test_conciliar_respuesta_incluye_diagnostico(self, client, db):
+        """La respuesta trae 'diagnostico' con las keys correctas y los conteos
+        de acreditadas/no_encontradas NO cambian por el diagnóstico (es aditivo)."""
+        extracto = _seed_extracto_con_movimientos(db, montos=[Decimal("5000")])
+        planilla, _ = _seed_planilla_con_filas(db, extracto.id, "ClienteDiag", n_filas=1)
+
+        token = _token(db, "admin@plan.test")
+        r = client.post(f"/planillas/{planilla.id}/conciliar", headers=_auth(token))
+        assert r.status_code == 200
+        data = r.json()
+
+        # Conteos base intactos: 1 fila (5000) matchea el único movimiento de 5000
+        assert data["acreditadas"] == 1
+        assert data["no_encontradas"] == 0
+        assert data["filas_procesadas"] == 1
+
+        diag = data["diagnostico"]
+        assert diag is not None
+        assert set(diag.keys()) == {
+            "banco_trae_identidad", "cobertura_montos",
+            "periodo_planilla", "periodo_extracto", "solapan_fechas",
+        }
+        assert diag["cobertura_montos"] == {"en_extracto": 1, "total": 1}
+        assert isinstance(diag["solapan_fechas"], bool)
+
     def test_conciliar_planilla_inexistente_retorna_404(self, client, db):
         token = _token(db, "admin@plan.test")
         r = client.post("/planillas/99999/conciliar", headers=_auth(token))
@@ -392,6 +417,160 @@ class TestPatchRowStatus:
             headers=_auth(token),
         )
         assert r.status_code == 404
+
+
+# ── Tests: resolución manual de filas ambiguas (asignar-movimiento) ───────────
+# Regresión ago 2026: antes, la única forma de resolver a mano un "no coincide"
+# (monto duplicado sin identidad suficiente) era "acreditar a cliente" desde
+# Movimientos, que agrega una fila NUEVA en vez de resolver la existente. Estos
+# endpoints resuelven la fila en su lugar, como hace "Re-conciliar".
+
+def _seed_extracto_monto_duplicado(db, monto=Decimal("24675")):
+    """2 movimientos con el MISMO monto — el caso ambiguo real."""
+    extracto = ExtractoBancario(
+        nombre_archivo="extracto_dup.xlsx", organizacion_id=1,
+        creado_por=1, fecha_creacion=datetime.utcnow(),
+    )
+    db.add(extracto)
+    db.flush()
+    mov_correcto = MovimientoBanco(
+        extracto_id=extracto.id, orden=1, fecha=date(2026, 8, 19), mes="agosto",
+        titular="TRANSF DIAZ, FAB 23419881279", monto=monto, saldo=monto,
+        source="extracto", organizacion_id=1,
+    )
+    mov_otro = MovimientoBanco(
+        extracto_id=extracto.id, orden=2, fecha=date(2026, 8, 7), mes="agosto",
+        titular="ING TRANSF XIMENA BELLOFA-27314529583", monto=monto, saldo=monto,
+        source="extracto", organizacion_id=1,
+    )
+    db.add_all([mov_correcto, mov_otro])
+    db.commit()
+    db.refresh(mov_correcto)
+    db.refresh(mov_otro)
+    return extracto, mov_correcto, mov_otro
+
+
+def _seed_planilla_fila_ambigua(db, extracto_id, cliente_nombre, monto=Decimal("24675")):
+    cliente = Cliente(nombre=cliente_nombre, organizacion_id=1)
+    db.add(cliente)
+    db.flush()
+    planilla = Planilla(
+        cliente_id=cliente.id, extracto_id=extracto_id, usuario_id=1,
+        nombre_archivo="planilla_ambigua.xlsx", organizacion_id=1,
+        fecha_carga=datetime.utcnow(),
+    )
+    db.add(planilla)
+    db.flush()
+    row = PlanillaRow(
+        planilla_id=planilla.id, monto=monto, cuit="41988127", titular="Fabio Diaz",
+        status="no coincide (2 mov. del mismo monto — revisar CUIT/CBU/titular)",
+        organizacion_id=1,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(planilla)
+    return planilla, cliente, row
+
+
+class TestCandidatosMovimiento:
+
+    def test_lista_los_movimientos_del_mismo_monto(self, client, db):
+        extracto, mov_correcto, mov_otro = _seed_extracto_monto_duplicado(db)
+        planilla, _, row = _seed_planilla_fila_ambigua(db, extracto.id, "ClienteCandidatos")
+
+        token = _token(db, "admin@plan.test")
+        r = client.get(f"/planillas/rows/{row.id}/candidatos-movimiento", headers=_auth(token))
+        assert r.status_code == 200
+        data = r.json()
+        ids = {c["id"] for c in data["candidatos"]}
+        assert ids == {mov_correcto.id, mov_otro.id}
+        assert all(c["es_libre"] for c in data["candidatos"])
+
+    def test_fila_inexistente_retorna_404(self, client, db):
+        token = _token(db, "admin@plan.test")
+        r = client.get("/planillas/rows/99999/candidatos-movimiento", headers=_auth(token))
+        assert r.status_code == 404
+
+
+class TestAsignarMovimiento:
+
+    def test_asignar_resuelve_fila_y_sincroniza_extracto_sin_crear_filas(self, client, db):
+        """El caso real SMT: elegir el movimiento correcto resuelve la fila EN
+        SU LUGAR (no crea una fila nueva) y acredita en el extracto."""
+        extracto, mov_correcto, mov_otro = _seed_extracto_monto_duplicado(db)
+        planilla, cliente, row = _seed_planilla_fila_ambigua(db, extracto.id, "ClienteAsignar")
+        filas_antes = len(planilla.rows)
+
+        token = _token(db, "admin@plan.test")
+        r = client.post(
+            f"/planillas/rows/{row.id}/asignar-movimiento",
+            json={"movimiento_id": mov_correcto.id},
+            headers=_auth(token),
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["status"] == "ok"
+        assert data["movimiento_id"] == mov_correcto.id
+
+        db.refresh(row)
+        db.refresh(mov_correcto)
+        db.refresh(mov_otro)
+        db.refresh(planilla)
+
+        assert row.status == "ok"
+        assert row.orden_movimiento_acreditado == mov_correcto.id
+        assert mov_correcto.cliente_acreditado == cliente.nombre
+        # El OTRO candidato no se toca
+        assert mov_otro.cliente_acreditado is None
+        # No se crearon filas nuevas
+        assert len(planilla.rows) == filas_antes
+
+    def test_asignar_monto_no_coincide_retorna_400(self, client, db):
+        extracto, mov_correcto, _ = _seed_extracto_monto_duplicado(db)
+        planilla, _, row = _seed_planilla_fila_ambigua(db, extracto.id, "ClienteMontoMal", monto=Decimal("999"))
+
+        token = _token(db, "admin@plan.test")
+        r = client.post(
+            f"/planillas/rows/{row.id}/asignar-movimiento",
+            json={"movimiento_id": mov_correcto.id},
+            headers=_auth(token),
+        )
+        assert r.status_code == 400
+
+    def test_asignar_movimiento_ya_acreditado_a_otro_cliente_retorna_409(self, client, db):
+        extracto, mov_correcto, _ = _seed_extracto_monto_duplicado(db)
+        mov_correcto.cliente_acreditado = "OtroClienteYaDueño"
+        db.commit()
+        planilla, _, row = _seed_planilla_fila_ambigua(db, extracto.id, "ClienteRobaMov")
+
+        token = _token(db, "admin@plan.test")
+        r = client.post(
+            f"/planillas/rows/{row.id}/asignar-movimiento",
+            json={"movimiento_id": mov_correcto.id},
+            headers=_auth(token),
+        )
+        assert r.status_code == 409
+
+    def test_asignar_fila_inexistente_retorna_404(self, client, db):
+        token = _token(db, "admin@plan.test")
+        r = client.post(
+            "/planillas/rows/99999/asignar-movimiento",
+            json={"movimiento_id": 1},
+            headers=_auth(token),
+        )
+        assert r.status_code == 404
+
+    def test_asignar_sin_movimiento_id_retorna_400(self, client, db):
+        extracto, _, _ = _seed_extracto_monto_duplicado(db)
+        planilla, _, row = _seed_planilla_fila_ambigua(db, extracto.id, "ClienteSinId")
+
+        token = _token(db, "admin@plan.test")
+        r = client.post(
+            f"/planillas/rows/{row.id}/asignar-movimiento",
+            json={},
+            headers=_auth(token),
+        )
+        assert r.status_code == 400
 
 
 # ── Tests: upload de planilla (xlsx real mínimo) ──────────────────────────────
@@ -474,3 +653,108 @@ class TestUploadPlanilla:
         r = client.post("/planillas/upload?cliente_nombre=X&extracto_id=1",
                         files={"file": ("p.xlsx", b"data", "application/octet-stream")})
         assert r.status_code in (401, 403)
+
+    def test_upload_xlsx_corrupto_muestra_motivo_real(self, client, db):
+        """Un .xlsx corrupto (header PK pero contenido roto) → 400 cuyo detalle
+        incluye el MOTIVO real de la excepción, no solo el mensaje genérico.
+        Regresión de la falta de visibilidad: antes el error se tragaba y no se
+        podía diagnosticar sin los logs de Render."""
+        extracto = _seed_extracto_con_movimientos(db)
+        token = _token(db, "admin@plan.test")
+        # Empieza con "PK" (firma zip/xlsx) para que el loader intente abrirlo como
+        # xlsx y falle al descomprimir, en vez de tratarlo como CSV.
+        basura = b"PK\x03\x04" + b"esto no es un xlsx valido" * 20
+
+        r = client.post(
+            f"/planillas/upload?cliente_nombre=Corrupto&extracto_id={extracto.id}",
+            files={"file": ("roto.xlsx", basura,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r.status_code == 400, r.text
+        detail = r.json()["detail"]
+        # El detalle ahora lleva el motivo entre paréntesis (tipo de excepción).
+        assert "Error al procesar la planilla (" in detail
+        assert detail.rstrip().endswith(").")
+
+    def test_upload_planilla_duplicada_mismo_cliente_retorna_409(self, client, db):
+        """Subir el MISMO archivo dos veces para el mismo cliente → 409, no crea
+        una segunda planilla (regresión del duplicado real: Green quedó cargado
+        dos veces porque el contador reenvió el archivo)."""
+        extracto = _seed_extracto_con_movimientos(db)
+        xlsx_bytes = _make_xlsx_bytes([(5000.0, "20123456789", "CLIENTE TEST SA", "REF001")])
+        token = _token(db, "admin@plan.test")
+
+        r1 = client.post(
+            f"/planillas/upload?cliente_nombre=Duplicado&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r1.status_code == 200, r1.text
+
+        r2 = client.post(
+            f"/planillas/upload?cliente_nombre=Duplicado&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r2.status_code == 409, r2.text
+        assert "ya fue cargada" in r2.json()["detail"]
+
+        cliente = db.query(Cliente).filter(Cliente.nombre == "Duplicado").first()
+        planillas = db.query(Planilla).filter(Planilla.cliente_id == cliente.id).all()
+        assert len(planillas) == 1
+
+    def test_upload_planilla_mismo_archivo_otro_cliente_no_bloquea(self, client, db):
+        """El bloqueo es por (cliente, archivo) — el mismo archivo para OTRO
+        cliente no debe chocar (ej. dos clientes que casualmente mandan una
+        planilla con la misma estructura/montos)."""
+        extracto = _seed_extracto_con_movimientos(db)
+        xlsx_bytes = _make_xlsx_bytes([(5000.0, "20123456789", "CLIENTE TEST SA", "REF001")])
+        token = _token(db, "admin@plan.test")
+
+        r1 = client.post(
+            f"/planillas/upload?cliente_nombre=ClienteA&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r1.status_code == 200, r1.text
+
+        r2 = client.post(
+            f"/planillas/upload?cliente_nombre=ClienteB&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r2.status_code == 200, r2.text
+
+    def test_upload_planilla_duplicada_tras_borrar_la_anterior_no_bloquea(self, client, db):
+        """Soft-delete de la planilla existente libera el fingerprint: volver a
+        subir el mismo archivo para el mismo cliente ya no choca."""
+        extracto = _seed_extracto_con_movimientos(db)
+        xlsx_bytes = _make_xlsx_bytes([(5000.0, "20123456789", "CLIENTE TEST SA", "REF001")])
+        token = _token(db, "admin@plan.test")
+
+        r1 = client.post(
+            f"/planillas/upload?cliente_nombre=Reintento&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r1.status_code == 200, r1.text
+        planilla_id = r1.json()["id"]
+
+        planilla = db.query(Planilla).filter(Planilla.id == planilla_id).first()
+        planilla.deleted_at = datetime.utcnow()
+        db.commit()
+
+        r2 = client.post(
+            f"/planillas/upload?cliente_nombre=Reintento&extracto_id={extracto.id}",
+            files={"file": ("planilla.xlsx", xlsx_bytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=_auth(token),
+        )
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["id"] != planilla_id

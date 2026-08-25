@@ -13,7 +13,7 @@ limiter de /auth/login (10/minute). Un test separado cubre el login real.
 """
 import pytest
 from decimal import Decimal
-from datetime import date, timedelta
+from datetime import date
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

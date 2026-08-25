@@ -3,8 +3,9 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from fastapi.testclient import TestClient
 from app.database import Base
-from app.models.user import User
 from app.services.auth import (
     get_password_hash,
     verify_password,
@@ -96,3 +97,62 @@ def test_authenticate_user(db):
     # Email no existe
     user = authenticate_user(db, "notfound@example.com", "password123")
     assert user is None
+
+
+# ── POST /auth/login vía endpoint real (TestClient) ────────────────────────────
+# Regresión ago 2026: el rol contador dejó de requerir aprobación en vivo del
+# superadmin en cada login (era para contadores de prueba en org de test, no
+# para uso operativo real). El login debe devolver token directo, como
+# cualquier otro rol sin 2FA.
+
+@pytest.fixture
+def client_db():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    yield session
+    session.close()
+
+
+@pytest.fixture
+def client(client_db):
+    from app.main import app
+    from app.database import get_db
+
+    def _override_db():
+        yield client_db
+
+    app.dependency_overrides[get_db] = _override_db
+    c = TestClient(app, raise_server_exceptions=True)
+    yield c
+    app.dependency_overrides.pop(get_db, None)
+
+
+def test_login_contador_recibe_token_directo_sin_aprobacion(client, client_db):
+    """Un usuario role=contador (no superadmin) hace login y recibe 200 con
+    access_token directo — NO un 202 pending_approval."""
+    from app.models.organizacion import Organizacion
+    from app.models.user import User
+
+    client_db.add(Organizacion(id=1, nombre="OrgContador"))
+    client_db.commit()
+    client_db.add(User(
+        email="contador@cuadra.test", full_name="Contador Real",
+        hashed_password=get_password_hash("pw123456"),
+        organizacion_id=1, is_active=True, role="contador", is_superadmin=False,
+    ))
+    client_db.commit()
+
+    r = client.post("/auth/login", json={
+        "email": "contador@cuadra.test", "password": "pw123456",
+    })
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "access_token" in data
+    assert "pending_approval" not in data
+    assert data["user"]["email"] == "contador@cuadra.test"

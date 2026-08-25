@@ -4,7 +4,6 @@ Cubre las funciones puras (parseo de importes, normalización de CUIT, extracci�
 y los casos básicos de matching con la config default.
 """
 
-import pytest
 from datetime import date
 from app.services.conciliacion import (
     buscar_match,
@@ -143,6 +142,32 @@ def test_buscar_match_monto_duplicado_con_cuit_correcto_acredita():
     assert status == "ok"
 
 
+def test_buscar_match_monto_duplicado_con_dni_embebido_en_cuit_del_mov_acredita():
+    """Regresión ago 2026 (caso real SMT): la planilla trae solo el DNI (8 dígitos,
+    no el CUIT/CUIL completo de 11). Con monto duplicado, el DNI embebido en el
+    CUIT del movimiento correcto debe desempatar — el otro candidato, sin ninguna
+    coincidencia de identidad, no debe competir."""
+    movimientos = [
+        _mov(24675.0, titular="ING TRANSF:XIMENA NATALIA BELLOFA-27314529583", id=858,
+             fecha=date(2026, 8, 7)),
+        _mov(24675.0, titular="TRANSF DIAZ, FAB 23419881279 VAR VARIOS VARIO", id=87,
+             fecha=date(2026, 8, 19)),
+    ]
+    resultado, status = buscar_match(
+        monto=24675.0,
+        cuit_planilla="41988127",   # DNI, no CUIT completo
+        titular_planilla="Fabio Joel Diaz",
+        referencia_planilla=None,
+        fecha_planilla=date(2026, 8, 19),
+        movimientos=movimientos,
+        procesados=set(),
+        org_config=CONFIG_DEFAULT_ORG,
+    )
+    assert resultado is not None, "el DNI embebido en el CUIT del movimiento debe alcanzar para acreditar"
+    assert resultado.id == 87
+    assert status == "ok"
+
+
 # ─── Regresión: asiento agrupado en re-conciliación (v3.13) ───────────────────
 # Verifica que re-conciliar una planilla (solo_pendientes=True) deje el asiento
 # um_reclass_planilla con el TOTAL de todas las filas ok, no solo el delta nuevo.
@@ -221,3 +246,114 @@ def test_reconciliacion_asiento_agrupado_suma_total(_db_cc):
                cliente_id=1, solo_pendientes=True)
     assert r2.status == "ok"
     assert _total_asiento_planilla(s) == _Dec("3000")
+
+
+# ── Tests: diagnóstico read-only de conciliación ──────────────────────────────
+
+from types import SimpleNamespace
+from app.services.conciliacion import diagnostico_conciliacion
+
+
+def _row_diag(monto, cuit=None, titular=None, fecha=None, status="pendiente"):
+    return SimpleNamespace(monto=monto, cuit=cuit, titular=titular, fecha=fecha, status=status)
+
+
+def test_diagnostico_banco_sin_identidad():
+    """Banco Comercio: todos los créditos genéricos → banco_trae_identidad False."""
+    movs = [
+        _mov(5000.0, titular="CREDITO POR CREDIN", id=1),
+        _mov(3000.0, titular="CREDITO POR TRANSFERENCIA", id=2),
+        _mov(2000.0, titular="CREDITO POR CREDIN", id=3),
+    ]
+    rows = [_row_diag(5000.0)]
+    d = diagnostico_conciliacion(rows, movs)
+    assert d["banco_trae_identidad"] is False
+
+
+def test_diagnostico_banco_con_identidad():
+    """Titulares con CUIT o nombre y apellido → banco_trae_identidad True."""
+    movs = [
+        _mov(5000.0, titular="GARCIA MARIA LAURA", id=1),
+        _mov(3000.0, titular="EMPRESA SA 20111111110", id=2),
+        _mov(2000.0, titular="RODRIGUEZ JUAN", id=3),
+    ]
+    d = diagnostico_conciliacion([_row_diag(5000.0)], movs)
+    assert d["banco_trae_identidad"] is True
+
+
+def test_diagnostico_banco_sin_movimientos_es_none():
+    d = diagnostico_conciliacion([_row_diag(5000.0)], [])
+    assert d["banco_trae_identidad"] is None
+
+
+def test_diagnostico_cobertura_montos():
+    """Planilla con 5 montos, extracto tiene 3 de esos → {en_extracto:3, total:5}."""
+    movs = [
+        _mov(1000.0, titular="X", id=1),
+        _mov(2000.0, titular="X", id=2),
+        _mov(3000.0, titular="X", id=3),
+    ]
+    rows = [
+        _row_diag(1000.0),
+        _row_diag(2000.0),
+        _row_diag(3000.0),
+        _row_diag(4000.0),
+        _row_diag(5000.0),
+    ]
+    d = diagnostico_conciliacion(rows, movs)
+    assert d["cobertura_montos"] == {"en_extracto": 3, "total": 5}
+
+
+def test_diagnostico_cobertura_tolerancia_centavos():
+    """Tolerancia de 1 peso: 1000.50 en planilla matchea 1000.00 en extracto."""
+    movs = [_mov(1000.00, titular="X", id=1)]
+    rows = [_row_diag(1000.50)]
+    d = diagnostico_conciliacion(rows, movs)
+    assert d["cobertura_montos"] == {"en_extracto": 1, "total": 1}
+
+
+def test_diagnostico_fechas_no_solapan():
+    """Planilla junio 3-5, extracto junio 17-24 → solapan_fechas False."""
+    rows = [
+        _row_diag(1000.0, fecha=date(2026, 6, 3)),
+        _row_diag(2000.0, fecha=date(2026, 6, 5)),
+    ]
+    movs = [
+        _mov(9000.0, titular="X", id=1, fecha=date(2026, 6, 17)),
+        _mov(8000.0, titular="X", id=2, fecha=date(2026, 6, 24)),
+    ]
+    d = diagnostico_conciliacion(rows, movs)
+    assert d["solapan_fechas"] is False
+    assert d["periodo_planilla"] == {"desde": date(2026, 6, 3), "hasta": date(2026, 6, 5)}
+    assert d["periodo_extracto"] == {"desde": date(2026, 6, 17), "hasta": date(2026, 6, 24)}
+
+
+def test_diagnostico_fechas_solapan():
+    rows = [_row_diag(1000.0, fecha=date(2026, 6, 10)), _row_diag(2000.0, fecha=date(2026, 6, 20))]
+    movs = [_mov(9000.0, titular="X", id=1, fecha=date(2026, 6, 15))]
+    d = diagnostico_conciliacion(rows, movs)
+    assert d["solapan_fechas"] is True
+
+
+def test_diagnostico_fechas_faltantes_no_alarma():
+    """Si falta algún extremo de fecha → solapan_fechas True (no alarmar de más)."""
+    rows = [_row_diag(1000.0, fecha=None)]
+    movs = [_mov(1000.0, titular="X", id=1, fecha=date(2026, 6, 15))]
+    d = diagnostico_conciliacion(rows, movs)
+    assert d["solapan_fechas"] is True
+
+
+def test_diagnostico_no_muta_rows_ni_movimientos():
+    """READ-ONLY: no cambia status de rows ni ningún campo de movimientos."""
+    rows = [_row_diag(5000.0, status="pendiente"), _row_diag(3000.0, status="ok")]
+    movs = [_mov(5000.0, titular="GARCIA MARIA", cliente_acreditado="Green", id=1)]
+    d = diagnostico_conciliacion(rows, movs)
+    assert rows[0].status == "pendiente"
+    assert rows[1].status == "ok"
+    assert movs[0].cliente_acreditado == "Green"
+    assert movs[0].titular == "GARCIA MARIA"
+    # shape completo
+    assert set(d.keys()) == {
+        "banco_trae_identidad", "cobertura_montos",
+        "periodo_planilla", "periodo_extracto", "solapan_fechas",
+    }

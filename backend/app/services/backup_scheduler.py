@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import get_settings
 from app.database import SessionLocal
@@ -129,10 +130,13 @@ def start_alertas_push_job() -> None:
 
 
 def _run_alertas_push() -> None:
-    """Revisa cheques por vencer y movimientos sin asignar. Manda push si hay urgentes."""
+    """Revisa cheques por vencer, movimientos sin asignar, planillas con descuadre de
+    total y filas ambiguas por revisar. Manda push si hay urgentes."""
     from datetime import datetime
+    from sqlalchemy import func
     from app.models.cheque import Cheque
     from app.models.extracto import MovimientoBanco
+    from app.models.planilla import Planilla, PlanillaRow
 
     db = SessionLocal()
     try:
@@ -140,10 +144,11 @@ def _run_alertas_push() -> None:
         en_3_dias = hoy + timedelta(days=3)
         hace_7_dias = hoy - timedelta(days=7)
 
+        from app.services.reportes_service import CHEQUE_EN_CARTERA
         cheques_urgentes = (
             db.query(Cheque)
             .filter(
-                Cheque.estado == "pendiente",
+                Cheque.estado.in_(CHEQUE_EN_CARTERA),
                 Cheque.fecha_deposito != None,
                 Cheque.fecha_deposito >= hoy,
                 Cheque.fecha_deposito <= en_3_dias,
@@ -162,6 +167,29 @@ def _run_alertas_push() -> None:
             .count()
         )
 
+        _descuadre_subq = (
+            db.query(Planilla.id)
+            .outerjoin(PlanillaRow, PlanillaRow.planilla_id == Planilla.id)
+            .filter(
+                Planilla.deleted_at.is_(None),
+                Planilla.total_declarado.isnot(None),
+            )
+            .group_by(Planilla.id, Planilla.total_declarado)
+            .having(func.abs(Planilla.total_declarado - func.coalesce(func.sum(PlanillaRow.monto), 0)) > 1)
+            .subquery()
+        )
+        planillas_descuadre = db.query(func.count()).select_from(_descuadre_subq).scalar() or 0
+
+        filas_ambiguas = (
+            db.query(PlanillaRow)
+            .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
+            .filter(
+                Planilla.deleted_at.is_(None),
+                PlanillaRow.status.like("ambiguo%"),
+            )
+            .count()
+        )
+
         partes = []
         if cheques_urgentes:
             n = cheques_urgentes
@@ -169,6 +197,12 @@ def _run_alertas_push() -> None:
         if movs_sin_asignar:
             n = movs_sin_asignar
             partes.append(f"{n} movimiento{'s' if n > 1 else ''} sin conciliar (+7 días)")
+        if planillas_descuadre:
+            n = planillas_descuadre
+            partes.append(f"{n} planilla{'s' if n > 1 else ''} con total que no cuadra")
+        if filas_ambiguas:
+            n = filas_ambiguas
+            partes.append(f"{n} fila{'s' if n > 1 else ''} ambigua{'s' if n > 1 else ''} por revisar")
 
         if not partes:
             logger.info("Push alertas: sin novedades urgentes hoy")
@@ -339,6 +373,48 @@ def _run_token_cleanup() -> None:
         logger.error("Token cleanup FALLO: %s", ex, exc_info=True)
     finally:
         db.close()
+
+
+def start_db_keepalive_job() -> None:
+    """Ping liviano a la DB cada 4 min para que Neon (free tier) no se duerma.
+
+    Neon free tier autosuspende el compute tras ~5 min sin actividad. UptimeRobot
+    pinguea /health, pero ese endpoint NO toca la DB → mantiene despierto a Render
+    pero deja dormir a Neon. Resultado: al entrar después de un rato, la PRIMERA
+    query de cada módulo paga la penalidad de despertar a Neon (y si se navega
+    lento, Neon vuelve a dormirse entre pantalla y pantalla). Un SELECT 1 cada 4
+    min desde el propio proceso FastAPI (que UptimeRobot ya mantiene vivo) evita
+    que el compute idle-out, sin depender de reconfigurar UptimeRobot.
+    """
+    global _scheduler
+    if _scheduler is None:
+        sched = BackgroundScheduler(timezone=_ART)
+        sched.start()
+        _scheduler = sched
+    if _scheduler.get_job("db_keepalive"):
+        return
+    _scheduler.add_job(
+        _run_db_keepalive,
+        IntervalTrigger(minutes=4),
+        id="db_keepalive",
+        name="Keep-alive de Neon (evita autosuspend)",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=120,
+    )
+    logger.info("Keep-alive de DB programado cada 4 min (evita autosuspend de Neon)")
+
+
+def _run_db_keepalive() -> None:
+    from sqlalchemy import text
+    from app.database import engine
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as ex:
+        # No es crítico: si falla, la próxima request despierta a Neon igual.
+        logger.debug("DB keepalive ping falló (se reintenta en 4 min): %s", ex)
 
 
 def stop_backup_scheduler() -> None:

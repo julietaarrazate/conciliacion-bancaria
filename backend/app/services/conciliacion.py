@@ -12,68 +12,19 @@ from sqlalchemy.orm import Session
 from app.models.extracto import MovimientoBanco
 from app.models.planilla import PlanillaRow
 
+# Extractores canónicos (fuente única de verdad, compartida con aprendizaje.py).
+# Se re-exportan desde este módulo para no romper imports existentes.
+from app.services.extractores import (
+    norm_cuit,
+    extraer_cuit,
+    extraer_cbu,
+    extraer_todos_numeros,
+    numeros_de_planilla,
+    normalizar_nombre,
+)
+
 # Umbral base: si un monto aparece >= N veces requiere validacion de identidad
 UMBRAL_BASE = 3
-
-
-def norm_cuit(v) -> str:
-    """Solo digitos, sin guiones ni espacios."""
-    if v is None:
-        return ''
-    return re.sub(r'\D', '', str(v))
-
-
-def extraer_cuit(texto: str) -> str:
-    """Extrae el primer CUIT/CUIL (10-11 digitos) que aparezca en el texto."""
-    if not texto:
-        return ''
-    nums = re.findall(r'\b\d{10,11}\b', str(texto))
-    return nums[0] if nums else ''
-
-
-def extraer_cbu(texto: str) -> str:
-    """Extrae el primer CBU/CVU (22 digitos exactos) del texto."""
-    if not texto:
-        return ''
-    nums = re.findall(r'\b\d{22}\b', str(texto))
-    return nums[0] if nums else ''
-
-
-def extraer_todos_numeros(texto: str) -> set:
-    """
-    Extrae TODOS los numeros significativos de un texto sin formato fijo.
-    Incluye: CUIT (10-11), CBU/CVU (22), numeros de cuenta/operacion (6-21).
-    Util para el campo 'titular' del extracto Banco Macro que mezcla todo.
-    Ej: "TRANSF 20112233440 GARCIA MARIA" -> {"20112233440"}
-        "CBU 2850590940090418135201 EMPRESA" -> {"2850590940090418135201"}
-        "ACRED 00001234567 RODRIGUEZ JUAN" -> {"1234567"}
-    """
-    if not texto:
-        return set()
-    # Todos los numeros de 6+ digitos (excluye numeros cortos tipo dia/mes)
-    return set(re.findall(r'\b\d{6,22}\b', str(texto)))
-
-
-def numeros_de_planilla(cuit: Optional[str], titular: Optional[str], referencia: Optional[str]) -> set:
-    """
-    Reune todos los identificadores numericos de una fila de planilla.
-    Incluye CUIT, CBU, numeros de cuenta u operacion que el cliente haya anotado.
-    """
-    nums = set()
-    for campo in [cuit, titular, referencia]:
-        if campo:
-            nums.update(extraer_todos_numeros(campo))
-    return nums
-
-
-def normalizar_nombre(texto: str) -> str:
-    """Normaliza nombre para comparacion: minusculas, sin tildes basicas, sin doble espacio."""
-    if not texto:
-        return ''
-    t = texto.lower().strip()
-    for a, b in [('á','a'),('é','e'),('í','i'),('ó','o'),('ú','u'),('ñ','n')]:
-        t = t.replace(a, b)
-    return re.sub(r'\s+', ' ', t)
 
 
 def parse_importe(v) -> Optional[float]:
@@ -150,6 +101,7 @@ def _score_identidad(
     Identidad (quien pago):
       12 = CUIT exacto
       10 = CBU/CVU exacto (22 digitos)
+       9 = DNI de planilla (7-8 digitos) embebido en el CUIT/CUIL del movimiento
        8 = numero de cuenta largo (10+ digitos) en comun
        6 = numero de referencia/operacion (6-9 digitos) en comun
        5 = titular (primeras 2 palabras)
@@ -181,6 +133,17 @@ def _score_identidad(
         digitos_mov = re.sub(r'\D', '', titular_mov)
         if cuit_plan in digitos_mov:
             score = 12 + _bonus_fecha(fecha_planilla, mov.fecha, dias_tolerancia)
+            return score
+
+    # ── DNI de planilla embebido en el CUIT/CUIL del movimiento ──
+    # El CUIT/CUIL argentino es 2 digitos de tipo + DNI (7-8 digitos) + 1
+    # verificador. Si la planilla solo trae el DNI (no el CUIT completo),
+    # buscarlo dentro de los digitos del movimiento sigue siendo identidad
+    # fuerte — solo no se puede confirmar con el checksum completo.
+    if cuit_plan and 7 <= len(cuit_plan) <= 8:
+        digitos_mov = re.sub(r'\D', '', titular_mov)
+        if cuit_plan in digitos_mov:
+            score = 9 + _bonus_fecha(fecha_planilla, mov.fecha, dias_tolerancia)
             return score
 
     # ── CBU/CVU exacto ─────────────────────────────────────────
@@ -357,6 +320,121 @@ def buscar_match(
     return None, f"no coincide ({n} mov. del mismo monto — revisar CUIT/CBU/titular)"
 
 
+# Palabras genéricas de bancos que NO constituyen identidad del pagador.
+# Ej: Banco Comercio acredita todo como "CRÉDITO POR CREDIN" / "CRÉDITO POR
+# TRANSFERENCIA" — no dice quién pagó, solo se puede conciliar por monto.
+_PALABRAS_GENERICAS_BANCO = frozenset({
+    "credito", "transferencia", "credin", "deposito", "pago", "transf",
+    "cuenta", "proveedores", "haberes", "varios", "sircreb", "imp", "ley",
+})
+
+
+def _mov_tiene_identidad(titular: Optional[str]) -> bool:
+    """True si el titular del movimiento identifica a quién pagó.
+
+    Tiene identidad si aparece un CUIT, o si el titular normalizado tiene >=2
+    palabras alfabéticas de >=3 letras que NO sean palabras genéricas de banco.
+    Read-only: no muta nada.
+    """
+    if not titular:
+        return False
+    if extraer_cuit(titular):
+        return True
+    norm = normalizar_nombre(titular)
+    palabras = [
+        p for p in norm.split()
+        if len(p) >= 3 and p.isalpha() and p not in _PALABRAS_GENERICAS_BANCO
+    ]
+    return len(palabras) >= 2
+
+
+def diagnostico_conciliacion(rows, movimientos) -> Dict[str, Any]:
+    """Diagnóstico read-only del contexto de una conciliación.
+
+    Se calcula DESPUÉS de conciliar para explicar en la UI por qué muchas filas
+    pueden quedar sin conciliar (banco sin identidad, monto ausente del extracto,
+    fechas que no solapan). NO altera qué fila matchea ni los status: es 100%
+    aditivo y no tiene efectos secundarios (no toca rows, movimientos ni la DB).
+
+    Args:
+        rows: PlanillaRow con .monto, .cuit, .titular, .fecha (o .fecha_acred).
+        movimientos: MovimientoBanco del extracto con .titular, .monto, .fecha.
+
+    Returns dict con:
+        banco_trae_identidad: bool | None (None si no hay movimientos)
+        cobertura_montos: {"en_extracto": int, "total": int}
+        periodo_planilla / periodo_extracto: {"desde": date|None, "hasta": date|None}
+        solapan_fechas: bool
+    """
+    movs = list(movimientos or [])
+    lista_rows = list(rows or [])
+
+    # ── banco_trae_identidad ───────────────────────────────────────
+    if not movs:
+        banco_trae_identidad: Optional[bool] = None
+    else:
+        con_identidad = sum(1 for m in movs if _mov_tiene_identidad(getattr(m, "titular", None)))
+        fraccion = con_identidad / len(movs)
+        banco_trae_identidad = fraccion >= 0.30
+
+    # ── cobertura_montos (Decimal, tolerancia 1 peso) ──────────────
+    tol = Decimal("1")
+    montos_mov = []
+    for m in movs:
+        mm = getattr(m, "monto", None)
+        if mm is not None:
+            try:
+                montos_mov.append(abs(Decimal(str(mm))))
+            except Exception:
+                pass
+
+    total = 0
+    en_extracto = 0
+    for r in lista_rows:
+        rm = getattr(r, "monto", None)
+        if rm is None:
+            continue
+        total += 1
+        try:
+            monto_row = abs(Decimal(str(rm)))
+        except Exception:
+            continue
+        if any(abs(monto_row - mv) <= tol for mv in montos_mov):
+            en_extracto += 1
+
+    # ── periodos ───────────────────────────────────────────────────
+    def _rango(objetos, *attrs):
+        fechas = []
+        for o in objetos:
+            f = None
+            for a in attrs:
+                f = getattr(o, a, None)
+                if f is not None:
+                    break
+            if f is not None:
+                fechas.append(f)
+        if not fechas:
+            return None, None
+        return min(fechas), max(fechas)
+
+    plan_desde, plan_hasta = _rango(lista_rows, "fecha", "fecha_acred")
+    ext_desde, ext_hasta = _rango(movs, "fecha")
+
+    # ── solapan_fechas (si falta algún dato → True, no alarmar) ─────
+    if None in (plan_desde, plan_hasta, ext_desde, ext_hasta):
+        solapan = True
+    else:
+        solapan = plan_desde <= ext_hasta and ext_desde <= plan_hasta
+
+    return {
+        "banco_trae_identidad": banco_trae_identidad,
+        "cobertura_montos": {"en_extracto": en_extracto, "total": total},
+        "periodo_planilla": {"desde": plan_desde, "hasta": plan_hasta},
+        "periodo_extracto": {"desde": ext_desde, "hasta": ext_hasta},
+        "solapan_fechas": solapan,
+    }
+
+
 # Config por defecto (org principal — comportamiento original)
 CONFIG_DEFAULT_ORG = {
     "match_rules": ["monto_cuit"],
@@ -377,6 +455,7 @@ def conciliar_planilla(
     org_id: int = 1,
     solo_pendientes: bool = False,
     cliente_id: Optional[int] = None,
+    comision_pct: Decimal = Decimal("0"),
 ) -> dict:
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
@@ -487,42 +566,64 @@ def conciliar_planilla(
             else:
                 res["sin_datos"] += 1
 
-    # Asiento agrupado por planilla: se recomputa el total sobre TODAS las filas
-    # ya conciliadas contra movimientos UM (no solo las de esta pasada). Así el
-    # upsert refleja el total real en re-conciliaciones y es idempotente —
-    # mismo criterio que usa "Empezar limpio" (reset-y-rebuild).
+    # Asiento agrupado por planilla, separado por ORIGEN del movimiento: la
+    # cuenta de donde sale la plata depende de dónde quedó parqueada al entrar
+    # — Pasivo Corriente para el extracto bancario principal (registrar_extracto:
+    # Banco D / Pasivo Corriente H), No identificado para Últimos Movimientos
+    # (registrar_um_import: Banco D / No identificado H). Mezclar el origen
+    # dejaría una de las dos mal (nunca se cancela, o queda negativa). El % de
+    # comisión se aplica en cada bucket por igual, así el cliente queda
+    # acreditado por el NETO total sin importar de qué origen vino cada pago
+    # (ver BUSINESS_RULES.md §4.1). Se recomputa el total sobre TODAS las filas
+    # ya conciliadas (no solo las de esta pasada). Así el upsert refleja el
+    # total real en re-conciliaciones y es idempotente — mismo criterio que usa
+    # "Empezar limpio" (reset-y-rebuild).
     if cliente_id and planilla_rows:
         try:
-            um_mov_ids = {m.id for m in movimientos if getattr(m, "source", None) == "um"}
-            total_um = Decimal("0")
-            fecha_ref = None
+            from app.services.motor_contable import registrar_reclasificacion_planilla
+            from app.services.tz import hoy_art as _hoy_art
+
+            planilla_id = planilla_rows[0].planilla_id
+            nombre_archivo = ""
+            try:
+                if getattr(planilla_rows[0], "planilla", None):
+                    nombre_archivo = planilla_rows[0].planilla.nombre_archivo or ""
+            except Exception:
+                pass
+
+            origen_por_mov = {
+                m.id: ("um" if getattr(m, "source", None) == "um" else "extracto")
+                for m in movimientos
+            }
+            cuenta_origen_por_bucket = {"um": "2-1-1-1", "extracto": "2-1-0-0"}
+            totales = {"um": Decimal("0"), "extracto": Decimal("0")}
+            fechas_ref = {"um": None, "extracto": None}
             for r in planilla_rows:
-                if (r.status or "") == "ok" and getattr(r, "orden_movimiento_acreditado", None) in um_mov_ids:
-                    total_um += abs(Decimal(str(r.monto or 0)))
-                    rf = getattr(r, "fecha_acred", None)
-                    if rf and (fecha_ref is None or rf > fecha_ref):
-                        fecha_ref = rf
-            if total_um > 0:
-                from app.services.motor_contable import registrar_reclasificacion_planilla
-                from app.services.tz import hoy_art as _hoy_art
-                planilla_id = planilla_rows[0].planilla_id
-                nombre_archivo = ""
-                try:
-                    if getattr(planilla_rows[0], "planilla", None):
-                        nombre_archivo = planilla_rows[0].planilla.nombre_archivo or ""
-                except Exception:
-                    pass
-                registrar_reclasificacion_planilla(
-                    db=db,
-                    planilla_id=planilla_id,
-                    org_id=org_id,
-                    usuario_id=None,
-                    cliente_id=cliente_id,
-                    cliente_nombre=cliente_nombre,
-                    total_monto=total_um,
-                    fecha=fecha_ref or _hoy_art(),
-                    nombre_archivo=nombre_archivo,
-                )
+                if (r.status or "") != "ok":
+                    continue
+                origen = origen_por_mov.get(getattr(r, "orden_movimiento_acreditado", None))
+                if origen is None:
+                    continue
+                totales[origen] += abs(Decimal(str(r.monto or 0)))
+                rf = getattr(r, "fecha_acred", None)
+                if rf and (fechas_ref[origen] is None or rf > fechas_ref[origen]):
+                    fechas_ref[origen] = rf
+
+            for bucket, total in totales.items():
+                if total > 0:
+                    registrar_reclasificacion_planilla(
+                        db=db,
+                        planilla_id=planilla_id,
+                        org_id=org_id,
+                        usuario_id=None,
+                        cliente_id=cliente_id,
+                        cliente_nombre=cliente_nombre,
+                        total_monto=total,
+                        fecha=fechas_ref[bucket] or _hoy_art(),
+                        nombre_archivo=nombre_archivo,
+                        cuenta_origen_codigo=cuenta_origen_por_bucket[bucket],
+                        comision_pct=comision_pct,
+                    )
         except Exception as _ex:
             import logging
             logging.getLogger(__name__).warning("Error asiento agrupado planilla: %s", _ex)

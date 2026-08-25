@@ -20,7 +20,6 @@ Todos los cálculos usan Decimal (las columnas Numeric ya devuelven Decimal).
 
 from __future__ import annotations
 
-import calendar
 import logging
 from datetime import date
 from decimal import Decimal

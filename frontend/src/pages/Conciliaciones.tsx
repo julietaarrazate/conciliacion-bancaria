@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
+import { parseMonto } from '@/utils/monto'
 
 interface ConciliacionItem {
   id: number
@@ -60,10 +61,10 @@ export const Conciliaciones: React.FC = () => {
     if (dTitular) f.titular = dTitular
     if (desde) f.desde = desde
     if (hasta) f.hasta = hasta
-    const mn = parseFloat(dMontoMin.replace(/\./g, '').replace(',', '.'))
-    const mx = parseFloat(dMontoMax.replace(/\./g, '').replace(',', '.'))
-    if (!isNaN(mn)) f.monto_min = mn
-    if (!isNaN(mx)) f.monto_max = mx
+    const mn = parseMonto(dMontoMin)  // util compartido y testeado (formatos AR/US)
+    const mx = parseMonto(dMontoMax)
+    if (mn != null) f.monto_min = mn
+    if (mx != null) f.monto_max = mx
     if (activeOrgId) f.org_id = activeOrgId
     return f
   }, [dCliente, dTitular, desde, hasta, dMontoMin, dMontoMax, activeOrgId])
@@ -148,11 +149,11 @@ export const Conciliaciones: React.FC = () => {
           <input type="date" className="input-field" value={hasta} onChange={e => setHasta(e.target.value)} />
         </div>
         <div>
-          <label className="label text-xs">Monto mín.</label>
+          <label className="label text-xs">Desde $</label>
           <input className="input-field" placeholder="0" value={montoMin} onChange={e => setMontoMin(e.target.value)} />
         </div>
         <div>
-          <label className="label text-xs">Monto máx.</label>
+          <label className="label text-xs">Hasta $</label>
           <input className="input-field" placeholder="999999999" value={montoMax} onChange={e => setMontoMax(e.target.value)} />
         </div>
       </div>

@@ -22,15 +22,15 @@ export default {
           'dark-card':    '#16161C',
           'dark-border':  '#1E1E26',
           'dark-hover':   '#1A1A22',
-          // ── Accent verde hacker ─────────────────────────
-          'green':        '#22C55E',
+          // ── Accent verde hacker (mode-aware vía --ml-green, ver styles/index.css)
+          'green':        'rgb(var(--ml-green) / <alpha-value>)',  // claro #16A34A / oscuro #4ADE80
           'green-bright': '#4ADE80',
           'green-dim':    '#16A34A',
           'green-muted':  '#14532D',
         },
         // Estado semánticos
         status: {
-          ok:       '#22C55E',
+          ok:       'rgb(var(--ml-green) / <alpha-value>)',
           error:    '#EF4444',
           warn:     '#F59E0B',
           info:     '#5E6AD2',

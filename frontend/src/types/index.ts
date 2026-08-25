@@ -88,6 +88,15 @@ export interface Planilla {
   extracto_id: number
   fecha_carga: string
   rows: PlanillaRow[]
+  deteccion?: DeteccionInfo
+}
+
+export interface DiagnosticoConciliacion {
+  banco_trae_identidad: boolean | null
+  cobertura_montos: { en_extracto: number; total: number }
+  periodo_planilla: { desde: string | null; hasta: string | null }   // 'YYYY-MM-DD'
+  periodo_extracto: { desde: string | null; hasta: string | null }
+  solapan_fechas: boolean
 }
 
 export interface ConciliacionResultado {
@@ -97,6 +106,51 @@ export interface ConciliacionResultado {
   no_encontradas: number
   duplicadas: number
   sin_datos: number
+  diagnostico?: DiagnosticoConciliacion | null
+}
+
+export interface ColumnaDisponible {
+  idx: number
+  header: string
+  muestras: string[]
+}
+
+export interface MapeoColumnas {
+  monto: number | null
+  cuit: number | null
+  titular: number | null
+  fecha: number | null
+  referencia: number | null
+}
+
+export interface ResultadoMapeoPlanilla {
+  origen: 'perfil' | 'heuristica' | 'ia' | 'manual'
+  confianza: number
+  header_row: number
+  columnas: MapeoColumnas
+  columnas_disponibles: ColumnaDisponible[]
+  preview: { fila: number; valores: string[] }[]
+  filas_totales: number
+  filas_descartadas: number
+  fingerprint: string
+  // Cuadre de totales: la planilla puede traer una fila de TOTAL que el backend
+  // detecta, excluye de los movimientos y usa para validar la suma
+  total_movimientos?: number
+  total_declarado?: number | null
+  total_cuadra?: boolean | null
+  filas_resumen?: number
+}
+
+export interface DeteccionInfo {
+  origen: string
+  confianza: number
+  filas_totales: number
+  filas_descartadas: number
+  // Cuadre de totales (ver ResultadoMapeoPlanilla)
+  total_movimientos?: number
+  total_declarado?: number | null
+  total_cuadra?: boolean | null
+  filas_resumen?: number
 }
 
 export interface PlanillaHistorialItem {
@@ -122,6 +176,7 @@ export interface ExtractoHistorialItem {
   total_movimientos: number
   acreditados: number
   banco?: string
+  archivado?: boolean
 }
 
 export interface AuditoriaLog {
@@ -147,6 +202,7 @@ export interface ExtractoListItem {
   fecha_creacion: string
   total_movimientos: number
   banco?: string
+  archivado?: boolean
 }
 
 export interface MovimientoFiltrado {
@@ -288,6 +344,66 @@ export interface ProyeccionIva {
   detalle: IvaProyeccionDetalleItem[] | null
   created_at: string
   updated_at: string
+}
+
+// ── IVA — Comprobantes ARCA y Liquidación real ──────────────────────────────
+export interface ComprobanteIva {
+  id: number
+  direccion: 'emitido' | 'recibido'
+  fecha: string
+  tipo_codigo: string
+  tipo_desc: string
+  punto_venta: number
+  numero: string
+  cuit_contraparte: string | null
+  denominacion: string | null
+  neto_gravado_total: number
+  total_iva: number
+  imp_total: number
+  incluido: boolean
+  es_nota_credito: boolean
+}
+
+export interface ComprobantesIvaResponse {
+  items: ComprobanteIva[]
+  totales: {
+    debito_incluido: number
+    credito_incluido: number
+  }
+}
+
+export interface ImportarComprobantesIvaResult {
+  importados: number
+  duplicados: number
+  fuera_de_periodo: number
+  periodo: string
+}
+
+export interface LiquidacionIvaCalculoPayload {
+  periodo: string
+  retenciones?: number
+  percepciones?: number
+  saldo_tecnico_anterior?: number
+  saldo_libre_anterior?: number
+}
+
+export interface LiquidacionIva {
+  id: number
+  periodo: string
+  debito_fiscal: number
+  credito_fiscal: number
+  tecnico_periodo: number
+  saldo_tecnico_anterior: number
+  saldo_tecnico_nuevo: number
+  retenciones: number
+  percepciones: number
+  saldo_libre_anterior: number
+  saldo_libre_nuevo: number
+  saldo_a_pagar: number
+  cant_emitidos: number
+  cant_recibidos: number
+  estado: 'borrador' | 'presentada'
+  fecha_presentacion: string | null
 }
 
 // ── Monotributo — Control Semestral ─────────────────────────────────────────

@@ -35,6 +35,17 @@ STATUS_OK = {"ok", "OK", "PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA"}
 # Status que cuentan como pendientes (no contamos "duplicado" ni vacios)
 STATUS_PENDIENTE = {"pendiente", "no está", "no esta", "faltan datos", "VENCIDO", "EN_REVISION"}
 
+# Estados de CHEQUE (distinto de status de fila de planilla). El estado canónico de un
+# cheque recién cargado es "registrado"; "pendiente" es un sinónimo legacy (ver frontend
+# `esRegistrado`) y el backfill de arranque migra "pendiente" -> "registrado". Por eso
+# filtrar cheques solo por estado == "pendiente" daba SIEMPRE 0 (bug corregido): las
+# alertas de cheques y el saldo de cheques por cliente quedaban vacíos.
+# Cheque "en cartera" = todavía no depositado (para alertas por fecha_deposito):
+CHEQUE_EN_CARTERA = ("registrado", "pendiente")
+# Cheque cuyo importe sigue pendiente de cobro = en cartera + depositado (entregado al
+# banco pero aún no acreditado); excluye acreditado/rechazado/anulado:
+CHEQUE_PENDIENTE_COBRO = ("registrado", "pendiente", "depositado")
+
 
 def resolver_org(current_user: User, org_id_param: Optional[int]) -> int:
     """Si es superadmin permite override de org via query param; si no, usa la suya."""
@@ -225,7 +236,7 @@ def _cheques_proximos_vencimiento(db: Session, org_id: int, dias: int = 30) -> l
         db.query(Cheque)
         .filter(
             Cheque.organizacion_id == org_id,
-            Cheque.estado == "pendiente",
+            Cheque.estado.in_(CHEQUE_EN_CARTERA),
             Cheque.fecha_deposito.isnot(None),
             Cheque.fecha_deposito >= hoy,
             Cheque.fecha_deposito <= limite,
@@ -329,13 +340,14 @@ def calcular_dashboard(
 
 
 def calcular_alertas(db: Session, organizacion_id: int) -> dict:
-    """Alertas operativas del día: cheques urgentes/vencidos, filas atrasadas, movimientos sin asignar."""
+    """Alertas operativas del día: cheques urgentes/vencidos, filas atrasadas, movimientos sin
+    asignar, planillas con descuadre de total y filas ambiguas por revisar."""
     from zoneinfo import ZoneInfo
     hoy = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date()
 
     cheques_urgentes = db.query(func.count(Cheque.id)).filter(
         Cheque.organizacion_id == organizacion_id,
-        Cheque.estado == "pendiente",
+        Cheque.estado.in_(CHEQUE_EN_CARTERA),
         Cheque.fecha_deposito.isnot(None),
         Cheque.fecha_deposito >= hoy,
         Cheque.fecha_deposito <= hoy + timedelta(days=7),
@@ -343,7 +355,7 @@ def calcular_alertas(db: Session, organizacion_id: int) -> dict:
 
     cheques_vencidos = db.query(func.count(Cheque.id)).filter(
         Cheque.organizacion_id == organizacion_id,
-        Cheque.estado == "pendiente",
+        Cheque.estado.in_(CHEQUE_EN_CARTERA),
         Cheque.fecha_deposito.isnot(None),
         Cheque.fecha_deposito < hoy,
     ).scalar() or 0
@@ -370,6 +382,37 @@ def calcular_alertas(db: Session, organizacion_id: int) -> dict:
             MovimientoBanco.cliente_acreditado == "",
         ),
     ).scalar() or 0
+
+    # Planillas activas cuyo total declarado por el cliente (Planilla.total_declarado)
+    # difiere en mas de $1 de la suma real de sus filas: indicio de fila faltante/de
+    # mas o de un error de carga que conviene revisar antes de cerrar el periodo.
+    _descuadre_subq = (
+        db.query(Planilla.id)
+        .outerjoin(PlanillaRow, PlanillaRow.planilla_id == Planilla.id)
+        .filter(
+            Planilla.organizacion_id == organizacion_id,
+            Planilla.deleted_at.is_(None),
+            Planilla.total_declarado.isnot(None),
+        )
+        .group_by(Planilla.id, Planilla.total_declarado)
+        .having(func.abs(Planilla.total_declarado - func.coalesce(func.sum(PlanillaRow.monto), 0)) > 1)
+        .subquery()
+    )
+    planillas_descuadre = db.query(func.count()).select_from(_descuadre_subq).scalar() or 0
+
+    # Filas que el motor dejo en "ambiguo (...)" (dos o mas candidatos con el mismo
+    # score) porque no puede elegir sin arriesgar un match incorrecto: requieren que
+    # una persona elija a mano el movimiento correcto.
+    filas_ambiguas = (
+        db.query(func.count(PlanillaRow.id))
+        .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
+        .filter(
+            Planilla.organizacion_id == organizacion_id,
+            Planilla.deleted_at.is_(None),
+            PlanillaRow.status.like("ambiguo%"),
+        )
+        .scalar() or 0
+    )
 
     alertas_lista = []
     if cheques_urgentes:
@@ -403,6 +446,22 @@ def calcular_alertas(db: Session, organizacion_id: int) -> dict:
             "label": "Movimientos sin asignar",
             "urgencia": "baja",
             "link": "/movimientos",
+        })
+    if planillas_descuadre:
+        alertas_lista.append({
+            "tipo": "planillas_descuadre",
+            "cantidad": planillas_descuadre,
+            "label": "Planillas con total que no cuadra",
+            "urgencia": "media",
+            "link": "/conciliaciones",
+        })
+    if filas_ambiguas:
+        alertas_lista.append({
+            "tipo": "filas_ambiguas",
+            "cantidad": filas_ambiguas,
+            "label": "Filas ambiguas por revisar",
+            "urgencia": "media",
+            "link": "/conciliaciones",
         })
 
     # `total` para el badge de la campana: solo cuenta TIPOS de alerta
@@ -494,7 +553,7 @@ def calcular_clientes_aging(db: Session, organizacion_id: int, limit: int, offse
         .join(Cliente, Cheque.cliente_id == Cliente.id)
         .filter(
             Cheque.organizacion_id == organizacion_id,
-            Cheque.estado == "pendiente",
+            Cheque.estado.in_(CHEQUE_PENDIENTE_COBRO),
         )
         .group_by(Cliente.id, Cliente.nombre)
         .all()

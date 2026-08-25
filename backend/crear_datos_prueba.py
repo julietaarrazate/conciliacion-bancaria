@@ -123,7 +123,7 @@ def crear_extracto():
 
     path = os.path.join(OUT_DIR, "extracto_prueba.xlsx")
     wb.save(path)
-    print(f"[OK] extracto_prueba.xlsx      30 movs, orden 30 arriba / 1 abajo (descendente)")
+    print("[OK] extracto_prueba.xlsx      30 movs, orden 30 arriba / 1 abajo (descendente)")
     return path
 
 
@@ -170,7 +170,7 @@ def crear_ultimos_movimientos():
 
     path = os.path.join(OUT_DIR, "ultimos_movimientos_prueba.xlsx")
     wb.save(path)
-    print(f"[OK] ultimos_movimientos_prueba.xlsx  2 dup (29,30) + 3 nuevos (31,32,33)")
+    print("[OK] ultimos_movimientos_prueba.xlsx  2 dup (29,30) + 3 nuevos (31,32,33)")
     return path
 
 
@@ -209,7 +209,7 @@ def crear_planilla_green():
 
     path = os.path.join(OUT_DIR, "planilla_green.xlsx")
     wb.save(path)
-    print(f"[OK] planilla_green.xlsx       8 filas: 5 OK, 2 faltan_datos, 1 no_esta")
+    print("[OK] planilla_green.xlsx       8 filas: 5 OK, 2 faltan_datos, 1 no_esta")
     return path
 
 
@@ -252,7 +252,7 @@ def crear_planilla_alojando():
 
     path = os.path.join(OUT_DIR, "planilla_alojando.xlsx")
     wb.save(path)
-    print(f"[OK] planilla_alojando.xlsx    6 filas: 5 OK, 1 no_esta")
+    print("[OK] planilla_alojando.xlsx    6 filas: 5 OK, 1 no_esta")
     return path
 
 
@@ -288,7 +288,7 @@ def crear_planilla_tucu():
 
     path = os.path.join(OUT_DIR, "planilla_tucu.xlsx")
     wb.save(path)
-    print(f"[OK] planilla_tucu.xlsx        7 filas: 6 OK, 1 faltan_datos")
+    print("[OK] planilla_tucu.xlsx        7 filas: 6 OK, 1 faltan_datos")
     return path
 
 

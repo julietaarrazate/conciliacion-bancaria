@@ -1,54 +1,54 @@
 # Web framework
-fastapi==0.115.0
-uvicorn[standard]==0.32.0
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
 
 # Base de datos
-sqlalchemy==2.0.36
-psycopg2-binary==2.9.10          # PostgreSQL (Render/Railway)
+sqlalchemy==2.0.52
+psycopg2-binary==2.9.12          # PostgreSQL (Render/Railway)
 
 # Autenticacion JWT
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.5.0
 
 # Validacion y settings
-pydantic==2.9.2
-pydantic[email]==2.9.2
-pydantic-settings==2.6.0
-email-validator==2.2.0
+pydantic==2.13.4
+pydantic[email]==2.13.4
+pydantic-settings==2.15.0
+email-validator==2.3.0
 
 # Upload de archivos (multipart/form-data)
-python-multipart==0.0.12
+python-multipart==0.0.32
 
 # Excel
 openpyxl==3.1.5
-xlrd==2.0.1
+xlrd==2.0.2
 
 # Utilidades
-python-dotenv==1.0.1
-requests==2.32.3
+python-dotenv==1.2.3
+requests==2.34.2
 
 # Rate limiting (proteccion brute force)
-slowapi==0.1.9
+slowapi==0.1.10
 
 # Migraciones de base de datos
-alembic==1.13.3
+alembic==1.19.1
 
 # Scheduler para backup automatico diario
-apscheduler==3.10.4
+apscheduler==3.11.3
 
 # PDF reports (estado de cuenta + cierre mensual)
-reportlab==4.2.5
+reportlab==5.0.1
 
 # Web Push notifications (VAPID)
-pywebpush>=1.14.0
+pywebpush>=2.4.0
 
 # Storage S3/R2 (opcional, activado via env vars S3_*)
-boto3==1.35.49
+boto3==1.43.78
 
 # Agente IA (Gemini Flash — activado via env var GEMINI_API_KEY)
-google-generativeai==0.8.3
+google-generativeai==0.8.6
 
 # Monitoreo de errores (opt-in via env var SENTRY_DSN)
 sentry-sdk[fastapi]
 
 # Parser de PDFs de tarjetas (opt-in: si no está instalado, tarjeta_parser degrada a carga manual)
-pdfminer.six>=20221105
+pdfminer.six>=20260107

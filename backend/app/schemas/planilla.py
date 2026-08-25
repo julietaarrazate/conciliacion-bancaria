@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime, date
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 
 class PlanillaRowBase(BaseModel):
     monto: float
@@ -26,6 +26,9 @@ class PlanillaResponse(BaseModel):
     extracto_id: int
     fecha_carga: datetime
     rows: List[PlanillaRowResponse]
+    # Metadatos de cómo se detectó/estandarizó la planilla en el upload.
+    # Solo lo llena POST /planillas/upload; en el resto queda None.
+    deteccion: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True
@@ -56,3 +59,7 @@ class ConciliacionResultado(BaseModel):
     no_encontradas: int
     duplicadas: int
     sin_datos: int
+    # Diagnóstico read-only calculado DESPUÉS de conciliar (aditivo). Explica en
+    # la UI por qué pueden quedar filas sin conciliar (banco sin identidad, monto
+    # ausente del extracto, fechas que no solapan). None en el resto de endpoints.
+    diagnostico: Optional[Dict[str, Any]] = None

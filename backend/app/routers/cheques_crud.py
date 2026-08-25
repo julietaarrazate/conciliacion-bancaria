@@ -17,7 +17,6 @@ Nota: GET "" y POST "" (listar/crear cheque) están declarados directamente
 en cheques.py (el agregador), no en este módulo — ver comentario en la
 sección "CRUD principal" más abajo.
 """
-from datetime import date
 from decimal import Decimal
 from typing import Optional, List
 import io
@@ -42,6 +41,7 @@ from app.services.tz import hoy_art
 from .cheques_common import (
     ChequeIn, PortadorIn, BulkCrearIn, FotoIn,
     _org_id, _local_interior, _cheque_dict, _parse_date,
+    _parse_ocr_response, _normalize_ocr_cheque,
 )
 
 router = APIRouter(tags=["cheques"])
@@ -55,12 +55,19 @@ async def bulk_ocr(
     fotos: List[UploadFile] = File(...),
     current_user: User = Depends(get_current_user),
 ):
-    """Recibe hasta 30 fotos, aplica OCR a cada una en paralelo y devuelve los datos extraídos."""
+    """Recibe hasta 30 fotos y aplica OCR a cada una en paralelo.
+
+    Cada foto puede contener UNO o VARIOS cheques (Julieta fotografía un lote
+    sobre la mesa). Por eso el modelo devuelve un array y los resultados de
+    todas las fotos se aplanan en una única lista `items`, cada uno con el
+    `index` de su foto de origen (para mapear el preview en el frontend).
+    """
     import asyncio
     import os
     import json
 
     MAX_FOTOS = 30
+    MAX_CHEQUES = 120  # tope defensivo total (varios cheques por foto)
     if len(fotos) > MAX_FOTOS:
         raise HTTPException(400, f"Máximo {MAX_FOTOS} fotos por lote")
     if len(fotos) == 0:
@@ -73,35 +80,38 @@ async def bulk_ocr(
     from routers.agente import _GEMINI_MODEL, _classify_gemini_error
 
     OCR_PROMPT = (
-        "Extraé los datos de este cheque bancario argentino. "
-        "Respondé SOLO con un JSON válido (sin texto extra, sin markdown), con estos campos "
-        "(usá null si no está visible o no podés leerlo): "
-        '{"numero": "string o null", "banco_origen": "string o null", "librador": "string o null", '
-        '"monto": número_sin_formato_o_null, "fecha_emision": "YYYY-MM-DD o null", '
-        '"fecha_deposito": "YYYY-MM-DD o null", "codigo_postal": "string o null"}'
+        "Esta imagen contiene UNO O VARIOS cheques bancarios argentinos "
+        "(pueden estar varios sobre una mesa). Detectá TODOS los cheques visibles "
+        "y extraé los datos de cada uno. "
+        "Respondé SOLO con un ARRAY JSON válido (sin texto extra, sin markdown), "
+        "un objeto por cheque, con estos campos (usá null si no está visible o no "
+        "podés leerlo con seguridad): "
+        '[{"numero": "string o null", "banco_origen": "string o null", '
+        '"librador": "string o null", "monto": número_sin_formato_o_null, '
+        '"fecha_emision": "YYYY-MM-DD o null", "fecha_deposito": "YYYY-MM-DD o null", '
+        '"codigo_postal": "string o null"}]. '
+        "Para el monto priorizá el número impreso arriba a la derecha (más confiable "
+        "que el texto manuscrito). Si hay un solo cheque, devolvé un array de un elemento."
     )
 
-    async def _ocr_single(index: int, foto: UploadFile) -> dict:
-        filename = foto.filename or f"foto_{index}"
-        base_result = {
-            "index": index,
-            "filename": filename,
-            "numero": None,
-            "banco_origen": None,
-            "librador": None,
-            "monto": None,
-            "fecha_emision": None,
-            "fecha_deposito": None,
-            "codigo_postal": None,
-            "local_interior": None,
+    def _err_item(index: int, filename: str, msg: str) -> dict:
+        return {
+            "index": index, "filename": filename,
+            "numero": None, "banco_origen": None, "librador": None, "monto": None,
+            "fecha_emision": None, "fecha_deposito": None,
+            "codigo_postal": None, "local_interior": None,
+            "error": True, "error_msg": msg,
         }
+
+    async def _ocr_photo(index: int, foto: UploadFile) -> List[dict]:
+        filename = foto.filename or f"foto_{index}"
         try:
             raw = await foto.read()
             mime_type = foto.content_type or "image/jpeg"
             # Llamada a Gemini en thread pool para no bloquear el event loop
             loop = asyncio.get_event_loop()
 
-            def _call():
+            def _call() -> str:
                 import google.generativeai as genai
                 import time as _time
                 genai.configure(api_key=api_key)
@@ -113,15 +123,9 @@ async def bulk_ocr(
                     try:
                         resp = model.generate_content([image_part, OCR_PROMPT])
                         try:
-                            texto = resp.text.strip()
+                            return resp.text.strip()
                         except Exception:
-                            return {}
-                        if not texto:
-                            return {}
-                        if texto.startswith("```"):
-                            lines = [l for l in texto.split("\n") if not l.startswith("```")]
-                            texto = "\n".join(lines).strip()
-                        return json.loads(texto)
+                            return ""
                     except Exception as ex:
                         msg = str(ex).upper()
                         is_transient = "RESOURCE_EXHAUSTED" in msg or "429" in str(ex)
@@ -130,30 +134,22 @@ async def bulk_ocr(
                             continue
                         raise
 
-            datos = await loop.run_in_executor(None, _call)
-            cp = str(datos.get("codigo_postal") or "").strip() or None
-            li = _local_interior(cp)
-            return {
-                **base_result,
-                "numero":         str(datos["numero"]).strip()        if datos.get("numero")         else None,
-                "banco_origen":   str(datos["banco_origen"]).strip()  if datos.get("banco_origen")   else None,
-                "librador":       str(datos["librador"]).strip()      if datos.get("librador")        else None,
-                "monto":          float(datos["monto"])               if datos.get("monto") is not None else None,
-                "fecha_emision":  str(datos["fecha_emision"])         if datos.get("fecha_emision")   else None,
-                "fecha_deposito": str(datos["fecha_deposito"])        if datos.get("fecha_deposito")  else None,
-                "codigo_postal":  cp,
-                "local_interior": li,
-                "error":          False,
-            }
+            texto = await loop.run_in_executor(None, _call)
+            cheques = _parse_ocr_response(texto)
+            if not cheques:
+                # No se detectó ningún cheque legible en la foto
+                return [_err_item(index, filename, "No se detectaron cheques legibles")]
+            return [_normalize_ocr_cheque(d, index, filename) for d in cheques]
         except json.JSONDecodeError:
-            return {**base_result, "error": True, "error_msg": "Respuesta OCR inválida"}
+            return [_err_item(index, filename, "Respuesta OCR inválida")]
         except Exception as ex:
             _, msg = _classify_gemini_error(ex)
-            return {**base_result, "error": True, "error_msg": msg}
+            return [_err_item(index, filename, msg)]
 
-    tasks = [_ocr_single(i, foto) for i, foto in enumerate(fotos)]
-    results = await asyncio.gather(*tasks)
-    return {"items": list(results)}
+    tasks = [_ocr_photo(i, foto) for i, foto in enumerate(fotos)]
+    grupos = await asyncio.gather(*tasks)
+    items = [item for grupo in grupos for item in grupo][:MAX_CHEQUES]
+    return {"items": items}
 
 
 @router.post("/bulk-crear")

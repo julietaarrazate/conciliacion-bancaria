@@ -15,6 +15,7 @@ from sqlalchemy import text
 from app.config import get_settings
 from app.logging_config import setup_logging
 from app.database import engine, Base
+from app.db_safety import SAFETY_NET_DDL
 from app.routers import auth, extractos, planillas, me, admin, auditoria, historial, clientes_dir
 from app.routers import organizaciones
 from app.routers import liquidaciones
@@ -50,7 +51,6 @@ from app.models.revoked_token import RevokedToken  # noqa: F401
 from app.models.login_approval import LoginApproval  # noqa: F401
 from app.models.twofa_code import TwofaCode  # noqa: F401
 from app.models.arca import ArcaConfig, ComprobanteArca  # noqa: F401
-from app.models.organizacion import Organizacion
 
 # ── Decimal → float encoder para SQLAlchemy Numeric columns ──────────────────
 class _DecimalEncoder(json.JSONEncoder):
@@ -89,13 +89,61 @@ if settings.sentry_dsn:
 limiter = Limiter(key_func=get_remote_address)
 
 
+def _exec_startup_ddl(conn, sql, retries=3):
+    """Ejecuta una sentencia DDL de arranque de forma resiliente y la commitea al toque.
+
+    Motivación (deadlock en deploy en caliente — ver BUGS.md): el DDL de arranque
+    (safety-net, índices, migraciones de columnas) corre mientras la instancia nueva
+    ya sirve requests. Un `ALTER TABLE`/`DROP INDEX` toma AccessExclusiveLock sobre la
+    tabla; si un request en vuelo (p. ej. /analisis/alertas contando cheques) tiene un
+    AccessShareLock, se puede formar un deadlock. Dos defensas:
+      1. `SET LOCAL lock_timeout` (solo Postgres): el DDL no espera indefinidamente por
+         el lock — cede rápido y reintenta, en vez de quedar en un abrazo mortal.
+      2. commit por sentencia: libera el lock de esa tabla de inmediato (no lo retiene
+         hasta el final de un lote), y aísla el error (una sentencia que falla no aborta
+         las siguientes).
+
+    Devuelve None si aplicó OK, o la excepción final si no pudo (el caller decide si
+    loguear como warning/debug — muchas fallan a propósito con "ya existe").
+    """
+    is_pg = conn.dialect.name == "postgresql"
+    last_ex = None
+    for attempt in range(retries):
+        try:
+            if is_pg:
+                conn.execute(text("SET LOCAL lock_timeout = '4s'"))
+            conn.execute(text(sql))
+            conn.commit()
+            return None
+        except Exception as ex:
+            last_ex = ex
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            transient = is_pg and ("lock" in str(ex).lower() or "deadlock" in str(ex).lower())
+            if transient and attempt < retries - 1:
+                continue
+            return last_ex
+    return last_ex
+
+
 def _run_alembic():
-    """Aplica migraciones pendientes. Si la DB nunca tuvo Alembic, la sella como baseline."""
+    """Sella la DB en la revisión head de Alembic (no corre `upgrade`).
+
+    El esquema lo mantienen `Base.metadata.create_all()` + los safety-nets DDL
+    idempotentes (`app/db_safety.py`), que ya construyen y mantienen todo. La cadena de
+    migraciones está desincronizada del esquema real (`001` es un stamp baseline; 007–009
+    referencian tablas viejas ya dropeadas — ver DATABASE_RULES / PROJECT_MEMORY D-8), así
+    que correr `upgrade` intentaría migraciones derivadas contra un esquema que ya está al
+    día y fallaría. Por eso solo SELLAMOS head: mantiene `alembic_version` reflejando la
+    realidad (para tooling: history/autogenerate/stamp) sin ejecutar la cadena.
+    `command.stamp(head)` crea la tabla `alembic_version` si no existe y es idempotente.
+    """
     try:
         import os
         from alembic import command
         from alembic.config import Config
-        from sqlalchemy import text
 
         # Path absoluto: backend/alembic.ini (relativo a este archivo: backend/app/main.py)
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -103,329 +151,21 @@ def _run_alembic():
         logger.debug("alembic config: %s", alembic_ini)
 
         alembic_cfg = Config(alembic_ini)
-
-        with engine.connect() as conn:
-            result = conn.execute(text(
-                "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name='alembic_version')"
-            ))
-            ya_tiene_alembic = result.scalar()
-
-        if not ya_tiene_alembic:
-            command.stamp(alembic_cfg, "head")
-            logger.info("DB sellada como baseline v001")
-        else:
-            command.upgrade(alembic_cfg, "head")
-            logger.info("migraciones Alembic aplicadas")
+        command.stamp(alembic_cfg, "head")
+        logger.info("Alembic sellado en head")
     except Exception as ex:
         logger.warning("Alembic error: %s", ex)
 
-    # Safety net: columnas que deben existir aunque Alembic falle
-    _safety_cols = [
-        "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
-        "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS porcentaje_comision_local NUMERIC(5,4)",
-        "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS porcentaje_comision_interior NUMERIC(5,4)",
-        "ALTER TABLE planillas ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
-        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS porcentaje_comision NUMERIC(5,4)",
-        "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cuenta_contable_id INTEGER REFERENCES plan_cuentas(id)",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_org_ids JSONB DEFAULT '[]'",
-        "ALTER TABLE asientos ADD COLUMN IF NOT EXISTS numero_asiento INTEGER",
-        # v3.9.2 — portadores + campos cheque
-        "CREATE TABLE IF NOT EXISTS portadores (id SERIAL PRIMARY KEY, organizacion_id INTEGER NOT NULL DEFAULT 1, nombre VARCHAR NOT NULL)",
-        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS portador_id INTEGER REFERENCES portadores(id)",
-        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS librador VARCHAR",
-        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS codigo_postal VARCHAR",
-        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS local_interior VARCHAR",
-        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS fecha_rechazo DATE",
-        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS fisico BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE cheques ADD COLUMN IF NOT EXISTS fecha_devolucion DATE",
-        "UPDATE cheques SET librador = titular WHERE librador IS NULL AND titular IS NOT NULL",
-        "CREATE TABLE IF NOT EXISTS twofa_codes (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), code_hash VARCHAR NOT NULL, expires_at TIMESTAMP NOT NULL, used BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP DEFAULT NOW())",
-        "ALTER TABLE twofa_codes ADD COLUMN IF NOT EXISTS failed_attempts INTEGER NOT NULL DEFAULT 0",
-        "CREATE INDEX IF NOT EXISTS ix_egresos_tipo ON egresos (tipo)",
-        "CREATE INDEX IF NOT EXISTS ix_egresos_forma_pago ON egresos (forma_pago)",
-        "CREATE INDEX IF NOT EXISTS ix_egresos_cliente_id ON egresos (cliente_id)",
-        "CREATE INDEX IF NOT EXISTS ix_egresos_org_fecha ON egresos (organizacion_id, fecha DESC)",
-        # TAREA 3 — liquidaciones de tarjetas (Visa / Mastercard / Amex)
-        "CREATE TABLE IF NOT EXISTS liquidaciones_tarjeta ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
-        "marca VARCHAR NOT NULL, "
-        "periodo VARCHAR(7) NOT NULL, "
-        "fecha_acreditacion DATE NOT NULL, "
-        "monto_bruto NUMERIC(12,2) NOT NULL, "
-        "aranceles NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "iva_df NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "percepciones_iibb NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "retenciones NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "neto NUMERIC(12,2) NOT NULL, "
-        "estado VARCHAR(20) DEFAULT 'pendiente', "
-        "extracto_movimiento_id INTEGER REFERENCES movimientos_banco(id), "
-        "archivo_original VARCHAR(255), "
-        "asiento_id INTEGER REFERENCES asientos(id), "
-        "notas TEXT, "
-        "usuario_id INTEGER REFERENCES users(id), "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "deleted_at TIMESTAMP)",
-        "CREATE INDEX IF NOT EXISTS ix_liq_tarjeta_org ON liquidaciones_tarjeta (organizacion_id)",
-        "CREATE INDEX IF NOT EXISTS ix_liq_tarjeta_org_fecha ON liquidaciones_tarjeta (organizacion_id, fecha_acreditacion DESC)",
-        # migración 012 — índices críticos para módulo contabilidad (Libro Diario, Cuentas Corrientes)
-        # asientos.organizacion_id aparece en TODOS los filtros contables; sin índice → full scan
-        "CREATE INDEX IF NOT EXISTS idx_asiento_org ON asientos(organizacion_id)",
-        "CREATE INDEX IF NOT EXISTS idx_asiento_org_fecha ON asientos(organizacion_id, fecha)",
-        "CREATE INDEX IF NOT EXISTS idx_asiento_modulo ON asientos(modulo)",
-        # asiento_detalle: asiento_id y cuenta_id son FK de JOIN críticos sin índice
-        "CREATE INDEX IF NOT EXISTS idx_asdet_asiento ON asiento_detalle(asiento_id)",
-        "CREATE INDEX IF NOT EXISTS idx_asdet_cuenta ON asiento_detalle(cuenta_id)",
-        "CREATE INDEX IF NOT EXISTS idx_asdet_cuenta_asiento ON asiento_detalle(cuenta_id, asiento_id)",
-        # uq_extracto_fp_org: excluir extractos borrados (soft delete) del índice
-        # único, así borrar y re-subir el mismo archivo crea uno nuevo en vez de
-        # chocar contra la fila borrada (migración 020). DROP+CREATE para reemplazar
-        # la definición vieja de la migración 006.
-        "DROP INDEX IF EXISTS uq_extracto_fp_org",
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_extracto_fp_org ON extractos_bancarios (fingerprint, organizacion_id) WHERE fingerprint IS NOT NULL AND deleted_at IS NULL",
-        # módulo IVA Proyección y DDJJ — tasa de IVA por cuenta + snapshot por período
-        "ALTER TABLE plan_cuentas ADD COLUMN IF NOT EXISTS tasa_iva NUMERIC(5,4)",
-        "CREATE TABLE IF NOT EXISTS proyecciones_iva ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
-        "periodo VARCHAR(7) NOT NULL, "
-        "debito_fiscal NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "credito_fiscal NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "saldo NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "estado VARCHAR(20) NOT NULL DEFAULT 'proyectado', "
-        "fecha_presentacion TIMESTAMP, "
-        "detalle JSONB, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW(), "
-        "CONSTRAINT uq_proyeccion_iva_org_periodo UNIQUE (organizacion_id, periodo))",
-        "CREATE INDEX IF NOT EXISTS ix_proyeccion_iva_org ON proyecciones_iva (organizacion_id)",
-        # módulo Control Semestral Monotributo — categorías, config opt-in y snapshots
-        "CREATE TABLE IF NOT EXISTS categorias_monotributo ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
-        "categoria VARCHAR(2) NOT NULL, "
-        "tipo_actividad VARCHAR(20) NOT NULL, "
-        "limite_anual NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "orden INTEGER NOT NULL DEFAULT 0, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW(), "
-        "CONSTRAINT uq_categoria_monotributo_org_cat_tipo "
-        "UNIQUE (organizacion_id, categoria, tipo_actividad))",
-        "CREATE INDEX IF NOT EXISTS ix_categoria_monotributo_org ON categorias_monotributo (organizacion_id)",
-        "CREATE TABLE IF NOT EXISTS monotributo_config ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL UNIQUE REFERENCES organizaciones(id), "
-        "categoria_actual VARCHAR(2), "
-        "tipo_actividad VARCHAR(20) NOT NULL DEFAULT 'servicios', "
-        "activo BOOLEAN NOT NULL DEFAULT FALSE, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW())",
-        "CREATE TABLE IF NOT EXISTS controles_monotributo ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
-        "periodo VARCHAR(7) NOT NULL, "
-        "fecha_corte DATE NOT NULL, "
-        "ingresos_12m NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "categoria_actual VARCHAR(2), "
-        "limite_categoria_actual NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "porcentaje_uso NUMERIC(6,2) NOT NULL DEFAULT 0, "
-        "categoria_sugerida VARCHAR(2), "
-        "excede BOOLEAN NOT NULL DEFAULT FALSE, "
-        "estado VARCHAR(20) NOT NULL DEFAULT 'pendiente', "
-        "fecha_revision TIMESTAMP, "
-        "detalle JSONB, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW(), "
-        "CONSTRAINT uq_control_monotributo_org_periodo "
-        "UNIQUE (organizacion_id, periodo))",
-        "CREATE INDEX IF NOT EXISTS ix_control_monotributo_org ON controles_monotributo (organizacion_id)",
-        # módulo Ingresos Brutos (IIBB) y Convenio Multilateral — jurisdicciones, config opt-in y snapshots
-        "CREATE TABLE IF NOT EXISTS jurisdicciones_iibb ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
-        "nombre VARCHAR(80) NOT NULL, "
-        "alicuota NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "coeficiente_distribucion NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "activa BOOLEAN NOT NULL DEFAULT TRUE, "
-        "orden INTEGER NOT NULL DEFAULT 0, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW(), "
-        "CONSTRAINT uq_jurisdiccion_iibb_org_nombre UNIQUE (organizacion_id, nombre))",
-        "CREATE INDEX IF NOT EXISTS ix_jurisdiccion_iibb_org ON jurisdicciones_iibb (organizacion_id)",
-        "CREATE TABLE IF NOT EXISTS iibb_config ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL UNIQUE REFERENCES organizaciones(id), "
-        "activo BOOLEAN NOT NULL DEFAULT FALSE, "
-        "modo VARCHAR(24) NOT NULL DEFAULT 'simple', "
-        "jurisdiccion_unica_id INTEGER REFERENCES jurisdicciones_iibb(id), "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW())",
-        "CREATE TABLE IF NOT EXISTS proyecciones_iibb ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
-        "periodo VARCHAR(7) NOT NULL, "
-        "ingreso_total NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "impuesto_total NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "detalle_por_jurisdiccion JSONB, "
-        "estado VARCHAR(20) NOT NULL DEFAULT 'proyectado', "
-        "fecha_presentacion TIMESTAMP, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW(), "
-        "CONSTRAINT uq_proyeccion_iibb_org_periodo UNIQUE (organizacion_id, periodo))",
-        "CREATE INDEX IF NOT EXISTS ix_proyeccion_iibb_org ON proyecciones_iibb (organizacion_id)",
-        # módulo Liquidador de Sueldos y F931 — convenios, categorías, empleados, config y liquidaciones
-        "CREATE TABLE IF NOT EXISTS convenios_colectivos ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
-        "nombre VARCHAR(120) NOT NULL, "
-        "descripcion VARCHAR(255), "
-        "activo BOOLEAN NOT NULL DEFAULT TRUE, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW(), "
-        "CONSTRAINT uq_convenio_org_nombre UNIQUE (organizacion_id, nombre))",
-        "CREATE INDEX IF NOT EXISTS ix_convenio_org ON convenios_colectivos (organizacion_id)",
-        "CREATE TABLE IF NOT EXISTS categorias_convenio ("
-        "id SERIAL PRIMARY KEY, "
-        "convenio_id INTEGER NOT NULL REFERENCES convenios_colectivos(id), "
-        "nombre VARCHAR(120) NOT NULL, "
-        "sueldo_basico NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "orden INTEGER NOT NULL DEFAULT 0, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW(), "
-        "CONSTRAINT uq_categoria_convenio_nombre UNIQUE (convenio_id, nombre))",
-        "CREATE INDEX IF NOT EXISTS ix_categoria_convenio ON categorias_convenio (convenio_id)",
-        "CREATE TABLE IF NOT EXISTS empleados ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
-        "nombre VARCHAR(160) NOT NULL, "
-        "cuil VARCHAR(13), "
-        "convenio_id INTEGER REFERENCES convenios_colectivos(id), "
-        "categoria_id INTEGER REFERENCES categorias_convenio(id), "
-        "fecha_ingreso DATE, "
-        "sueldo_basico NUMERIC(12,2), "
-        "cargas_familia INTEGER NOT NULL DEFAULT 0, "
-        "activo BOOLEAN NOT NULL DEFAULT TRUE, "
-        "deleted_at TIMESTAMP, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW())",
-        "CREATE INDEX IF NOT EXISTS ix_empleado_org ON empleados (organizacion_id)",
-        "CREATE INDEX IF NOT EXISTS ix_empleado_deleted ON empleados (deleted_at)",
-        "CREATE TABLE IF NOT EXISTS config_sueldos ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL UNIQUE REFERENCES organizaciones(id), "
-        "activo BOOLEAN NOT NULL DEFAULT FALSE, "
-        "aporte_jubilacion NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "aporte_inssjp NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "aporte_obra_social NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "contrib_jubilacion NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "contrib_inssjp NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "contrib_obra_social NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "contrib_asig_fam NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "contrib_fondo_desempleo NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "alicuota_art NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW())",
-        "CREATE TABLE IF NOT EXISTS liquidaciones_sueldo ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
-        "periodo VARCHAR(7) NOT NULL, "
-        "estado VARCHAR(20) NOT NULL DEFAULT 'borrador', "
-        "total_bruto NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "total_aportes NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "total_contribuciones NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "total_neto NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "fecha_aprobacion TIMESTAMP, "
-        "fecha_presentacion TIMESTAMP, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW(), "
-        "CONSTRAINT uq_liquidacion_sueldo_org_periodo UNIQUE (organizacion_id, periodo))",
-        "CREATE INDEX IF NOT EXISTS ix_liquidacion_sueldo_org ON liquidaciones_sueldo (organizacion_id)",
-        "CREATE TABLE IF NOT EXISTS detalles_liquidacion_sueldo ("
-        "id SERIAL PRIMARY KEY, "
-        "liquidacion_periodo_id INTEGER NOT NULL REFERENCES liquidaciones_sueldo(id), "
-        "empleado_id INTEGER REFERENCES empleados(id), "
-        "sueldo_bruto NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "sac_proporcional NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "total_aportes NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "total_contribuciones NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "sueldo_neto NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "detalle_json JSONB, "
-        "created_at TIMESTAMP DEFAULT NOW())",
-        "CREATE INDEX IF NOT EXISTS ix_detalle_liq_sueldo ON detalles_liquidacion_sueldo (liquidacion_periodo_id)",
-        # Retención de Ganancias 4ta categoría (opt-in, ver migración 017)
-        "ALTER TABLE config_sueldos ADD COLUMN IF NOT EXISTS ganancias_activo BOOLEAN NOT NULL DEFAULT FALSE",
-        "ALTER TABLE config_sueldos ADD COLUMN IF NOT EXISTS minimo_no_imponible NUMERIC(12,2) NOT NULL DEFAULT 0",
-        "ALTER TABLE config_sueldos ADD COLUMN IF NOT EXISTS deduccion_especial NUMERIC(12,2) NOT NULL DEFAULT 0",
-        "ALTER TABLE detalles_liquidacion_sueldo ADD COLUMN IF NOT EXISTS retencion_ganancias NUMERIC(12,2) NOT NULL DEFAULT 0",
-        "CREATE TABLE IF NOT EXISTS escala_ganancias ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
-        "tramo_desde NUMERIC(14,2) NOT NULL DEFAULT 0, "
-        "tramo_hasta NUMERIC(14,2), "
-        "alicuota NUMERIC(5,4) NOT NULL DEFAULT 0, "
-        "monto_fijo NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW())",
-        "CREATE INDEX IF NOT EXISTS ix_escala_ganancias_org ON escala_ganancias (organizacion_id)",
-        # Total de retención de Ganancias en el período (contrapartida 2-1-6-0, ver migración 018)
-        "ALTER TABLE liquidaciones_sueldo ADD COLUMN IF NOT EXISTS total_retencion_ganancias NUMERIC(12,2) NOT NULL DEFAULT 0",
-        # ARCA (ex-AFIP) — facturación electrónica, integración propia WSFEv1/WSAA (ver migración 019)
-        "CREATE TABLE IF NOT EXISTS arca_config ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL UNIQUE REFERENCES organizaciones(id), "
-        "cuit VARCHAR(11), "
-        "ambiente VARCHAR(20) NOT NULL DEFAULT 'homologacion', "
-        "punto_venta INTEGER NOT NULL DEFAULT 1, "
-        "activo BOOLEAN NOT NULL DEFAULT FALSE, "
-        "certificado_enc TEXT, "
-        "clave_privada_enc TEXT, "
-        "certificado_subido_en TIMESTAMP, "
-        "ultimo_token_enc TEXT, "
-        "ultimo_sign_enc TEXT, "
-        "token_expira TIMESTAMP, "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW())",
-        "CREATE TABLE IF NOT EXISTS comprobantes_arca ("
-        "id SERIAL PRIMARY KEY, "
-        "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
-        "cliente_id INTEGER REFERENCES clientes(id), "
-        "tipo_comprobante INTEGER NOT NULL, "
-        "punto_venta INTEGER NOT NULL, "
-        "numero INTEGER, "
-        "concepto INTEGER NOT NULL DEFAULT 1, "
-        "doc_tipo INTEGER NOT NULL DEFAULT 99, "
-        "doc_nro VARCHAR(11), "
-        "fecha_emision DATE NOT NULL, "
-        "fecha_serv_desde DATE, "
-        "fecha_serv_hasta DATE, "
-        "fecha_vto_pago DATE, "
-        "importe_neto NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "importe_iva NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "importe_total NUMERIC(12,2) NOT NULL DEFAULT 0, "
-        "cae VARCHAR(20), "
-        "cae_vencimiento DATE, "
-        "estado VARCHAR(20) NOT NULL DEFAULT 'borrador', "
-        "error_detalle TEXT, "
-        "referencia_planilla_id INTEGER REFERENCES planillas(id), "
-        "asiento_id INTEGER REFERENCES asientos(id), "
-        "usuario_id INTEGER REFERENCES users(id), "
-        "created_at TIMESTAMP DEFAULT NOW(), "
-        "updated_at TIMESTAMP DEFAULT NOW(), "
-        "CONSTRAINT uq_comprobante_arca_org_pv_tipo_numero UNIQUE (organizacion_id, punto_venta, tipo_comprobante, numero))",
-        # Por si la tabla ya existía sin estas 3 columnas (deploy parcial de la migración 019)
-        "ALTER TABLE comprobantes_arca ADD COLUMN IF NOT EXISTS fecha_serv_desde DATE",
-        "ALTER TABLE comprobantes_arca ADD COLUMN IF NOT EXISTS fecha_serv_hasta DATE",
-        "ALTER TABLE comprobantes_arca ADD COLUMN IF NOT EXISTS fecha_vto_pago DATE",
-        "CREATE INDEX IF NOT EXISTS ix_arca_config_org ON arca_config (organizacion_id)",
-        "CREATE INDEX IF NOT EXISTS ix_comprobantes_arca_org ON comprobantes_arca (organizacion_id)",
-        "CREATE INDEX IF NOT EXISTS ix_comprobantes_arca_cliente ON comprobantes_arca (cliente_id)",
-    ]
+    # Safety net: DDL mínimo que debe existir aunque Alembic falle.
+    # Fuente única e importable en app/db_safety.py (testeada en test_db_safety.py).
+    # Cada sentencia se aplica con lock_timeout + commit inmediato (ver
+    # _exec_startup_ddl y BUGS.md — deadlock en deploy en caliente).
     try:
-        from sqlalchemy import text as _text
         with engine.connect() as _conn:
-            for _sql in _safety_cols:
-                _conn.execute(_text(_sql))
-            _conn.commit()
+            for _sql in SAFETY_NET_DDL:
+                _err = _exec_startup_ddl(_conn, _sql)
+                if _err is not None:
+                    logger.warning("Safety net DDL (%s…): %s", _sql[:60], _err)
     except Exception as ex:
         logger.warning("Safety net columnas: %s", ex)
 
@@ -468,13 +208,14 @@ def _init_db():
         # Asientos — numero_asiento se usa en ordenamiento y numeración correlativa
         "CREATE INDEX IF NOT EXISTS idx_asientos_numero ON asientos(numero_asiento DESC)",
     ]
-    for sql in indexes:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text(sql))
-                conn.commit()
-        except Exception as ex:
-            logger.debug("Index ya existe (ignorado): %s", ex)
+    try:
+        with engine.connect() as conn:
+            for sql in indexes:
+                err = _exec_startup_ddl(conn, sql)
+                if err is not None:
+                    logger.debug("Index ya existe (ignorado): %s", err)
+    except Exception as ex:
+        logger.debug("Índices de arranque: %s", ex)
 
     # 3. Migraciones de columnas — todas idempotentes (IF NOT EXISTS no disponible en todos los Postgres,
     #    se usa try/except para ignorar "column already exists")
@@ -507,13 +248,12 @@ def _init_db():
         "ALTER TABLE liquidaciones ALTER COLUMN cerrado_by DROP NOT NULL",
         "ALTER TABLE arqueos_diarios ALTER COLUMN creado_por DROP NOT NULL",
     ]
-    for sql in migrations:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text(sql))
-                conn.commit()
-        except Exception:
-            pass  # columna ya existe
+    try:
+        with engine.connect() as conn:
+            for sql in migrations:
+                _exec_startup_ddl(conn, sql)  # falla a propósito si la columna ya existe
+    except Exception as ex:
+        logger.debug("Migraciones de columnas de arranque: %s", ex)
 
     # 2.5. Normalizar campo "mes" de movimientos: dejar solo el numero (1-12).
     # Casos viejos: "Mayo 2026", "May 2026", "5", "05/2026", etc.
@@ -577,7 +317,7 @@ def _init_db():
     # 5. Seed Organizacion principal (id=1)
     try:
         from app.database import SessionLocal as SL
-        from app.models.organizacion import Organizacion as Org, CONFIG_DEFAULT
+        from app.models.organizacion import Organizacion as Org
         db = SL()
         org_principal = db.query(Org).filter(Org.id == 1).first()
         if not org_principal:
@@ -631,23 +371,24 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error seed contabilidad: %s", ex)
 
-    # 7. Backfill contabilidad — genera asientos para extractos/planillas existentes
+    # 7. Backfill contabilidad — genera asientos de extracto para los existentes.
+    #
+    # El backfill de PLANILLAS se eliminó (ago 2026): usaba la función vieja
+    # `registrar_planilla` (regla `carga_planilla` → cuenta genérica 2-1-2-0
+    # "Cliente", no la cuenta corriente propia de cada cliente), recorría también
+    # planillas borradas (deleted_at) y, al correr en cada arranque, generaba
+    # asientos de planilla duplicados y mal imputados (cuentas corrientes por
+    # cliente vacías). El asiento por cliente correcto se genera en el flujo de
+    # conciliación con el tratamiento contable que defina la operadora; no
+    # reintroducir este backfill.
     try:
         from app.database import SessionLocal as SL
         from app.models.extracto import ExtractoBancario as Ext
-        from app.models.planilla import Planilla as Plan
         from app.models.contabilidad import Asiento as A
-        from app.services.motor_contable import registrar_extracto, registrar_planilla
-        from datetime import date as _date
-        from app.services.tz import hoy_art
+        from app.services.motor_contable import registrar_extracto
 
         db = SL()
-
-        # IDs que ya tienen asiento (para no duplicar)
-        ids_ext  = {r[0] for r in db.query(A.referencia_id).filter(A.modulo == "extracto").all()}
-        ids_plan = {r[0] for r in db.query(A.referencia_id).filter(A.modulo == "planilla").all()}
-
-        # Backfill extractos
+        ids_ext = {r[0] for r in db.query(A.referencia_id).filter(A.modulo == "extracto").all()}
         n_ext = 0
         for e in db.query(Ext).filter(Ext.organizacion_id == 1).all():
             if e.id not in ids_ext:
@@ -659,30 +400,7 @@ def _init_db():
                     movimientos=e.movimientos,
                 )
                 n_ext += 1
-
-        # Backfill planillas
-        n_plan = 0
-        for p in db.query(Plan).filter(Plan.organizacion_id == 1).all():
-            if p.id not in ids_plan:
-                try:
-                    fecha = p.fecha_carga.date() if p.fecha_carga else hoy_art()
-                except Exception:
-                    fecha = hoy_art()
-                registrar_planilla(
-                    db=db, planilla_id=p.id,
-                    org_id=p.organizacion_id or 1,
-                    usuario_id=p.usuario_id,
-                    cliente_nombre=p.cliente.nombre if p.cliente else "",
-                    nombre_archivo=p.nombre_archivo or "",
-                    rows=p.rows,
-                    fecha_acred=fecha,
-                )
-                n_plan += 1
-
-        if n_ext or n_plan:
-            logger.info("Backfill contabilidad: %d extracto(s), %d planilla(s)", n_ext, n_plan)
-        else:
-            logger.info("Backfill contabilidad: todo al dia")
+        logger.info("Backfill contabilidad: %d extracto(s)", n_ext)
         db.close()
     except Exception as ex:
         logger.warning("Error backfill contabilidad: %s", ex)
@@ -729,7 +447,7 @@ def _init_db():
     # 7c. Cleanup único: eliminar planillas auto-recuperadas y clientes huérfanos
     try:
         from app.database import SessionLocal as SL
-        from app.models.planilla import Planilla as Pl, PlanillaRow as PR
+        from app.models.planilla import Planilla as Pl
         from app.models.cliente import Cliente as Cli
         from app.models.cheque import Cheque as Ch
         from app.models.egreso import Egreso as Eg
@@ -841,44 +559,13 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error verificando asientos legacy: %s", ex)
 
-    # 9b. Crear asientos de documentación para los 3 gaps de migración v3.9
-    # Los asientos #518, #519, #520 fueron eliminados físicamente en la migración v3.9
-    # (módulos extracto/planilla con cuentas incorrectas). Se registran 3 asientos
-    # ajuste_manual con numero_asiento = 518/519/520 para mantener la correlatividad.
-    try:
-        from app.database import SessionLocal as SL
-        from app.models.contabilidad import Asiento
-        _db = SL()
-        try:
-            for _num_orig in [518, 519, 520]:
-                _existe = _db.query(Asiento).filter(
-                    Asiento.organizacion_id == 1,
-                    Asiento.numero_asiento == _num_orig,
-                ).first()
-                if not _existe:
-                    _a = Asiento(
-                        fecha=__import__('datetime').date(2026, 6, 3),
-                        descripcion=f"BAJA LEGACY migración v3.9 — asiento #{_num_orig} (módulo extracto/planilla) fue eliminado físicamente al sanear el Libro Diario. Sin impacto contable.",
-                        modulo="ajuste_manual",
-                        organizacion_id=1,
-                        numero_asiento=_num_orig,
-                    )
-                    _db.add(_a)
-            _db.commit()
-
-            # Eliminar los registros mal-numerados (888/889/890) si existen
-            _db.query(Asiento).filter(
-                Asiento.organizacion_id == 1,
-                Asiento.modulo == "ajuste_manual",
-                Asiento.descripcion.like("BAJA LEGACY migración v3.9%"),
-                Asiento.numero_asiento > 520,
-            ).delete(synchronize_session=False)
-            _db.commit()
-            logger.info("Asientos documentación gaps v3.9 en posiciones 518/519/520 (correlativos)")
-        finally:
-            _db.close()
-    except Exception as ex:
-        logger.warning("Error creando asientos documentación gaps: %s", ex)
+    # 9b. (Removido en el reset operativo de ago-2026) — antes este bloque re-sembraba en
+    # cada arranque 3 asientos "lápida" (numero_asiento 518/519/520, sin detalle, "sin impacto
+    # contable") para tapar los huecos que dejó la baja física de esos asientos en la migración
+    # v3.9 y mantener la correlatividad del Libro Diario. Tras vaciar por completo los datos
+    # operativos (incluidos todos los asientos), el Libro Diario arranca de cero: ya no hay
+    # huecos que tapar y esos tombstone forzarían el primer asiento real a numerarse 521 en vez
+    # de 1. Por eso el backfill se eliminó. No reintroducir salvo que se restaure el histórico.
 
     # 9. Fix numero_asiento NULL — asigna correlativo a asientos sin numerar
     try:
@@ -923,11 +610,13 @@ async def lifespan(app: FastAPI):
         from app.services.backup_scheduler import (
             start_backup_scheduler, stop_backup_scheduler,
             start_alertas_push_job, start_token_cleanup_job, start_r2_storage_alert_job,
+            start_db_keepalive_job,
         )
         start_backup_scheduler()
         start_alertas_push_job()       # 10:00 ART — push cheques/movs urgentes
         start_token_cleanup_job()      # 03:30 ART — purga tokens revocados
         start_r2_storage_alert_job()   # 09:00 ART — alerta si R2 > 8 GB
+        start_db_keepalive_job()       # cada 4 min — SELECT 1 para que Neon no se duerma
     except Exception as ex:
         logger.warning("No se pudo iniciar schedulers: %s", ex)
     yield
@@ -939,7 +628,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="3.24.0",
+    version="3.29.0",
     debug=settings.debug,
     lifespan=lifespan,
     default_response_class=JSONResponse,

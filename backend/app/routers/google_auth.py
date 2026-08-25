@@ -1,4 +1,3 @@
-import secrets
 import logging
 import requests as http_requests
 from fastapi import APIRouter, Depends, HTTPException

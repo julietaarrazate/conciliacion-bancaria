@@ -10,7 +10,6 @@ Cubre:
   - inmutabilidad: un comprobante emitido no se puede re-emitir.
   - aislamiento multi-org.
 """
-from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -26,7 +25,7 @@ from app.services.seed_contable import seed_contabilidad_org
 from app.models.organizacion import Organizacion
 from app.models.user import User
 from app.models.cliente import Cliente
-from app.models.contabilidad import PlanCuenta, Asiento, AsientoDetalle
+from app.models.contabilidad import PlanCuenta, AsientoDetalle
 from app.models.arca import ArcaConfig, ComprobanteArca
 from app.services import arca_crypto
 from app.services.arca_wsfe import ArcaWsfeRechazo, ArcaWsfeError

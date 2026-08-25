@@ -51,18 +51,27 @@ en [UX_RULES.md](./UX_RULES.md).
 | `ml-dark-border` | `#1E1E26` | bordes |
 | `ml-dark-hover` | `#1A1A22` | hover |
 
-**Acento verde (marca, dark)**
-| Token | Hex |
-|---|---|
-| `ml-green` | `#22C55E` |
-| `ml-green-bright` | `#4ADE80` |
-| `ml-green-dim` | `#16A34A` |
-| `ml-green-muted` | `#14532D` |
+**Acento verde (marca, mode-aware)**
+
+`ml-green` y `status-ok` son **mode-aware** vía la variable CSS `--ml-green`
+(definida en `index.css`, formato canales "R G B" para soportar opacidad):
+legible en claro y brillante "Matrix" en oscuro. Los demás tokens verde son fijos.
+
+| Token | Claro | Oscuro |
+|---|---|---|
+| `ml-green` (vía `--ml-green`) | `#16A34A` | `#4ADE80` |
+| `ml-green-bright` | `#4ADE80` | `#4ADE80` |
+| `ml-green-dim` | `#16A34A` | `#16A34A` |
+| `ml-green-muted` | `#14532D` | `#14532D` |
+
+El logo de marca (`CuadraLogo`) y los íconos PWA (`icon-192/512.svg`) van siempre
+sobre placa oscura → usan el verde brillante fijo `#4ADE80`. El favicon mantiene
+`#22C55E` (tile verde + check blanco, mejor contraste a 16px).
 
 **Estados semánticos** (`colors.status`)
 | Token | Hex |
 |---|---|
-| `status-ok` | `#22C55E` |
+| `status-ok` | mode-aware vía `--ml-green` (claro `#16A34A` / oscuro `#4ADE80`) |
 | `status-error` | `#EF4444` |
 | `status-warn` | `#F59E0B` |
 | `status-info` | `#5E6AD2` |
@@ -177,8 +186,8 @@ SVG propios, sin librería externa, con formato `es-AR`:
 ## 7. Convenciones de marca menores
 
 - **Nombre visible**: "Cuadra" (el repo y backend conservan el nombre histórico
-  "conciliacion-bancaria"). El título en la UI usa fuente mono y color verde
-  (`#22C55E`) vía `.app-title` (en dark se fuerza verde con `!important`).
+  "conciliacion-bancaria"). El título en la UI usa fuente mono; en dark se fuerza
+  el verde de marca con `rgb(var(--ml-green)) !important` vía `.app-title`.
 - **Scrollbar fina** en dark (4px, thumb `#1E1E26`, hover verde translúcido) —
   `index.css`.
 - **Fondo y `color-scheme`**: `.dark` setea `color-scheme: dark` para nativos

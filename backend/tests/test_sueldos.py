@@ -11,7 +11,6 @@ Cubre:
   - asiento contable al aprobar (partida doble Debe == Haber).
   - validación de CUIL (11 dígitos).
 """
-from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -775,8 +774,8 @@ def test_sicoss_linea_tiene_ancho_esperado_por_registro(db, client):
     admin = _token(db, "admin@sueldos.test")
     _cfg(db, aporte_jubilacion=0.11, aporte_inssjp=0.03, aporte_obra_social=0.03,
          contrib_jubilacion=0.10)
-    emp1 = _empleado(db, "Empleado Uno", basico=100000, activo=True)
-    emp2 = _empleado(db, "Empleado Dos", basico=150000, activo=True)
+    _empleado(db, "Empleado Uno", basico=100000, activo=True)
+    _empleado(db, "Empleado Dos", basico=150000, activo=True)
     _empleado(db, "Empleado Inactivo", basico=80000, activo=False)
 
     r = client.post(f"/sueldos/liquidacion/calcular?periodo={PERIODO}", headers=_auth(admin))

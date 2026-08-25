@@ -1,0 +1,9 @@
+# Linter de Python (ruff). Enfocado en reglas de BUGS reales (pyflakes "F"):
+# nombres indefinidos (F821 — caza el tipo de bug del NameError en aprendizaje.py),
+# imports y variables sin usar, redefiniciones. Se evita a propósito el ruido de
+# estilo para que el CI marque problemas accionables, no formato.
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = ["F"]

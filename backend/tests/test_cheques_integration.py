@@ -8,8 +8,6 @@ Cubre:
 - Eliminar cheque registrado → crea asiento reverso
 """
 import pytest
-from datetime import date
-from decimal import Decimal
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

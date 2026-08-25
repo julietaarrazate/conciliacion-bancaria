@@ -156,7 +156,7 @@ def get_cuenta_corriente(
             reversados.add(ref)
 
     # um_reclass_planilla: referencia_id = planilla_id directamente
-    reclass_planilla_ids = {
+    {
         a.referencia_id for _, a in filas
         if a.modulo == "um_reclass_planilla" and a.referencia_id
     }

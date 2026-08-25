@@ -26,6 +26,10 @@ import {
   IvaConfigCuenta,
   IvaProyeccionPreview,
   ProyeccionIva,
+  ComprobantesIvaResponse,
+  ImportarComprobantesIvaResult,
+  LiquidacionIva,
+  LiquidacionIvaCalculoPayload,
   MonotributoConfig,
   CategoriaMonotributo,
   MonotributoControlPreview,
@@ -44,6 +48,8 @@ import {
   ArcaConfig,
   ComprobanteArca,
   ComprobanteArcaPayload,
+  ResultadoMapeoPlanilla,
+  MapeoColumnas,
 } from '@/types'
 import { useLockStore } from '@/store/lock'
 
@@ -160,7 +166,11 @@ class ApiClient {
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
-      timeout: 60000,
+      // 120s: subir+conciliar una planilla encadena preview→upload→conciliar, y el
+      // free tier de Render/Neon puede pagar arranque en frío (~30-50s) en la primera
+      // request. Con 60s el navegador cortaba ANTES de que el server terminara (el
+      // trabajo quedaba hecho pero se mostraba "error"). 120s cubre el cold start.
+      timeout: 120000,
       headers: {
         'Content-Type': 'application/json'
       }
@@ -409,14 +419,37 @@ class ApiClient {
     clienteNombre: string,
     extractoId: number,
     file: File,
-    orgId?: number | null
+    orgId?: number | null,
+    mapeo?: MapeoColumnas & { header_row: number }
   ): Promise<Planilla> {
     const formData = new FormData()
     formData.append('file', file)
+    if (mapeo) formData.append('mapeo', JSON.stringify(mapeo))
 
     const params: any = { cliente_nombre: clienteNombre, extracto_id: extractoId }
     if (orgId) params.org_id = orgId
     const res = await this.client.post('/planillas/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params
+    })
+    return res.data
+  }
+
+  // Preview de mapeo de columnas — no guarda nada, solo analiza el archivo
+  async previewPlanilla(
+    file: File,
+    clienteId?: number,
+    orgId?: number | null,
+    clienteNombre?: string
+  ): Promise<ResultadoMapeoPlanilla> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const params: any = {}
+    if (clienteId) params.cliente_id = clienteId
+    if (clienteNombre) params.cliente_nombre = clienteNombre
+    if (orgId) params.org_id = orgId
+    const res = await this.client.post('/planillas/preview', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       params
     })
@@ -513,6 +546,18 @@ class ApiClient {
     return res.data
   }
 
+  async archivarExtracto(id: number): Promise<{ ok: boolean; archivado: boolean; mensaje: string }> {
+    const res = await this.client.patch(`/extractos/${id}/archivar`)
+    this.invalidateCache('/extractos')
+    return res.data
+  }
+
+  async desarchivarExtracto(id: number): Promise<{ ok: boolean; archivado: boolean; mensaje: string }> {
+    const res = await this.client.patch(`/extractos/${id}/desarchivar`)
+    this.invalidateCache('/extractos')
+    return res.data
+  }
+
   async getMovimientos(
     extractoId: number,
     filters: MovimientosFiltros = {}
@@ -571,6 +616,20 @@ class ApiClient {
     await this.client.delete(`/planillas/rows/${rowId}`)
   }
 
+  async candidatosMovimiento(rowId: number): Promise<{
+    row_id: number
+    monto: number
+    candidatos: { id: number; fecha: string | null; titular: string; cliente_acreditado: string | null; es_libre: boolean; es_este_cliente: boolean }[]
+  }> {
+    const { data } = await this.client.get(`/planillas/rows/${rowId}/candidatos-movimiento`)
+    return data
+  }
+
+  async asignarMovimiento(rowId: number, movimientoId: number): Promise<{ ok: boolean; row_id: number; movimiento_id: number; status: string }> {
+    const { data } = await this.client.post(`/planillas/rows/${rowId}/asignar-movimiento`, { movimiento_id: movimientoId })
+    return data
+  }
+
   async appendUM(extractoId: number, file: File, corteSaldo?: number, modoAsiento?: string): Promise<MergeUMResult> {
     const formData = new FormData()
     formData.append('file', file)
@@ -614,6 +673,18 @@ class ApiClient {
     const a = document.createElement('a')
     a.href = url
     a.download = `planilla_conciliada_${planillaId}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // Exportar PDF (misma data que el Excel: detalle de filas + totales/cuadre)
+  async exportPlanillaPdf(planillaId: number): Promise<void> {
+    _suppressLockForDownload()
+    const res = await this.client.get(`/planillas/${planillaId}/export-pdf`, { responseType: 'blob' })
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `planilla_conciliada_${planillaId}.pdf`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -842,6 +913,80 @@ class ApiClient {
     if (params.limit != null) q.limit = params.limit
     if (params.offset != null) q.offset = params.offset
     const res: AxiosResponse<PaginatedResponse<ProyeccionIva>> = await this.client.get('/iva/historial', { params: q })
+    return res.data
+  }
+
+  // ── IVA — Comprobantes ARCA y Liquidación real ──────────────────────────────
+  async importarComprobantesIva(
+    file: File, direccion: 'emitido' | 'recibido', periodo: string, orgId?: number,
+  ): Promise<ImportarComprobantesIvaResult> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const params: Record<string, string | number> = { direccion, periodo }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<ImportarComprobantesIvaResult> = await this.client.post(
+      '/iva/comprobantes/importar', formData, {
+        params,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      },
+    )
+    return res.data
+  }
+
+  async getComprobantesIva(params: {
+    periodo: string; direccion?: 'emitido' | 'recibido'; orgId?: number
+  }): Promise<ComprobantesIvaResponse> {
+    const q: Record<string, string | number> = { periodo: params.periodo }
+    if (params.direccion) q.direccion = params.direccion
+    if (params.orgId) q.org_id = params.orgId
+    const res: AxiosResponse<ComprobantesIvaResponse> = await this.client.get('/iva/comprobantes', { params: q })
+    return res.data
+  }
+
+  async setComprobanteIvaIncluido(id: number, incluido: boolean, orgId?: number): Promise<{ ok: boolean }> {
+    const res = await this.client.patch(`/iva/comprobantes/${id}`, { incluido }, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async deleteComprobanteIva(id: number, orgId?: number): Promise<{ ok: boolean }> {
+    const res = await this.client.delete(`/iva/comprobantes/${id}`, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async calcularLiquidacionIva(payload: LiquidacionIvaCalculoPayload, orgId?: number): Promise<LiquidacionIva> {
+    const res: AxiosResponse<LiquidacionIva> = await this.client.post('/iva/liquidacion/calcular', payload, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async getLiquidacionIva(periodo: string, orgId?: number): Promise<LiquidacionIva | null> {
+    const params: Record<string, string | number> = { periodo }
+    if (orgId) params.org_id = orgId
+    try {
+      const res: AxiosResponse<LiquidacionIva> = await this.client.get('/iva/liquidacion', { params })
+      return res.data
+    } catch (e: any) {
+      if (e?.response?.status === 404) return null
+      throw e
+    }
+  }
+
+  async getHistorialLiquidacionIva(orgId?: number): Promise<{ items: LiquidacionIva[] }> {
+    const res: AxiosResponse<{ items: LiquidacionIva[] }> = await this.client.get('/iva/liquidacion/historial', {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async presentarLiquidacionIva(id: number, orgId?: number): Promise<{ ok: boolean }> {
+    const res = await this.client.post(`/iva/liquidacion/${id}/presentar`, null, {
+      params: orgId ? { org_id: orgId } : {},
+    })
     return res.data
   }
 

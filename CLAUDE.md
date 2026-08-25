@@ -17,9 +17,12 @@ Lee el CLAUDE.md del repo julietaarrazate/conciliacion-bancaria para entender el
 
 - Frontend (React + PWA): Vercel — https://conciliacion-bancaria-ten.vercel.app
 - Backend (FastAPI): Render — https://conciliacion-api.onrender.com
-- Base de datos: Neon PostgreSQL — ep-ancient-hall-anz4pezn.c-6.us-east-1.aws.neon.tech
+- Base de datos: Neon PostgreSQL — ep-ancient-hall-anz4pezn.c-6.us-east-1.aws.neon.tech.
+  `DATABASE_URL` es `sync: false` en `render.yaml` (Render no la autogenera — está seteada a mano
+  en el dashboard de Render, apuntando a Neon; no tocar ese valor desde acá).
 - Código: GitHub — julietaarrazate/conciliacion-bancaria (PRIVADO)
-- Keep-alive: UptimeRobot pinguea /health cada 5 min
+- Keep-alive: UptimeRobot pinguea /health cada 5 min (mantiene despierto a Render). Neon lo
+  mantiene despierto un job interno `db_keepalive` (SELECT 1 cada 4 min) — ver "Schedulers".
 
 IDs públicos: Render service `srv-d7pqt81j2pic73c0c6fg` · Vercel `prj_cVINkspVm6j3B1fxOrdU81B0ehWg`
 
@@ -46,7 +49,17 @@ Render free tier (cold start ~30s, mitigado con UptimeRobot + retry en frontend)
 Backend: FastAPI + SQLAlchemy + PostgreSQL (Neon) + Python 3.11
 Frontend: React 18 + TypeScript + Vite + TailwindCSS + PWA instalable
 Auth: JWT 8h · pbkdf2_sha256 · Rate limiting (slowapi) · Headers de seguridad
-Diseño: Linear-inspired · Inter font · dark mode (#0B0B0F)
+Diseño (app autenticada): Linear-inspired · Inter font · dark mode (#0B0B0F)
+Diseño (landing pública `/`): estilo marketing con efectos — gradiente en el título, glow-orb,
+mockup animado en loop, badge parpadeante, StatCounter, Calculadora, Comparativa, Testimoniales,
+Pricing, FAQ (~14 secciones) — más titulares en **Fraunces** (serif display) + acento itálico en
+Cormorant Garamond; Inter sigue siendo el body font en toda la plataforma. Es un estilo DISTINTO
+a propósito del resto de la app: la operadora revirtió (jul 2026) un rediseño sobrio de la landing
+porque "antes era mejor" y porque el copy técnico no lo entiende el cliente — **el copy visible de
+la landing no debe usar jerga interna** ("Decimal punta a punta", "asientos inmutables", "Ley
+25.326"); esos términos son correctos como documentación INTERNA para desarrolladores (ver
+"Fortalezas" en `docs/AUDITORIA_EKP_2026-07.md`), no como copy de cara al cliente. No volver a
+tocar la landing hacia un estilo "sobrio/profesional" sin pedido explícito de la operadora.
 
 ---
 
@@ -74,6 +87,12 @@ es la referencia profunda. **Consultá el doc correspondiente ANTES de tocar su 
 - Diseño / tokens / componentes → `docs/ux/DESIGN_SYSTEM.md` y `docs/ux/UX_RULES.md`
 - Agregar módulo/endpoint/banco/parser/reporte/módulo-contable → `docs/playbooks/`
 - Mapa general y entidades → `docs/architecture/SYSTEM_MAP.md`, `DOMAIN_MODEL.md` · Índice: `docs/README.md`
+- Auditoría de due-diligence EKP (bandas de madurez, veredicto, roadmap por evidencia) →
+  `docs/AUDITORIA_EKP_2026-07.md` (jul 2026, re-audita `ENGINEERING_AUDIT.md` de junio)
+- Gates de Product Genesis (viabilidad de ideas nuevas evaluadas con el generador del EKP) →
+  `docs/ekp/GENESIS_COPILOTO_IMPOSITIVO.md` (condicionalmente viable, no construir sin validar
+  primero) y `docs/ekp/GENESIS_BILLETERAS.md` (NOT VIABLE como producto standalone; VIABLE
+  reencuadrado como feature de Cuadra — parser de billeteras en el motor multi-banco)
 
 Cada doc tiene una sección `## Pendiente de revisar` con discrepancias código↔doc detectadas.
 Si cambiás el código de un área, actualizá su doc (la doc describe el código tal como está).
@@ -134,7 +153,16 @@ Tolerancia fecha: 5 días · UM deduplicación: (orden, monto) o (fecha, monto, 
 
 **Antes de tocar fechas, montos (Decimal), compartir por WhatsApp o detección de banco**: revisar
 `BUGS.md` — son las áreas con bugs recurrentes documentados (causa raíz + cómo evitarlos).
-Bancos soportados: Macro, BBVA, Santander, Galicia, ICBC y genérico.
+Bancos soportados (16, `detectar_banco` en `excel_parser.py`): Macro, BBVA, Santander, Galicia,
+ICBC, Nación, Provincia, Ciudad, HSBC, Mercado Pago (por headers, no por texto), Credicoop,
+Supervielle, Patagonia, Bancor, Rioja, La Pampa — más genérico como fallback.
+
+**Planillas de clientes heterogéneas** (v3.27): la planilla del cliente (distinta del extracto del
+banco) pasa por un embudo de estandarización (`services/planilla_mapper.py`) que la normaliza al
+esquema canónico `{monto, cuit, titular, referencia, fecha}` antes de conciliar. 3 capas: perfil por
+cliente (`Cliente.mapeo_planilla`, se aprende al confirmar el mapeo una vez) → heurística con
+validación de contenido → IA (Gemini) como fallback. Endpoints `/planillas/preview` (+ modal de
+mapeo en frontend) y `/planillas/upload` con `mapeo` opcional. El motor de conciliación no cambia.
 
 IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ confirmaciones → aplica auto).
 
@@ -150,7 +178,12 @@ IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ con
 
 ## Schedulers (APScheduler en proceso FastAPI)
 
+- **cada 4 min** — `db_keepalive`: `SELECT 1` para que Neon (free tier) no autosuspenda. UptimeRobot
+  pinguea `/health` (no toca la DB) → mantiene despierto a Render pero dejaba dormir a Neon, y cada
+  módulo pagaba el wake-up de Neon en su primera query. Este job lo evita. Siempre activo.
 - **03:00 ART** — backup completo JSON gzipeado por email (Resend). Activo si `RESEND_API_KEY` está seteada.
+- **03:30 ART** — purga de tokens revocados / login approvals / códigos 2FA vencidos. Siempre activo.
+- **09:00 ART** — alerta si el uso de R2 supera ~8 GB. Activa si `S3_*` está configurado.
 - **10:00 ART** — push alertas: cheques que vencen en ≤3 días + movimientos sin conciliar >7 días. Activo si `VAPID_PRIVATE_KEY` y `VAPID_PUBLIC_KEY` están seteadas.
 
 ---
@@ -165,16 +198,34 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ## Estado actual y changelog
 
-**Versión actual: v3.24.** Historial completo de versiones (v3.6 a v3.24, con detalle de cada
+**Versión actual: v3.29.** Historial completo de versiones (v3.6 a v3.29, con detalle de cada
 feature/fix/PR) en **`CHANGELOG.md`** — no se carga automáticamente en cada sesión, así que si
 necesitás contexto histórico detallado de una versión puntual, leelo directamente.
 
+Últimas versiones: **v3.27** estandarización universal de planillas de clientes (embudo de mapeo) +
+capa de diagnóstico de conciliación · **v3.28** archivar extractos (cierre de período) + exports
+estéticos con PDF de planilla conciliada + alertas de descuadre/filas ambiguas + UX de estados
+(labels humanos) · **v3.29** carga masiva de cheques (varios cheques por foto en el OCR).
+
+Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,
+sin efectos) y la operadora la rechazó — se revirtió a la landing anterior completa (gradiente,
+glow-orb, mockup animado, Calculadora, Comparativa, Testimoniales, Pricing, FAQ) más un refresco
+tipográfico (Fraunces en titulares) pedido aparte. Ver "Diseño" arriba antes de tocar `/landing`.
+
 Resumen muy breve de dónde está el sistema hoy: motor de conciliación + multi-banco (16 bancos) +
 multi-tenant funcionando en producción; módulos operativos completos (Cheques, Pagos, Caja,
-Liquidaciones, Contabilidad con cuentas corrientes); 4 módulos de liquidación de impuestos
-(IVA, Monotributo, Ingresos Brutos, Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
+Liquidaciones, Contabilidad con cuentas corrientes); 5 módulos de liquidación de impuestos
+(IVA Proyección, IVA Liquidación real con "Mis Comprobantes" de ARCA, Monotributo, Ingresos Brutos,
+Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
 ARCA (facturación electrónica WSFEv1) construido pero desactivado a propósito (ver "Pendiente para
-próximas sesiones" abajo). 440 tests pasando.
+próximas sesiones" abajo). **~575 tests backend + ~40 tests frontend** pasando.
+
+Profesionalización de ingeniería (jun 2026): base de documentación en `/docs` (arquitectura,
+negocio, API, BD, seguridad, UX, playbooks, ADR — cada doc con su "Pendiente de revisar"),
+`.claude/` (comandos + checklists + templates + memoria de deuda técnica), CI (ruff + pytest +
+eslint + tsc + vitest + build), y `ENGINEERING_AUDIT.md`. Verde de marca unificado en un token
+mode-aware (`--ml-green`: claro `#16A34A` / oscuro `#4ADE80`). Tests de frontend con Testing
+Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) en CI.
 
 ---
 
@@ -233,6 +284,11 @@ Sonnet para el CRUD/UI del frontend, por el protocolo de orquestación ya docume
 - **v3.20 — Control Semestral Monotributo** ✅ implementado (ver CHANGELOG.md). Segundo módulo del plan.
 - **v3.21 — Ingresos Brutos y Convenio Multilateral** ✅ implementado (ver CHANGELOG.md). Tercer módulo del plan.
 - **v3.22 — Liquidador de Sueldos y F931** ✅ implementado (ver CHANGELOG.md). Cuarto módulo del plan.
+- **v3.26 — IVA Liquidación real ("Mis Comprobantes" de ARCA)** ✅ implementado (ver CHANGELOG.md).
+  Quinto módulo: importa el Excel oficial de ventas/compras de ARCA, depura comprobantes, calcula
+  débito−crédito con saldo técnico arrastrado + retenciones/percepciones + saldo de libre
+  disponibilidad. Pendiente menor: automatizar import del Excel de ret/perc (hoy carga manual —
+  falta un archivo de ejemplo de ARCA para el parser).
 - Pendientes a priorizar: Intake Exportador de Servicios.
 
 ---
@@ -309,6 +365,39 @@ con descripción por versión. Son en su mayoría referencias documentales, no s
 git — antes de un `git checkout vX.Y` correr `git tag` y confirmar que existe; tags reales hoy:
 `v2.1`, `v2.2`, `v3.14-stable`, `v3.22`, `dnda-software-2026-v1`.
 
+### Ciclo de trabajo obligatorio — Claude como Software Architect (Fase 3)
+
+Claude mantiene la calidad del sistema a medida que evoluciona. El rigor **se escala al tamaño y
+riesgo del cambio** (no gastar tokens de más: leer con cerebros baratos, razonar/implementar lo
+complejo con los caros).
+
+**Ruteo por costo de modelo** (clave para no gastar de más):
+- **Haiku** → leer, buscar, resumir impacto, tareas mecánicas (renombres, docs menores).
+- **Sonnet** → implementación estándar (CRUD, UI, endpoints, refactors, tipado).
+- **Opus** → lógica compleja/riesgosa (motor contable, parsers, migraciones, lógica financiera).
+- **Fable** → orquesta: diseño, descomposición, dependencias, conflictos de merge, auditoría.
+- Regla de oro: el orquestador **delega la lectura/análisis a Haiku** y reserva Opus para el
+  razonamiento difícil. Nunca leer 4 docs con un modelo caro si Haiku puede resumirlos.
+
+**Nivel del cambio → ceremonia:**
+- **Trivial** (fix de 1 línea, typo, refactor mecánico): reproducir/verificar → corregir → test →
+  doc si aplica. (Haiku/Sonnet)
+- **Estándar** (endpoint, CRUD, UI): leer SOLO el/los doc(s) del área tocada → analizar impacto →
+  implementar → tests → actualizar doc. (Sonnet)
+- **Complejo** (feature/módulo nuevo, cambio de esquema, lógica financiera): **ciclo completo** →
+  1) PRODUCT_BIBLE 2) SYSTEM_MAP 3) DOMAIN_MODEL 4) DECISIONS 5) analizar impacto 6) buscar
+  reutilización 7) diseñar 8) implementar 9) tests 10) docs 11) CHANGELOG 12) detectar deuda
+  técnica 13) proponer mejoras arquitectónicas. (Fable diseña · Opus implementa lo difícil)
+
+Los flujos detallados (entrada/salida/docs afectada por tipo de trabajo) están en
+**`docs/playbooks/LOOPS.md`** (Feature/Bug/Refactor/Documentation/Security/Database/AI/Release/
+Architecture/Product), operacionalizados en `.claude/commands/`.
+
+**Reglas de calidad permanentes** (innegociables en todo cambio):
+no duplicar lógica · no romper compatibilidad · mantener el aislamiento multi-tenant ·
+mantener la auditoría · mantener la trazabilidad contable (partida doble) · mantener/crear tests ·
+actualizar la documentación afectada. Verificación siempre: `pytest` + `tsc --noEmit` + `build`.
+
 ---
 
 ## Registro de Obra de Software (DNDA)
@@ -334,4 +423,4 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.24
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.29

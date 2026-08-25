@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Boolean, Numeric
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Numeric
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -15,6 +15,10 @@ class ExtractoBancario(Base):
     banco = Column(String, nullable=True, default="Banco Macro")
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
     deleted_at = Column(DateTime, nullable=True, index=True)  # soft delete: NULL = activo
+    # Archivado (cierre de período): distinto de borrado — un extracto archivado se
+    # sigue viendo/filtrando/exportando por id, solo sale del listado por defecto y
+    # rechaza nuevos UM. Permite cerrar el mes y arrancar un extracto nuevo del banco.
+    archivado_at = Column(DateTime, nullable=True)
 
     # Relationships
     creado_por_user = relationship("User", back_populates="extractos")

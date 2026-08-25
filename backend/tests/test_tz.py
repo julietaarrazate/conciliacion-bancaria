@@ -4,7 +4,7 @@ El bug que corrige: el servidor corre en UTC; date.today() devolvía la fecha de
 ayer entre la medianoche y las 3 AM hora argentina, dejando pagos/cheques/asientos
 con la fecha equivocada en el Libro Diario.
 """
-from datetime import date, datetime, timezone, timedelta
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 from app.services.tz import hoy_art, now_art, ARG_TZ

@@ -26,6 +26,7 @@ suma el **bonus por fecha** (§1.2). Las señales son **excluyentes y ordenadas*
 | CUIT exacto (10-11 dígitos) | **12** | `conciliacion.py:174-176` |
 | CUIT de planilla como substring de dígitos del movimiento | **12** | `conciliacion.py:180-184` |
 | CBU/CVU exacto (22 dígitos) | **10** | `conciliacion.py:188-189` |
+| DNI de planilla (7-8 dígitos) embebido en el CUIT/CUIL del movimiento | **9** | `conciliacion.py:138-146` |
 | Número en común de longitud ≥ 22 (CBU/CVU por longitud) | **10** | `conciliacion.py:198-199` |
 | Número de cuenta largo (≥ 10 dígitos) en común | **8** | `conciliacion.py:200-201` |
 | Número de referencia/operación (6-9 dígitos) en común | **6** | `conciliacion.py:202-203` |
@@ -35,6 +36,14 @@ suma el **bonus por fecha** (§1.2). Las señales son **excluyentes y ordenadas*
 | Titular: única palabra presente | **3** | `conciliacion.py:225-227` |
 
 Notas fieles al código:
+- El caso DNI-embebido-en-CUIT (ago 2026, caso real cliente SMT) cubre planillas
+  que solo anotan el DNI del titular (8 dígitos) en vez del CUIT/CUIL completo
+  (11). Como el CUIT argentino es 2 dígitos de tipo + DNI + 1 verificador, el DNI
+  aparece como substring contigua dentro de los dígitos del movimiento. Antes de
+  este fix, ese caso puntuaba 0 (ni el chequeo de CUIT-substring, que solo corre
+  con `cuit_plan` de 10-11 dígitos, ni el cruce de números, que exige match
+  exacto de todo el token) — la fila quedaba en "no coincide" pese a tener
+  identidad suficiente para desempatar sin ambigüedad.
 - Solo se consideran "palabras" de titular las **alfabéticas de ≥ 3 caracteres**
   (`conciliacion.py:212`), para no filtrar nombres cortos (Ana, Leo, Sol).
 - Los números significativos que se cruzan son los de **6 a 22 dígitos**
@@ -122,6 +131,24 @@ Estados base que produce el motor (`buscar_match` + `conciliar_planilla`):
 > El monto duplicado y el monto ya acreditado se contabilizan ambos como
 > `duplicadas` en el resumen (`conciliacion.py:485-486`).
 
+### 1.5bis. Resolución manual de filas ambiguas
+
+Cuando el scoring automático no puede desempatar (`no coincide`, `ambiguo`,
+`sin datos`), hay **dos** caminos manuales distintos según el caso — no son
+intercambiables:
+
+| Caso | Dónde | Qué hace | Endpoint |
+|---|---|---|---|
+| La fila **ya existe** en una planilla del cliente y solo falta elegir cuál de los movimientos candidatos es | Botón "🔗" en la fila (Historial/PlanillaPanel) | Resuelve **esa fila en su lugar**: `status="ok"`, linkea `orden_movimiento_acreditado`, sincroniza `mov.cliente_acreditado` y dispara `registrar_reclasificacion_planilla` — mismo criterio que "Re-conciliar". No crea filas nuevas. | `GET /planillas/rows/{id}/candidatos-movimiento`, `POST /planillas/rows/{id}/asignar-movimiento` (`routers/planillas.py`) |
+| El movimiento es realmente **huérfano** — plata que llegó al banco sin que el cliente la declarara en ninguna planilla | Vista Movimientos (extracto) → "acreditar a cliente" | Marca `mov.cliente_acreditado` y agrega una fila a la planilla original del cliente para ese extracto (o crea una planilla "acreditación manual {d}.{m}" si no existe ninguna) | `POST /clientes/movimientos/{mov_id}/acreditar` (`routers/clientes_dir.py:429-559`) |
+
+> **Regresión ago 2026 (caso real SMT):** antes solo existía el segundo
+> camino. Usarlo para resolver una fila ya existente (monto duplicado
+> ambiguo) dejaba la fila original huérfana en "no coincide" para siempre y
+> agregaba una fila nueva — funcionaba para el total de la cuenta corriente,
+> pero era confuso y no reflejaba qué pasó. El botón "🔗" cubre ese caso
+> correctamente.
+
 ### 1.6. Configuración por organización
 
 `CONFIG_DEFAULT_ORG` (`conciliacion.py:361-367`) — comportamiento de la org base:
@@ -141,6 +168,27 @@ Estados base que produce el motor (`buscar_match` + `conciliar_planilla`):
   `cliente_acreditado` es None, vacío o "no identificado" —
   `conciliacion.py:104-107`) o ya pertenece al mismo cliente
   (`conciliacion.py:288-292`).
+
+### 1.7. Bloqueo de planillas duplicadas (por cliente) — desde ago 2026
+
+Archivo: `backend/app/routers/planillas.py` (`upload_planilla`), migración 026.
+
+- `POST /planillas/upload` calcula `fingerprint = sha1(contenido_del_archivo)` y
+  rechaza con **409** si ya existe una planilla **activa** (no borrada) con el
+  mismo `(cliente_id, fingerprint, organizacion_id)`. Mismo patrón que
+  `ExtractoBancario.fingerprint` (§ arquitectura, índice único parcial
+  `uq_extracto_fp_org`), acá `uq_planilla_fp_cliente_org` — `WHERE fingerprint
+  IS NOT NULL AND deleted_at IS NULL`, así borrar la planilla existente libera
+  el fingerprint para re-subir.
+- El bloqueo es por **archivo idéntico para el mismo cliente**, no por cliente
+  solo: dos clientes distintos pueden subir un archivo con bytes idénticos sin
+  problema; el mismo cliente con datos distintos (mes siguiente) tampoco choca
+  porque el contenido cambia.
+- El mensaje de error incluye el id/fecha de la planilla existente y sugiere el
+  camino correcto para el caso de uso real que motivó esto: si lo que cambió es
+  el **% de comisión** (se tipea al conciliar, no viaja en el archivo — ver §4.1),
+  no hace falta re-subir el archivo — hay que re-conciliar la planilla ya cargada
+  con el % correcto.
 
 ---
 
@@ -222,6 +270,68 @@ Archivo: `backend/app/routers/liquidaciones.py`.
   (`liquidaciones.py:106`, `167`).
 - Solo cubre planillas (TT). **Los cheques se liquidan por separado** en su
   módulo (`liquidaciones.py:55`).
+
+> **No hay doble cobro posible entre el % de la planilla y el % del cliente** —
+> son dos números que ni siquiera se suman: son **campos independientes que
+> alimentan pantallas distintas** y pueden mostrar valores diferentes para el
+> mismo cliente/período si no coinciden:
+> - **Liquidaciones** (arriba) usa exclusivamente `Planilla.porcentaje_comision`
+>   (el % tipeado al conciliar esa planilla puntual). Nunca lee `Cliente.porcentaje_comision`.
+> - **Estado de Cuenta** (`reportes_service.calcular_estado_cuenta_cliente`,
+>   `reportes_service.py:737-745`) — incluida la página pública compartida
+>   (`/p/:token`) — usa `Cliente.porcentaje_comision` si está seteado, si no el
+>   default de la org (`comisiones.porcentaje_default`, 1.5%). Nunca lee
+>   `Planilla.porcentaje_comision`.
+>
+> Si el % "de siempre" de un cliente está en su ficha (`Clientes.porcentaje_comision`,
+> ej. 2%) y además se tipea un % al conciliar cada planilla, mantenerlos iguales es
+> responsabilidad manual — el sistema no los sincroniza ni los valida entre sí.
+
+### 4.1bis. Asiento contable al conciliar una planilla (cuenta corriente del cliente)
+
+Archivos: `backend/app/services/conciliacion.py` (`conciliar_planilla`) +
+`backend/app/services/motor_contable.py` (`registrar_reclasificacion_planilla`).
+Tratamiento acordado con el contador (ago 2026).
+
+Al conciliar filas de una planilla contra el banco, además de actualizar el
+`status` de cada fila, se postea un asiento que reclasifica la plata del banco
+a la cuenta corriente del cliente:
+
+- **Cliente (Haber) = NETO** (total conciliado **menos** la comisión de esa
+  planilla) — es lo que se ve como "Total Crédito" en Cuentas Corrientes.
+- **Pagos al cliente** (efectivo/transferencia, eventos `pago_cliente_banco` /
+  `pago_cliente_efectivo`) siguen siendo lo único que entra en "Total Débito".
+  La comisión **no** pasa por el débito del cliente — se separa a un asiento
+  distinto, no ensucia su cuenta corriente.
+- **Comisión** → asiento aparte: **Comisiones ganadas** (3-1-1-0) al Haber, se
+  reconoce como ingreso nuestro independiente de la cuenta del cliente.
+
+**Contrapartida (Debe) según el ORIGEN del movimiento** — de dónde salió la
+plata realmente, no es intercambiable:
+| Origen del movimiento (`MovimientoBanco.source`) | Cuenta de origen (Debe) | Por qué |
+|---|---|---|
+| `"extracto"` (extracto bancario principal) | **Pasivo Corriente** (2-1-0-0) | Ahí quedó la plata al importar el extracto (`registrar_extracto`: Banco D / Pasivo Corriente H). |
+| `"um"` (Últimos Movimientos) | **No identificado** (2-1-1-1) | Ahí quedó la plata al importar el UM (`registrar_um_import`: Banco D / No identificado H). |
+
+Una planilla con filas conciliadas contra **ambos** orígenes genera **dos
+asientos principales independientes** (uno por origen, módulos
+`reclass_planilla_extracto` / `um_reclass_planilla`) — cada uno neteando su
+propia comisión proporcional — para no dejar ninguna de las dos cuentas de
+origen mal (una nunca se cancelaría, la otra quedaría negativa).
+
+- El **% de comisión efectivo** es el que se manda en el request de conciliar
+  si es `> 0`, o si no vino, el que ya tenía guardado `Planilla.porcentaje_comision`
+  (re-conciliar sin re-tipear el % no lo pierde) — resuelto en el router
+  (`planillas.py::conciliar`), no en `conciliar_planilla`.
+- **Upsert por `(modulo, planilla_id, organizacion_id)`**: re-conciliar
+  recalcula sobre TODAS las filas `ok` (no solo las de esa pasada) y actualiza
+  los asientos existentes — idempotente. Si el % de comisión baja a 0, el
+  asiento de comisión se borra (no queda huérfano con un monto que ya no
+  corresponde).
+- La cuenta del cliente se resuelve/crea/vincula vía `_get_o_crear_cuenta_cliente`
+  — **nunca** la cuenta madre genérica "Cliente" (2-1-2-0). Ese fue el bug de un
+  backfill de arranque ya eliminado (ver CHANGELOG ago 2026): usaba la cuenta
+  genérica y el monto bruto, dejando las cuentas corrientes por cliente vacías.
 
 ### 4.2. Comisión de cheques (local / interior)
 

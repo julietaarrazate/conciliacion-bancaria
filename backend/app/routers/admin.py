@@ -10,7 +10,7 @@ from app.schemas.admin import (
     UserAdminUpdate,
     UserListResponse
 )
-from app.middleware.auth import get_current_user, require_superadmin
+from app.middleware.auth import require_superadmin
 from app.services.auditoria import registrar_log
 
 router = APIRouter(prefix="/admin", tags=["admin"])

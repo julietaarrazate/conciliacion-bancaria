@@ -21,15 +21,15 @@ from sqlalchemy.orm import Session
 from app.models.organizacion import Organizacion
 from app.models.user import User
 from app.models.cliente import Cliente
-from app.models.extracto import ExtractoBancario, MovimientoBanco
-from app.models.planilla import Planilla, PlanillaRow
+from app.models.extracto import ExtractoBancario
+from app.models.planilla import Planilla
 from app.models.auditoria import AuditoriaLog
 from app.models.patron_aprendido import PatronAprendido
-from app.models.liquidacion import Liquidacion, LiquidacionDetalle, CierrePeriodo
+from app.models.liquidacion import Liquidacion, CierrePeriodo
 from app.models.cheque import Cheque
 from app.models.egreso import Egreso, CategoriaEgreso
 from app.models.caja import ArqueoDiario
-from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento, AsientoDetalle
+from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento
 
 
 logger = logging.getLogger(__name__)

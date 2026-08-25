@@ -482,6 +482,163 @@ def test_reclasificacion_planilla_un_asiento_agrupado(db):
     assert cli_l.cuenta_id == cuenta_cli.id
 
 
+def test_reclasificacion_planilla_con_comision_separa_neto_y_comision(db):
+    """comision_pct > 0 -> 2 asientos: principal por el NETO (origen D / Cliente H)
+    y uno separado por la comision (origen D / Comisiones ganadas H). Tratamiento
+    acordado con el contador (ago 2026): el cliente queda acreditado por el neto,
+    la comision se reconoce como ingreso aparte."""
+    cli, cuenta_cli = _cliente_con_cuenta(db)
+    mc.registrar_reclasificacion_planilla(
+        db, planilla_id=20, org_id=ORG_ID, usuario_id=1,
+        cliente_id=cli.id, cliente_nombre=cli.nombre,
+        total_monto=Decimal("100000"), fecha=date(2026, 8, 20),
+        nombre_archivo="alojando.xlsx", comision_pct=Decimal("2"),
+    )
+    principales = _asientos_de(db, "um_reclass_planilla", 20)
+    comisiones = _asientos_de(db, "um_reclass_planilla_comision", 20)
+    assert len(principales) == 1
+    assert len(comisiones) == 1
+
+    p = principales[0]
+    origen_p = next(l for l in p.lineas if l.debe > 0)
+    cli_l = next(l for l in p.lineas if l.haber > 0)
+    assert origen_p.debe == Decimal("98000.00")
+    assert cli_l.haber == Decimal("98000.00")
+    assert cli_l.cuenta_id == cuenta_cli.id
+
+    c = comisiones[0]
+    origen_c = next(l for l in c.lineas if l.debe > 0)
+    com_l = next(l for l in c.lineas if l.haber > 0)
+    assert origen_c.debe == Decimal("2000.00")
+    assert com_l.haber == Decimal("2000.00")
+
+
+def test_reclasificacion_planilla_sin_comision_no_crea_asiento_comision(db):
+    """comision_pct == 0 (default) -> un solo asiento por el total, sin separar
+    nada (compatibilidad con el comportamiento previo a ago 2026)."""
+    cli, _ = _cliente_con_cuenta(db)
+    mc.registrar_reclasificacion_planilla(
+        db, planilla_id=21, org_id=ORG_ID, usuario_id=1,
+        cliente_id=cli.id, cliente_nombre=cli.nombre,
+        total_monto=Decimal("5000"), fecha=date(2026, 8, 20),
+    )
+    assert len(_asientos_de(db, "um_reclass_planilla", 21)) == 1
+    assert len(_asientos_de(db, "um_reclass_planilla_comision", 21)) == 0
+
+
+def test_reclasificacion_planilla_bajar_comision_a_cero_borra_asiento_comision(db):
+    """Re-conciliar con comision_pct=0 tras haber tenido comision borra el
+    asiento de comision viejo (no lo deja huerfano con un monto que ya no
+    corresponde)."""
+    cli, _ = _cliente_con_cuenta(db)
+    mc.registrar_reclasificacion_planilla(
+        db, planilla_id=22, org_id=ORG_ID, usuario_id=1,
+        cliente_id=cli.id, cliente_nombre=cli.nombre,
+        total_monto=Decimal("10000"), fecha=date(2026, 8, 20),
+        comision_pct=Decimal("2"),
+    )
+    assert len(_asientos_de(db, "um_reclass_planilla_comision", 22)) == 1
+
+    mc.registrar_reclasificacion_planilla(
+        db, planilla_id=22, org_id=ORG_ID, usuario_id=1,
+        cliente_id=cli.id, cliente_nombre=cli.nombre,
+        total_monto=Decimal("10000"), fecha=date(2026, 8, 20),
+        comision_pct=Decimal("0"),
+    )
+    assert len(_asientos_de(db, "um_reclass_planilla_comision", 22)) == 0
+    principal = _asientos_de(db, "um_reclass_planilla", 22)[0]
+    assert sum(l.debe for l in principal.lineas) == Decimal("10000.00")
+
+
+def test_reclasificacion_planilla_origen_extracto_usa_pasivo_corriente_y_modulo_propio(db):
+    """cuenta_origen_codigo='2-1-0-0' (extracto principal) postea contra Pasivo
+    Corriente, no contra No identificado, y usa un modulo DISTINTO al de UM —
+    para que ambos buckets convivan sin pisarse en la MISMA planilla (un cliente
+    puede tener filas conciliadas contra el extracto y contra UM a la vez)."""
+    cli, cuenta_cli = _cliente_con_cuenta(db)
+    pasivo = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-0-0", PlanCuenta.organizacion_id == ORG_ID).first()
+
+    mc.registrar_reclasificacion_planilla(
+        db, planilla_id=30, org_id=ORG_ID, usuario_id=1,
+        cliente_id=cli.id, cliente_nombre=cli.nombre,
+        total_monto=Decimal("7000"), fecha=date(2026, 8, 20),
+        cuenta_origen_codigo="2-1-0-0",
+    )
+    asientos_extracto = _asientos_de(db, "reclass_planilla_extracto", 30)
+    assert len(asientos_extracto) == 1
+    origen_l = next(l for l in asientos_extracto[0].lineas if l.debe > 0)
+    assert origen_l.cuenta_id == pasivo.id
+
+    # El mismo planilla_id, bucket UM (default) -> asiento aparte, no choca.
+    mc.registrar_reclasificacion_planilla(
+        db, planilla_id=30, org_id=ORG_ID, usuario_id=1,
+        cliente_id=cli.id, cliente_nombre=cli.nombre,
+        total_monto=Decimal("1000"), fecha=date(2026, 8, 20),
+    )
+    assert len(_asientos_de(db, "reclass_planilla_extracto", 30)) == 1
+    assert len(_asientos_de(db, "um_reclass_planilla", 30)) == 1
+
+
+def test_conciliar_planilla_genera_asiento_por_origen_con_comision(db):
+    """Integración conciliacion.conciliar_planilla -> motor_contable: una planilla
+    con filas conciliadas contra el extracto principal Y contra UM genera DOS
+    asientos separados (uno por origen), cada uno neteando su propia comisión —
+    sin que se pisen entre sí en la misma planilla."""
+    from app.services.conciliacion import conciliar_planilla, CONFIG_DEFAULT_ORG
+
+    cli, cuenta_cli = _cliente_con_cuenta(db, nombre="Alojando")
+
+    mov_extracto = SimpleNamespace(
+        id=101, source="extracto", monto=Decimal("98000"), titular="JUAN PEREZ",
+        fecha=date(2026, 8, 19), cliente_acreditado=None, fecha_acred=None,
+    )
+    mov_um = SimpleNamespace(
+        id=202, source="um", monto=Decimal("49000"), titular="JUAN PEREZ",
+        fecha=date(2026, 8, 19), cliente_acreditado=None, fecha_acred=None,
+    )
+    row_extracto = SimpleNamespace(
+        planilla_id=99, monto=Decimal("98000"), cuit=None, titular="Juan Perez",
+        referencia=None, fecha=date(2026, 8, 19), fecha_acred=None,
+        status="pendiente", orden_movimiento_acreditado=None,
+    )
+    row_um = SimpleNamespace(
+        planilla_id=99, monto=Decimal("49000"), cuit=None, titular="Juan Perez",
+        referencia=None, fecha=date(2026, 8, 19), fecha_acred=None,
+        status="pendiente", orden_movimiento_acreditado=None,
+    )
+
+    resultado = conciliar_planilla(
+        db=db,
+        planilla_rows=[row_extracto, row_um],
+        movimientos=[mov_extracto, mov_um],
+        cliente_nombre="Alojando",
+        fecha_acred_str="2026-08-20",
+        org_config=CONFIG_DEFAULT_ORG,
+        org_id=ORG_ID,
+        cliente_id=cli.id,
+        comision_pct=Decimal("2"),
+    )
+    assert resultado["acreditadas"] == 2
+
+    principal_extracto = _asientos_de(db, "reclass_planilla_extracto", 99)
+    comision_extracto = _asientos_de(db, "reclass_planilla_extracto_comision", 99)
+    principal_um = _asientos_de(db, "um_reclass_planilla", 99)
+    comision_um = _asientos_de(db, "um_reclass_planilla_comision", 99)
+    assert len(principal_extracto) == 1 and len(comision_extracto) == 1
+    assert len(principal_um) == 1 and len(comision_um) == 1
+
+    pasivo = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-0-0", PlanCuenta.organizacion_id == ORG_ID).first()
+    no_id = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-1-1", PlanCuenta.organizacion_id == ORG_ID).first()
+
+    origen_pe = next(l for l in principal_extracto[0].lineas if l.debe > 0)
+    assert origen_pe.cuenta_id == pasivo.id
+    assert origen_pe.debe == Decimal("96040.00")  # 98000 - 2%
+
+    origen_pu = next(l for l in principal_um[0].lineas if l.debe > 0)
+    assert origen_pu.cuenta_id == no_id.id
+    assert origen_pu.debe == Decimal("48020.00")  # 49000 - 2%
+
+
 def test_reclasificacion_planilla_upsert_actualiza_monto(db):
     """Re-conciliar la misma planilla actualiza el monto, no crea otro asiento."""
     cli, _ = _cliente_con_cuenta(db)

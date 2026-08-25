@@ -693,6 +693,8 @@ export const Clientes: React.FC = () => {
                                             </button>
                                             <button onClick={() => apiClient.downloadPlanillaConciliada(a.id)}
                                               className="p-1 text-green-600 hover:text-green-700 dark:text-green-400" title="Descargar Excel">⬇️</button>
+                                            <button onClick={() => apiClient.exportPlanillaPdf(a.id)}
+                                              className="p-1 text-green-600 hover:text-green-700 dark:text-green-400" title="Descargar PDF">📕</button>
                                           </div>
                                         </div>
                                       )

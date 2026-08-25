@@ -10,6 +10,9 @@ estado actual del sistema basándose exclusivamente en el código.
 
 ## Índice
 
+### Panorama general
+- [ESTADO_SISTEMA.md](./ESTADO_SISTEMA.md) — snapshot completo y autocontenido de todo lo construido (módulos, deuda técnica, pendientes); pensado para revisión externa
+
 ### Arquitectura (`architecture/`)
 - [ARCHITECTURE.md](./architecture/ARCHITECTURE.md) — stack, capas, topología de producción, ciclo de request, schedulers
 - [SYSTEM_MAP.md](./architecture/SYSTEM_MAP.md) — mapa módulo → router → service → modelo → página
@@ -42,12 +45,14 @@ estado actual del sistema basándose exclusivamente en el código.
 - [DECISIONS.md](./adr/DECISIONS.md) — registro de decisiones arquitectónicas (ADR)
 
 ### Playbooks (`playbooks/`) — guías paso a paso
+- [LOOPS.md](./playbooks/LOOPS.md) — ciclos de trabajo permanentes (Feature/Bug/Refactor/… con ruteo por modelo)
 - [NEW_MODULE.md](./playbooks/NEW_MODULE.md) — agregar un módulo
 - [NEW_API_ENDPOINT.md](./playbooks/NEW_API_ENDPOINT.md) — agregar un endpoint
 - [NEW_BANK.md](./playbooks/NEW_BANK.md) — soportar un banco nuevo
 - [NEW_PARSER.md](./playbooks/NEW_PARSER.md) — extender el parser de Excel
 - [NEW_REPORT.md](./playbooks/NEW_REPORT.md) — agregar un reporte/export
 - [NEW_ACCOUNTING_MODULE.md](./playbooks/NEW_ACCOUNTING_MODULE.md) — integrar con el motor contable
+- [RESET_OPERATIVO.md](./playbooks/RESET_OPERATIVO.md) — vaciar lo transaccional (arrancar limpio) conservando maestros
 
 ## Convención
 

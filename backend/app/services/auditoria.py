@@ -1,6 +1,5 @@
 """Servicio para registrar logs de auditoría automáticamente"""
 
-import json
 from decimal import Decimal
 from typing import Any, Optional
 from sqlalchemy.orm import Session

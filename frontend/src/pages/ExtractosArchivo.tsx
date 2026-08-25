@@ -91,6 +91,24 @@ export const ExtractosArchivo: React.FC = () => {
     setDlLoading(null)
   }
 
+  const [archLoading, setArchLoading] = useState<number | null>(null)
+
+  const handleArchivar = async (e: ExtractoHistorialItem) => {
+    setDlError('')
+    setArchLoading(e.id)
+    try {
+      if (e.archivado) {
+        await apiClient.desarchivarExtracto(e.id)
+      } else {
+        await apiClient.archivarExtracto(e.id)
+      }
+      setItems(prev => prev.map(x => x.id === e.id ? { ...x, archivado: !e.archivado } : x))
+    } catch (err: any) {
+      setDlError(err.response?.data?.detail || 'No se pudo cambiar el estado del extracto.')
+    }
+    setArchLoading(null)
+  }
+
   const startRename = (e: ExtractoHistorialItem) => {
     setRenamingId(e.id)
     setRenameVal(e.nombre_archivo)
@@ -251,6 +269,11 @@ export const ExtractosArchivo: React.FC = () => {
                                                 )}
                                                 <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
                                                   Subido {fmtDatetime(e.fecha_creacion)} · {e.usuario_nombre}
+                                                  {e.archivado && (
+                                                    <span className="ml-1.5 px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-ml-dark-card dark:text-gray-400 font-medium">
+                                                      📦 Archivado
+                                                    </span>
+                                                  )}
                                                 </p>
                                               </div>
 
@@ -276,6 +299,16 @@ export const ExtractosArchivo: React.FC = () => {
                                                   className="px-2.5 py-1 text-[11px] bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors whitespace-nowrap"
                                                 >
                                                   {dlLoading === e.id ? '⏳' : '⬇️'} .xlsx
+                                                </button>
+                                                <button
+                                                  onClick={() => handleArchivar(e)}
+                                                  disabled={archLoading === e.id}
+                                                  className="px-2.5 py-1 text-[11px] text-gray-500 border border-gray-300 dark:border-ml-dark-border rounded-md hover:bg-gray-50 dark:hover:bg-ml-dark-hover disabled:opacity-50 transition-colors whitespace-nowrap"
+                                                  title={e.archivado
+                                                    ? 'Reabrir este extracto (vuelve a aceptar movimientos nuevos)'
+                                                    : 'Cerrar el período: queda guardado y consultable, pero no recibe más movimientos. Podés subir un extracto nuevo del banco.'}
+                                                >
+                                                  {archLoading === e.id ? '⏳' : e.archivado ? '↩️ Reabrir' : '📦 Archivar'}
                                                 </button>
                                               </div>
                                             </div>

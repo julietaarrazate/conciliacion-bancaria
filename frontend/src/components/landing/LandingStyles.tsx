@@ -2,9 +2,10 @@ import React from 'react'
 
 export const LandingStyles: React.FC = () => (
   <style>{`
-    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,600;1,700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,600;1,700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,800&display=swap');
 
     .landing-root {
+      --font-display: 'Fraunces', Georgia, serif;
       --bg:           #FFFFFF;
       --bg-2:         #FFFFFF;
       --bg-soft:      #F4F4F5;
@@ -37,7 +38,7 @@ export const LandingStyles: React.FC = () => (
       --text-2:       #D4D4D8;
       --muted:        #71717A;
       --muted-2:      #52525B;
-      --accent:       #22C55E;
+      --accent:       #4ADE80;
       --accent-2:     #4ADE80;
       --accent-soft:  #22C55E12;
       --accent-line:  #22C55E30;
@@ -99,7 +100,7 @@ export const LandingStyles: React.FC = () => (
     /* Nav */
     .land-nav { position:fixed; top:0; left:0; right:0; z-index:50; display:flex; align-items:center; justify-content:space-between; padding:0 20px; height:60px; background:rgba(255,255,255,0.95); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border-bottom:1px solid var(--border); transition:background .2s; }
     .dark .land-nav { background:rgba(9,9,13,0.92); }
-    .nav-logo { display:flex; align-items:center; gap:8px; font-size:17px; font-weight:700; letter-spacing:-.5px; color:var(--accent); text-decoration:none; flex-shrink:0; }
+    .nav-logo { display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-size:18px; font-weight:600; letter-spacing:-.3px; color:var(--accent); text-decoration:none; flex-shrink:0; }
     .nav-actions { display:flex; align-items:center; gap:8px; }
     .nav-links { display:none; }
     @media (min-width:720px) { .nav-links { display:flex; gap:2px; align-items:center; } }
@@ -175,14 +176,14 @@ export const LandingStyles: React.FC = () => (
 
     /* Hero */
     .hero-section { position:relative; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:90px 20px 56px; text-align:center; overflow:hidden; }
-    .hero-title { font-size:clamp(38px,10vw,84px); font-weight:700; line-height:1.06; letter-spacing:-2px; max-width:820px; margin-bottom:22px; }
-    .hero-sub { font-size:clamp(15px,3.5vw,20px); color:var(--muted); max-width:500px; line-height:1.65; margin-bottom:36px; padding:0 8px; }
+    .hero-title { font-family:var(--font-display); font-size:clamp(40px,10vw,88px); font-weight:600; line-height:1.04; letter-spacing:-0.02em; max-width:820px; margin-bottom:24px; }
+    .hero-sub { font-size:clamp(15px,3.5vw,20px); color:var(--muted); max-width:500px; line-height:1.65; margin-bottom:36px; padding:0 8px; font-weight:400; }
     .mockup-wrap { width:100%; max-width:560px; padding:0 4px; }
 
     /* Sections */
     .section { padding:72px 20px; }
     @media (min-width:720px) { .section { padding:96px 24px; } }
-    .section-title { font-size:clamp(26px,6vw,46px); font-weight:700; letter-spacing:-1.5px; margin-bottom:14px; line-height:1.1; }
+    .section-title { font-family:var(--font-display); font-size:clamp(27px,6vw,48px); font-weight:600; letter-spacing:-0.015em; margin-bottom:14px; line-height:1.12; }
 
     /* Feature spotlight */
     .spotlight { display:grid; grid-template-columns:1fr; gap:48px; align-items:center; max-width:960px; margin:0 auto; }

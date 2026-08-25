@@ -7,7 +7,7 @@ Soporta Banco Macro, BBVA, Santander, Galicia, ICBC y formatos genericos.
 import re
 import os
 import tempfile
-from typing import Tuple, Optional, List, Dict
+from typing import Tuple
 from datetime import date, datetime
 import openpyxl
 

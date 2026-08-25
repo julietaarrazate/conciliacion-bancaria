@@ -496,7 +496,11 @@ def reset_y_rebuild_asientos(
 ):
     """Borra TODOS los asientos de la org y los reconstruye desde los datos reales:
     - um_lote: un asiento por cada lote de UM importado en el extracto
-    - um_reclass_planilla: un asiento por cada planilla conciliada con cliente vinculado (agrupado)
+    - reclasificación por planilla conciliada (agrupada), un bucket por ORIGEN del
+      movimiento (extracto principal → Pasivo Corriente; UM → No identificado —
+      mismo criterio que el flujo vivo, ver conciliacion.py::conciliar_planilla),
+      acreditando al cliente por el NETO y separando la comisión (Planilla.porcentaje_comision)
+      en un asiento aparte contra Comisiones ganadas cuando corresponde.
     Sólo superadmin puede ejecutarlo (dry_run=false).
     """
     if not current_user.is_superadmin:
@@ -543,7 +547,6 @@ def reset_y_rebuild_asientos(
         .order_by(MovimientoBanco.um_lote, MovimientoBanco.id)
         .all()
     )
-    from itertools import groupby
     lotes = {}
     for m in um_movs:
         lote_key = m.um_lote or 0
@@ -565,19 +568,33 @@ def reset_y_rebuild_asientos(
         )
         .all()
     )
-    # Agrupar por planilla → un asiento por planilla.
-    # Solo filas conciliadas contra movimientos UM: el asiento reclasifica
-    # "No identificado" (creado por um_lote) → Cliente. Las filas conciliadas
-    # contra el extracto mensual NO tienen contrapartida en No identificado,
-    # así que se excluyen (mismo criterio que el flujo live en conciliacion.py).
-    um_mov_ids = {m.id for m in um_movs}
+    # Agrupar por (planilla, ORIGEN del movimiento) → un bucket por combinación.
+    # El origen determina de qué cuenta salió realmente la plata (no es
+    # intercambiable): extracto principal → Pasivo Corriente (2-1-0-0), UM →
+    # No identificado (2-1-1-1) — mismo criterio que el flujo vivo
+    # (conciliacion.py::conciliar_planilla). Una planilla con filas de ambos
+    # orígenes genera dos buckets independientes.
+    ids_acreditados = {
+        row.orden_movimiento_acreditado for row, _p, _c in filas_ok
+        if row.orden_movimiento_acreditado
+    }
+    origen_por_mov = {
+        mid: ("um" if src == "um" else "extracto")
+        for mid, src in (
+            db.query(MovimientoBanco.id, MovimientoBanco.source)
+            .filter(MovimientoBanco.id.in_(ids_acreditados))
+            .all()
+            if ids_acreditados else []
+        )
+    }
     planillas_map: dict = {}
     for row, planilla, cliente in filas_ok:
-        if row.orden_movimiento_acreditado not in um_mov_ids:
+        origen = origen_por_mov.get(row.orden_movimiento_acreditado)
+        if origen is None:
             continue
-        key = planilla.id
+        key = (planilla.id, origen)
         if key not in planillas_map:
-            planillas_map[key] = {"planilla": planilla, "cliente": cliente, "rows": []}
+            planillas_map[key] = {"planilla": planilla, "cliente": cliente, "origen": origen, "rows": []}
         planillas_map[key]["rows"].append(row)
     n_planillas = len(planillas_map)
 
@@ -587,8 +604,8 @@ def reset_y_rebuild_asientos(
             "a_borrar": {"asientos": n_asientos, "detalles": n_detalles},
             "a_crear": {
                 "um_lotes": n_um_lotes,
-                "um_reclass_planilla": n_planillas,
-                "total_asientos_nuevos": n_um_lotes + n_planillas,
+                "reclass_planilla_buckets": n_planillas,
+                "total_asientos_nuevos": "≥ " + str(n_um_lotes + n_planillas) + " (+1 por bucket con comisión > 0)",
             },
             "msg": "Ejecutá con dry_run=false para aplicar los cambios.",
         }
@@ -641,22 +658,37 @@ def reset_y_rebuild_asientos(
                 db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=_D("0"), haber=total_neg))
         contador += len(pending_um)
 
-        # ── Reconstruir um_reclass_planilla (agrupado por planilla) ──────────
+        # ── Reconstruir reclasificación por planilla, un bucket por origen ───
+        # (Pasivo Corriente para extracto principal, No identificado para UM —
+        # ver docstring). Acredita al cliente por el NETO y separa la comisión
+        # (Planilla.porcentaje_comision) en un asiento aparte.
+        pasivo_cte   = _get_cuenta_por_codigo(db, "2-1-0-0", oid)
+        comisiones   = _get_cuenta_por_codigo(db, "3-1-1-0", oid)
+        cuenta_origen_por_bucket = {"um": no_id, "extracto": pasivo_cte}
+
         _cuenta_cache: dict = {}
-        pending_rp: list = []
+        pending_rp: list = []      # (asiento, monto_neto, cuenta_cliente_id, cuenta_origen_id)
+        pending_rp_com: list = []  # (asiento, monto_comision, cuenta_origen_id, cuenta_comisiones_id)
         from datetime import datetime as _dt
-        for planilla_id, grupo in planillas_map.items():
+        for (planilla_id, origen), grupo in planillas_map.items():
             planilla = grupo["planilla"]
             cliente  = grupo["cliente"]
             rows     = grupo["rows"]
+            cta_origen = cuenta_origen_por_bucket.get(origen)
+            if not cta_origen:
+                continue
             if cliente.id not in _cuenta_cache:
                 _cuenta_cache[cliente.id] = _get_o_crear_cuenta_cliente(db, cliente.id, oid)
             cuenta_cli = _cuenta_cache[cliente.id]
             if not cuenta_cli:
                 continue
-            total_monto = sum(abs(_monto(r.monto)) for r in rows)
-            if total_monto <= 0:
+            total_bruto = sum(abs(_monto(r.monto)) for r in rows)
+            if total_bruto <= 0:
                 continue
+            comision_pct = _D(str(planilla.porcentaje_comision or 0))
+            comision_monto = round(total_bruto * comision_pct / _D("100"), 2) if comision_pct > 0 else _D("0")
+            neto = total_bruto - comision_monto
+
             # Fecha: la más reciente de las filas, o fecha_carga de la planilla
             fechas = [r.fecha_acred for r in rows if r.fecha_acred]
             fecha = max(fechas) if fechas else (planilla.fecha_carga or hoy_art())
@@ -665,21 +697,38 @@ def reset_y_rebuild_asientos(
                     fecha = _dt.strptime(str(fecha)[:10], "%Y-%m-%d").date()
                 except Exception:
                     fecha = hoy_art()
+
+            modulo = "um_reclass_planilla" if origen == "um" else "reclass_planilla_extracto"
             a = Asiento(
                 fecha=fecha,
                 descripcion=f"TT {cliente.nombre} — {planilla.nombre_archivo}",
-                modulo="um_reclass_planilla",
+                modulo=modulo,
                 referencia_id=planilla_id,
                 organizacion_id=oid,
                 usuario_id=current_user.id,
             )
             db.add(a)
-            pending_rp.append((a, total_monto, cuenta_cli.id))
+            pending_rp.append((a, neto, cuenta_cli.id, cta_origen.id))
+
+            if comision_monto > 0 and comisiones:
+                a2 = Asiento(
+                    fecha=fecha,
+                    descripcion=f"Comisión {comision_pct}% — {cliente.nombre}",
+                    modulo=modulo + "_comision",
+                    referencia_id=planilla_id,
+                    organizacion_id=oid,
+                    usuario_id=current_user.id,
+                )
+                db.add(a2)
+                pending_rp_com.append((a2, comision_monto, cta_origen.id, comisiones.id))
         db.flush()
-        for a, monto, cuenta_cli_id in pending_rp:
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id,        debe=monto,    haber=_D("0")))
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cli_id,   debe=_D("0"),  haber=monto))
-        contador += len(pending_rp)
+        for a, monto, cuenta_cli_id, cuenta_origen_id in pending_rp:
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_origen_id, debe=monto,    haber=_D("0")))
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cli_id,    debe=_D("0"),  haber=monto))
+        for a2, monto, cuenta_origen_id, cuenta_comisiones_id in pending_rp_com:
+            db.add(AsientoDetalle(asiento_id=a2.id, cuenta_id=cuenta_origen_id,     debe=monto,   haber=_D("0")))
+            db.add(AsientoDetalle(asiento_id=a2.id, cuenta_id=cuenta_comisiones_id, debe=_D("0"), haber=monto))
+        contador += len(pending_rp) + len(pending_rp_com)
 
         # ── Renumerar correlativamente ────────────────────────────
         nuevos = (
@@ -799,7 +848,6 @@ def delete_asiento_manual(
     current_user: User = Depends(require_permission("admin_accounting")),
 ):
     from app.services.motor_contable import _next_numero_asiento
-    from datetime import date as _date
 
     oid = _org_id(current_user, org_id)
     asiento = db.query(Asiento).filter(Asiento.id == asiento_id, Asiento.organizacion_id == oid).first()

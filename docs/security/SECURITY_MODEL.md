@@ -24,8 +24,9 @@ Documento relacionado: convenciones de API y dónde se aplica cada control →
 - Se envía como header `Authorization: Bearer <token>` y se valida en `get_current_user`.
 
 Variantes de expiración:
-- **Contador**: sesión más corta de **4h** (`CONTADOR_SESSION_MINUTES = 240` en `routers/auth.py`),
-  generada recién al ser aprobada (ver §6).
+- **Contador** (desde ago 2026): usa la sesión estándar de 8h, igual que el resto — el login por
+  aprobación con sesión corta de 4h (`CONTADOR_SESSION_MINUTES = 240`) se sacó del flujo de login
+  (ver §6). La constante queda en `routers/auth.py` sin caller activo.
 
 ### Hashing de contraseñas: `pbkdf2_sha256`
 
@@ -74,9 +75,10 @@ Notas (del propio código):
 - **superadmin** (`is_superadmin=True`): `require_permission` retorna el usuario antes de mirar la
   matriz → tiene **todos** los permisos, en **todas** las organizaciones. Es Julieta
   (`julietaarrazate@gmail.com`).
-- **contador** (rol "de prueba"): opera (sube, concilia, finanzas, liquidaciones) y ve
-  contabilidad + auditoría/actividad en solo lectura. **NO** tiene `delete_records` (no borra nada)
-  ni `manage_users` (no ve Usuarios/Orgs/Papelera). Su login es por aprobación en vivo (§6).
+- **contador**: opera (sube, concilia, finanzas, liquidaciones) y ve contabilidad + auditoría/
+  actividad en solo lectura. **NO** tiene `delete_records` (no borra nada) ni `manage_users` (no
+  ve Usuarios/Orgs/Papelera). Login directo, sin aprobación (desde ago 2026 — ver §6); la cuenta
+  la sigue creando únicamente el superadmin vía `/auth/register`.
 - Acciones exclusivas del superadmin no usan la matriz sino `require_superadmin` (p. ej.
   `POST /auth/register`, decidir aprobaciones de login, limpieza masiva de extractos).
 
@@ -141,22 +143,28 @@ aditivos). Detalle de columnas y constraints: ver [../database/DATABASE_RULES.md
 
 ---
 
-## 6. Aprobación de login en vivo (rol `contador`)
+## 6. Aprobación de login en vivo — sacada del flujo (ago 2026)
 
-`models/login_approval.py` + `routers/auth.py`. El contador **no** recibe token al loguearse:
+`models/login_approval.py` + `routers/auth.py`. Hasta ago 2026, un usuario con rol `contador`
+**no** recibía token al loguearse: el login creaba un `LoginApproval` pendiente y quedaba
+bloqueado hasta que el superadmin lo aprobaba **en vivo, en cada login** (no solo la primera vez).
+Diseñado en v3.7 (mayo 2026) para **contadores de prueba** en una org de test — a pedido de la
+operadora se sacó del flujo real: bloqueaba el uso operativo diario de contadores reales, que
+necesitan poder entrar con su cuenta sin depender de que el superadmin esté disponible para
+aprobar cada vez.
 
-1. Login → se crea un `LoginApproval` en estado `pending` con un `poll_secret` (se guarda su
-   **sha256**, `poll_secret_hash`) y un TTL de 10 min (`APPROVAL_REQUEST_TTL_MINUTES`). Respuesta
-   `202 {"pending_approval": true, "approval_id", "poll_secret", "expires_at"}`. Se notifica a los
-   superadmins por push (best-effort).
-2. El cliente del contador hace **polling** a `GET /auth/login-approval/{id}?secret=...`
-   (rate limit `120/minute`). El `secret` es obligatorio y se compara por hash — evita que un
-   tercero adivine el `approval_id` y robe el token.
-3. El superadmin aprueba/rechaza en `POST /auth/login-approval/{id}/decide` (`require_superadmin`).
-   Al aprobar se genera el JWT de **4h** y se guarda en `access_token`.
-4. El polling entrega el token **una sola vez** (luego se limpia el campo). Pasadas las 4h, repite.
+**Estado actual**: `POST /auth/login` ya no tiene ninguna rama para `contador` — recibe token
+directo igual que `operador`/`admin` (sujeto a 2FA solo si es admin/superadmin, §2). El
+superadmin sigue siendo el único que puede **crear** la cuenta del contador (`POST /auth/register`,
+`require_superadmin`) — lo que se sacó es la aprobación de cada login posterior, no el alta.
 
-Caducidad: si el superadmin no decide a tiempo, el pedido pasa a `expired`.
+El mecanismo de aprobación (`LoginApproval`, `GET /auth/login-approval/{id}`,
+`GET /auth/pending-approvals`, `POST /auth/login-approval/{id}/decide`, página `/aprobaciones`)
+**queda en el código sin ningún caller activo** — nada vuelve a crear un `LoginApproval` pendiente,
+así que esos endpoints y esa página quedan efectivamente en desuso (no reintroducir el gate por
+código sin pedido explícito). Cómo funcionaba, por si se reintroduce: creaba un pending con
+`poll_secret` (TTL 10 min), el cliente hacía polling a `GET .../login-approval/{id}?secret=...`
+hasta recibir el token (4h, `CONTADOR_SESSION_MINUTES`) cuando el superadmin decidía.
 
 ---
 
@@ -237,8 +245,11 @@ Observabilidad: requests por encima de `SLOW_REQUEST_MS` (default 1500) se logue
   `create_access_token({"sub": user.email})` sin `user_id` ni `role`, mientras que el login normal
   y el de contador sí los incluyen. `get_current_user` solo necesita `sub`, pero conviene confirmar
   que ningún consumidor del token dependa de `role`/`user_id` en el payload tras un login Google.
-- **2FA solo para admin/superadmin**: el rol `contador` (que tiene flujo de aprobación propio) y los
-  demás roles no tienen 2FA. Es intencional según el código, pero documentado aquí por las dudas.
+- **2FA solo para admin/superadmin**: `contador` y `operador` no tienen 2FA — login directo con
+  email + contraseña únicamente. Es intencional según el código (contador ya no tiene tampoco el
+  gate de aprobación que tuvo hasta ago 2026, ver §6), pero documentado aquí por las dudas: si se
+  quiere un segundo factor para contador sin volver a depender de la aprobación en vivo del
+  superadmin, la opción ya construida es extenderle el mismo 2FA por email de admin/superadmin.
 - **Validación de fuerza de contraseña**: `reset-password` exige `min_length=6` (schema), pero no
   hay política de complejidad. Revisar si se quiere endurecer.
 - La matriz de §2 debe mantenerse sincronizada con `require_permission` en `middleware/auth.py` si

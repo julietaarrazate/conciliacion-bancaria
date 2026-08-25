@@ -18,7 +18,7 @@ export const Pricing: React.FC = () => (
           <div style={{ display: 'inline-block', padding: '5px 12px', borderRadius: 999, background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', color: 'var(--accent)', fontSize: 11, fontWeight: 600, marginBottom: 18, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
             Onboarding incluido
           </div>
-          <h3 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, letterSpacing: '-0.5px' }}>Plan empresa</h3>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 23, fontWeight: 600, marginBottom: 8, letterSpacing: '-0.02em' }}>Plan empresa</h3>
           <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 28, maxWidth: 340, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
             Implementación, capacitación al equipo y soporte directo.
           </p>

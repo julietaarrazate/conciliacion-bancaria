@@ -11,12 +11,12 @@ con numeración de página.
 from __future__ import annotations
 
 import io
-from datetime import datetime
+from decimal import Decimal
 from typing import Any, Optional
 from app.services.tz import now_art
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT, TA_RIGHT
+from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
@@ -55,6 +55,18 @@ def _fmt_ars(n: float) -> str:
     except (TypeError, ValueError):
         n = 0.0
     return f"$ {n:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _fmt_fecha(d: Any) -> str:
+    """Acepta date/datetime o string ISO; devuelve DD/MM/YYYY o '-' si no hay valor."""
+    if not d:
+        return "-"
+    if isinstance(d, str):
+        return d[:10]
+    try:
+        return d.strftime("%d/%m/%Y")
+    except AttributeError:
+        return str(d)
 
 
 def _styles() -> dict[str, ParagraphStyle]:
@@ -736,6 +748,101 @@ def recibo_sueldo_pdf(
         "según la Ley de Contrato de Trabajo (Ley 20.744).</i>",
         s["small"],
     ))
+
+    deco = _page_decorator(generado_por)
+    doc.build(story, onFirstPage=deco, onLaterPages=deco)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Planilla conciliada (mismo contenido que export_planilla_conciliada en Excel)
+# ---------------------------------------------------------------------------
+def export_planilla_conciliada_pdf(planilla_data: dict, generado_por: str = "Julieta Arrazate") -> bytes:
+    """Recibe el mismo dict que usa export_planilla_conciliada (excel_export.py):
+    {cliente_nombre, nombre_archivo, rows: [...], total_declarado: Decimal|None}.
+
+    Cada row de `rows` trae: monto, cuit, titular, status,
+    orden_movimiento_acreditado, mov_titular, mov_fecha, mov_fecha_acred.
+    """
+    s = _styles()
+    buf = io.BytesIO()
+    cliente_nombre = planilla_data.get("cliente_nombre") or "-"
+    nombre_archivo = planilla_data.get("nombre_archivo") or "-"
+    rows_data = planilla_data.get("rows") or []
+    total_declarado = planilla_data.get("total_declarado")
+
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=_ML * mm, rightMargin=_MR * mm,
+        topMargin=_MT * mm, bottomMargin=_MB * mm,
+        title=f"Planilla conciliada - {cliente_nombre}",
+        author=generado_por,
+    )
+
+    story: list = []
+    story.append(_header_band(
+        "Planilla conciliada",
+        "Generado",
+        now_art().strftime("%d/%m/%Y %H:%M"),
+    ))
+    story.append(Paragraph(f"<b>{cliente_nombre}</b>  ·  {nombre_archivo}", s["subtitle"]))
+
+    total_monto = Decimal("0")
+    for r in rows_data:
+        monto = r.get("monto")
+        if monto is not None:
+            total_monto += Decimal(str(monto))
+
+    ok_count = sum(1 for r in rows_data if (r.get("status") or "").startswith("ok"))
+
+    kpis = [
+        ("Filas", str(len(rows_data)), None),
+        ("Conciliadas", str(ok_count), _GREEN),
+        ("Total movimientos", _fmt_ars(total_monto), _BRAND_DARK),
+    ]
+    if total_declarado is not None:
+        kpis.append(("Total declarado", _fmt_ars(total_declarado), None))
+    story.append(Spacer(1, 6))
+    story.append(_kpi_cards(kpis))
+
+    if rows_data:
+        story.extend(_section(f"Detalle ({len(rows_data)} filas)"))
+        table_rows = []
+        for r in rows_data:
+            orden = r.get("orden_movimiento_acreditado")
+            fecha = r.get("mov_fecha_acred") or r.get("mov_fecha")
+            titular = r.get("titular") or r.get("mov_titular") or "-"
+            cuit = r.get("cuit") or "-"
+            monto = r.get("monto") or 0
+            estado = r.get("status") or "-"
+            table_rows.append([
+                str(orden) if orden else "-",
+                _fmt_fecha(fecha),
+                Paragraph(titular, s["cell"]),
+                cuit,
+                _fmt_ars(monto),
+                estado,
+            ])
+        story.append(_tabla(
+            ["Orden", "Fecha", "Titular", "CUIT", "Monto", "Estado"],
+            table_rows,
+            [16 * mm, 20 * mm, 58 * mm, 30 * mm, 28 * mm, 26 * mm],
+            aligns={0: "CENTER", 1: "CENTER"},
+            money_cols=[4],
+        ))
+    else:
+        story.append(Spacer(1, 18))
+        story.append(_empty_note("La planilla no tiene filas."))
+
+    # Cuadre / totales al final
+    story.append(Spacer(1, 12))
+    items = [("Total movimientos", _fmt_ars(total_monto), _DARK, False)]
+    if total_declarado is not None:
+        diferencia = Decimal(str(total_declarado)) - total_monto
+        diff_color = _GREEN if diferencia == 0 else _AMBER
+        items.append(("Total declarado por el cliente", _fmt_ars(total_declarado), _DARK, False))
+        items.append(("Diferencia", _fmt_ars(diferencia), diff_color, True))
+    story.append(_totales_box(items))
 
     deco = _page_decorator(generado_por)
     doc.build(story, onFirstPage=deco, onLaterPages=deco)

@@ -6,6 +6,7 @@ import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
 import { localIsoDate } from '@/utils/fecha'
+import { parseMonto } from '@/utils/monto'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -128,19 +129,8 @@ export const Movimientos: React.FC = () => {
   const filteredMovs = useMemo(() => {
     let m = tab === 'um' ? movimientos.filter(x => x.source === 'um') : movimientos
     if (debouncedFilters.importe) {
-      const s = debouncedFilters.importe.trim()
-      let val: number
-      if (s.includes(',') && s.includes('.')) {
-        // Ambos: el último es el decimal
-        val = s.lastIndexOf(',') > s.lastIndexOf('.')
-          ? parseFloat(s.replace(/\./g, '').replace(',', '.'))   // "128.220,58"
-          : parseFloat(s.replace(/,/g, ''))                       // "128,220.58"
-      } else if (s.includes(',')) {
-        val = parseFloat(s.replace(',', '.'))                     // "128220,58"
-      } else {
-        val = parseFloat(s)                                       // "128220.58"
-      }
-      if (!isNaN(val)) m = m.filter(x => Math.abs(Math.abs(x.monto) - Math.abs(val)) < 0.01)
+      const val = parseMonto(debouncedFilters.importe)  // util compartido y testeado (formatos AR/US)
+      if (val != null) m = m.filter(x => Math.abs(Math.abs(x.monto) - Math.abs(val)) < 0.01)
     }
     return m
   }, [movimientos, debouncedFilters.importe, tab])

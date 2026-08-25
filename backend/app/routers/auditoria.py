@@ -8,8 +8,7 @@ from collections import defaultdict
 
 from app.database import get_db
 from app.models.auditoria import AuditoriaLog
-from app.models.planilla import Planilla, PlanillaRow
-from app.models.cliente import Cliente
+from app.models.planilla import Planilla
 from app.models.user import User
 from app.schemas.auditoria import AuditoriaListResponse, AuditoriaLogResponse
 from app.middleware.auth import require_permission, get_current_user, can_switch_org

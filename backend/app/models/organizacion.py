@@ -1,5 +1,4 @@
 from sqlalchemy import Column, Integer, String, Boolean, JSON
-from sqlalchemy.orm import relationship
 from app.database import Base
 
 CONFIG_DEFAULT = {

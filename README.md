@@ -123,8 +123,7 @@ conciliacion-bancaria/
 │   ├── alembic/                  # Migraciones
 │   └── seed.py
 │
-├── frontend/                     # React 18 + TS + Vite + Tailwind + PWA
-├── mobile/                       # Scaffold React Native (la experiencia mobile productiva es la PWA)
+├── frontend/                     # React 18 + TS + Vite + Tailwind + PWA (la app mobile es la PWA instalable)
 └── *.md                          # Documentación (ver abajo)
 ```
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Text, Boolean, Numeric
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Text, Numeric
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -23,6 +23,14 @@ class Planilla(Base):
     fecha_carga = Column(DateTime, default=datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True, index=True)  # soft delete: NULL = activo
     porcentaje_comision = Column(Numeric(5, 4), nullable=True)  # % comisión para liquidación
+    # sha1 del contenido del archivo. Bloquea re-subir la MISMA planilla para el
+    # mismo cliente (mismo patrón que ExtractoBancario.fingerprint): único por
+    # (cliente_id, fingerprint, organizacion_id) entre planillas activas (no
+    # borradas) — ver índice parcial en el safety net / migración 026.
+    fingerprint = Column(String, nullable=True, index=True)
+    # Total declarado por el cliente al final de su planilla (fila de resumen/total
+    # detectada y excluida de los movimientos). None si no la hay. Se usa para cuadre.
+    total_declarado = Column(Numeric(14, 2), nullable=True)
 
     # Relationships
     cliente = relationship("Cliente", back_populates="planillas")
@@ -44,6 +52,7 @@ class PlanillaRow(Base):
     cuit = Column(String, nullable=True)
     titular = Column(String, nullable=True)
     referencia = Column(String, nullable=True)  # para match_rule "referencia"
+    fecha = Column(Date, nullable=True)  # fecha de pago declarada en la planilla (no la de acreditación)
 
     # Resultado de la conciliación
     # Estados base: "pendiente", "ok", "no está", "duplicado", "faltan datos", "acreditado DD/MM"

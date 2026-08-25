@@ -5,7 +5,8 @@ convenciones seguir al tocar la DB y por qué existen los patrones defensivos.
 
 Fuentes de verdad (código):
 - `backend/alembic/versions/*.py` — 20 migraciones versionadas.
-- `backend/app/main.py` (`_run_alembic`, `_init_db`) — safety nets DDL idempotentes + seed.
+- `backend/app/db_safety.py` (`SAFETY_NET_DDL`) — safety nets DDL idempotentes (fuente única).
+- `backend/app/main.py` (`_run_alembic`, `_init_db`) — aplica los safety nets + seed en el arranque.
 - `backend/app/services/tz.py` — fechas de negocio en ART.
 - `backend/app/services/decimal_utils.py` — conversión a `Decimal`.
 - `BUGS.md` — bugs recurrentes ("Decimal vs float", "Fechas ART").
@@ -58,19 +59,26 @@ aplica un **safety net DDL idempotente** en cada arranque.
 
 ### Por qué existen los safety nets
 
-`_run_alembic()` (`main.py`) intenta correr `command.upgrade(..., "head")` al iniciar, pero
-**está envuelto en try/except y solo loguea un warning si falla**. En Render (free tier, cold
-starts, deploys que pueden interrumpirse) no hay garantía de que Alembic corra hasta el final.
-Si Alembic falla o la DB queda a medias, las columnas/tablas/índices que el código nuevo
-necesita **podrían no existir** y la app rompería al primer query.
+El esquema lo construyen y mantienen `Base.metadata.create_all()` + los safety-nets DDL; la
+cadena de migraciones está desincronizada (ver "Pendiente de revisar"). Por eso `_run_alembic()`
+(`main.py`) **solo hace `command.stamp(head)`** — sella `alembic_version` en head para reflejar la
+realidad y dejar Alembic usable como tooling (history/autogenerate), sin correr `upgrade` (que
+intentaría migraciones derivadas contra un esquema que ya está al día y fallaría). Todo está
+envuelto en try/except y solo loguea un warning si falla. En Render (free tier, cold starts,
+deploys que pueden interrumpirse) tampoco hay garantía de que Alembic corriera hasta el final:
+si faltara alguna columna/tabla/índice, la app rompería al primer query.
 
 Por eso, después de Alembic, `main.py` ejecuta listas de DDL **idempotente** que garantizan el
 esquema mínimo aunque Alembic no haya corrido:
 
-- `_safety_cols` (en `_run_alembic`): `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`,
-  `CREATE TABLE IF NOT EXISTS`, `CREATE [UNIQUE] INDEX IF NOT EXISTS`. Cubren columnas de
+- `SAFETY_NET_DDL` (en `app/db_safety.py`, aplicada por `_run_alembic`):
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`,
+  `CREATE [UNIQUE] INDEX IF NOT EXISTS`, `DROP INDEX IF EXISTS`. Cubren columnas de
   comisión, `cuenta_contable_id`, `numero_asiento`, portadores/cheques, twofa, liquidaciones
   de tarjeta, índices de contabilidad, IVA, monotributo, IIBB, sueldos, ganancias y ARCA.
+  Está extraída a un módulo importable para poder testearla: `tests/test_db_safety.py`
+  **exige que toda sentencia sea idempotente** (falla en CI si aparece un `ADD COLUMN` sin
+  `IF NOT EXISTS`, que crashearía el 2º boot) y que no haya índices con nombre duplicado.
 - `indexes` (en `_init_db`): `CREATE INDEX IF NOT EXISTS` de performance.
 - `migrations` (en `_init_db`): `ALTER TABLE ... ADD COLUMN` sin `IF NOT EXISTS`, cada uno en
   su propio try/except que ignora "column already exists" (porque `IF NOT EXISTS` no está
@@ -79,14 +87,14 @@ esquema mínimo aunque Alembic no haya corrido:
   subcuentas, normalizar `mes`, etc.).
 
 **Regla al agregar una columna/tabla/índice nuevo**: escribir la migración Alembic *y* agregar
-la sentencia idempotente equivalente al safety net de `main.py`. Las dos rutas deben converger
+la sentencia idempotente equivalente a `SAFETY_NET_DDL` (`app/db_safety.py`). Las dos rutas deben converger
 al mismo esquema. El seed contable (`seed_contabilidad_org`) corre también en cada boot, por
 organización, e igualmente es idempotente (ver [ACCOUNTING_ENGINE](../architecture/ACCOUNTING_ENGINE.md)).
 
 ### Orden de arranque (`_init_db`)
 
 1. `Base.metadata.create_all()` — crea tablas faltantes.
-2. `_run_alembic()` — Alembic upgrade (o `stamp head` si la DB nunca tuvo Alembic) + safety
+2. `_run_alembic()` — `stamp head` (sella la versión; no corre `upgrade`) + safety
    net de columnas/tablas.
 3. Índices de performance idempotentes.
 4. Migraciones de columnas legacy (try/except).
@@ -202,14 +210,32 @@ Ver BUGS.md → "Fechas en zona horaria Argentina (UTC-3)".
 
 ## Pendiente de revisar
 
-- **Migración 009 vs. 007**: la 009 dropea `ordenes_de_pago`, `pagos` y `gastos`, pero la 007
-  (anterior) convierte columnas de esas mismas tablas a NUMERIC. Es coherente por orden de
-  revisión (007 antes que 009), pero confirmar que el `downgrade` de 007 no falle si las tablas
-  ya fueron dropeadas por 009.
+- **⚠️ La cadena Alembic está desincronizada del esquema real (verificado jul 2026)**. Hallazgos
+  de correr la cadena contra un Postgres descartable:
+  1. **`alembic/env.py` importaba clases inexistentes** (`OrdenDePago`, `Pago`, `Gasto` —
+     unificadas en `Egreso`). Como `env.py` se carga en *cada* comando de alembic, `command.upgrade`
+     y `command.stamp` **fallaban al importar**, y como `_run_alembic()` traga la excepción y solo
+     loguea un warning, **Alembic no corría en producción**: el esquema lo sostienen `create_all()`
+     + los safety-nets. **Corregido**: `env.py` ahora importa los módulos de modelo (no clases
+     sueltas), robusto ante renombres.
+  2. **La cadena NO se puede construir desde cero**: `001_baseline` es un `pass` (stamp baseline,
+     asume que las tablas ya existen por `create_all()`). El camino real de arranque —`create_all()`
+     + `stamp head`— **sí funciona** (verificado: sella `020`, 44 tablas, safety-nets idempotentes
+     sobre PG real).
+  3. **Migraciones históricas referencian tablas ya dropeadas**: 007 hace `ALTER TABLE
+     ordenes_de_pago …` y 009 las dropea (`DROP TABLE IF EXISTS … CASCADE`, guardado ✓). Sobre un
+     esquema moderno (`create_all`) un `upgrade` incremental desde una revisión vieja falla en 007
+     porque esas tablas ya no existen. En la DB de producción histórica no falló porque esas tablas
+     **sí existían** cuando 007 corrió.
+  → **Decisión (jul 2026)**: mantener `create_all` + safety-nets como fuente de verdad y que
+  Alembic **solo selle** (`_run_alembic` hace `stamp head`, no `upgrade`). No se tocan migraciones
+  históricas ya aplicadas. Un re-baseline (colapsar el esquema actual en un baseline nuevo) queda
+  como mejora futura opcional, para una sesión dedicada.
 - **Doble fuente de DDL**: el esquema vive a la vez en migraciones Alembic y en los safety nets
-  de `main.py`. Son intencionalmente redundantes (resiliencia ante fallos de Alembic en Render),
-  pero hay que mantener ambas sincronizadas a mano al agregar columnas/índices; no hay test que
-  verifique que convergen.
+  (`app/db_safety.py`). Son intencionalmente redundantes (resiliencia ante fallos de Alembic en
+  Render — que de hecho no corría, ver arriba). El guard `tests/test_db_safety.py` verifica que
+  toda sentencia del safety-net sea idempotente, pero **no** que converja con las migraciones a
+  mano; mantenerlas sincronizadas al agregar columnas/índices.
 - **`CONFIG_DEFAULT`**: `main.py` importa `CONFIG_DEFAULT` de `models/organizacion` pero define
   un `config_org` inline al sembrar la Organización A. Revisar si `CONFIG_DEFAULT` es la fuente
   canónica de configuración por org y si conviene unificar.

@@ -5,6 +5,420 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Feature (ago 2026) — Contador ya no requiere aprobación en vivo para loguearse
+
+El login por aprobación (v3.7, mayo 2026) se diseñó para **contadores de prueba** en una org de
+test: cada login de un usuario `contador` quedaba bloqueado hasta que el superadmin lo aprobaba
+en vivo desde `/aprobaciones` — **en cada login, no solo el primero**. A pedido de la operadora
+(los contadores reales necesitan entrar con su cuenta sin depender de su disponibilidad para
+aprobar cada vez), se sacó esa rama del login: `POST /auth/login` ya no distingue `contador` —
+recibe token directo (8h, la sesión estándar) igual que `operador`/`admin`, sujeto a 2FA solo si
+es admin/superadmin.
+
+- **No cambia**: el superadmin sigue siendo el único que puede **crear** la cuenta del contador
+  (`POST /auth/register`, `require_superadmin`) — lo que se sacó es la aprobación de cada login
+  posterior a esa alta, no el alta en sí.
+- El mecanismo de `LoginApproval` (endpoints `/login-approval/*`, `/pending-approvals`, página
+  `/aprobaciones`) queda en el código sin caller activo — nada vuelve a crear un pending. No se
+  borró en este cambio (bajo riesgo dejarlo dormido); se puede limpiar aparte si se confirma que
+  no hace falta para nada más.
+- Test de regresión: `test_auth.py::test_login_contador_recibe_token_directo_sin_aprobacion`
+  (login real vía TestClient, confirma 200 + `access_token`, no 202 `pending_approval`).
+- Ver `docs/security/SECURITY_MODEL.md` §1 y §6.
+
+---
+
+### Feature (ago 2026) — Asiento por cliente al conciliar: neto + comisión aparte (cuentas corrientes)
+
+Seguimiento del fix de asientos duplicados/mal imputados: con el backfill viejo eliminado, las
+cuentas corrientes por cliente (Alojando, Green, ...) seguían en cero — el flujo vivo de
+conciliación nunca generaba asiento para pagos conciliados contra el **extracto bancario
+principal** (solo lo hacía para "Últimos Movimientos"). Se definió el tratamiento contable con el
+contador y se implementó:
+
+- **Cliente (Haber) = NETO** (total conciliado menos comisión) — lo que se ve como "Total Crédito"
+  en Cuentas Corrientes. La comisión se separa en un **asiento aparte**: Comisiones ganadas (H),
+  no ensucia el débito/crédito del cliente.
+- **Contrapartida (Debe) según el ORIGEN del movimiento** — no es intercambiable, porque es de ahí
+  de donde salió la plata realmente: **Pasivo Corriente** (2-1-0-0) para el extracto principal,
+  **No identificado** (2-1-1-1) para UM. Una planilla con filas de ambos orígenes genera dos pares
+  de asientos independientes (uno por origen), cada uno neteando su propia comisión.
+- `motor_contable.registrar_reclasificacion_planilla` — generalizada: acepta `cuenta_origen_codigo`
+  y `comision_pct`; upsert por `(modulo, planilla_id, org_id)` sigue idempotente en re-conciliación,
+  y si la comisión baja a 0 borra el asiento de comisión (no lo deja huérfano).
+- `conciliacion.conciliar_planilla` — nuevo param `comision_pct`; agrupa el total conciliado por
+  origen del movimiento (`extracto` / `um`) y llama al motor una vez por bucket.
+- `routers/planillas.py::conciliar` — resuelve el % efectivo (el del request si es > 0, si no el
+  ya guardado en `Planilla.porcentaje_comision`) y lo pasa al motor.
+- `routers/ctb_libro.py::reset_y_rebuild_asientos` — el botón admin "Reset Libro Diario" se
+  actualizó al mismo criterio dual (antes solo reconstruía UM con el monto bruto sin comisión;
+  quedaba inconsistente con el flujo vivo tras este cambio).
+- Tests: 4 nuevos en `test_motor_contable.py` (split neto/comisión, sin comisión, comisión→0 borra
+  el asiento, dos orígenes en la misma planilla sin pisarse) + 1 de integración
+  `conciliacion.conciliar_planilla` end-to-end + 2 en `test_contabilidad_integration.py` para el
+  reset-y-rebuild. 606 tests backend en verde.
+- Ver `docs/business/BUSINESS_RULES.md` §4.1bis y `docs/architecture/ACCOUNTING_ENGINE.md` §5/§7.
+
+**Pendiente / conocido**: `reset-y-rebuild` borra TODOS los asientos de la org, incluido el de
+`extracto` (Banco D / Pasivo Corriente H), y no lo reconstruye — gap preexistente, no introducido
+acá. Para backfillear el asiento por cliente de planillas ya conciliadas (Alojando, Green) sin
+riesgo, alcanza con volver a apretar "Conciliar" una vez desplegado (upsert idempotente); no hace
+falta tocar el botón de reset.
+
+---
+
+### Fix (ago 2026) — Asientos de planilla duplicados / mal imputados (backfill viejo)
+
+Al revisar el Libro Diario tras el arranque limpio aparecían: (a) el asiento de Green **duplicado**,
+(b) **ninguna** cuenta corriente de cliente con movimientos, y (c) planillas sin asiento (Alojando).
+Causa raíz única: el **backfill de arranque** (`main.py` paso 7) usaba la función vieja
+`registrar_planilla` (regla `carga_planilla` → cuenta **genérica** `2-1-2-0 "Cliente"`, no la cuenta
+corriente propia de cada cliente), recorría **también planillas borradas** (no filtraba `deleted_at`)
+y, al correr en cada boot, generaba asientos duplicados y mal imputados. Como imputaba a la cuenta
+madre genérica, los saldos por cliente (que leen la cuenta propia `2-1-2-X`) salían vacíos.
+
+- **Fix**: se eliminó el backfill de planillas del arranque (se mantiene solo el de extractos, que
+  usa `registrar_extracto`, correcto). La función `registrar_planilla` queda en el motor (aún cubierta
+  por tests) pero ya no se invoca desde el arranque. El asiento por cliente correcto se generará en el
+  flujo de conciliación con el tratamiento contable que defina la operadora con su contador (pendiente).
+- **Datos**: se limpiaron los asientos de planilla mal armados de producción (genéricos/huérfanos).
+  La regeneración por cliente queda pendiente de la definición del tratamiento.
+
+---
+
+### Fix (ago 2026) — "Error en la conciliación" fantasma por timeout del cliente
+
+Tras el fix del timeout de parseo, subir la planilla de Alojando seguía mostrando "Error en la
+conciliación" — pero en la base la planilla quedaba **conciliada 7/7** (todas las filas en `ok` con
+su movimiento acreditado). Se reprodujo el endpoint completo con la config real de la org: devuelve
+200. El "error" venía del **timeout de 60 s del cliente axios**: subir+conciliar encadena
+preview→upload→conciliar y, con el arranque en frío de Render/Neon (free tier), la primera request
+pagaba ~30-50 s; el navegador cortaba antes de recibir la respuesta aunque el servidor terminaba el
+trabajo. La operadora veía "error", reintentaba, y el reintento chocaba con el bloqueo de duplicados.
+
+- **Frontend** (`services/api.ts`): timeout del cliente 60 s → **120 s** (cubre el cold start).
+- **Frontend** (`Dashboard.tsx`): si el `conciliar` falla por red *después* de que el `upload` ya
+  creó la planilla, no se muestra un "error" seco — se avisa que la planilla quedó cargada (#id),
+  se refresca el historial y se le pide revisar el resultado en vez de re-subir (que chocaría con
+  el bloqueo de duplicados).
+
+---
+
+### Fix (ago 2026) — Timeout al subir planillas cortas (dimensión de hoja inflada)
+
+**Causa raíz del "Error en la conciliación" de Alojando** (que los PRs anteriores hicieron visible
+y descartaron como problema de datos): `_preview` en `planilla_mapper.py` juntaba hasta `n=8` filas
+no vacías para el modal, pero **sin corte por filas vacías**. Una planilla con menos de 8 filas de
+datos hacía que el loop escaneara hasta `ws.max_row` — y muchas planillas de clientes (Excel de
+Google Sheets / exportados) declaran una dimensión de ~1.048.576 filas, que openpyxl reporta como
+`max_row`. Resultado: `estandarizar_planilla` tardaba **~25 s por archivo** (medido con el archivo
+real), y como se llama dos veces (endpoint `/preview` + `/upload`), superaba el timeout de 60 s del
+cliente → el frontend mostraba "error" sin `detail` (error de red, no del backend) y no quedaba
+planilla persistida. Explicaba por qué Green (47 filas) conciliaba y Alojando (7 filas) no.
+
+- **Fix** (`services/planilla_mapper.py`): `_preview` corta tras `CORTE_FILAS_VACIAS` filas vacías
+  consecutivas y respeta `MAX_DATA_ROWS`, igual que `_parsear_filas`. Con el archivo real:
+  25.42 s → 0.009 s. Test de regresión con worksheet falso de `max_row=1.048.576` que verifica que
+  el escaneo se corta (no recorre toda la hoja).
+
+---
+
+### Mantenimiento (ago 2026) — Errores de conciliación visibles + spinner por acción
+
+Seguimiento del anterior. Al seguir probando, subir una planilla mostraba "Error en la
+conciliación" sin ninguna pista de la causa, y el spinner se prendía en los **tres** botones de
+carga a la vez (extracto, UM, planilla). Se reprodujo el flujo completo (`estandarizar_planilla`
+→ insert → `conciliar_planilla` con motor contable) con el archivo real del cliente y los
+movimientos reales del extracto: concilia 7/7 sin excepción, o sea el error no es de datos/lógica
+sino que quedaba **invisible** (los endpoints devolvían un mensaje genérico y no hay acceso a los
+logs de Render desde el entorno de trabajo).
+
+- **Backend** (`routers/planillas.py`): `preview`, `upload` y `conciliar` ahora incluyen el
+  **motivo real** de la excepción (tipo + mensaje truncado, helper `_motivo`) en el `detail` del
+  error, además de loguear con `logger.exception` (stacktrace). Son endpoints de staff
+  autenticado; el detalle no expone secretos (errores de parseo/DB/timeout). Test de regresión:
+  `.xlsx` corrupto → 400 con el motivo entre paréntesis.
+- **Frontend** (`Dashboard.tsx`): estado `accionCarga` (`'extracto' | 'um' | 'planilla'`) —
+  el spinner de `FileUpload` se muestra SOLO en el botón de la acción en curso (antes los 3
+  compartían un único `loading`).
+
+---
+
+### Mantenimiento (ago 2026) — Bloqueo de planillas duplicadas + feedback visual al conciliar
+
+Detectado en la primera prueba real post-reset: el contador reenvió la misma planilla de un
+cliente (una vez sin % de comisión, otra con) y quedó **duplicada** — ambas corridas conciliaron
+contra el mismo extracto sin ninguna protección, porque `Planilla` (a diferencia de
+`ExtractoBancario`) no tenía fingerprint ni chequeo de duplicados. Además, el botón de subir
+planilla no daba ningún indicio visual mientras se subía y conciliaba (variable de loading
+declarada pero nunca renderizada), lo que invita a reintentar pensando que no funcionó.
+
+- **Backend**: `Planilla.fingerprint` (sha1 del archivo, migración 026 + safety net) +
+  índice único parcial `uq_planilla_fp_cliente_org` por `(cliente_id, fingerprint,
+  organizacion_id)` excluyendo borradas — mismo patrón que `uq_extracto_fp_org`.
+  `POST /planillas/upload` rechaza con 409 si el mismo archivo ya está cargado y activo para
+  ese cliente, con mensaje que sugiere re-conciliar la planilla existente con otro % en vez de
+  re-subir (el % de comisión se tipea al conciliar, no viaja en el archivo). Borrar la planilla
+  existente libera el fingerprint. Tests de regresión (duplicado bloqueado, mismo archivo para
+  otro cliente no bloquea, borrar+re-subir no bloquea).
+- **Frontend**: `FileUpload` ahora acepta `loading`/`loadingLabel` — muestra spinner, texto de
+  progreso y bloquea clicks/drop mientras sube+concilia. Conectado en los 3 uploads de
+  `Dashboard.tsx` (extracto, UM, planilla individual — la variable de loading que existía sin
+  usar se activó).
+- Ver `docs/business/BUSINESS_RULES.md` §1.7 (regla del bloqueo) y §4.1 (aclaración: el % de
+  comisión de la planilla y el % del cliente son campos independientes — Liquidaciones usa uno,
+  Estado de Cuenta el otro, no se duplican ni se suman, pero pueden divergir si no se mantienen
+  iguales a mano).
+
+---
+
+### Mantenimiento (ago 2026) — Reset de datos operativos para arrancar limpio
+
+A pedido de la operadora se vació todo lo transaccional (extractos, movimientos, planillas,
+conciliaciones, asientos ⇒ saldos de cuenta corriente en cero, cheques, egresos, arqueos,
+liquidaciones, comprobantes/proyecciones impositivas, órdenes de pago legacy) y el log de
+auditoría, **conservando** clientes, usuarios, plan de cuentas + reglas y toda la config, en las
+2 organizaciones. Se hizo backup previo con un branch de Neon. La ejecución inicial fue un
+`TRUNCATE ... RESTART IDENTITY`; quedó además una herramienta **reutilizable** y scopeada por
+organización: `app/services/reset_operativo.py` + `scripts/reset_operativo.py` (con `--dry-run`,
+confirmación, y flag para conservar auditoría) + tests. Runbook: `docs/playbooks/RESET_OPERATIVO.md`.
+
+Complemento del arranque limpio: se **eliminó el backfill de arranque** (`main.py`, paso 9b) que
+re-sembraba en cada boot 3 asientos "lápida" (`numero_asiento` 518/519/520, `modulo=ajuste_manual`,
+sin detalle, "sin impacto contable") para tapar los huecos que dejó la baja física de esos asientos
+en la migración v3.9 y mantener la correlatividad del Libro Diario. Tras vaciar el Libro Diario a
+cero ese relleno ya no aplica y además forzaba a que el primer asiento real se numerara 521 en vez
+de 1 (`_next_numero_asiento` = max+1). Se borraron las 3 filas y se reinició `asientos_id_seq` →
+el próximo asiento real arranca en `id` 1 y `numero_asiento` 1. También se versionó
+`docs/ESTADO_SISTEMA.md` (snapshot autocontenido del sistema).
+
+---
+
+### v3.29 — Fix alertas/saldos de cheques que siempre daban 0 (estado "pendiente" vs "registrado")
+
+Las alertas de cheques (urgentes/vencidos) del dashboard **nunca se disparaban**, aunque hubiera
+cheques por vencer. Causa: filtraban por `estado == "pendiente"`, pero el estado canónico es
+`"registrado"` y un backfill de arranque migra `"pendiente" → "registrado"` — o sea, en producción
+no hay cheques con estado `"pendiente"`, así que el filtro daba siempre 0 (silenciosamente).
+
+- **5 lugares afectados** (todos devolvían vacío): `calcular_alertas` (cheques urgentes/vencidos),
+  `_cheques_proximos_vencimiento` (resumen del dashboard), saldo de cheques por cliente del estado
+  de cuenta, push de alertas de `backup_scheduler.py` (10:00 ART — nunca notificaba cheques por
+  vencer), y dos queries del asistente IA (`agente.py`).
+- **Fix**: constantes en `reportes_service.py` — `CHEQUE_EN_CARTERA = ("registrado", "pendiente")`
+  (no depositado aún) y `CHEQUE_PENDIENTE_COBRO = ("registrado", "pendiente", "depositado")`
+  (importe aún no cobrado). Se reemplazó `estado == "pendiente"` por `estado.in_(...)` según el
+  caso. Documentado en `BUGS.md`.
+- **Tests**: `test_alertas.py` +7 (un cheque `registrado` por vencer ahora dispara la alerta;
+  `acreditado`/`rechazado`/`anulado` no; aislamiento multi-tenant).
+
+---
+
+### v3.29 — Fix deadlock de Postgres en deploy en caliente (DDL de arranque)
+
+Producción reportó `OperationalError: deadlock detected` en `GET /analisis/alertas` (contando
+cheques): el DDL de arranque competía por locks con requests en vuelo durante un deploy. El
+safety-net (`db_safety.py`, ~100 sentencias) corría en **una sola transacción** que retenía
+`AccessExclusiveLock` sobre ~15 tablas hasta el commit final, sin `lock_timeout` → deadlock contra
+los `AccessShareLock` de las lecturas.
+
+- **Helper `main.py::_exec_startup_ddl(conn, sql)`**: cada sentencia DDL de arranque en su propia
+  transacción con `SET LOCAL lock_timeout = '4s'` (solo Postgres), commit por sentencia (libera el
+  lock de la tabla de inmediato), reintento ante contención de lock/deadlock, y aislamiento de
+  errores (una sentencia que falla ya no aborta las siguientes — bug latente previo). Aplicado a
+  los 3 loops de DDL de arranque (safety-net + índices + migraciones de columnas).
+- **Tests**: `test_startup_ddl.py` (4 tests, sqlite en memoria) verifica el aislamiento de errores
+  y el commit-por-sentencia. Documentado en `BUGS.md` como área de bug recurrente.
+
+---
+
+### v3.29 — Carga masiva de cheques: varios cheques por foto (jul 2026)
+
+La carga masiva de cheques por foto ya existía (tab "Carga masiva" en Cheques → `POST /cheques/bulk-ocr`),
+pero asumía **1 foto = 1 cheque**: el prompt de OCR pedía "los datos de *este* cheque" (singular) y
+devolvía un único cheque por imagen. Al fotografiar un lote de cheques sobre la mesa (varios en una
+sola foto) se extraía solo uno y se perdían el resto.
+
+- **Detección multi-cheque** (`routers/cheques_crud.py`, `bulk-ocr`): el prompt ahora pide un
+  **array JSON** con *todos* los cheques visibles en la imagen; los resultados de todas las fotos se
+  aplanan en una única lista `items`, cada uno con el `index` de su foto de origen (para mapear el
+  preview). **Retrocompatible**: una foto con un solo cheque devuelve un array de 1 → el modo actual
+  (una foto por cheque) sigue igual. Tope defensivo de 120 cheques por lote.
+- **Funciones puras testeables** (`routers/cheques_common.py`): `_parse_ocr_response` (acepta array
+  u objeto único, limpia fences markdown, descarta objetos todo-null) y `_normalize_ocr_cheque` +
+  `_parse_monto_ocr` (casteo de monto tolerante al formato argentino: `"350.000,00"` → 350000,
+  sin romper decimales planos como `"1005282.00"` — área de bugs recurrentes de montos). 17 tests nuevos.
+- **Frontend**: el flujo (dropzone → OCR → tabla editable para revisar/corregir → asignar cliente →
+  guardar) no cambió; la tabla ya renderiza N filas y manda cada foto a resolución completa. Solo se
+  actualizó el texto: "Podés poner varios cheques en una misma foto". El modo **individual** (modal de
+  alta con foto vía `/agente/ocr-cheque`) queda intacto.
+
+---
+
+### v3.28 — Archivar extractos + exports estéticos + alertas de alto valor + UX de estados (jul 2026)
+
+Cuatro mejoras que salieron juntas bajo la etiqueta v3.28 (de una auditoría de fricciones para
+usuarios nuevos no técnicos y del ciclo de cierre mensual):
+
+- **Archivar extractos (cierre de período)** (`ExtractoBancario.archivado_at`, migración 025 +
+  safety-net): los UM se acumulan en el mismo extracto y el histórico se vuelve pesado. Ahora se
+  puede **archivar** un extracto: todo lo conciliado queda guardado y consultable/exportable por id
+  (movimientos, filtros cliente/fecha, export), pero sale del listado por defecto y rechaza nuevos UM
+  (409 claro). Después se sube un extracto nuevo del mismo banco y se arranca liviano. `PATCH
+  /extractos/{id}/archivar` y `/desarchivar` (permiso `delete_records`, auditados, idempotentes);
+  `GET /extractos` oculta archivados salvo `incluir_archivados=true`. Fix preexistente: `ExtractoListItem`
+  no declaraba `banco` → el `response_model` lo filtraba y el frontend nunca lo recibía. UI: botón
+  📦 Archivar / ↩️ Reabrir + badge Archivado.
+- **Exports estéticos + PDF de planilla conciliada**: Excel de planilla conciliada con marca Cuadra
+  discreta, headers verde oscuro, autofiltro + freeze panes, formato es-AR, fila TOTAL en negrita con
+  "Total declarado por el cliente" + "Diferencia" (columnas y orden intactos — compatibilidad
+  contador). PDF nuevo (`export_planilla_conciliada_pdf`, `GET /planillas/{id}/export-pdf`, mismo
+  aislamiento multi-tenant, armado compartido en `_build_planilla_export_data`). Frontend:
+  `exportPlanillaPdf` + botón PDF junto al Excel en Clientes y Cuenta Corriente.
+- **Alertas de alto valor**: dos alertas nuevas en las 3 superficies (widget Dashboard, push diario
+  10:00 ART, tool `consultar_alertas` del asistente IA): "Planillas con total que no cuadra" (⚖️,
+  descuadre >$1 entre `total_declarado` y la suma de rows, outerjoin) y "Filas ambiguas por revisar"
+  (🤔, rows con status LIKE `ambiguo%`). Scopeado por org.
+- **UX de estados** (`utils/status.ts` → `statusLabel`): traduce los status de conciliación a texto
+  humano en toda la UI ("ok"→"Acreditado ✓", "no está"→"No encontrado ✕", "ambiguo (…)"→"Ambiguo —
+  elegir a mano"). Los VALORES de la API no cambian, solo lo mostrado. Leyenda de estados sobre la
+  tabla, "UM" explicado con tooltip (Últimos Movimientos), "🗑 UM"→"🗑 Limpiar UM", estado vacío
+  guiado con los 3 pasos, filtros "Desde $ / Hasta $".
+
+558 tests backend + 37–40 frontend, todo verde (ruff + pytest + tsc + eslint + vitest + build).
+
+---
+
+### v3.27 — Estandarización universal de planillas de clientes (jul 2026)
+
+Cada cliente manda su planilla en un formato distinto (columnas, orden, headers en filas
+distintas). Antes el parser buscaba "monto"/"importe" solo en las filas 1-5, tomaba el primer
+match y caía a un fallback hardcodeado de Banco Macro → degradaba en silencio a "sin datos".
+Ahora hay un **embudo de estandarización** que normaliza cualquier planilla al esquema canónico
+`{monto, cuit, titular, referencia, fecha}` que ya consume el motor de conciliación (**el motor no
+se tocó** — cero riesgo sobre el matcheo).
+
+- **Pipeline de 3 capas** (`services/planilla_mapper.py`, `estandarizar_planilla`): 1) **perfil**
+  por cliente (mapeo guardado + fingerprint de headers → si coincide, parsea directo sin preguntar);
+  2) **heurística** mejorada (detecta la fila de headers escaneando 1..15, soporta offset de columna,
+  diccionario de sinónimos normalizado, y **valida el contenido** de cada columna — monto numérico,
+  CUIT 7-11 dígitos, titular no-constante para evitar la trampa "Cliente=constante", corta tras 3
+  filas sin monto contra planillas con 1M de filas vacías); 3) **IA (Gemini)** solo si la heurística
+  no llega al umbral (degradación total sin API key). Montos en Decimal.
+- **Perfil aprendido**: nueva columna `Cliente.mapeo_planilla` (JSON) — la primera vez que se
+  confirma/corrige el mapeo de un cliente se guarda; las próximas cargas del mismo formato parsean
+  solas. Migración 022 + safety-net.
+- **Endpoints**: `POST /planillas/preview` (detecta sin persistir → alimenta el modal) y
+  `POST /planillas/upload` extendido con `mapeo` opcional (corrección manual, se guarda como perfil)
+  + `deteccion` en la respuesta. Compatible: el upload sin `mapeo` sigue funcionando.
+- **Frontend**: `ColumnMapperModal` — al cargar una planilla, si la detección es de alta confianza
+  o de perfil, sube directo (sin fricción); si duda, muestra un modal con las primeras filas y un
+  desplegable por columna ("Usar como: Monto/CUIT/Titular/Referencia/Fecha/Ignorar") para confirmar
+  o corregir. Avisa cuántas filas detectó (no más filas desaparecidas en silencio).
+- Probado contra **3 formatos reales** (Tucu/Green en Org A/Macro, Dani en Org Prueba/Comercio):
+  los tres parsean con la heurística sola a confianza 1.00 (header en fila distinta, offset de
+  columna, trampa del cliente-constante, 1M de filas vacías — todo resuelto). Multi-tenant: el
+  perfil vive en `Cliente` (scopeado por org). **20 tests nuevos** (500 backend + 31 frontend).
+- **Detección de fila de total/resumen**: algunos clientes agregan al final de la planilla una fila
+  con el total (suma de los movimientos). Antes se contaba como un movimiento más (sin identidad →
+  "sin datos"). Ahora `_detectar_totales` la reconoce (por etiqueta "total/suma/…" o porque su monto
+  ≈ suma de los movimientos, y solo en filas trailing sin CUIT → no borra movimientos reales), la
+  **excluye** de los movimientos, la guarda como `Planilla.total_declarado` y calcula el **cuadre**:
+  la UI muestra "Total de la planilla" (suma de movimientos) vs. "Declarado por el cliente" con un
+  badge ✓ Cuadra / ⚠ Difiere en $X. Verificado con Tucu real (8 mov + total 5.089.000 detectado
+  correctamente). Migración 023 + safety-net. **+6 tests** (506 backend + 33 frontend).
+
+- **Capa de diagnóstico de conciliación** (por qué las filas no matchean, sin tocar el matcher —
+  Org A intacta): tras conciliar, `diagnostico_conciliacion` calcula y devuelve (aditivo, read-only)
+  (a) **`banco_trae_identidad`**: si el extracto trae nombre/CUIT del que pagó (muchos bancos, ej.
+  Comercio, solo dicen "CRÉDITO POR TRANSFERENCIA" → conciliación solo por monto); (b) **cobertura
+  de montos**: cuántos montos de la planilla aparecen en el extracto ("12 de 33"); (c) **solape de
+  fechas** planilla vs. período del extracto. El frontend (`DiagnosticoPanel`) lo muestra en el
+  resultado: "este banco no trae identidad → solo por monto", "faltan N montos, ¿extracto correcto?",
+  "las fechas no coinciden". Resuelve el falso "está roto" cuando en realidad el banco no da el dato.
+  Verificado con datos reales de Dani/Comercio (banco sin identidad, 12/33). Además se persiste la
+  **fecha de pago** de la planilla (`PlanillaRow.fecha`, antes se descartaba; migración 024) para el
+  cálculo del período. **+10 tests** (536 backend + 37 frontend).
+
+- **Archivar extractos (cierre de período)**: `archivado_at` en ExtractoBancario (migración 025;
+  distinto de borrar) — un extracto archivado conserva TODO lo conciliado (consultable y exportable
+  por id: movimientos, filtros por cliente/fecha y export siguen funcionando), pero sale del listado
+  por defecto (`GET /extractos?incluir_archivados=true` los muestra con flag `archivado`) y rechaza
+  nuevos UM (409 con mensaje claro). Endpoints `PATCH /extractos/{id}/archivar|desarchivar`
+  (permiso `delete_records`, auditados, idempotentes). UI: botón "📦 Archivar / ↩️ Reabrir" + badge
+  en Extractos. Resuelve "el extracto se pone pesado": cerrás el mes y subís uno nuevo del mismo
+  banco. De paso: `ExtractoListItem` ahora declara `banco` (bug preexistente: el response_model lo
+  filtraba y el frontend nunca lo recibía). **+4 tests** (558 backend).
+
+- **UX para usuarios nuevos** (de una auditoría de fricciones como "usuario que entra por primera
+  vez"): estados de conciliación con labels humanos en toda la UI vía `utils/status.ts::statusLabel`
+  ("ok"→"Acreditado ✓", "no está"→"No encontrado ✕", "ambiguo (…)"→"Ambiguo — elegir a mano", etc.;
+  los valores de API no cambian, solo lo que se muestra) + leyenda de estados en el panel de
+  planilla; "UM" explicado inline (Últimos Movimientos, con tooltip); botón "🗑 UM"→"🗑 Limpiar UM";
+  estado vacío del resultado con los 3 pasos en vez de "Esperando carga…"; filtros de monto
+  "Desde $ / Hasta $". **+3 tests** (40 frontend).
+
+---
+
+### v3.26 — Liquidación REAL de IVA con "Mis Comprobantes" de ARCA (jul 2026)
+
+Quinto módulo del plan de liquidación de impuestos. Complementa la *proyección* de IVA (v3.19,
+que estima desde asientos internos): acá se liquida con los comprobantes oficiales que ARCA
+entrega al contador (no hay API pública; el Excel "Mis Comprobantes" es la vía estándar).
+
+- **Importación de comprobantes** (`mis_comprobantes_parser.py`): parser determinístico del Excel
+  "Mis Comprobantes Emitidos/Recibidos" de ARCA (título fila 1, headers fila 2). Extrae fecha,
+  tipo, PV, número, CUIT/denominación de la contraparte (receptor si emitido, emisor si recibido),
+  neto gravado, Total IVA e Imp. Total + detalle por alícuota. Probado contra archivos reales.
+- **Modelos** (`iva_liquidacion.py`): `ComprobanteIva` (staging re-importable, dedup por
+  org+dirección+tipo+PV+número+CUIT, flag `incluido` para depurar) y `LiquidacionIva` (snapshot
+  mensual, único por org+período). Ambos multi-tenant (`organizacion_id` NOT NULL).
+- **Lógica fiscal** (`iva_liquidacion_service.py`): débito = Σ IVA emitidos incluidos, crédito =
+  Σ IVA recibidos incluidos, las notas de crédito restan. Posición del período vs. **saldo técnico
+  a favor arrastrado** (se auto-hereda del período anterior; solo compensa IVA). Retenciones +
+  percepciones + **saldo de libre disponibilidad** (aplicable a otros impuestos) cancelan el saldo
+  a pagar. Técnico y libre disponibilidad se llevan **separados** (art. 24). Todo en Decimal.
+- **Router** (`/iva/comprobantes/*` + `/iva/liquidacion/*`): importar, listar+totales, toggle
+  incluir/excluir, borrar, calcular (upsert), historial, presentar (inmutable). Permisos en 3
+  capas: `view_accounting` (leer) / `manage_finance` (importar/depurar/calcular) / `admin_accounting`
+  (presentar). Auditoría en cada acción.
+- **Frontend** (`Iva.tsx`): tabs "Comprobantes" (importar ventas/compras por separado, tabla con
+  toggle incluir/excluir, totales en vivo) y "Liquidación" (cascada débito→crédito→técnico→
+  ret/perc→libre→a pagar) + historial. Retenciones/percepciones por carga manual (falta el
+  formato de export de ARCA para automatizar).
+- **14 tests** (parser sobre Excel real, dedup, toggle, herencia de saldo técnico entre períodos,
+  NC que resta, libre disponibilidad, presentada→409, aislamiento multi-tenant). Total: 480 backend.
+
+---
+
+### v3.25 — Profesionalización de ingeniería + hardening (jun–jul 2026)
+
+Sesión de calidad (no features de negocio): consolidar el sistema como producto mantenible.
+
+- **Base de documentación `/docs`** (Fase 1): 21 docs + índice `README.md` cubriendo arquitectura,
+  negocio, API, BD, seguridad, UX, playbooks (agregar módulo/endpoint/banco/parser/reporte) y ADR.
+  Cada doc documenta el código tal como está y anota discrepancias en su sección "Pendiente de revisar".
+- **Andamiaje `.claude/` + `.github/`** (Fase 2): comandos (`/analyze`, `/bug`, `/feature`,
+  `/refactor`, `/review`, `/release`, `/deploy`, `/docs`), checklists, templates, memoria de deuda
+  técnica (`PROJECT_MEMORY.md`); CI (backend ruff+pytest, frontend eslint+tsc+vitest+build),
+  Dependabot, CODEOWNERS, plantillas de PR/issue, `SECURITY`/`CONTRIBUTING`/`SUPPORT`.
+- **Ciclo de trabajo como Software Architect** (Fase 3): CLAUDE.md formaliza el ciclo obligatorio
+  escalado por tamaño de cambio + ruteo por costo de modelo; `ENGINEERING_AUDIT.md` (madurez ~4/5).
+- **Fixes de producción**: extractos al org correcto + aislamiento multi-tenant, re-subida tras
+  borrar (índice único excluye soft-deleted, migración 020), número de orden por extracto/org,
+  Decimal vs float en re-upload, selector de bancos, compartir foto de OP por WhatsApp.
+- **Performance**: N+1 en historial/contabilidad (selectinload), exports paginados, cachés TTL,
+  lazy-load Sentry, logging de requests lentas (`SLOW`, header `X-Process-Time`).
+- **Deuda técnica saldada**: ruff, eslint (config sobria + react-hooks), `parseMonto`/`fecha`
+  consolidados con tests, convención de paginación fijada en `offset`, `mobile/` eliminado.
+- **Verde de marca mode-aware**: un token `--ml-green` (claro `#16A34A` / oscuro `#4ADE80` "Matrix").
+- **Tests de frontend** (Testing Library + jsdom): smoke de `CuadraLogo`/`Skeleton`/`DonutChart`.
+- **Guard de idempotencia del safety-net DDL**: lista extraída a `app/db_safety.py` + test que
+  exige `IF NOT EXISTS`/`IF EXISTS` en toda sentencia (evita crash del 2º boot en Render).
+- Estado de tests: **465 backend + 25 frontend**.
+
+---
+
 ## Features implementadas (estado actual — v3.12.1)
 
 - Conciliación bancaria multi-extracto con motor de scoring
