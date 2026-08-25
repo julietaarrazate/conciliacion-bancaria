@@ -248,6 +248,73 @@ class TestEditarEgreso:
         assert e.concepto == "Compra materiales"
         assert e.referencia == "OP-001"
 
+    def test_editar_forma_pago_banco_a_efectivo_engancha_arqueo(self, db):
+        """Regresión ago 2026: se cargó 'banco' por error siendo 'efectivo' —
+        debe poder corregirse y quedar enganchado al arqueo del día."""
+        from app.routers.pagos import editar_egreso
+        _crear_egreso(db, egreso_id=30, forma_pago="banco", fecha=date(2026, 6, 1))
+
+        editar_egreso(
+            egreso_id=30,
+            payload={"forma_pago": "efectivo"},
+            db=db,
+            current_user=_mock_user(),
+        )
+        e = db.query(Egreso).filter(Egreso.id == 30).first()
+        assert e.forma_pago == "efectivo"
+        assert e.arqueo_id is not None
+
+        from app.models.caja import ArqueoDiario
+        arqueo = db.query(ArqueoDiario).filter(ArqueoDiario.id == e.arqueo_id).first()
+        assert arqueo is not None
+        assert arqueo.fecha == date(2026, 6, 1)
+
+    def test_editar_forma_pago_efectivo_a_banco_desengancha_y_repone(self, db):
+        from app.routers.pagos import editar_egreso
+        from app.models.caja import ArqueoDiario, denominaciones_vacias
+
+        arqueo = ArqueoDiario(
+            organizacion_id=1, fecha=date(2026, 6, 1),
+            saldo_inicial=0, pesos_agregados=0, ingresos=0,
+            denominaciones=denominaciones_vacias(), creado_por=1,
+        )
+        db.add(arqueo)
+        db.commit()
+        e = _crear_egreso(db, egreso_id=31, forma_pago="efectivo", fecha=date(2026, 6, 1))
+        e.arqueo_id = arqueo.id
+        e.denominaciones_usadas = {"1000": 5}
+        dens = dict(arqueo.denominaciones)
+        dens["1000"] = int(dens.get("1000", 0)) - 5
+        arqueo.denominaciones = dens
+        db.commit()
+
+        editar_egreso(
+            egreso_id=31,
+            payload={"forma_pago": "banco"},
+            db=db,
+            current_user=_mock_user(),
+        )
+        db.refresh(e)
+        db.refresh(arqueo)
+        assert e.forma_pago == "banco"
+        assert e.arqueo_id is None
+        assert e.denominaciones_usadas is None
+        # Las 5 unidades de $1000 vuelven al arqueo
+        assert arqueo.denominaciones["1000"] == 0
+
+    def test_editar_forma_pago_invalida_devuelve_400(self, db):
+        from app.routers.pagos import editar_egreso
+        _crear_egreso(db, egreso_id=32, forma_pago="banco")
+
+        with pytest.raises(HTTPException) as exc_info:
+            editar_egreso(
+                egreso_id=32,
+                payload={"forma_pago": "cheque"},
+                db=db,
+                current_user=_mock_user(),
+            )
+        assert exc_info.value.status_code == 400
+
 
 # ── Tests DELETE /pagos/{id} ──────────────────────────────────────────────────
 

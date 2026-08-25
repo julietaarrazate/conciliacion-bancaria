@@ -323,7 +323,7 @@ export const Pagos: React.FC = () => {
     setSearchParams(sp, { replace: true })
   }, [searchParams, setSearchParams])
 
-  // Lazy: cargar clientes/categorías solo al abrir el form (no bloquea la carga inicial del historial)
+  // Lazy: cargar clientes solo al abrir "Nuevo pago" (no bloquea la carga inicial del historial)
   useEffect(() => {
     if (vista !== 'nuevo') return
     const params = activeOrgId ? { org_id: activeOrgId } : {}
@@ -338,10 +338,16 @@ export const Pagos: React.FC = () => {
         : (r.data.clientes?.map((c: { id?: number; nombre: string }) => ({ id: c.id || 0, nombre: c.nombre })) || [])
       setClientes(lista.sort((a, b) => a.nombre.localeCompare(b.nombre)))
     }).catch(() => {})
+  }, [activeOrgId, vista])
+
+  // Categorías: hacen falta tanto en "Nuevo pago" como al editar uno desde el
+  // historial — a diferencia de clientes, se cargan siempre (consulta liviana).
+  useEffect(() => {
+    const params = activeOrgId ? { org_id: activeOrgId } : {}
     apiClient.client.get('/pagos/categorias', { params }).then(r => {
       setCategorias(r.data || [])
     }).catch(() => {})
-  }, [activeOrgId, vista])
+  }, [activeOrgId])
 
   const aplicarOcrTransferencia = (imagenBase64: string) => {
     apiClient.client.post('/agente/ocr-transferencia', { imagen_base64: imagenBase64 })
@@ -487,7 +493,7 @@ export const Pagos: React.FC = () => {
 
   // ── Editar egreso ─────────────────────────────────────────────────
   const [editItem, setEditItem] = useState<Egreso | null>(null)
-  const [editForm, setEditForm] = useState({ monto: '', fecha: '', beneficiario: '', concepto: '', referencia: '', categoria: '' })
+  const [editForm, setEditForm] = useState({ monto: '', fecha: '', beneficiario: '', concepto: '', referencia: '', categoria: '', forma_pago: 'banco' })
   const [editSaving, setEditSaving] = useState(false)
   const [editMsg, setEditMsg] = useState('')
 
@@ -500,6 +506,7 @@ export const Pagos: React.FC = () => {
       concepto: e.concepto || '',
       referencia: e.referencia || '',
       categoria: e.categoria || '',
+      forma_pago: e.forma_pago,
     })
     setEditMsg('')
   }
@@ -517,6 +524,7 @@ export const Pagos: React.FC = () => {
         concepto: editForm.concepto || undefined,
         referencia: editForm.referencia || undefined,
         categoria: editForm.categoria || undefined,
+        forma_pago: editForm.forma_pago,
       })
       setEditItem(null)
       cargarLista()
@@ -823,6 +831,38 @@ export const Pagos: React.FC = () => {
                 onChange={e => setEditForm(p => ({ ...p, fecha: e.target.value }))}
               />
             </div>
+
+            <div>
+              <label className="label">Forma de pago</label>
+              <div className="grid grid-cols-2 gap-2">
+                {(['banco', 'efectivo'] as const).map(f => (
+                  <button key={f} type="button"
+                    onClick={() => setEditForm(p => ({ ...p, forma_pago: f }))}
+                    className={`py-2 rounded-lg text-sm font-medium transition-colors ${
+                      editForm.forma_pago === f
+                        ? 'bg-ml-blue dark:bg-ml-green text-white dark:text-black'
+                        : 'bg-ml-gray dark:bg-ml-dark-card text-gray-500 dark:text-zinc-400'}`}>
+                    {f === 'banco' ? 'Banco' : 'Efectivo'}
+                  </button>
+                ))}
+              </div>
+              {editForm.forma_pago !== editItem.forma_pago && (
+                <p className="text-2xs text-amber-600 dark:text-amber-400 mt-1">
+                  Se ajusta el arqueo de caja del día y el asiento contable al guardar.
+                </p>
+              )}
+            </div>
+
+            {editItem.tipo !== 'pago_cliente' && (
+              <div>
+                <label className="label">Categoría</label>
+                <select className="input-field" value={editForm.categoria}
+                  onChange={e => setEditForm(p => ({ ...p, categoria: e.target.value }))}>
+                  <option value="">Sin categoría</option>
+                  {categorias.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="label">{editItem.tipo === 'pago_cliente' ? 'A favor de' : 'Proveedor / Beneficiario'}</label>
