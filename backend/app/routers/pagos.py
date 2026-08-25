@@ -260,7 +260,7 @@ def editar_egreso(
     current_user: User = Depends(require_permission("reconcile")),
 ):
     """Edita campos básicos de un egreso (monto, fecha, beneficiario, concepto,
-    referencia, categoria, forma_pago). No modifica la foto (flujo propio).
+    referencia, categoria, forma_pago, foto_base64 — null para quitarla).
     Reversa el asiento original y genera uno nuevo con los valores corregidos."""
     q = db.query(Egreso).filter(Egreso.id == egreso_id)
     if not current_user.is_superadmin:
@@ -291,6 +291,9 @@ def editar_egreso(
         e.referencia = (payload["referencia"] or "").strip() or None
     if "categoria" in payload:
         e.categoria = (payload["categoria"] or "").strip() or None
+    if "foto_base64" in payload:
+        nueva_foto = payload.get("foto_base64")
+        e.foto_comprobante = upload_comprobante(nueva_foto, prefix=f"egreso/{e.organizacion_id}") if nueva_foto else None
 
     # Forma de pago (ej: se cargó "banco" y en realidad fue "efectivo"). Mismo
     # criterio que crear/eliminar: reponer denominaciones del arqueo viejo (si
