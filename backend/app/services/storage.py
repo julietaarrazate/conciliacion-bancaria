@@ -79,7 +79,7 @@ def upload_comprobante(data: Optional[str], prefix: str = "op") -> Optional[str]
         logger.warning("upload_comprobante: data no es data URL válido, devolviendo tal cual")
         return data
     raw, content_type = parsed
-    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}.get(content_type, "bin")
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf"}.get(content_type, "bin")
     key = f"{prefix}/{uuid.uuid4().hex}.{ext}"
 
     try:
