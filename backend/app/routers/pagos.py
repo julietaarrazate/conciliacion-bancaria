@@ -260,8 +260,8 @@ def editar_egreso(
     current_user: User = Depends(require_permission("reconcile")),
 ):
     """Edita campos básicos de un egreso (monto, fecha, beneficiario, concepto,
-    referencia, categoria). No modifica forma_pago ni foto (flujos propios).
-    Reversa el asiento original y genera uno nuevo con el monto corregido."""
+    referencia, categoria, forma_pago). No modifica la foto (flujo propio).
+    Reversa el asiento original y genera uno nuevo con los valores corregidos."""
     q = db.query(Egreso).filter(Egreso.id == egreso_id)
     if not current_user.is_superadmin:
         q = q.filter(Egreso.organizacion_id == (current_user.organizacion_id or 1))
@@ -292,6 +292,51 @@ def editar_egreso(
     if "categoria" in payload:
         e.categoria = (payload["categoria"] or "").strip() or None
 
+    # Forma de pago (ej: se cargó "banco" y en realidad fue "efectivo"). Mismo
+    # criterio que crear/eliminar: reponer denominaciones del arqueo viejo (si
+    # había) y, si la nueva forma es efectivo, engancharlo al arqueo del día
+    # (creándolo si no existe) para que cuente en "pagos_dia"/caja_restante.
+    if "forma_pago" in payload or "denominaciones" in payload:
+        nueva_forma_pago = (payload.get("forma_pago") or e.forma_pago).strip()
+        if nueva_forma_pago not in FORMAS_PAGO:
+            raise HTTPException(400, f"forma_pago inválida: {nueva_forma_pago}")
+
+        if e.arqueo_id and e.denominaciones_usadas:
+            arqueo_viejo = db.query(ArqueoDiario).filter(ArqueoDiario.id == e.arqueo_id).first()
+            if arqueo_viejo:
+                dens = dict(arqueo_viejo.denominaciones or denominaciones_vacias())
+                for den_str, cant in e.denominaciones_usadas.items():
+                    dens[str(den_str)] = int(dens.get(str(den_str), 0)) + int(cant)
+                arqueo_viejo.denominaciones = dens
+        e.arqueo_id = None
+        e.denominaciones_usadas = None
+
+        if nueva_forma_pago == "efectivo":
+            dens_usadas = payload.get("denominaciones") or {}
+            arqueo = db.query(ArqueoDiario).filter(
+                ArqueoDiario.organizacion_id == e.organizacion_id,
+                ArqueoDiario.fecha == e.fecha,
+            ).first()
+            if not arqueo:
+                arqueo = ArqueoDiario(
+                    organizacion_id=e.organizacion_id, fecha=e.fecha,
+                    saldo_inicial=0, pesos_agregados=0, ingresos=0,
+                    denominaciones=denominaciones_vacias(),
+                    creado_por=current_user.id,
+                )
+                db.add(arqueo)
+                db.flush()
+            if dens_usadas:
+                dens = dict(arqueo.denominaciones or denominaciones_vacias())
+                for den_str, cant in dens_usadas.items():
+                    actual = int(dens.get(str(den_str), 0))
+                    dens[str(den_str)] = max(0, actual - int(cant))
+                arqueo.denominaciones = dens
+            e.arqueo_id = arqueo.id
+            e.denominaciones_usadas = {str(k): int(v) for k, v in dens_usadas.items()} if dens_usadas else None
+
+        e.forma_pago = nueva_forma_pago
+
     # Reversar asiento anterior y crear uno nuevo con los valores corregidos
     try:
         from app.services.motor_contable import reversar_asientos, registrar_egreso as _reg_egreso
@@ -314,6 +359,7 @@ def editar_egreso(
 
     registrar_log(db, current_user.id, "egresos", e.id, "UPDATE", {
         "monto": str(e.monto), "fecha": str(e.fecha), "beneficiario": e.beneficiario,
+        "forma_pago": e.forma_pago,
     })
     db.commit()
     return {"ok": True, "egreso": _egreso_dict(e)}
