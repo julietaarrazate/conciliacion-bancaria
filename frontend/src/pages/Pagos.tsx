@@ -343,13 +343,43 @@ export const Pagos: React.FC = () => {
     }).catch(() => {})
   }, [activeOrgId, vista])
 
+  const aplicarOcrTransferencia = (imagenBase64: string) => {
+    apiClient.client.post('/agente/ocr-transferencia', { imagen_base64: imagenBase64 })
+      .then(res => {
+        const d = res.data
+        setForm(prev => {
+          const ocrMonto = parseMonto(d.monto)
+          return {
+            ...prev,
+            // type="number" input requires standard decimal format ("15000.5"), NOT Argentine ("15.000,50")
+            monto:        prev.monto        || (ocrMonto != null ? String(Math.round(ocrMonto * 100) / 100) : prev.monto),
+            fecha:        prev.fecha        || d.fecha        || prev.fecha,
+            beneficiario: prev.beneficiario || d.beneficiario || prev.beneficiario,
+            referencia:   prev.referencia   || d.referencia   || prev.referencia,
+          }
+        })
+      })
+      .catch(() => { setMsg('OCR no disponible — completá el importe manualmente') })
+  }
+
   const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    const esPdf = file.type === 'application/pdf'
     const reader = new FileReader()
     reader.onload = ev => {
       const base64 = (ev.target?.result as string) || ''
       setFotoPreview(base64)
+
+      if (esPdf) {
+        // Un PDF no se puede pasar por <canvas> (eso solo funciona con
+        // imágenes rasterizadas) — va tal cual. El backend y Gemini OCR
+        // aceptan cualquier mime type, no hace falta convertir nada.
+        setFoto(base64)
+        aplicarOcrTransferencia(base64)
+        return
+      }
+
       const img = new Image()
       img.onload = () => {
         const canvas = document.createElement('canvas')
@@ -375,22 +405,7 @@ export const Pagos: React.FC = () => {
         ocrCtx.fillStyle = '#ffffff'; ocrCtx.fillRect(0, 0, ow, oh)
         ocrCtx.drawImage(img, 0, 0, ow, oh)
         const ocrCompressed = ocrCanvas.toDataURL('image/jpeg', 0.92)
-        apiClient.client.post('/agente/ocr-transferencia', { imagen_base64: ocrCompressed })
-          .then(res => {
-            const d = res.data
-            setForm(prev => {
-              const ocrMonto = parseMonto(d.monto)
-              return {
-                ...prev,
-                // type="number" input requires standard decimal format ("15000.5"), NOT Argentine ("15.000,50")
-                monto:        prev.monto        || (ocrMonto != null ? String(Math.round(ocrMonto * 100) / 100) : prev.monto),
-                fecha:        prev.fecha        || d.fecha        || prev.fecha,
-                beneficiario: prev.beneficiario || d.beneficiario || prev.beneficiario,
-                referencia:   prev.referencia   || d.referencia   || prev.referencia,
-              }
-            })
-          })
-          .catch(() => { setMsg('OCR no disponible — completá el importe manualmente') })
+        aplicarOcrTransferencia(ocrCompressed)
       }
       img.src = base64
     }
@@ -748,21 +763,28 @@ export const Pagos: React.FC = () => {
 
             {/* Foto */}
             <div>
-              <label className="label">Comprobante (foto)</label>
+              <label className="label">Comprobante (foto o PDF)</label>
               {fotoPreview ? (
                 <div className="space-y-2">
-                  <img src={fotoPreview} alt="comprobante" className="max-h-48 mx-auto rounded-lg object-contain border border-ml-gray dark:border-ml-dark-border" />
+                  {fotoPreview.startsWith('data:application/pdf') ? (
+                    <div className="flex items-center justify-center gap-2 py-6 px-4 rounded-lg border border-ml-gray dark:border-ml-dark-border text-sm text-ml-text-soft dark:text-zinc-400">
+                      <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+                      PDF adjunto
+                    </div>
+                  ) : (
+                    <img src={fotoPreview} alt="comprobante" className="max-h-48 mx-auto rounded-lg object-contain border border-ml-gray dark:border-ml-dark-border" />
+                  )}
                   <button type="button" onClick={() => { setFoto(null); setFotoPreview(null) }} className="btn-secondary text-sm w-full">
-                    Quitar foto
+                    Quitar {fotoPreview.startsWith('data:application/pdf') ? 'PDF' : 'foto'}
                   </button>
                 </div>
               ) : (
                 <>
-                  <input ref={fileInputRef} type="file" accept="image/*" capture="environment"
+                  <input ref={fileInputRef} type="file" accept="image/*,application/pdf" capture="environment"
                     className="hidden" onChange={handleFoto} />
                   <button type="button" onClick={() => { suppressLockForCamera(); fileInputRef.current?.click() }} className="btn-secondary w-full text-sm flex items-center justify-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg>
-                    Sacar / subir foto
+                    Sacar / subir foto o PDF
                   </button>
                 </>
               )}
