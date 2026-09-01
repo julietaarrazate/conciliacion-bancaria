@@ -10,8 +10,8 @@ psycopg2-binary==2.9.12          # PostgreSQL (Render/Railway)
 python-jose[cryptography]==3.5.0
 
 # Validacion y settings
-pydantic==2.13.4
-pydantic[email]==2.13.4
+pydantic==2.13.5
+pydantic[email]==2.13.5
 pydantic-settings==2.15.0
 email-validator==2.3.0
 
@@ -42,7 +42,7 @@ reportlab==5.0.1
 pywebpush>=2.4.0
 
 # Storage S3/R2 (opcional, activado via env vars S3_*)
-boto3==1.43.78
+boto3==1.43.83
 
 # Agente IA (Gemini Flash — activado via env var GEMINI_API_KEY)
 google-generativeai==0.8.6
