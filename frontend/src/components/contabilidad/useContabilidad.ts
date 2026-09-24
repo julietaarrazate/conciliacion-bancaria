@@ -241,12 +241,13 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       const confirmar = window.confirm(
         `🧹 EMPEZAR LIMPIO — Libro Diario\n\n` +
         `Borra TODOS los asientos y reconstruye desde cero, prolijo y numerado desde 1, ` +
-        `usando solo las fuentes confiables: importaciones del banco (UM) y conciliaciones agrupadas por planilla. ` +
+        `usando solo las fuentes confiables: extractos del banco, importaciones del banco (UM) y conciliaciones agrupadas por planilla. ` +
         `Vincula la cuenta de cada cliente automáticamente.\n\n` +
         `Se van a BORRAR: ${a_borrar.asientos} asientos (${a_borrar.detalles} líneas)\n` +
         `Se van a CREAR: ${a_crear.total_asientos_nuevos} asientos limpios\n` +
+        `  · ${a_crear.extractos} extracto(s) bancario(s)\n` +
         `  · ${a_crear.um_lotes} lote(s) de banco (UM)\n` +
-        `  · ${a_crear.um_reclass_planilla} transferencia(s) conciliada(s) (TT)\n\n` +
+        `  · ${a_crear.reclass_planilla_buckets} transferencia(s) conciliada(s) (TT)\n\n` +
         `¿Confirmás empezar limpio?`
       )
       if (!confirmar) return
