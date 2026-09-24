@@ -1,5 +1,8 @@
-# Actualizaciones de dependencias automáticas (semanal, agrupadas) para no
-# acumular deuda de versiones. Genera PRs que el CI valida antes de mergear.
+# Actualizaciones de dependencias automáticas (semanal) para no acumular deuda
+# de versiones. Genera PRs que el CI valida antes de mergear.
+# Menores y parches van agrupados en un solo PR por ecosistema; los saltos de
+# versión mayor quedan fuera del grupo y llegan de a uno (cada uno puede exigir
+# migración: ver #187, que juntó 8 mayores y no instalaba).
 version: 2
 updates:
   - package-ecosystem: pip
@@ -10,6 +13,7 @@ updates:
     groups:
       backend-deps:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: npm
     directory: /frontend
@@ -19,6 +23,7 @@ updates:
     groups:
       frontend-deps:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /
