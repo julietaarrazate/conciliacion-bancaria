@@ -22,7 +22,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, text
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -495,6 +495,12 @@ def reset_y_rebuild_asientos(
     current_user: User = Depends(get_current_user),
 ):
     """Borra TODOS los asientos de la org y los reconstruye desde los datos reales:
+    - extracto: un asiento por extracto bancario (no borrado) con los movimientos
+      del extracto principal (source != "um") — Banco Macro D / Pasivo Corriente H
+      por los ingresos y a la inversa por los egresos. Es la contrapartida que
+      cancela la reclasificación de origen extracto (Pasivo Corriente D / Cliente H);
+      sin él Pasivo Corriente queda deudor tras el reset. Los movimientos UM no
+      entran acá: ya los cubre um_lote.
     - um_lote: un asiento por cada lote de UM importado en el extracto
     - reclasificación por planilla conciliada (agrupada), un bucket por ORIGEN del
       movimiento (extracto principal → Pasivo Corriente; UM → No identificado —
@@ -553,6 +559,25 @@ def reset_y_rebuild_asientos(
         lotes.setdefault(lote_key, []).append(m)
     n_um_lotes = len(lotes)
 
+    # ── Movimientos del extracto principal agrupados por extracto ─
+    # Mismo módulo/referencia que registrar_extracto ("extracto", extracto_id),
+    # así el backfill de arranque (main.py paso 7) los ve y no los duplica.
+    principal_movs = (
+        db.query(MovimientoBanco)
+        .join(ExtractoBancario, MovimientoBanco.extracto_id == ExtractoBancario.id)
+        .filter(
+            ExtractoBancario.organizacion_id == oid,
+            ExtractoBancario.deleted_at.is_(None),
+            or_(MovimientoBanco.source.is_(None), MovimientoBanco.source != "um"),
+        )
+        .order_by(MovimientoBanco.extracto_id, MovimientoBanco.id)
+        .all()
+    )
+    extractos_movs: dict = {}
+    for m in principal_movs:
+        extractos_movs.setdefault(m.extracto_id, []).append(m)
+    n_extractos = len(extractos_movs)
+
     # ── Planillas conciliadas (agrupadas) ────────────────────────
     # No exigimos cuenta_contable_id: el loop de rebuild crea/vincula la cuenta
     # de cada cliente (_get_o_crear_cuenta_cliente), así el arranque limpio es
@@ -603,9 +628,10 @@ def reset_y_rebuild_asientos(
             "dry_run": True,
             "a_borrar": {"asientos": n_asientos, "detalles": n_detalles},
             "a_crear": {
+                "extractos": n_extractos,
                 "um_lotes": n_um_lotes,
                 "reclass_planilla_buckets": n_planillas,
-                "total_asientos_nuevos": "≥ " + str(n_um_lotes + n_planillas) + " (+1 por bucket con comisión > 0)",
+                "total_asientos_nuevos": "≥ " + str(n_extractos + n_um_lotes + n_planillas) + " (+1 por bucket con comisión > 0)",
             },
             "msg": "Ejecutá con dry_run=false para aplicar los cambios.",
         }
@@ -627,6 +653,54 @@ def reset_y_rebuild_asientos(
             raise HTTPException(status_code=500, detail="Plan de cuentas incompleto: faltan cuentas base (Banco Macro o No Identificado)")
 
         contador = 0
+
+        # ── Reconstruir extracto (Banco Macro / Pasivo Corriente) ─
+        # Cuenta hoja Banco Macro (no la madre 1-1-1-3 de la regla carga_extracto,
+        # ver extractos.py::upload) y Pasivo Corriente 2-1-0-0, la misma cuenta que
+        # debita reclass_planilla_extracto. Fecha = primer movimiento del extracto,
+        # así el asiento queda antes que las reclasificaciones que lo cancelan.
+        pasivo_cte = _get_cuenta_por_codigo(db, "2-1-0-0", oid)
+        pending_ext: list = []
+        if pasivo_cte:
+            extractos_por_id = {
+                e.id: e for e in db.query(ExtractoBancario)
+                .filter(ExtractoBancario.id.in_(list(extractos_movs.keys())))
+                .all()
+            } if extractos_movs else {}
+            for extracto_id, movs in sorted(extractos_movs.items()):
+                total_pos = sum(max(_monto(m.monto), _D("0")) for m in movs)
+                total_neg = sum(abs(min(_monto(m.monto), _D("0"))) for m in movs)
+                if total_pos <= 0 and total_neg <= 0:
+                    continue
+                ext = extractos_por_id.get(extracto_id)
+                fechas = [m.fecha for m in movs if isinstance(m.fecha, _date)]
+                if fechas:
+                    fecha_ref = min(fechas)
+                elif ext is not None and ext.fecha_extracto:
+                    fecha_ref = ext.fecha_extracto
+                elif ext is not None and ext.fecha_creacion:
+                    fecha_ref = ext.fecha_creacion.date()
+                else:
+                    fecha_ref = hoy_art()
+                a = Asiento(
+                    fecha=fecha_ref,
+                    descripcion=f"Extracto: {(ext.nombre_archivo if ext else '') or extracto_id}",
+                    modulo="extracto",
+                    referencia_id=extracto_id,
+                    organizacion_id=oid,
+                    usuario_id=current_user.id,
+                )
+                db.add(a)
+                pending_ext.append((a, total_pos, total_neg))
+            db.flush()
+            for a, total_pos, total_neg in pending_ext:
+                if total_pos > 0:
+                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=total_pos, haber=_D("0")))
+                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=pasivo_cte.id, debe=_D("0"), haber=total_pos))
+                if total_neg > 0:
+                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=pasivo_cte.id, debe=total_neg, haber=_D("0")))
+                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=_D("0"), haber=total_neg))
+        contador += len(pending_ext)
 
         # ── Reconstruir um_lote ───────────────────────────────────
         # Acumula asientos y hace un único flush para obtener todos los IDs
@@ -662,7 +736,6 @@ def reset_y_rebuild_asientos(
         # (Pasivo Corriente para extracto principal, No identificado para UM —
         # ver docstring). Acredita al cliente por el NETO y separa la comisión
         # (Planilla.porcentaje_comision) en un asiento aparte.
-        pasivo_cte   = _get_cuenta_por_codigo(db, "2-1-0-0", oid)
         comisiones   = _get_cuenta_por_codigo(db, "3-1-1-0", oid)
         cuenta_origen_por_bucket = {"um": no_id, "extracto": pasivo_cte}
 
