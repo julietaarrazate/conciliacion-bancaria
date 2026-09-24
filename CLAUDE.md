@@ -39,7 +39,7 @@ Env vars opcionales en Render (feature flags — sin la var, la feature se degra
 `VITE_SENTRY_DSN` (Vercel) monitoreo errores · `GOOGLE_CLIENT_ID` (Render) /
 `VITE_GOOGLE_CLIENT_ID` (Vercel) login Google · `S3_*` (5 vars) storage fotos R2 ·
 `ARCA_ENCRYPTION_KEY` ya seteada, módulo ARCA construido pero desactivado a propósito (ver
-"Pendiente para próximas sesiones"). Stack: Python 3.11 / Node 20, Neon free tier (puede dormir),
+"Pendiente para próximas sesiones"). Stack: Python 3.11 / Node 24 (Vercel deja de buildear con Node 20 desde oct 2026), Neon free tier (puede dormir),
 Render free tier (cold start ~30s, mitigado con UptimeRobot + retry en frontend).
 
 ---
