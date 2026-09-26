@@ -30,7 +30,7 @@ export const Terminos: React.FC = () => {
               Cuadra — Sistema de Conciliación Bancaria
             </p>
             <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">
-              Última actualización: 12 de junio de 2026
+              Última actualización: 26 de septiembre de 2026
             </p>
           </div>
 
@@ -113,6 +113,15 @@ export const Terminos: React.FC = () => {
                 </Link>.
               </li>
             </ul>
+            <p>
+              La obligación de confidencialidad de ambas partes se mantiene vigente aun
+              después de finalizada la relación.
+            </p>
+            <p>
+              Cuadra podrá utilizar información estadística agregada y anonimizada, que no
+              permita identificar al Usuario ni a ninguna persona, para mejorar y desarrollar
+              el Sistema.
+            </p>
           </Section>
 
           <Section title="5. Datos de terceros cargados por el usuario">
@@ -134,6 +143,13 @@ export const Terminos: React.FC = () => {
               El Usuario es el único responsable por la licitud, calidad y pertinencia de los
               datos de terceros que incorpore al Sistema. Cuadra no adquiere la propiedad de
               esos datos ni los trata con fines propios.
+            </p>
+            <p>
+              Respecto de esos datos, el Usuario es el responsable de la base de datos y la
+              Proveedora actúa como encargada del tratamiento (Art. 25 de la Ley 25.326):
+              los trata solo para prestar el servicio y según las instrucciones del Usuario,
+              y no los cede a terceros salvo a los proveedores de infraestructura indicados
+              en la Política de Privacidad o por orden judicial.
             </p>
           </Section>
 
@@ -160,7 +176,27 @@ export const Terminos: React.FC = () => {
             </p>
           </Section>
 
-          <Section title="8. Propiedad intelectual">
+          <Section title="8. Precio y forma de pago">
+            <ul>
+              <li>
+                El uso del Sistema puede estar sujeto al pago del plan contratado, según el
+                precio informado al Usuario al momento de la contratación.
+              </li>
+              <li>
+                La Proveedora puede modificar los precios avisando al Usuario por correo
+                electrónico con al menos 30 días de anticipación. Si el Usuario no está de
+                acuerdo, puede dar de baja el servicio antes de que el nuevo precio entre en
+                vigencia, sin penalidad.
+              </li>
+              <li>
+                Ante la falta de pago, la Proveedora podrá suspender el acceso al Sistema
+                previo aviso por correo electrónico. Durante la suspensión los datos del
+                Usuario se conservan y el acceso se restablece al regularizar el pago.
+              </li>
+            </ul>
+          </Section>
+
+          <Section title="9. Propiedad intelectual">
             <p>
               El Sistema, su código fuente, diseño, logotipos y documentación son propiedad
               exclusiva de Julieta Arrazate, con obra registrada ante la Dirección Nacional
@@ -174,7 +210,7 @@ export const Terminos: React.FC = () => {
             </p>
           </Section>
 
-          <Section title="9. Limitación de responsabilidad">
+          <Section title="10. Limitación de responsabilidad">
             <p>Cuadra no será responsable por:</p>
             <ul>
               <li>
@@ -198,9 +234,15 @@ export const Terminos: React.FC = () => {
               El Sistema es una herramienta de apoyo. La validación final de conciliaciones
               y registros contables es responsabilidad del contador y del Usuario.
             </p>
+            <p>
+              En todos los casos, la responsabilidad total de la Proveedora frente al Usuario
+              por cualquier concepto se limita al monto efectivamente pagado por el Usuario
+              en los 12 meses anteriores al hecho que origine el reclamo. Esta limitación no
+              aplica en caso de dolo o culpa grave de la Proveedora.
+            </p>
           </Section>
 
-          <Section title="10. Indemnidad">
+          <Section title="11. Indemnidad">
             <p>
               El Usuario se obliga a mantener indemne a Cuadra y a la Proveedora frente a
               cualquier reclamo, demanda, daño o gasto (incluyendo honorarios legales)
@@ -214,15 +256,32 @@ export const Terminos: React.FC = () => {
             </p>
           </Section>
 
-          <Section title="11. Respaldo de datos">
+          <Section title="12. Respaldo de datos">
             <p>
-              Cuadra realiza backups diarios automáticos conservados por 30 días. Sin embargo,
-              se recomienda al Usuario exportar regularmente sus datos mediante las funciones
-              de exportación disponibles en el Sistema (Excel, PDF).
+              Cuadra realiza backups diarios automáticos conservados hasta 30 días. Estos
+              backups son una medida de seguridad del Sistema y no reemplazan las copias del
+              Usuario: es obligación del Usuario conservar sus propias copias de la
+              información que ingresa o genera, mediante las funciones de exportación
+              disponibles en el Sistema (Excel, PDF).
             </p>
           </Section>
 
-          <Section title="12. Modificaciones">
+          <Section title="13. Baja del servicio y eliminación de datos">
+            <ul>
+              <li>
+                El Usuario puede dar de baja el servicio en cualquier momento, avisando por
+                correo electrónico con al menos 15 días de anticipación.
+              </li>
+              <li>
+                Finalizada la relación, por cualquier causa, los datos del Usuario quedan
+                disponibles para su exportación durante 30 días. Vencido ese plazo, la
+                Proveedora los elimina del Sistema, salvo aquellos que deba conservar por
+                obligación legal, y los backups se renuevan en los 30 días siguientes.
+              </li>
+            </ul>
+          </Section>
+
+          <Section title="14. Modificaciones">
             <p>
               Cuadra puede modificar estos Términos en cualquier momento para reflejar cambios
               legales, técnicos u operativos. Los cambios serán notificados al correo
@@ -231,7 +290,7 @@ export const Terminos: React.FC = () => {
             </p>
           </Section>
 
-          <Section title="13. Ley aplicable y jurisdicción">
+          <Section title="15. Ley aplicable y jurisdicción">
             <p>
               Estos Términos se rigen por las leyes de la República Argentina. Para cualquier
               controversia, las partes se someten a la jurisdicción de los tribunales ordinarios
@@ -240,7 +299,7 @@ export const Terminos: React.FC = () => {
             </p>
           </Section>
 
-          <Section title="14. Contacto">
+          <Section title="16. Contacto">
             <p>
               Para consultas, reclamos o notificaciones:{' '}
               <a

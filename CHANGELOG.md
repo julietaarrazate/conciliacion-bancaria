@@ -5,6 +5,26 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Legal (sep 2026) — Términos y Política de Privacidad actualizados
+
+Revisión contra la Ley 25.326 y contra los términos de software contable argentino (Xubio, Colppy,
+Contabilium). Solo texto de `/terminos` y `/privacidad`; no cambia código de negocio.
+
+- **Términos**: tope de responsabilidad (lo pagado en los últimos 12 meses, salvo dolo o culpa
+  grave), rol de encargado del tratamiento (Art. 25) para los datos de terceros, confidencialidad
+  que sigue después de la baja, uso de datos agregados anonimizados, precio y pago (aviso de 30
+  días para cambios, suspensión por falta de pago con aviso), obligación del usuario de guardar
+  sus copias, y baja con 15 días de aviso + 30 días para exportar antes del borrado.
+- **Privacidad**: se declaran los datos laborales (Sueldos/F931) y fiscales (IVA/IIBB/Monotributo),
+  se distingue responsable (usuarios propios) de encargado (datos que cargan las organizaciones),
+  se suman Cloudflare R2, Sentry y Google a los subprocesadores (solo si están habilitados) y se
+  corrige "backups cifrados" (hoy son JSON gzip por email, sin cifrar).
+- Pendiente fuera de este cambio: registrar la aceptación de términos (fecha + versión) por
+  usuario, un job que aplique las retenciones declaradas (auditoría 2 años, logs 90 días), y la
+  inscripción de la base en el Registro Nacional de Bases de Datos de la AAIP.
+
+---
+
 ### Feature (ago 2026) — Contador ya no requiere aprobación en vivo para loguearse
 
 El login por aprobación (v3.7, mayo 2026) se diseñó para **contadores de prueba** en una org de
