@@ -344,12 +344,14 @@ git commit --allow-empty --author="Julieta Arrazate <julietaarrazate@gmail.com>"
 
 ### Protocolo de orquestación ultracode (definido por Julieta, junio 2026)
 
-El modelo orquestador (Fable) se reserva SOLO para: diseño y descomposición en tareas atómicas,
-detección de dependencias (archivos compartidos → secuenciar), resolución de conflictos de merge
-y auditoría de resultados cuando se requiera. Todo lo demás se delega para no gastar de más:
-- **Opus** — implementación compleja (motor contable, parsers, migraciones, lógica financiera).
-- **Sonnet** — implementación estándar (CRUD, UI, refactors mecánicos, tipado).
-- **Haiku** — tareas simples (renombres, docs menores, búsquedas).
+**Ruteo por costo de modelo** (única fuente de esta regla; para no gastar de más):
+- **Fable** (orquestador) — solo diseño y descomposición en tareas atómicas, detección de
+  dependencias (archivos compartidos → secuenciar), conflictos de merge y auditoría de resultados.
+- **Opus** — lógica compleja/riesgosa (motor contable, parsers, migraciones, lógica financiera).
+- **Sonnet** — implementación estándar (CRUD, UI, endpoints, refactors, tipado).
+- **Haiku** — leer, buscar, resumir impacto y tareas mecánicas (renombres, docs menores).
+- El orquestador delega la lectura/análisis a Haiku y reserva Opus para el razonamiento difícil:
+  no leer 4 docs con un modelo caro si Haiku puede resumirlos.
 
 Reglas del bucle (cuanto más corta y verificable cada unidad, más robusto el bucle):
 1. Unidad de trabajo atómica (~30-45 min por agente); módulos grandes se parten en 2-3 agentes.
@@ -373,13 +375,7 @@ Claude mantiene la calidad del sistema a medida que evoluciona. El rigor **se es
 riesgo del cambio** (no gastar tokens de más: leer con cerebros baratos, razonar/implementar lo
 complejo con los caros).
 
-**Ruteo por costo de modelo** (clave para no gastar de más):
-- **Haiku** → leer, buscar, resumir impacto, tareas mecánicas (renombres, docs menores).
-- **Sonnet** → implementación estándar (CRUD, UI, endpoints, refactors, tipado).
-- **Opus** → lógica compleja/riesgosa (motor contable, parsers, migraciones, lógica financiera).
-- **Fable** → orquesta: diseño, descomposición, dependencias, conflictos de merge, auditoría.
-- Regla de oro: el orquestador **delega la lectura/análisis a Haiku** y reserva Opus para el
-  razonamiento difícil. Nunca leer 4 docs con un modelo caro si Haiku puede resumirlos.
+Qué modelo hace cada cosa: ver "Ruteo por costo de modelo" en el protocolo de orquestación, arriba.
 
 **Nivel del cambio → ceremonia:**
 - **Trivial** (fix de 1 línea, typo, refactor mecánico): reproducir/verificar → corregir → test →
