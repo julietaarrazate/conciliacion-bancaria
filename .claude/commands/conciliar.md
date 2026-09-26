@@ -31,11 +31,13 @@ Por cada planilla que llegue de un cliente:
 5. El sistema concilia automáticamente
 
 **Interpretar los resultados:**
-- ✅ **ok** — acreditado correctamente
-- ❌ **no está** — el monto no existe en el extracto → verificar con el cliente
-- ⚠️ **sin datos (N mov.)** — hay N movimientos con ese monto pero falta CUIT/CBU → pedirle al cliente
-- ⚠️ **no coincide (N mov.)** — tiene datos pero no matcheó → revisar CUIT o nombre
-- 🔄 **duplicado** — ya estaba acreditado → no hacer nada
+(la app muestra el label; entre paréntesis, el valor que devuelve la API)
+- **Acreditado ✓** (`ok`) — acreditado correctamente
+- **No encontrado ✕** (`no está`) — el monto no existe en el extracto → verificar con el cliente
+- **Sin datos ?** (`sin datos (N mov.)`) — hay N movimientos con ese monto pero falta CUIT/CBU → pedirle al cliente
+- **No coincide — revisar** (`no coincide (N mov.)`) — tiene datos pero no matcheó → revisar CUIT o nombre
+- **Ambiguo — elegir a mano** (`ambiguo (...)`) — dos candidatos con el mismo puntaje → elegir el correcto
+- **Duplicado ⚠** (`duplicado`) — ya estaba acreditado → no hacer nada
 
 ---
 
@@ -76,10 +78,10 @@ Checklist antes de cerrar:
 Si necesitás hacer algo por API directamente:
 
 ```bash
-# Login
+# Login (con un usuario real: el demo admin@julieta.com solo existe con debug=true, no en producción)
 TOKEN=$(curl -s -X POST https://conciliacion-api.onrender.com/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@julieta.com","password":"admin123"}' | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+  -d '{"email":"<email>","password":"<password>"}' | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
 
 # Listar extractos
 curl -s https://conciliacion-api.onrender.com/extractos \

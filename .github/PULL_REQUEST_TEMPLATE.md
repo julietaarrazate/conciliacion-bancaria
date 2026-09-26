@@ -18,11 +18,11 @@
 
 ## Checklist
 
-- [ ] `cd backend && python -m pytest -q` en verde
-- [ ] `cd frontend && npx tsc --noEmit && npm run build` en verde
+- [ ] `(cd backend && ruff check . && python -m pytest -q)` en verde
+- [ ] `(cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build)` en verde
 - [ ] Montos en `Decimal`/`Numeric`, nunca `float` (ver `BUGS.md`)
 - [ ] Multi-tenant: endpoints respetan `org_id` + `can_switch_org` (si aplica)
-- [ ] Migración Alembic **+** safety-net en `main.py` (si toca el esquema)
+- [ ] Migración Alembic **+** safety-net en `app/db_safety.py` (si toca el esquema)
 - [ ] No se modifican datos existentes de Org A (`organizacion_id=1`)
 - [ ] Sin secretos/keys en el código
 - [ ] Documentación de `/docs` actualizada si cambió el comportamiento

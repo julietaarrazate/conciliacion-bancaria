@@ -18,7 +18,8 @@ Pediste analizar un archivo. Pasos:
 2. Corré el analizador (reutiliza `app/services/excel_parser.py`, el parser real):
 
    ```bash
-   cd /home/user/conciliacion-bancaria && python backend/scripts/analizar_excel.py "<ruta_del_archivo>"
+   # desde la raíz del repo
+   python backend/scripts/analizar_excel.py "<ruta_del_archivo>"
    ```
 
 3. Leé la salida y explicásela al usuario en español claro, sin jerga técnica.
@@ -40,7 +41,7 @@ El script reporta:
 - Scoring: CUIT 12 pts · CBU 10 pts · nº cuenta 8 pts · referencia 6 pts · titular 2 palabras 5 pts.
 - Regla fundamental: **monto duplicado en extracto → SIEMPRE exige identidad.**
 - Tolerancia de fecha: 5 días.
-- Bancos soportados: Macro, BBVA, Santander, Galicia, ICBC y genérico.
+- Bancos soportados: los 16 de `detectar_banco` en `excel_parser.py` (lista en CLAUDE.md) + genérico.
 
 ## Si el formato es nuevo / no soportado
 Si el banco no se detecta o hay muchas columnas sin reconocer, ofrecé al usuario

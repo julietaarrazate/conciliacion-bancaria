@@ -21,15 +21,16 @@ Propósito: revisar un cambio antes de mergear, con foco en los riesgos reales d
      raise` primero, luego rollback + log ([`docs/api/API_RULES.md`](../../docs/api/API_RULES.md) §5).
    - **Fechas**: `hoy_art()`/`now_art()`/`localIsoDate()`, nunca UTC directo para fecha de negocio.
 3. **Migraciones**: si hay columna/tabla/índice nuevo, confirmar que existe la migración Alembic
-   **y** el safety-net idempotente equivalente en `main.py` (ambas rutas convergen).
+   **y** el safety-net idempotente equivalente en `app/db_safety.py` (es el que construye el esquema;
+   Alembic solo se sella con `stamp head`).
 4. **Tests**: el cambio trae tests (caso feliz + aislamiento org + 403 + regresión si es bug fix).
 5. **Author del commit**: `Julieta Arrazate <julietaarrazate@gmail.com>` (Vercel bloquea otros).
 
 ## Verificación
 
 ```bash
-cd backend && python -m pytest -q
-cd frontend && npx tsc --noEmit && npm run build
+(cd backend && ruff check . && python -m pytest -q)
+(cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build)
 ```
 
 ## Salida
