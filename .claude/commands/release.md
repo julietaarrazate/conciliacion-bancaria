@@ -10,8 +10,8 @@ tag y deploy a Render (backend) + Vercel (frontend).
 2. **Verde local**:
 
    ```bash
-   cd backend && python -m pytest -q
-   cd frontend && npx tsc --noEmit && npm run build
+   (cd backend && ruff check . && python -m pytest -q)
+   (cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build)
    ```
 3. **Changelog**: agregar la entrada de la versión nueva al tope de
    [`CHANGELOG.md`](../../CHANGELOG.md) (feature/fix/PR), siguiendo el formato de las entradas
@@ -19,7 +19,8 @@ tag y deploy a Render (backend) + Vercel (frontend).
 4. **Sin secretos**: confirmar que no se commitearon keys/tokens (van en Render/Vercel/GitHub,
    nunca en el repo). Ver [`.claude/checklists/security_checklist.md`](../checklists/security_checklist.md).
 5. **Migraciones**: si la versión trae cambios de esquema, verificar que cada migración Alembic
-   tiene su safety-net idempotente en `main.py` (convergen en el arranque de Render).
+   tiene su safety-net idempotente en `app/db_safety.py` (es lo que construye el esquema en el
+   arranque de Render; Alembic solo se sella con `stamp head`).
 6. **Tag** (si aplica — varios "checkpoints" son documentales, no tags físicos; ver CHANGELOG
    → "Checkpoints / releases"):
 

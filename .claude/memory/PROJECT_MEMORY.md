@@ -57,7 +57,7 @@ Registro vivo. Cada doc de `/docs` tiene además su propia sección `## Pendient
 
 Mapa completo en [`docs/architecture/SYSTEM_MAP.md`](../../docs/architecture/SYSTEM_MAP.md). En una
 línea: conciliación bancaria multi-banco, cheques, pagos/gastos (con OCR), caja, liquidaciones,
-contabilidad de partida doble, 4 módulos de impuestos (IVA, Monotributo, IIBB, Sueldos/F931), ARCA
+contabilidad de partida doble, 5 módulos de impuestos (IVA Proyección, IVA Liquidación, Monotributo, IIBB, Sueldos/F931), ARCA
 (facturación electrónica, construido y desactivado a propósito), asistente IA (Gemini).
 
 ## 5. Módulos / trabajo futuro

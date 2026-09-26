@@ -18,8 +18,8 @@ sin romper reglas transversales.
    - Multi-tenant: `org_id` validado con `can_switch_org`, toda query filtra por `organizacion_id`.
      Org A solo aditivo.
    - Permisos en 3 capas (`require_permission(...)` donde mute o sea sensible).
-   - Migración Alembic **+** safety-net idempotente equivalente en `main.py`
-     (`CREATE TABLE/ADD COLUMN IF NOT EXISTS`). Opt-in por org, no hardcodeado.
+   - Migración Alembic **+** safety-net idempotente equivalente en `app/db_safety.py`
+     (`CREATE TABLE/ADD COLUMN IF NOT EXISTS`; lo valida `test_db_safety.py`). Opt-in por org, no hardcodeado.
 4. **Tests backend**: caso feliz + aislamiento de otra org (404) + 403 sin permiso + borrado con
    FKs si hay `DELETE`.
 5. **Implementar frontend**: página, ruta gateada por permiso en `App.tsx`, item en `Layout.tsx`,
@@ -32,8 +32,8 @@ sin romper reglas transversales.
 ## Verificación
 
 ```bash
-cd backend && python -m pytest -q
-cd frontend && npx tsc --noEmit && npm run build
+(cd backend && ruff check . && python -m pytest -q)
+(cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build)
 ```
 
 ## PR

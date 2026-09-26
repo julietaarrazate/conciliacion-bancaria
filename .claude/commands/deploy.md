@@ -8,8 +8,8 @@ Render, DB en Neon. Detalle de infraestructura en [`CLAUDE.md`](../../CLAUDE.md)
 1. **Pre-deploy — verde local**:
 
    ```bash
-   cd backend && python -m pytest -q
-   cd frontend && npx tsc --noEmit && npm run build
+   (cd backend && ruff check . && python -m pytest -q)
+   (cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build)
    ```
 2. **Merge a `main`** vía PR squash desde `claude/...`. El push a `main` dispara automáticamente:
    - **Vercel** → build + deploy del frontend. Recordá: Vercel **bloquea builds con autor de commit
@@ -22,8 +22,9 @@ Render, DB en Neon. Detalle de infraestructura en [`CLAUDE.md`](../../CLAUDE.md)
      -H "Authorization: Bearer <RENDER_API_KEY>"
    ```
    El `RENDER_API_KEY` vive en el entorno de Julieta, no en el repo.
-4. **Esperar el arranque** (Render free tier: cold start ~30s). En el boot, `main.py` corre Alembic
-   + safety-nets idempotentes + seed por org — el esquema converge solo aunque Alembic falle.
+4. **Esperar el arranque** (Render free tier: cold start ~30s). En el boot, `main.py` sella Alembic
+   (`stamp head`, no corre la cadena) y aplica los safety-nets idempotentes de `app/db_safety.py` +
+   seed por org — el esquema lo construyen los safety-nets.
 
 ## Verificación (smoke test en prod)
 

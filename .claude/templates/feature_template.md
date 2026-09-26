@@ -24,7 +24,7 @@ operador, cliente.)
 | Service | `backend/app/services/<modulo>_service.py` | |
 | Router | `backend/app/routers/<modulo>.py` | |
 | Migración | `backend/alembic/versions/<rev>_<modulo>.py` | |
-| Safety net | `backend/app/main.py` | ✅ |
+| Safety net | `backend/app/db_safety.py` | ✅ |
 | Frontend página | `frontend/src/pages/<Modulo>.tsx` | |
 | API client | `frontend/src/services/api.ts` | ✅ |
 | Rutas | `frontend/src/App.tsx` | ✅ |
@@ -41,7 +41,7 @@ operador, cliente.)
 - [ ] Montos `Decimal`/`Numeric(12,2)`; fechas `hoy_art()`/`localIsoDate()`.
 - [ ] Multi-tenant: filtro `organizacion_id` + `can_switch_org`; Org A solo aditivo.
 - [ ] Permisos en 3 capas; permiso usado: `____`.
-- [ ] Migración Alembic + safety-net idempotente en `main.py`.
+- [ ] Migración Alembic + safety-net idempotente en `app/db_safety.py`.
 
 ## Criterios de aceptación
 
@@ -52,4 +52,4 @@ operador, cliente.)
 
 - [ ] Backend: caso feliz + aislamiento otra org (404) + 403 sin permiso (+ borrado con FKs si hay `DELETE`).
 - [ ] Frontend: modo claro y oscuro; `tsc --noEmit` + `build`.
-- [ ] Verificación: `cd backend && python -m pytest -q` · `cd frontend && npx tsc --noEmit && npm run build`.
+- [ ] Verificación: los mismos checks del CI — `ruff` + `pytest` (backend) · `lint` + `tsc --noEmit` + `vitest` + `build` (frontend).
