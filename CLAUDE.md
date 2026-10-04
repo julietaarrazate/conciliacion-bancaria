@@ -38,6 +38,7 @@ Env vars opcionales en Render (feature flags — sin la var, la feature se degra
 · `GEMINI_API_KEY`(+`GEMINI_MODEL`) asistente IA/OCR/transcripción · `SENTRY_DSN` (Render) /
 `VITE_SENTRY_DSN` (Vercel) monitoreo errores · `GOOGLE_CLIENT_ID` (Render) /
 `VITE_GOOGLE_CLIENT_ID` (Vercel) login Google · `S3_*` (5 vars) storage fotos R2 ·
+`INBOUND_EMAIL_DOMAIN` + `RESEND_INBOUND_SECRET` recepción de facturas por mail (Comprobantes por revisar) ·
 `ARCA_ENCRYPTION_KEY` ya seteada, módulo ARCA construido pero desactivado a propósito (ver
 "Pendiente para próximas sesiones"). Stack: Python 3.11 / Node 24 (Vercel deja de buildear con Node 20 desde oct 2026), Neon free tier (puede dormir),
 Render free tier (cold start ~30s, mitigado con UptimeRobot + retry en frontend).
@@ -107,17 +108,19 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
                    Planilla, PlanillaRow, AuditoriaLog, PatronAprendido,
                    Liquidacion, CierrePeriodo, Cheque, Pago, Gasto,
                    ArqueoDiario, OrdenDePago, PlanCuenta, ReglaContable,
-                   Asiento, AsientoDetalle, PasswordResetToken, PushSubscription
+                   Asiento, AsientoDetalle, PasswordResetToken, PushSubscription,
+                   BuzonComprobantes, BorradorComprobante
   /app/routers   — auth, me, extractos, planillas, historial, auditoria, admin,
                    clientes_dir, organizaciones, liquidaciones, caja, cheques,
                    pagos, contabilidad (+ ctb_*), analisis, search, iva, monotributo,
-                   iibb, sueldos, tarjetas, arca, agente, papelera, public_router, push_router
+                   iibb, sueldos, tarjetas, arca, comprobantes_compra, agente, papelera,
+                   public_router, push_router
                    (lista completa: `docs/architecture/SYSTEM_MAP.md`)
   /app/services  — conciliacion.py, aprendizaje.py, excel_export.py, pdf_export.py,
                    extracto_merger.py, excel_parser.py, motor_contable.py,
                    backup_service.py, backup_scheduler.py, push_service.py,
                    email_sender.py, password_reset.py
-  /alembic/versions — 001 a 026. En el arranque Alembic solo hace `stamp head`: el esquema real lo
+  /alembic/versions — 001 a 027. En el arranque Alembic solo hace `stamp head`: el esquema real lo
                       sostienen `create_all` + los safety-nets de `app/db_safety.py`
 
 /frontend/src
@@ -125,7 +128,7 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
              ExtractosArchivo, Movimientos, Conciliaciones, Historial, Auditoria,
              Usuarios, Perfil, Login, Organizaciones, Liquidaciones, Caja,
              Pagos, Cheques, Tarjetas, Iva, Monotributo, IngresosBrutos, Sueldos, Arca,
-             Papelera, Contabilidad, Resumen,
+             Papelera, Contabilidad, Resumen, ComprobantesCompra,
              EstadoCuenta, FlujoCaja, Revision, Actividad,
              PaginaPublica (/p/:token — sin auth), RecuperarPassword, RestablecerPassword,
              Privacidad (/privacidad — sin auth), Terminos (/terminos — sin auth)
@@ -200,14 +203,16 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ## Estado actual y changelog
 
-**Versión actual: v3.29.** Historial completo de versiones (v3.6 a v3.29, con detalle de cada
+**Versión actual: v3.30.** Historial completo de versiones (v3.6 a v3.30, con detalle de cada
 feature/fix/PR) en **`CHANGELOG.md`** — no se carga automáticamente en cada sesión, así que si
 necesitás contexto histórico detallado de una versión puntual, leelo directamente.
 
 Últimas versiones: **v3.27** estandarización universal de planillas de clientes (embudo de mapeo) +
 capa de diagnóstico de conciliación · **v3.28** archivar extractos (cierre de período) + exports
 estéticos con PDF de planilla conciliada + alertas de descuadre/filas ambiguas + UX de estados
-(labels humanos) · **v3.29** carga masiva de cheques (varios cheques por foto en el OCR).
+(labels humanos) · **v3.29** carga masiva de cheques (varios cheques por foto en el OCR) ·
+**v3.30** Comprobantes por revisar: facturas de compra por mail (Resend Inbound) o subidas, leídas
+con IA y confirmadas hacia IVA y Pagos (`docs/business/COMPROBANTES_POR_REVISAR.md`).
 
 Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,
 sin efectos) y la operadora la rechazó — se revirtió a la landing anterior completa (gradiente,
@@ -220,7 +225,7 @@ Liquidaciones, Contabilidad con cuentas corrientes); 5 módulos de liquidación 
 (IVA Proyección, IVA Liquidación real con "Mis Comprobantes" de ARCA, Monotributo, Ingresos Brutos,
 Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
 ARCA (facturación electrónica WSFEv1) construido pero desactivado a propósito (ver "Pendiente para
-próximas sesiones" abajo). **~615 tests backend + ~40 tests frontend** pasando.
+próximas sesiones" abajo). **~655 tests backend + ~42 tests frontend** pasando.
 
 Profesionalización de ingeniería (jun 2026): base de documentación en `/docs` (arquitectura,
 negocio, API, BD, seguridad, UX, playbooks, ADR — cada doc con su "Pendiente de revisar"),
@@ -233,6 +238,13 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
 
 ### Pendiente para próximas sesiones
 
+- **Activar la recepción de facturas por mail (v3.30)**: el código está mergeado; la subida manual
+  con IA ya funciona sin configurar nada. Para el mail: en Resend activar Receiving (confirmar que el
+  plan lo incluya), crear un webhook `email.received` a
+  `https://conciliacion-api.onrender.com/comprobantes-compra/webhook/resend` y pegar en Render
+  `INBOUND_EMAIL_DOMAIN` (el `<id>.resend.app` que da Resend) y `RESEND_INBOUND_SECRET` (el
+  `whsec_...` del webhook). Después, en `/comprobantes-compra`, "Crear dirección de mail". Detalle en
+  `docs/business/COMPROBANTES_POR_REVISAR.md`.
 - **Activar Sentry (observabilidad)**: el código ya está 100% cableado (backend en
   `main.py` con 5% de performance tracing; frontend lazy, auto-captura errores globales al iniciar).
   Solo falta que Julieta pegue los DSN: en su cuenta de Sentry crear/abrir **dos proyectos** (uno
@@ -424,4 +436,4 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.29
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.30

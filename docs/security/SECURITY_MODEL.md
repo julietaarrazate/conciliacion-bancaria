@@ -200,6 +200,19 @@ por ARCA para facturar bajo su CUIT) — el material más sensible que maneja el
 
 ---
 
+## 8b. Webhook de Resend Inbound (Comprobantes por revisar, v3.30)
+
+`POST /comprobantes-compra/webhook/resend` es el único endpoint de negocio sin JWT. Se protege así:
+
+- **Firma Svix obligatoria** (`verificar_firma_svix` en `comprobantes_compra_service.py`):
+  HMAC-SHA256 de `"{svix-id}.{svix-timestamp}.{body}"` con `RESEND_INBOUND_SECRET`, comparación en
+  tiempo constante y timestamp de hasta 5 minutos (anti-replay). Sin el secret configurado responde 503.
+- **Org por token**: el mail solo entra a la organización cuyo buzón activo tiene ese token
+  (16 caracteres aleatorios, regenerable). Un token desconocido o viejo se ignora con 200, sin revelar
+  si existe.
+- **Nada impacta sin confirmación humana**: el webhook solo crea borradores; pasar a IVA/Pagos requiere
+  `manage_finance`. Adjuntos limitados a PDF/JPG/PNG/WebP de hasta 5 MB.
+
 ## 9. Rate limiting (brute force)
 
 `slowapi` con clave = IP remota (`main.py`, `app.state.limiter`). Protege login y endpoints

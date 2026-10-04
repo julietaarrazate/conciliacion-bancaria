@@ -5,6 +5,31 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.30 (oct 2026) — Comprobantes por revisar: facturas de compra por mail + lectura con IA
+
+Idea tomada del análisis de LaPyme (carga de facturas con IA + recepción por email). Aditivo: no
+toca la conciliación ni el cálculo de la liquidación de IVA.
+
+- **Dirección de mail por organización** (`facturas-<token>@<INBOUND_EMAIL_DOMAIN>`, opt-in, se
+  crea/regenera desde la pantalla). Resend Inbound llama a `POST /comprobantes-compra/webhook/resend`
+  (firma Svix verificada, idempotente por `email_id`); cada PDF/foto adjunto es un borrador. Un mail
+  sin adjunto queda visible con su asunto (p. ej. el código de confirmación del reenvío de Gmail).
+- **Subida manual** de hasta 10 PDF/fotos (5 MB c/u).
+- **Lectura con IA** (Gemini, mismo helper que el OCR de cheques, tope diario propio
+  `FACTURAS_OCR_DAILY_LIMIT`) en segundo plano + **controles**: CUIT, suma vs total, IVA por
+  alícuota, letra vs IVA, fecha, "ya está cargado en IVA".
+- **Confirmar** crea el `ComprobanteIva` (recibido) con el mismo unique que "Mis Comprobantes" (no
+  se duplica si después se importa el Excel de ARCA) y, si se tilda, el `Egreso` a proveedor con su
+  asiento. Las notas de crédito no generan pago. Las percepciones leídas no se suman solas a la
+  liquidación.
+- Tablas nuevas `buzon_comprobantes` y `borradores_comprobante` (migración 027 + safety net).
+- Pantalla `/comprobantes-compra` ("Comprobantes por revisar"): dirección para copiar, subida,
+  bandeja y revisión con el PDF al lado.
+- Tests: `test_comprobantes_compra.py` (38) + `ComprobantesCompra.test.tsx` (2).
+- Ver `docs/business/COMPROBANTES_POR_REVISAR.md` (flujo, reglas, env vars, permisos).
+
+---
+
 ### Legal (sep 2026) — Términos y Política de Privacidad actualizados
 
 Revisión contra la Ley 25.326 y contra los términos de software contable argentino (Xubio, Colppy,

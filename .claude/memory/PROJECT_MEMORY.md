@@ -47,6 +47,7 @@ Registro vivo. Cada doc de `/docs` tiene además su propia sección `## Pendient
 | D-5 | **Free tier**: cold start de Render (~30s) y Neon que duerme | Alto (latencia percibida) | Mitigado (UptimeRobot + retry); se resuelve pasando Render a paid |
 | D-6 | ~~`mobile/` scaffold React Native sin uso~~ | Bajo | **RESUELTO**: eliminado (la app mobile es la PWA). Si se retoma nativo, se arranca limpio. |
 | D-7 | Cobertura de frontend acotada (utilidades + smoke de componentes; sin E2E) | Bajo-Medio | **Parcial**: vitest + Testing Library (jsdom) con smoke tests de componentes (`CuadraLogo`, `Skeleton`, `DonutChart`) + tests de utilidades (`monto`, `fecha`). Falta E2E de flujos críticos (Playwright) |
+| D-9 | **Comprobantes por revisar procesa en `BackgroundTasks`** del proceso web: un reinicio de Render a mitad de una lectura deja el borrador en `procesando` | Bajo | Aceptado (se vuelve a subir); mejora futura: job que reintente `procesando` viejos |
 | D-8 | **Cadena Alembic desincronizada del esquema real** (jul 2026): `env.py` importaba clases inexistentes → `upgrade`/`stamp` fallaban → Alembic no corría en prod (el esquema lo sostienen `create_all` + safety-nets). `001` es stamp baseline (no construye desde cero); 007–009 referencian tablas ya dropeadas | Medio | **env.py corregido** (importa módulos, no clases). Camino real verificado sobre PG (sella 020, 44 tablas). **Resuelto (decisión jul 2026)**: `_run_alembic` ahora **solo hace `stamp head`** (no `upgrade`) → Alembic refleja la realidad sin correr la cadena derivada; `create_all`+safety-nets son la fuente de verdad. Re-baseline = mejora futura opcional |
 
 > Áreas históricamente frágiles (ver [`BUGS.md`](../../BUGS.md)): fechas UTC-3, Decimal vs float,
@@ -58,7 +59,8 @@ Registro vivo. Cada doc de `/docs` tiene además su propia sección `## Pendient
 Mapa completo en [`docs/architecture/SYSTEM_MAP.md`](../../docs/architecture/SYSTEM_MAP.md). En una
 línea: conciliación bancaria multi-banco, cheques, pagos/gastos (con OCR), caja, liquidaciones,
 contabilidad de partida doble, 5 módulos de impuestos (IVA Proyección, IVA Liquidación, Monotributo, IIBB, Sueldos/F931), ARCA
-(facturación electrónica, construido y desactivado a propósito), asistente IA (Gemini).
+(facturación electrónica, construido y desactivado a propósito), asistente IA (Gemini), Comprobantes por
+revisar (facturas de compra por mail/subida leídas con IA → IVA y Pagos, v3.30).
 
 ## 5. Módulos / trabajo futuro
 
