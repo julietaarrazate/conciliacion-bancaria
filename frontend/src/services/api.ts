@@ -17,6 +17,7 @@ import {
   UserRole,
   ExtractoListItem,
   MovimientoFiltrado,
+  ResumenExtracto,
   MergeUMResult,
   MovimientosFiltros,
   ConciliacionItem,
@@ -571,6 +572,12 @@ class ApiClient {
       const res = await this.client.get(`/extractos/${extractoId}/movimientos`, { params })
       return res.data
     })
+  }
+
+  // Sin cache: tiene que reflejar al instante una acreditación recién hecha.
+  async getResumenExtracto(extractoId: number): Promise<ResumenExtracto> {
+    const res = await this.client.get(`/extractos/${extractoId}/resumen`)
+    return res.data
   }
 
   async getClientesArchivos(orgId?: number | null): Promise<any> {

@@ -5,6 +5,21 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Feature (oct 2026) — Gastos bancarios al centavo, % acreditado y motivo de cada match
+
+Ideas tomadas de la comparación con Caliper Contable. Todo read-only: no cambia el scoring, los
+estados ni la contabilidad.
+
+- **Resumen del extracto** (`GET /extractos/{id}/resumen`, barra desplegable arriba de
+  Movimientos): % de ingresos del extracto ya acreditados a un cliente, y gastos bancarios
+  agrupados por concepto (Ley 25.413, SIRCREB/IIBB, percepción IVA, IVA, comisiones, intereses)
+  con cantidad y total, para cuadrarlos contra la nota de débito del banco.
+- **Motivo de cada match** en el panel de planilla: debajo de "Acreditado ✓" se ve qué dato
+  coincide con el banco (monto + CUIT, DNI, CBU, n° de operación, titular, referencia, o solo
+  monto). Ver `BUSINESS_RULES.md` §1.8.
+
+---
+
 ### Legal (sep 2026) — Términos y Política de Privacidad actualizados
 
 Revisión contra la Ley 25.326 y contra los términos de software contable argentino (Xubio, Colppy,

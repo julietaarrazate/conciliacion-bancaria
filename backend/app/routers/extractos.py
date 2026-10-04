@@ -22,6 +22,7 @@ from app.services.excel_parser import parsear_extracto_bancario
 from app.services.extracto_merger import mergear_movimientos
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_movimientos, export_extracto_contador
+from app.services.gastos_bancarios import resumen_extracto as resumen_gastos_extracto
 import logging
 from app.middleware.auth import get_current_user, require_permission, can_switch_org
 from app.config import get_settings
@@ -758,6 +759,17 @@ def delete_movimiento(
         db.rollback()
         logger.error("borrar movimiento: %s", e)
         raise HTTPException(500, "Error al borrar el movimiento. Intentá de nuevo.")
+
+
+@router.get("/{extracto_id}/resumen")
+def resumen_extracto(extracto_id: int, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    """Gastos bancarios agrupados por concepto + % de ingresos ya acreditados.
+    Read-only: no toca movimientos ni asientos (ver services/gastos_bancarios.py)."""
+    _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
+    movs = (db.query(MovimientoBanco.titular, MovimientoBanco.monto, MovimientoBanco.cliente_acreditado)
+            .filter(MovimientoBanco.extracto_id == extracto_id).all())
+    return resumen_gastos_extracto(movs)
 
 
 @router.get("/{extracto_id}", response_model=ExtractoBancarioResponse)
