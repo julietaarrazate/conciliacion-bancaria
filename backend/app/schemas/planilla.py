@@ -15,6 +15,9 @@ class PlanillaRowResponse(PlanillaRowBase):
     mov_titular: Optional[str] = None
     mov_fecha: Optional[date] = None
     mov_fecha_acred: Optional[date] = None
+    # Qué dato coincide entre la fila y el movimiento (solo filas "ok"):
+    # cuit | dni | cbu | numero | titular | referencia | monto. Ver explicar_match().
+    motivo_match: Optional[str] = None
 
     class Config:
         from_attributes = True
