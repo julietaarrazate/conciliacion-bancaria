@@ -374,4 +374,37 @@ SAFETY_NET_DDL = [
     # borradas, así borrar y re-subir libera el fingerprint.
     "ALTER TABLE planillas ADD COLUMN IF NOT EXISTS fingerprint VARCHAR",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_planilla_fp_cliente_org ON planillas (cliente_id, fingerprint, organizacion_id) WHERE fingerprint IS NOT NULL AND deleted_at IS NULL",
+    # migración 027 — Comprobantes por revisar (facturas de compra por mail / IA)
+    "CREATE TABLE IF NOT EXISTS buzon_comprobantes ("
+    "id SERIAL PRIMARY KEY, "
+    "organizacion_id INTEGER NOT NULL UNIQUE REFERENCES organizaciones(id), "
+    "token VARCHAR(32) NOT NULL UNIQUE, "
+    "activo BOOLEAN NOT NULL DEFAULT TRUE, "
+    "created_at TIMESTAMP DEFAULT NOW(), "
+    "updated_at TIMESTAMP DEFAULT NOW())",
+    "CREATE TABLE IF NOT EXISTS borradores_comprobante ("
+    "id SERIAL PRIMARY KEY, "
+    "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+    "origen VARCHAR(10) NOT NULL DEFAULT 'subida', "
+    "estado VARCHAR(20) NOT NULL DEFAULT 'procesando', "
+    "email_id VARCHAR(64), "
+    "adjunto_id VARCHAR(64), "
+    "remitente VARCHAR(255), "
+    "asunto VARCHAR(500), "
+    "archivo_nombre VARCHAR(255), "
+    "archivo_mime VARCHAR(100), "
+    "archivo TEXT, "
+    "datos JSON, "
+    "alertas JSON, "
+    "error TEXT, "
+    "comprobante_iva_id INTEGER REFERENCES comprobantes_iva(id), "
+    "egreso_id INTEGER REFERENCES egresos(id), "
+    "creado_por INTEGER REFERENCES users(id), "
+    "confirmado_por INTEGER REFERENCES users(id), "
+    "confirmado_at TIMESTAMP, "
+    "created_at TIMESTAMP DEFAULT NOW(), "
+    "updated_at TIMESTAMP DEFAULT NOW(), "
+    "CONSTRAINT uq_borrador_email_adjunto UNIQUE (organizacion_id, email_id, adjunto_id))",
+    "CREATE INDEX IF NOT EXISTS ix_borrador_comprobante_org_estado ON borradores_comprobante (organizacion_id, estado)",
+    "CREATE INDEX IF NOT EXISTS ix_borrador_comprobante_email ON borradores_comprobante (email_id)",
 ]

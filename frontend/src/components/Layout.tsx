@@ -57,6 +57,7 @@ const navItems: Array<{ to: string; label: string; Icon: () => JSX.Element; perm
   { to: '/revision',       label: 'Revisión',      Icon: Icon.Flag, permission: 'reconcile' },
   { to: '/cuentas-corrientes', label: 'Cuentas corrientes', Icon: Icon.Bank, permission: 'manage_finance' },
   { to: '/contabilidad',   label: 'Contabilidad',  Icon: Icon.Stack, permission: 'view_accounting' },
+  { to: '/comprobantes-compra', label: 'Comprobantes por revisar', Icon: Icon.DocCheck, permission: 'view_accounting' },
   { to: '/iva',            label: 'IVA',           Icon: Icon.Receipt, permission: 'view_accounting' },
   { to: '/monotributo',   label: 'Monotributo',  Icon: Icon.Gauge, permission: 'view_accounting' },
   { to: '/ingresos-brutos', label: 'Ingresos Brutos', Icon: Icon.Building, permission: 'view_accounting' },
