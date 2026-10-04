@@ -5,6 +5,25 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Fix (oct 2026) — ARCA: reintentar una emisión ya no puede duplicar la factura
+
+ARCA no acepta clave de idempotencia: si la respuesta de `FECAESolicitar` se perdía (timeout,
+reinicio de Render), el comprobante quedaba en "error" y el reintento pedía "último + 1", lo que
+podía emitir una segunda factura real. Ahora (`routers/arca.py`, sección "Emisión segura"):
+
+- El número se reserva en la fila (estado `emitiendo`) antes de pedir el CAE.
+- Un error técnico deja el número reservado. Al reintentar se consulta en ARCA
+  (`FECompConsultar`, nuevo en `arca_wsfe.py`): si existe y coincide (total + documento) se
+  recupera el CAE sin emitir; si es otro comprobante se frena con 409; si no existe se libera.
+- Un rechazo de ARCA libera el número. Si otro comprobante tiene reservado el número siguiente,
+  se frena hasta verificar ese primero.
+- Emisiones simultáneas del mismo punto de venta + tipo se serializan (advisory lock de Postgres).
+
+Idea tomada del SDK npm `facturas` (LaPyme); no se adoptó el SDK porque es solo Node y el backend
+es Python. El módulo ARCA sigue desactivado (ADR-011).
+
+---
+
 ### v3.30 (oct 2026) — Comprobantes por revisar: facturas de compra por mail + lectura con IA
 
 Idea tomada del análisis de LaPyme (carga de facturas con IA + recepción por email). Aditivo: no

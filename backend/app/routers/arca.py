@@ -7,7 +7,8 @@ Endpoints (prefix /arca):
   DELETE /arca/certificado           — borra el certificado+clave cargados (no el resto de la config)
   GET  /arca/comprobantes            — lista comprobantes de la org, paginado
   POST /arca/comprobantes            — crea un comprobante en borrador
-  POST /arca/comprobantes/{id}/emitir — pide el CAE a ARCA (WSAA login + WSFEv1 FECAESolicitar)
+  POST /arca/comprobantes/{id}/emitir — pide el CAE a ARCA (WSAA login + WSFEv1 FECAESolicitar);
+                                        reintentable sin duplicar (ver "Emisión segura")
   GET  /arca/comprobantes/{id}       — detalle
 
 Permisos en 3 capas (mismo patrón que IVA/IIBB/Sueldos):
@@ -20,12 +21,15 @@ Nunca se devuelve `certificado_enc`/`clave_privada_enc`/tokens cifrados en ningu
 
 from __future__ import annotations
 
-from datetime import date
+import hashlib
+from contextlib import contextmanager
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -37,6 +41,7 @@ from app.services import motor_contable
 from app.services.arca_crypto import encriptar, ArcaCryptoError
 from app.services.arca_wsaa import obtener_token_sign, ArcaWsaaError
 from app.services.arca_wsfe import (
+    consultar_comprobante,
     consultar_ultimo_autorizado,
     solicitar_cae,
     DatosComprobante,
@@ -331,6 +336,104 @@ def crear_comprobante(
     return _comprobante_dict(c)
 
 
+# ── Emisión segura (sin duplicar comprobantes) ───────────────────
+#
+# ARCA no acepta una clave de idempotencia: si la respuesta de FECAESolicitar se
+# pierde (timeout, corte de red, reinicio de Render), ARCA pudo haber autorizado
+# el comprobante igual. Reintentar pidiendo "último + 1" emitiría una SEGUNDA
+# factura real. Para evitarlo:
+#   1. El número se reserva en la fila (estado "emitiendo") ANTES de llamar a
+#      FECAESolicitar, con commit — sobrevive a un reinicio del proceso.
+#   2. Si la llamada falla técnicamente, el número queda reservado (estado
+#      "error"). Al reintentar, primero se consulta ese número en ARCA
+#      (FECompConsultar): si ya existe y coincide, se recupera el CAE sin emitir
+#      de nuevo; si existe pero es otro comprobante, se frena (conflicto); si no
+#      existe, se libera y se emite normalmente.
+#   3. Las emisiones del mismo punto de venta + tipo se serializan con un
+#      advisory lock de Postgres, para que dos pedidos simultáneos no tomen el
+#      mismo número.
+
+
+def _clave_lock(oid: int, punto_venta: int, tipo_comprobante: int) -> int:
+    """Clave bigint estable (entre procesos) para el advisory lock de emisión."""
+    digest = hashlib.sha1(f"arca:{oid}:{punto_venta}:{tipo_comprobante}".encode()).digest()
+    return int.from_bytes(digest[:8], "big", signed=True)
+
+
+@contextmanager
+def _lock_emision(db: Session, oid: int, punto_venta: int, tipo_comprobante: int):
+    """Serializa emisiones por (org, punto de venta, tipo).
+
+    En Postgres usa un advisory lock de sesión sobre una conexión aparte (la
+    sesión del request hace commits intermedios y puede soltar su conexión).
+    En otros motores (SQLite de tests) es un no-op.
+    """
+    bind = db.get_bind()
+    engine = getattr(bind, "engine", bind)
+    if engine.dialect.name != "postgresql":
+        yield
+        return
+    clave = _clave_lock(oid, punto_venta, tipo_comprobante)
+    with engine.connect() as conn:
+        conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": clave})
+        conn.commit()
+        try:
+            yield
+        finally:
+            conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": clave})
+            conn.commit()
+
+
+def _coincide_con_arca(c: ComprobanteArca, remoto: dict) -> bool:
+    """¿El comprobante que ARCA tiene en ese número es este mismo?"""
+    if remoto.get("resultado") not in (None, "A") or not remoto.get("cae"):
+        return False
+    total_remoto = remoto.get("importe_total")
+    if total_remoto is None or Decimal(str(total_remoto)).quantize(Decimal("0.01")) != Decimal(str(c.importe_total)).quantize(Decimal("0.01")):
+        return False
+    try:
+        return int(remoto.get("doc_nro") or 0) == int(c.doc_nro or 0)
+    except ValueError:
+        return False
+
+
+def _parse_fecha_arca(valor: Optional[str]) -> Optional[date]:
+    if not valor:
+        return None
+    try:
+        return datetime.strptime(valor, "%Y%m%d").date()
+    except ValueError:
+        return None
+
+
+def _registrar_emitido(
+    db: Session, c: ComprobanteArca, oid: int, current_user: User,
+    cae: str, cae_vencimiento: Optional[str], recuperado: bool,
+) -> dict:
+    """Marca el comprobante como emitido, genera el asiento y audita."""
+    c.cae = cae
+    c.cae_vencimiento = _parse_fecha_arca(cae_vencimiento)
+    c.estado = "emitido"
+    c.error_detalle = None
+    db.commit()
+    db.refresh(c)
+
+    cliente_nombre = c.cliente.nombre if c.cliente else ""
+    asiento_id = motor_contable.registrar_factura_arca(
+        db, c.id, oid, current_user.id, c.cliente_id, cliente_nombre,
+        c.importe_neto, c.importe_iva, c.importe_total, c.fecha_emision,
+    )
+    if asiento_id:
+        c.asiento_id = asiento_id
+        db.commit()
+
+    registrar_log(db, current_user.id, "arca_comprobante", oid, "EMITIR", {
+        "comprobante_id": c.id, "cae": c.cae, "numero": c.numero, "recuperado": recuperado,
+    })
+    db.refresh(c)
+    return _comprobante_dict(c)
+
+
 @router.post("/comprobantes/{comprobante_id}/emitir")
 def emitir_comprobante(
     comprobante_id: int,
@@ -338,7 +441,7 @@ def emitir_comprobante(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("manage_finance")),
 ):
-    """Pide el CAE a ARCA: login WSAA (cacheado ~12h) + FECompUltimoAutorizado + FECAESolicitar."""
+    """Pide el CAE a ARCA sin riesgo de duplicar (ver "Emisión segura" arriba)."""
     oid = _org_id(current_user, org_id)
     c = (
         db.query(ComprobanteArca)
@@ -356,20 +459,98 @@ def emitir_comprobante(
     if not cfg.cuit:
         raise HTTPException(422, "Falta configurar el CUIT de la organización")
 
-    try:
-        token, sign = obtener_token_sign(db, cfg)
-        ultimo = consultar_ultimo_autorizado(
-            token, sign, cfg.cuit, cfg.ambiente, cfg.punto_venta, c.tipo_comprobante,
-        )
+    # Si ya hay un número reservado, se verifica sobre ESE punto de venta.
+    punto_venta = c.punto_venta if c.numero is not None else cfg.punto_venta
+
+    with _lock_emision(db, oid, punto_venta, c.tipo_comprobante):
+        # Otro pedido pudo haberlo emitido mientras esperábamos el lock.
+        db.refresh(c)
+        if c.estado == "emitido":
+            raise HTTPException(409, "El comprobante ya fue emitido (tiene CAE) — es inmutable")
+
+        try:
+            token, sign = obtener_token_sign(db, cfg)
+        except ArcaWsaaError as ex:
+            c.estado = "error"
+            c.error_detalle = f"WSAA: {ex}"
+            db.commit()
+            raise HTTPException(502, f"No se pudo autenticar contra ARCA: {ex}")
+
+        # 1. Número reservado de un intento anterior: verificar antes de emitir otro.
+        if c.numero is not None:
+            try:
+                remoto = consultar_comprobante(
+                    token, sign, cfg.cuit, cfg.ambiente, c.punto_venta, c.tipo_comprobante, c.numero,
+                )
+            except ArcaWsfeError as ex:
+                c.estado = "error"
+                c.error_detalle = (
+                    f"No se pudo verificar en ARCA el número {c.numero} reservado: {ex}. "
+                    "Reintentá más tarde — no se emite otro número hasta verificarlo."
+                )
+                db.commit()
+                raise HTTPException(502, c.error_detalle)
+            if remoto is not None:
+                if _coincide_con_arca(c, remoto):
+                    return _registrar_emitido(
+                        db, c, oid, current_user, remoto["cae"], remoto.get("cae_vencimiento"),
+                        recuperado=True,
+                    )
+                c.estado = "error"
+                c.error_detalle = (
+                    f"Conflicto: ARCA tiene otro comprobante autorizado con el número {c.numero} "
+                    f"(total {remoto.get('importe_total')}). No se emitió nada. Revisalo antes de seguir."
+                )
+                db.commit()
+                raise HTTPException(409, c.error_detalle)
+            # ARCA no lo tiene: el número no se consumió, se libera.
+            c.numero = None
+            db.commit()
+
+        # 2. Reservar el número siguiente.
+        try:
+            ultimo = consultar_ultimo_autorizado(
+                token, sign, cfg.cuit, cfg.ambiente, cfg.punto_venta, c.tipo_comprobante,
+            )
+        except ArcaWsfeError as ex:
+            c.estado = "error"
+            c.error_detalle = str(ex)
+            db.commit()
+            raise HTTPException(502, f"Error técnico llamando a WSFEv1: {ex}")
         numero = ultimo + 1
 
+        otro = (
+            db.query(ComprobanteArca)
+            .filter(
+                ComprobanteArca.organizacion_id == oid,
+                ComprobanteArca.punto_venta == cfg.punto_venta,
+                ComprobanteArca.tipo_comprobante == c.tipo_comprobante,
+                ComprobanteArca.numero == numero,
+                ComprobanteArca.id != c.id,
+            )
+            .first()
+        )
+        if otro is not None:
+            raise HTTPException(
+                409,
+                f"El comprobante #{otro.id} tiene reservado el número {numero} y está pendiente "
+                "de verificar. Reintentá ese primero.",
+            )
+
+        c.punto_venta = cfg.punto_venta
+        c.numero = numero
+        c.estado = "emitiendo"
+        c.error_detalle = None
+        db.commit()
+
+        # 3. Pedir el CAE.
         ivas = []
         if c.importe_iva and c.importe_iva > 0:
             ivas.append(ItemIva(alic_id=5, base_imp=c.importe_neto, importe=c.importe_iva))
 
         datos = DatosComprobante(
             cuit=cfg.cuit,
-            punto_venta=cfg.punto_venta,
+            punto_venta=c.punto_venta,
             tipo_comprobante=c.tipo_comprobante,
             numero=numero,
             concepto=c.concepto,
@@ -384,48 +565,27 @@ def emitir_comprobante(
             fecha_vto_pago=c.fecha_vto_pago.strftime("%Y%m%d") if c.fecha_vto_pago else None,
             ivas=ivas,
         )
-        resultado = solicitar_cae(token, sign, cfg.ambiente, datos)
-    except ArcaWsaaError as ex:
-        c.estado = "error"
-        c.error_detalle = f"WSAA: {ex}"
-        db.commit()
-        raise HTTPException(502, f"No se pudo autenticar contra ARCA: {ex}")
-    except ArcaWsfeRechazo as ex:
-        c.estado = "rechazado"
-        c.error_detalle = "; ".join(ex.errores)
-        db.commit()
-        raise HTTPException(422, f"ARCA rechazó el comprobante: {'; '.join(ex.errores)}")
-    except ArcaWsfeError as ex:
-        c.estado = "error"
-        c.error_detalle = str(ex)
-        db.commit()
-        raise HTTPException(502, f"Error técnico llamando a WSFEv1: {ex}")
-
-    from datetime import datetime as _dt
-    c.numero = numero
-    c.cae = resultado["cae"]
-    vto = resultado.get("cae_vencimiento")
-    if vto:
         try:
-            c.cae_vencimiento = _dt.strptime(vto, "%Y%m%d").date()
-        except Exception:
-            c.cae_vencimiento = None
-    c.estado = "emitido"
-    c.error_detalle = None
-    db.commit()
-    db.refresh(c)
+            resultado = solicitar_cae(token, sign, cfg.ambiente, datos)
+        except ArcaWsfeRechazo as ex:
+            # ARCA respondió y rechazó: el número no se consumió.
+            c.numero = None
+            c.estado = "rechazado"
+            c.error_detalle = "; ".join(ex.errores)
+            db.commit()
+            raise HTTPException(422, f"ARCA rechazó el comprobante: {'; '.join(ex.errores)}")
+        except ArcaWsfeError as ex:
+            # Resultado incierto: ARCA pudo haberlo autorizado. El número queda
+            # reservado y el próximo intento lo verifica antes de emitir.
+            c.estado = "error"
+            c.error_detalle = (
+                f"Error técnico llamando a WSFEv1: {ex}. El número {numero} queda reservado: "
+                "al reintentar, Cuadra verifica en ARCA antes de emitir otro."
+            )
+            db.commit()
+            raise HTTPException(502, f"Error técnico llamando a WSFEv1: {ex}")
 
-    cliente_nombre = c.cliente.nombre if c.cliente else ""
-    asiento_id = motor_contable.registrar_factura_arca(
-        db, c.id, oid, current_user.id, c.cliente_id, cliente_nombre,
-        c.importe_neto, c.importe_iva, c.importe_total, c.fecha_emision,
-    )
-    if asiento_id:
-        c.asiento_id = asiento_id
-        db.commit()
-
-    registrar_log(db, current_user.id, "arca_comprobante", oid, "EMITIR", {
-        "comprobante_id": c.id, "cae": c.cae, "numero": c.numero,
-    })
-    db.refresh(c)
-    return _comprobante_dict(c)
+        return _registrar_emitido(
+            db, c, oid, current_user, resultado["cae"], resultado.get("cae_vencimiento"),
+            recuperado=False,
+        )
