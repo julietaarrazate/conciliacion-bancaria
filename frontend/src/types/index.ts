@@ -99,6 +99,19 @@ export interface DiagnosticoConciliacion {
   solapan_fechas: boolean
 }
 
+// GET /extractos/{id}/resumen — read-only (services/gastos_bancarios.py).
+// Los montos llegan como number o string (Decimal serializado): usar Number().
+export interface GastoBancarioConcepto {
+  concepto: string
+  cantidad: number
+  total: number | string
+}
+
+export interface ResumenExtracto {
+  gastos_bancarios: { conceptos: GastoBancarioConcepto[]; cantidad: number; total: number | string }
+  explicado: { creditos: number; acreditados: number; sin_acreditar: number; porcentaje: number | null }
+}
+
 export interface ConciliacionResultado {
   planilla_id: number
   filas_procesadas: number

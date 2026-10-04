@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
-import { ExtractoListItem, MovimientoFiltrado, MovimientosFiltros } from '@/types'
+import { ExtractoListItem, MovimientoFiltrado, MovimientosFiltros, ResumenExtracto as ResumenExtractoData } from '@/types'
+import { ResumenExtracto } from '@/components/ResumenExtracto'
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
@@ -101,6 +102,19 @@ export const Movimientos: React.FC = () => {
   const [acredError, setAcredError] = useState('')
   const umRef = useRef<HTMLInputElement>(null)
   const [modoAsiento, setModoAsiento] = useState<'agrupado' | 'individual'>('agrupado')
+  const [resumen, setResumen] = useState<ResumenExtractoData | null>(null)
+
+  // Resumen (% acreditado + gastos bancarios) del extracto completo, sin filtros.
+  // Se recalcula cada vez que cambia la lista: acreditar, editar o borrar
+  // un movimiento lo mueve.
+  useEffect(() => {
+    if (!extractoId) { setResumen(null); return }
+    let cancelado = false
+    apiClient.getResumenExtracto(extractoId)
+      .then(r => { if (!cancelado) setResumen(r) })
+      .catch(() => { if (!cancelado) setResumen(null) })
+    return () => { cancelado = true }
+  }, [extractoId, movimientos])
 
   useEffect(() => {
     apiClient.listExtractos(activeOrgId).then(data => {
@@ -366,6 +380,8 @@ export const Movimientos: React.FC = () => {
           </button>
         )}
       </div>
+
+      <ResumenExtracto resumen={resumen} />
 
       {umMsg && (
         <div className={`mb-3 px-3 py-2 rounded-md text-sm ${umMsg.startsWith('✓') ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'}`}>

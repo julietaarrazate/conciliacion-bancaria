@@ -435,6 +435,48 @@ def diagnostico_conciliacion(rows, movimientos) -> Dict[str, Any]:
     }
 
 
+def explicar_match(row, mov) -> Optional[str]:
+    """Qué dato tienen en común una fila conciliada y su movimiento ("por qué cierra").
+
+    Read-only y 100% aditivo: no participa de la decisión del motor ni cambia
+    status. Reusa `_score_identidad` probando UNA señal por vez (sin bonus de
+    fecha), así la explicación usa exactamente las mismas reglas que el scoring
+    y no duplica lógica. Describe lo que coincide hoy entre fila y movimiento,
+    por eso vale igual para matches automáticos, aprendidos o asignados a mano.
+
+    Returns: "cuit" | "dni" | "cbu" | "numero" | "titular" | "referencia" |
+             "monto" (solo coincide el importe) | None (sin movimiento).
+    """
+    if row is None or mov is None:
+        return None
+
+    cuit_fila = getattr(row, "cuit", None)
+    titular_fila = getattr(row, "titular", None)
+    referencia_fila = getattr(row, "referencia", None)
+
+    # Misma derivación de identificadores que buscar_match().
+    cuit_plan = norm_cuit(cuit_fila or '')
+    if not cuit_plan and titular_fila:
+        cuit_plan = extraer_cuit(titular_fila)
+    cbu_plan = extraer_cbu(titular_fila or '') or extraer_cbu(cuit_fila or '')
+    nums_plan = numeros_de_planilla(cuit_fila, titular_fila, referencia_fila)
+
+    def _coincide(cuit='', cbu='', titular='', nums=None) -> bool:
+        return _score_identidad(cuit, cbu, titular, nums or set(), mov, None, 0) > 0
+
+    if cuit_plan and _coincide(cuit=cuit_plan):
+        return "dni" if len(cuit_plan) <= 8 else "cuit"
+    if cbu_plan and _coincide(cbu=cbu_plan):
+        return "cbu"
+    if nums_plan and _coincide(nums=nums_plan):
+        return "numero"
+    if titular_fila and _coincide(titular=titular_fila):
+        return "titular"
+    if referencia_fila and referencia_fila.strip() and referencia_fila.strip().lower() in (getattr(mov, "titular", None) or '').lower():
+        return "referencia"
+    return "monto"
+
+
 # Config por defecto (org principal — comportamiento original)
 CONFIG_DEFAULT_ORG = {
     "match_rules": ["monto_cuit"],

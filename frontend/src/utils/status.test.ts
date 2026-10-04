@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { statusLabel } from './status'
+import { statusLabel, motivoMatchLabel } from './status'
 
 describe('statusLabel', () => {
   it('traduce los estados base', () => {
@@ -24,5 +24,19 @@ describe('statusLabel', () => {
     expect(statusLabel('algo raro')).toBe('algo raro')
     expect(statusLabel(null)).toBe('—')
     expect(statusLabel(undefined)).toBe('—')
+  })
+})
+
+describe('motivoMatchLabel', () => {
+  it('traduce cada motivo del backend', () => {
+    expect(motivoMatchLabel('cuit')).toBe('monto + CUIT')
+    expect(motivoMatchLabel('titular')).toBe('monto + titular')
+    expect(motivoMatchLabel('monto')).toBe('solo monto')
+  })
+
+  it('devuelve null si no hay motivo o es desconocido', () => {
+    expect(motivoMatchLabel(null)).toBeNull()
+    expect(motivoMatchLabel(undefined)).toBeNull()
+    expect(motivoMatchLabel('otro')).toBeNull()
   })
 })
