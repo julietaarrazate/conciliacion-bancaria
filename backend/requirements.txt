@@ -1,9 +1,9 @@
 # Web framework
 fastapi==0.141.1
-uvicorn[standard]==0.53.0
+uvicorn[standard]==0.54.0
 
 # Base de datos
-sqlalchemy==2.0.54
+sqlalchemy==2.1.1
 psycopg2-binary==2.9.13          # PostgreSQL (Render/Railway)
 
 # Autenticacion JWT
@@ -42,7 +42,7 @@ reportlab==5.0.1
 pywebpush>=2.5.0
 
 # Storage S3/R2 (opcional, activado via env vars S3_*)
-boto3==1.43.98
+boto3==1.43.103
 
 # Agente IA (Gemini Flash — activado via env var GEMINI_API_KEY)
 google-generativeai==0.8.6

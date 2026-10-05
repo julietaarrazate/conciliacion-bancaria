@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
-import { statusLabel } from '@/utils/status'
+import { statusLabel, motivoMatchLabel } from '@/utils/status'
 
 interface Row {
   id: number
@@ -13,6 +13,7 @@ interface Row {
   mov_titular?: string
   mov_fecha?: string
   mov_fecha_acred?: string
+  motivo_match?: string | null
 }
 
 interface Candidato {
@@ -546,6 +547,14 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                               {statusLabel(row.status)}
                             </span>
                           </button>
+                        )}
+                        {editingRowId !== row.id && row.status === 'ok' && motivoMatchLabel(row.motivo_match) && (
+                          <span
+                            className={`block pl-2 text-[9px] leading-tight ${row.motivo_match === 'monto' ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}
+                            title="Qué dato coincide entre la fila de la planilla y el movimiento del banco"
+                          >
+                            Coincide: {motivoMatchLabel(row.motivo_match)}
+                          </span>
                         )}
                       </td>
                       <td className="px-1 py-px text-center whitespace-nowrap">

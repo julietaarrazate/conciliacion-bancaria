@@ -7,7 +7,7 @@
 > implementación estándar → Sonnet; lógica compleja/riesgosa → Opus; orquestación/diseño → Fable.
 
 Plantilla de cada loop: **Objetivo · Cerebro · Entrada · Pasos · Salida · Docs afectada**.
-Verificación común a casi todos: `cd backend && pytest -q` + `cd frontend && npx tsc --noEmit && npm run build`.
+Verificación común a casi todos (lo mismo que corre el CI): `(cd backend && ruff check . && pytest -q)` + `(cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build)`.
 
 ---
 
@@ -64,7 +64,7 @@ Verificación común a casi todos: `cd backend && pytest -q` + `cd frontend && n
 - **Objetivo**: cambios de esquema seguros y reproducibles.
 - **Cerebro**: Opus (migraciones/lógica de datos).
 - **Entrada**: necesidad de nueva tabla/columna/índice/constraint.
-- **Pasos**: migración Alembic **+** safety-net idempotente en `main.py` → dinero en `Numeric(12,2)`
+- **Pasos**: migración Alembic **+** safety-net idempotente en `app/db_safety.py` → dinero en `Numeric(12,2)`
   → soft delete con `deleted_at` si aplica → índices únicos parciales que excluyan borrados →
   `organizacion_id` para multi-tenant → backfill cuidado (no tocar Org A) → tests.
   Ver [`DATABASE_RULES.md`](../database/DATABASE_RULES.md).
@@ -86,7 +86,7 @@ Verificación común a casi todos: `cd backend && pytest -q` + `cd frontend && n
 - **Objetivo**: publicar cambios a producción con seguridad.
 - **Cerebro**: Fable (coordina) · Haiku (changelog/checks).
 - **Entrada**: cambios mergeados y CI verde.
-- **Pasos**: [`release_checklist.md`](../../.claude/checklists/release_checklist.md): pytest/tsc/build
+- **Pasos**: [`release_checklist.md`](../../.claude/checklists/release_checklist.md): ruff/pytest/lint/tsc/vitest/build
   verdes, sin secretos, migraciones aplicadas, CHANGELOG actualizado → merge a `main` (squash) →
   Vercel (frontend) y Render (backend) deployan solos → smoke test (`/health`, logs `SLOW`, Sentry).
   Ver [`.claude/commands/deploy.md`](../../.claude/commands/deploy.md).

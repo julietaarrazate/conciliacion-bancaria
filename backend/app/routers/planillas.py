@@ -23,7 +23,7 @@ from app.models.organizacion import Organizacion
 from fastapi.responses import StreamingResponse
 from app.schemas.planilla import PlanillaResponse, PlanillaDetalleResponse, ConciliacionResultado
 from app.services.planilla_mapper import estandarizar_planilla
-from app.services.conciliacion import conciliar_planilla, diagnostico_conciliacion, montos_iguales
+from app.services.conciliacion import conciliar_planilla, diagnostico_conciliacion, explicar_match, montos_iguales
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_planilla_conciliada
 from app.services.tz import hoy_art
@@ -1085,6 +1085,7 @@ def get_planilla_detalle(
             "mov_titular": mov.titular if mov else None,
             "mov_fecha": mov.fecha if mov else None,
             "mov_fecha_acred": (mov.fecha_acred if mov else None) or r.fecha_acred,
+            "motivo_match": explicar_match(r, mov) if (mov and r.status == "ok") else None,
         })
 
     return {

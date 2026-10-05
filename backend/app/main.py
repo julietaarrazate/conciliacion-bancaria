@@ -37,6 +37,7 @@ from app.routers import iibb
 from app.routers import sueldos
 from app.routers import google_auth
 from app.routers import arca
+from app.routers import comprobantes_compra
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.egreso import Egreso, CategoriaEgreso  # noqa: F401
 from app.models.monotributo import CategoriaMonotributo, MonotributoConfig, ControlMonotributo  # noqa: F401
@@ -715,6 +716,7 @@ app.include_router(iibb.router)
 app.include_router(sueldos.router)
 app.include_router(google_auth.router)
 app.include_router(arca.router)
+app.include_router(comprobantes_compra.router)
 
 
 @app.get("/")

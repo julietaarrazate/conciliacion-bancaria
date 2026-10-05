@@ -23,7 +23,7 @@ backend/app/services/<modulo>_service.py  # lógica/cálculo financiero (Decimal
 backend/app/routers/<modulo>.py           # 3 capas: get_current_user + require_permission +
                                           #   filtro organizacion_id / can_switch_org
 backend/alembic/versions/<rev>_<modulo>.py# migración
-backend/app/main.py                       # safety-net idempotente (CREATE/ALTER ... IF NOT EXISTS)
+backend/app/db_safety.py                  # safety-net idempotente (CREATE/ALTER ... IF NOT EXISTS)
                                           #   + include_router(<modulo>.router) + seed por org
 backend/tests/test_<modulo>.py            # service + router (feliz / aislamiento 404 / 403 / DELETE)
 frontend/src/pages/<Modulo>.tsx           # página (probar modo claro y oscuro)

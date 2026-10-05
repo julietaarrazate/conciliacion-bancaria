@@ -5,6 +5,85 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Fix (oct 2026) — ARCA: reintentar una emisión ya no puede duplicar la factura
+
+ARCA no acepta clave de idempotencia: si la respuesta de `FECAESolicitar` se perdía (timeout,
+reinicio de Render), el comprobante quedaba en "error" y el reintento pedía "último + 1", lo que
+podía emitir una segunda factura real. Ahora (`routers/arca.py`, sección "Emisión segura"):
+
+- El número se reserva en la fila (estado `emitiendo`) antes de pedir el CAE.
+- Un error técnico deja el número reservado. Al reintentar se consulta en ARCA
+  (`FECompConsultar`, nuevo en `arca_wsfe.py`): si existe y coincide (total + documento) se
+  recupera el CAE sin emitir; si es otro comprobante se frena con 409; si no existe se libera.
+- Un rechazo de ARCA libera el número. Si otro comprobante tiene reservado el número siguiente,
+  se frena hasta verificar ese primero.
+- Emisiones simultáneas del mismo punto de venta + tipo se serializan (advisory lock de Postgres).
+
+Idea tomada del SDK npm `facturas` (LaPyme); no se adoptó el SDK porque es solo Node y el backend
+es Python. El módulo ARCA sigue desactivado (ADR-011).
+
+---
+
+### v3.30 (oct 2026) — Comprobantes por revisar: facturas de compra por mail + lectura con IA
+
+Idea tomada del análisis de LaPyme (carga de facturas con IA + recepción por email). Aditivo: no
+toca la conciliación ni el cálculo de la liquidación de IVA.
+
+- **Dirección de mail por organización** (`facturas-<token>@<INBOUND_EMAIL_DOMAIN>`, opt-in, se
+  crea/regenera desde la pantalla). Resend Inbound llama a `POST /comprobantes-compra/webhook/resend`
+  (firma Svix verificada, idempotente por `email_id`); cada PDF/foto adjunto es un borrador. Un mail
+  sin adjunto queda visible con su asunto (p. ej. el código de confirmación del reenvío de Gmail).
+- **Subida manual** de hasta 10 PDF/fotos (5 MB c/u).
+- **Lectura con IA** (Gemini, mismo helper que el OCR de cheques, tope diario propio
+  `FACTURAS_OCR_DAILY_LIMIT`) en segundo plano + **controles**: CUIT, suma vs total, IVA por
+  alícuota, letra vs IVA, fecha, "ya está cargado en IVA".
+- **Confirmar** crea el `ComprobanteIva` (recibido) con el mismo unique que "Mis Comprobantes" (no
+  se duplica si después se importa el Excel de ARCA) y, si se tilda, el `Egreso` a proveedor con su
+  asiento. Las notas de crédito no generan pago. Las percepciones leídas no se suman solas a la
+  liquidación.
+- Tablas nuevas `buzon_comprobantes` y `borradores_comprobante` (migración 027 + safety net).
+- Pantalla `/comprobantes-compra` ("Comprobantes por revisar"): dirección para copiar, subida,
+  bandeja y revisión con el PDF al lado.
+- Tests: `test_comprobantes_compra.py` (38) + `ComprobantesCompra.test.tsx` (2).
+- Ver `docs/business/COMPROBANTES_POR_REVISAR.md` (flujo, reglas, env vars, permisos).
+
+---
+
+### Feature (oct 2026) — Gastos bancarios al centavo, % acreditado y motivo de cada match
+
+Ideas tomadas de la comparación con Caliper Contable. Todo read-only: no cambia el scoring, los
+estados ni la contabilidad.
+
+- **Resumen del extracto** (`GET /extractos/{id}/resumen`, barra desplegable arriba de
+  Movimientos): % de ingresos del extracto ya acreditados a un cliente, y gastos bancarios
+  agrupados por concepto (Ley 25.413, SIRCREB/IIBB, percepción IVA, IVA, comisiones, intereses)
+  con cantidad y total, para cuadrarlos contra la nota de débito del banco.
+- **Motivo de cada match** en el panel de planilla: debajo de "Acreditado ✓" se ve qué dato
+  coincide con el banco (monto + CUIT, DNI, CBU, n° de operación, titular, referencia, o solo
+  monto). Ver `BUSINESS_RULES.md` §1.8.
+
+---
+
+### Legal (sep 2026) — Términos y Política de Privacidad actualizados
+
+Revisión contra la Ley 25.326 y contra los términos de software contable argentino (Xubio, Colppy,
+Contabilium). Solo texto de `/terminos` y `/privacidad`; no cambia código de negocio.
+
+- **Términos**: tope de responsabilidad (lo pagado en los últimos 12 meses, salvo dolo o culpa
+  grave), rol de encargado del tratamiento (Art. 25) para los datos de terceros, confidencialidad
+  que sigue después de la baja, uso de datos agregados anonimizados, precio y pago (aviso de 30
+  días para cambios, suspensión por falta de pago con aviso), obligación del usuario de guardar
+  sus copias, y baja con 15 días de aviso + 30 días para exportar antes del borrado.
+- **Privacidad**: se declaran los datos laborales (Sueldos/F931) y fiscales (IVA/IIBB/Monotributo),
+  se distingue responsable (usuarios propios) de encargado (datos que cargan las organizaciones),
+  se suman Cloudflare R2, Sentry y Google a los subprocesadores (solo si están habilitados) y se
+  corrige "backups cifrados" (hoy son JSON gzip por email, sin cifrar).
+- Pendiente fuera de este cambio: registrar la aceptación de términos (fecha + versión) por
+  usuario, un job que aplique las retenciones declaradas (auditoría 2 años, logs 90 días), y la
+  inscripción de la base en el Registro Nacional de Bases de Datos de la AAIP.
+
+---
+
 ### Feature (ago 2026) — Contador ya no requiere aprobación en vivo para loguearse
 
 El login por aprobación (v3.7, mayo 2026) se diseñó para **contadores de prueba** en una org de

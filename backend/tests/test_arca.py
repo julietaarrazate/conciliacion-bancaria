@@ -409,3 +409,199 @@ def test_solicitar_cae_productos_no_requiere_fechas(monkeypatch):
     resultado = solicitar_cae("TOKEN", "SIGN", "homologacion", datos)
     assert resultado["cae"] == "123"
     assert "FchServDesde" not in capturado["body"]
+
+
+# ── reintentos sin duplicar (número reservado + FECompConsultar) ──
+
+def _mock_auth(monkeypatch):
+    monkeypatch.setattr(arca_router, "obtener_token_sign", lambda db, cfg: ("TOKEN", "SIGN"))
+
+
+def _crear(client, tok, total=500.0):
+    r = client.post("/arca/comprobantes", json={
+        "cliente_id": 1, "tipo_comprobante": 11, "importe_neto": total, "importe_total": total,
+    }, headers=_auth(tok))
+    return r.json()["id"]
+
+
+def _timeout(*a, **k):
+    raise ArcaWsfeError("timeout esperando FECAESolicitar")
+
+
+def test_timeout_en_cae_deja_numero_reservado(client, db, monkeypatch):
+    tok = _token(db, "admin@arca.test")
+    _activar(client, tok)
+    _mock_auth(monkeypatch)
+    monkeypatch.setattr(arca_router, "consultar_ultimo_autorizado", lambda *a, **k: 7)
+    monkeypatch.setattr(arca_router, "solicitar_cae", _timeout)
+    cid = _crear(client, tok)
+
+    r = client.post(f"/arca/comprobantes/{cid}/emitir", headers=_auth(tok))
+    assert r.status_code == 502
+    c = db.query(ComprobanteArca).filter(ComprobanteArca.id == cid).first()
+    assert c.estado == "error"
+    assert c.numero == 8  # reservado, no se libera: ARCA pudo haberlo autorizado
+
+
+def test_reintento_recupera_cae_sin_emitir_de_nuevo(client, db, monkeypatch):
+    tok = _token(db, "admin@arca.test")
+    _activar(client, tok)
+    _mock_auth(monkeypatch)
+    monkeypatch.setattr(arca_router, "consultar_ultimo_autorizado", lambda *a, **k: 7)
+    monkeypatch.setattr(arca_router, "solicitar_cae", _timeout)
+    cid = _crear(client, tok)
+    client.post(f"/arca/comprobantes/{cid}/emitir", headers=_auth(tok))
+
+    # ARCA sí lo había autorizado: el reintento lo encuentra y no vuelve a pedir CAE.
+    llamadas = []
+    monkeypatch.setattr(arca_router, "solicitar_cae", lambda *a, **k: llamadas.append(1))
+    monkeypatch.setattr(arca_router, "consultar_comprobante", lambda *a, **k: {
+        "cae": "75000000000008", "cae_vencimiento": "20261020",
+        "importe_total": Decimal("500.00"), "doc_nro": "0", "resultado": "A",
+    })
+    r = client.post(f"/arca/comprobantes/{cid}/emitir", headers=_auth(tok))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["estado"] == "emitido"
+    assert body["numero"] == 8
+    assert body["cae"] == "75000000000008"
+    assert llamadas == []
+    c = db.query(ComprobanteArca).filter(ComprobanteArca.id == cid).first()
+    assert c.asiento_id is not None
+
+
+def test_reintento_numero_no_existe_en_arca_emite_normal(client, db, monkeypatch):
+    tok = _token(db, "admin@arca.test")
+    _activar(client, tok)
+    _mock_auth(monkeypatch)
+    monkeypatch.setattr(arca_router, "consultar_ultimo_autorizado", lambda *a, **k: 7)
+    monkeypatch.setattr(arca_router, "solicitar_cae", _timeout)
+    cid = _crear(client, tok)
+    client.post(f"/arca/comprobantes/{cid}/emitir", headers=_auth(tok))
+
+    monkeypatch.setattr(arca_router, "consultar_comprobante", lambda *a, **k: None)
+    monkeypatch.setattr(arca_router, "solicitar_cae", lambda *a, **k: {
+        "cae": "75000000000009", "cae_vencimiento": "20261020", "observaciones": [],
+    })
+    r = client.post(f"/arca/comprobantes/{cid}/emitir", headers=_auth(tok))
+    assert r.status_code == 200
+    assert r.json()["numero"] == 8
+    assert r.json()["cae"] == "75000000000009"
+
+
+def test_reintento_conflicto_no_emite(client, db, monkeypatch):
+    tok = _token(db, "admin@arca.test")
+    _activar(client, tok)
+    _mock_auth(monkeypatch)
+    monkeypatch.setattr(arca_router, "consultar_ultimo_autorizado", lambda *a, **k: 7)
+    monkeypatch.setattr(arca_router, "solicitar_cae", _timeout)
+    cid = _crear(client, tok)
+    client.post(f"/arca/comprobantes/{cid}/emitir", headers=_auth(tok))
+
+    llamadas = []
+    monkeypatch.setattr(arca_router, "solicitar_cae", lambda *a, **k: llamadas.append(1))
+    monkeypatch.setattr(arca_router, "consultar_comprobante", lambda *a, **k: {
+        "cae": "75000000000008", "cae_vencimiento": "20261020",
+        "importe_total": Decimal("9999.00"), "doc_nro": "0", "resultado": "A",
+    })
+    r = client.post(f"/arca/comprobantes/{cid}/emitir", headers=_auth(tok))
+    assert r.status_code == 409
+    assert llamadas == []
+    c = db.query(ComprobanteArca).filter(ComprobanteArca.id == cid).first()
+    assert c.estado == "error"
+    assert c.cae is None
+
+
+def test_reintento_sin_poder_verificar_no_emite(client, db, monkeypatch):
+    tok = _token(db, "admin@arca.test")
+    _activar(client, tok)
+    _mock_auth(monkeypatch)
+    monkeypatch.setattr(arca_router, "consultar_ultimo_autorizado", lambda *a, **k: 7)
+    monkeypatch.setattr(arca_router, "solicitar_cae", _timeout)
+    cid = _crear(client, tok)
+    client.post(f"/arca/comprobantes/{cid}/emitir", headers=_auth(tok))
+
+    llamadas = []
+    monkeypatch.setattr(arca_router, "solicitar_cae", lambda *a, **k: llamadas.append(1))
+
+    def _falla_consulta(*a, **k):
+        raise ArcaWsfeError("ARCA caído")
+    monkeypatch.setattr(arca_router, "consultar_comprobante", _falla_consulta)
+    r = client.post(f"/arca/comprobantes/{cid}/emitir", headers=_auth(tok))
+    assert r.status_code == 502
+    assert llamadas == []
+    c = db.query(ComprobanteArca).filter(ComprobanteArca.id == cid).first()
+    assert c.numero == 8
+
+
+def test_numero_reservado_por_otro_comprobante_frena(client, db, monkeypatch):
+    tok = _token(db, "admin@arca.test")
+    _activar(client, tok)
+    _mock_auth(monkeypatch)
+    monkeypatch.setattr(arca_router, "consultar_ultimo_autorizado", lambda *a, **k: 7)
+    monkeypatch.setattr(arca_router, "solicitar_cae", _timeout)
+    cid1 = _crear(client, tok)
+    client.post(f"/arca/comprobantes/{cid1}/emitir", headers=_auth(tok))  # reserva el 8
+
+    llamadas = []
+    monkeypatch.setattr(arca_router, "solicitar_cae", lambda *a, **k: llamadas.append(1))
+    cid2 = _crear(client, tok, total=700.0)
+    r = client.post(f"/arca/comprobantes/{cid2}/emitir", headers=_auth(tok))
+    assert r.status_code == 409
+    assert llamadas == []
+
+
+def test_rechazo_libera_el_numero(client, db, monkeypatch):
+    tok = _token(db, "admin@arca.test")
+    _activar(client, tok)
+    _mock_auth(monkeypatch)
+    monkeypatch.setattr(arca_router, "consultar_ultimo_autorizado", lambda *a, **k: 7)
+
+    def _rechaza(*a, **k):
+        raise ArcaWsfeRechazo("Comprobante rechazado", ["10015: CUIT inválido"])
+    monkeypatch.setattr(arca_router, "solicitar_cae", _rechaza)
+    cid = _crear(client, tok)
+    client.post(f"/arca/comprobantes/{cid}/emitir", headers=_auth(tok))
+    c = db.query(ComprobanteArca).filter(ComprobanteArca.id == cid).first()
+    assert c.numero is None
+
+
+def test_consultar_comprobante_parsea_respuesta(monkeypatch):
+    from app.services import arca_wsfe
+    import xml.etree.ElementTree as ET
+
+    monkeypatch.setattr(arca_wsfe, "_soap_call", lambda *a, **k: ET.fromstring(
+        "<r><ResultGet><DocNro>20111111112</DocNro><ImpTotal>1210.5</ImpTotal>"
+        "<CodAutorizacion>75000000000001</CodAutorizacion><FchVto>20261020</FchVto>"
+        "<Resultado>A</Resultado></ResultGet></r>"
+    ))
+    r = arca_wsfe.consultar_comprobante("T", "S", "20111111112", "homologacion", 1, 11, 5)
+    assert r["cae"] == "75000000000001"
+    assert r["importe_total"] == Decimal("1210.5")
+    assert r["doc_nro"] == "20111111112"
+
+
+def test_consultar_comprobante_inexistente_devuelve_none(monkeypatch):
+    from app.services import arca_wsfe
+    import xml.etree.ElementTree as ET
+
+    monkeypatch.setattr(arca_wsfe, "_soap_call", lambda *a, **k: ET.fromstring(
+        "<r><Errors><Err><Code>602</Code><Msg>No existen datos</Msg></Err></Errors></r>"
+    ))
+    assert arca_wsfe.consultar_comprobante("T", "S", "1", "homologacion", 1, 11, 5) is None
+
+
+def test_consultar_comprobante_otro_error_falla(monkeypatch):
+    from app.services import arca_wsfe
+    import xml.etree.ElementTree as ET
+
+    monkeypatch.setattr(arca_wsfe, "_soap_call", lambda *a, **k: ET.fromstring(
+        "<r><Errors><Err><Code>600</Code><Msg>No autorizado</Msg></Err></Errors></r>"
+    ))
+    with pytest.raises(ArcaWsfeError):
+        arca_wsfe.consultar_comprobante("T", "S", "1", "homologacion", 1, 11, 5)
+
+
+def test_clave_lock_estable():
+    assert arca_router._clave_lock(1, 3, 11) == arca_router._clave_lock(1, 3, 11)
+    assert arca_router._clave_lock(1, 3, 11) != arca_router._clave_lock(1, 3, 6)

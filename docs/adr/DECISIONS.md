@@ -135,7 +135,12 @@ Cross-ref:
   y pide el CAE. El certificado X.509 + clave de cada org se cifran
   (`backend/app/services/arca_crypto.py`, `ARCA_ENCRYPTION_KEY`).
 - **Consecuencias:** sólo se implementan las operaciones que Cuadra necesita
-  (`FECompUltimoAutorizado`, `FECAESolicitar`). Coherente con el estilo liviano
+  (`FECompUltimoAutorizado`, `FECAESolicitar`, `FECompConsultar`). Como ARCA no
+  acepta clave de idempotencia, la emisión reserva el número en la fila antes de
+  pedir el CAE y, si la respuesta se pierde, el reintento consulta ese número en
+  ARCA (`FECompConsultar`) antes de emitir otro; las emisiones de un mismo punto
+  de venta + tipo se serializan con un advisory lock de Postgres (oct 2026, idea
+  tomada del SDK npm `facturas` de LaPyme, que no se adoptó por ser solo Node). Coherente con el estilo liviano
   del resto (excel_parser, motor_contable tampoco usan frameworks externos).
 - **Estado:** Aceptada. Construida pero **desactivada a propósito** (ver ADR-011).
 

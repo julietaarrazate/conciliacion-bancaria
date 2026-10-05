@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     # Sin esta key, el módulo ARCA no permite cargar certificados (falla explícito, no degrada).
     arca_encryption_key: str = ""
 
+    # Comprobantes por revisar — recepción de facturas de compra por mail (opt-in)
+    # Usa Resend Inbound (misma cuenta que RESEND_API_KEY). INBOUND_EMAIL_DOMAIN es el
+    # dominio de recepción (p. ej. "xxxx.resend.app" o uno propio con MX a Resend) y
+    # RESEND_INBOUND_SECRET el "signing secret" (whsec_...) del webhook email.received
+    # que apunta a POST /comprobantes-compra/webhook/resend. Sin estas dos, la carga
+    # manual con IA funciona igual y solo se oculta la dirección de mail.
+    inbound_email_domain: str = ""
+    resend_inbound_secret: str = ""
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
