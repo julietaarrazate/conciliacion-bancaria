@@ -474,3 +474,95 @@ class TestResetYRebuild:
         assert len(_asientos("reclass_planilla_extracto_comision")) == 0
         assert len(_asientos("um_reclass_planilla")) == 1
         assert len(_asientos("um_reclass_planilla_comision")) == 0
+
+    def _saldo(self, db, codigo):
+        from decimal import Decimal
+        from app.models.contabilidad import Asiento, AsientoDetalle
+        cuenta = db.query(PlanCuenta).filter(PlanCuenta.codigo == codigo, PlanCuenta.organizacion_id == 1).first()
+        lineas = (
+            db.query(AsientoDetalle)
+            .join(Asiento, AsientoDetalle.asiento_id == Asiento.id)
+            .filter(AsientoDetalle.cuenta_id == cuenta.id, Asiento.organizacion_id == 1)
+            .all()
+        )
+        return sum((Decimal(str(l.debe)) - Decimal(str(l.haber)) for l in lineas), Decimal("0"))
+
+    def test_rebuild_reconstruye_asiento_del_extracto(self, client, db):
+        """El reset borraba el asiento `extracto` (Banco D / Pasivo Corriente H) y
+        no lo reconstruía: Pasivo Corriente quedaba deudor por la reclasificación
+        de origen extracto. Ahora se regenera con solo los movimientos del
+        extracto principal (los UM ya los cubre um_lote)."""
+        from datetime import date
+        from decimal import Decimal
+        from app.models.contabilidad import Asiento
+        from app.models.extracto import MovimientoBanco
+
+        planilla = self._seed_planilla_dos_origenes(db, comision_pct=None)
+        # Un egreso del extracto principal: va a la inversa (Pasivo D / Banco H)
+        db.add(MovimientoBanco(
+            extracto_id=planilla.extracto_id, orden=3, fecha=date(2026, 8, 18),
+            titular="Comisión banco", monto=Decimal("-1500"), source="extracto",
+            organizacion_id=1,
+        ))
+        db.commit()
+        token = self._superadmin_token(db)
+
+        prev = client.post("/contabilidad/reset-y-rebuild?dry_run=true", headers=_auth(token))
+        assert prev.status_code == 200, prev.text
+        assert prev.json()["a_crear"]["extractos"] == 1
+
+        r = client.post("/contabilidad/reset-y-rebuild?dry_run=false", headers=_auth(token))
+        assert r.status_code == 200, r.text
+
+        asientos = db.query(Asiento).filter(
+            Asiento.modulo == "extracto", Asiento.referencia_id == planilla.extracto_id,
+            Asiento.organizacion_id == 1,
+        ).all()
+        assert len(asientos) == 1
+        a = asientos[0]
+        assert a.fecha == date(2026, 8, 18)  # primer movimiento del extracto
+        assert sum(Decimal(str(l.debe)) for l in a.lineas) == sum(Decimal(str(l.haber)) for l in a.lineas)
+
+        banco = db.query(PlanCuenta).filter(PlanCuenta.codigo == "1-1-1-3-1", PlanCuenta.organizacion_id == 1).first()
+        pasivo = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-0-0", PlanCuenta.organizacion_id == 1).first()
+        debe_banco = sum(Decimal(str(l.debe)) for l in a.lineas if l.cuenta_id == banco.id)
+        haber_banco = sum(Decimal(str(l.haber)) for l in a.lineas if l.cuenta_id == banco.id)
+        haber_pasivo = sum(Decimal(str(l.haber)) for l in a.lineas if l.cuenta_id == pasivo.id)
+        assert debe_banco == Decimal("98000")   # sin los 49000 del UM
+        assert haber_banco == Decimal("1500")
+        assert haber_pasivo == Decimal("98000")
+
+        # La reclasificación de origen extracto cancela el ingreso: Pasivo
+        # Corriente queda neto por el egreso (1500 deudor), no por −98000.
+        assert self._saldo(db, "2-1-0-0") == Decimal("1500")
+        # Y el asiento del extracto va antes que la reclasificación que lo cancela
+        reclass = db.query(Asiento).filter(
+            Asiento.modulo == "reclass_planilla_extracto", Asiento.referencia_id == planilla.id,
+        ).one()
+        assert a.numero_asiento < reclass.numero_asiento
+
+    def test_rebuild_ignora_extractos_borrados(self, client, db):
+        from datetime import datetime
+        from app.models.contabilidad import Asiento
+
+        planilla = self._seed_planilla_dos_origenes(db, comision_pct=None)
+        planilla.extracto.deleted_at = datetime.utcnow()
+        db.commit()
+        token = self._superadmin_token(db)
+
+        r = client.post("/contabilidad/reset-y-rebuild?dry_run=false", headers=_auth(token))
+        assert r.status_code == 200, r.text
+        assert db.query(Asiento).filter(Asiento.modulo == "extracto").count() == 0
+
+    def test_rebuild_es_idempotente_con_el_asiento_del_extracto(self, client, db):
+        from app.models.contabilidad import Asiento
+
+        self._seed_planilla_dos_origenes(db, comision_pct=2)
+        token = self._superadmin_token(db)
+
+        for _ in range(2):
+            r = client.post("/contabilidad/reset-y-rebuild?dry_run=false", headers=_auth(token))
+            assert r.status_code == 200, r.text
+        assert db.query(Asiento).filter(Asiento.modulo == "extracto").count() == 1
+        nums = sorted(a.numero_asiento for a in db.query(Asiento).filter(Asiento.organizacion_id == 1))
+        assert nums == list(range(1, len(nums) + 1))

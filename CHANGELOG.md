@@ -5,6 +5,24 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Fix (oct 2026) — "Empezar limpio" reconstruye el asiento del extracto bancario
+
+El reset del Libro Diario (`POST /contabilidad/reset-y-rebuild`) borraba el asiento `extracto`
+(Banco D / Pasivo Corriente H) y no lo volvía a generar, así que tras apretarlo Pasivo Corriente
+quedaba deudor por las reclasificaciones de origen extracto (gap anotado en ago 2026).
+
+- `routers/ctb_libro.py::reset_y_rebuild_asientos` — reconstruye un asiento `extracto` por
+  extracto no borrado con solo los movimientos del extracto principal (los UM ya van en
+  `um_lote`): ingresos Banco Macro D / Pasivo Corriente H, egresos a la inversa. Fechado con el
+  primer movimiento, así queda antes de las reclasificaciones. El `dry_run` informa
+  `a_crear.extractos`.
+- Frontend: el confirm de "Empezar limpio" muestra la cantidad de extractos y corrige el conteo
+  de transferencias conciliadas, que leía una clave inexistente y mostraba "undefined".
+- Tests: 3 nuevos en `test_contabilidad_integration.py` (asiento y saldo de Pasivo Corriente,
+  extractos borrados, idempotencia/numeración). 623 tests backend en verde.
+
+---
+
 ### Fix (oct 2026) — ARCA: reintentar una emisión ya no puede duplicar la factura
 
 ARCA no acepta clave de idempotencia: si la respuesta de `FECAESolicitar` se perdía (timeout,

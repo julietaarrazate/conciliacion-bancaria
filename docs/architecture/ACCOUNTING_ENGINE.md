@@ -294,16 +294,20 @@ asiento `*_reverso` como su original (detecta `Asiento.modulo.like("%_reverso")`
   el Libro Diario a cero — ya no hay huecos que tapar y evitaba que el primer asiento nuevo se
   numerara 521 en vez de 1. No reintroducir salvo que se restaure el histórico.
 - `POST /contabilidad/reset-y-rebuild` (solo superadmin, `dry_run` por defecto) **borra todos
-  los asientos de la org y los reconstruye** desde los datos reales: un `um_lote` por lote de
-  UM importado + un bucket de reclasificación por `(planilla, origen del movimiento)` — mismo
-  criterio dual que el flujo vivo (extracto principal → Pasivo Corriente, UM → No identificado),
-  neteando la comisión de la planilla en un asiento aparte cuando corresponde — luego renumera
-  correlativamente 1..N por `(fecha, id)`. Incluye self-heal de la columna `numero_asiento` por
-  si Render no corrió el safety net.
-  > **Ojo**: borra TODOS los asientos de la org, incluidos los de módulo `extracto` (Banco D /
-  > Pasivo Corriente H al importar el extracto bancario) — y **no los reconstruye** (este
-  > endpoint no toca ese módulo). Usarlo asume que se puede re-generar `extracto` de otra forma
-  > o que se acepta perderlo. Gap preexistente, no introducido por el cambio de ago 2026.
+  los asientos de la org y los reconstruye** desde los datos reales: un `extracto` por extracto
+  bancario no borrado + un `um_lote` por lote de UM importado + un bucket de reclasificación por
+  `(planilla, origen del movimiento)` — mismo criterio dual que el flujo vivo (extracto principal
+  → Pasivo Corriente, UM → No identificado), neteando la comisión de la planilla en un asiento
+  aparte cuando corresponde — luego renumera correlativamente 1..N por `(fecha, id)`. Incluye
+  self-heal de la columna `numero_asiento` por si Render no corrió el safety net.
+  - El asiento `extracto` reconstruido toma **solo los movimientos del extracto principal**
+    (`source != "um"`; los UM ya los cubre `um_lote`) y los separa como `um_lote`: ingresos
+    Banco Macro `1-1-1-3-1` D / Pasivo Corriente `2-1-0-0` H, egresos a la inversa. Usa la cuenta
+    hoja Banco Macro (no la madre `1-1-1-3` de la regla `carga_extracto`) y se fecha con el primer
+    movimiento del extracto, así queda antes que las reclasificaciones que lo cancelan. Conserva
+    `(modulo="extracto", referencia_id=extracto_id)`, así el backfill de arranque (`main.py`
+    paso 7) lo ve y no lo duplica. Antes (hasta sep 2026) el reset no lo reconstruía y Pasivo
+    Corriente quedaba deudor por las reclasificaciones de origen extracto.
 
 ---
 
