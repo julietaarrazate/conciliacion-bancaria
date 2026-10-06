@@ -4,8 +4,8 @@ Para usar con [`/release`](../commands/release.md) y [`/deploy`](../commands/dep
 
 ## Verde local
 
-- [ ] `cd backend && python -m pytest -q` (suite completa pasando).
-- [ ] `cd frontend && npx tsc --noEmit` sin errores de tipos.
+- [ ] `(cd backend && ruff check . && python -m pytest -q)` (suite completa pasando).
+- [ ] `(cd frontend && npm run lint && npx tsc --noEmit && npx vitest run)` sin errores.
 - [ ] `cd frontend && npm run build` ok.
 
 ## Changelog y versión
@@ -20,7 +20,7 @@ Para usar con [`/release`](../commands/release.md) y [`/deploy`](../commands/dep
 
 ## Migraciones / esquema
 
-- [ ] Cada migración Alembic nueva tiene su safety-net idempotente en `main.py` (convergen).
+- [ ] Cada migración Alembic nueva tiene su safety-net idempotente en `app/db_safety.py`.
 - [ ] Sin migración destructiva sobre datos de Org A (`organizacion_id=1`).
 
 ## Deploy

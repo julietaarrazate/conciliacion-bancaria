@@ -23,6 +23,7 @@ estado actual del sistema basándose exclusivamente en el código.
 ### Negocio (`business/`)
 - [PRODUCT_BIBLE.md](./business/PRODUCT_BIBLE.md) — qué es Cuadra, para quién, módulos
 - [BUSINESS_RULES.md](./business/BUSINESS_RULES.md) — reglas (scoring de conciliación, dedup, impuestos)
+- [COMPROBANTES_POR_REVISAR.md](./business/COMPROBANTES_POR_REVISAR.md) — facturas de compra por mail + lectura con IA → IVA/Pagos
 - [WORKFLOWS.md](./business/WORKFLOWS.md) — flujos de usuario end-to-end
 
 ### IA (`ai/`)

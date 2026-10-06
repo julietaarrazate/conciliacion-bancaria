@@ -44,7 +44,7 @@ Para usar con [`/review`](../commands/review.md). Foco en los riesgos reales del
 
 ## Esquema
 
-- [ ] Columna/tabla/índice nuevo: migración Alembic **y** safety-net idempotente en `main.py`.
+- [ ] Columna/tabla/índice nuevo: migración Alembic **y** safety-net idempotente en `app/db_safety.py`.
 
 ## Higiene
 

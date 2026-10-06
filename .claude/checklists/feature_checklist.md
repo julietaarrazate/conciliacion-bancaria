@@ -33,7 +33,7 @@ Para usar con [`/feature`](../commands/feature.md). Referencia completa:
 ## Migración + safety net (idempotente)
 
 - [ ] Migración Alembic en `backend/alembic/versions/`.
-- [ ] Safety-net equivalente en `main.py` (`CREATE TABLE / ADD COLUMN / CREATE [UNIQUE] INDEX
+- [ ] Safety-net equivalente en `app/db_safety.py` (`CREATE TABLE / ADD COLUMN / CREATE [UNIQUE] INDEX
       IF NOT EXISTS`) — converge en el arranque aunque Alembic falle.
 - [ ] Seed por org idempotente si necesita datos sembrados.
 
@@ -61,6 +61,6 @@ Para usar con [`/feature`](../commands/feature.md). Referencia completa:
 
 ## Verificación
 
-- [ ] `cd backend && python -m pytest -q`
-- [ ] `cd frontend && npx tsc --noEmit && npm run build`
+- [ ] `(cd backend && ruff check . && python -m pytest -q)`
+- [ ] `(cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build)`
 - [ ] Commits con autor `Julieta Arrazate <julietaarrazate@gmail.com>`.

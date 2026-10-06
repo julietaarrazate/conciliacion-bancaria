@@ -10,8 +10,8 @@ Si el comportamiento cambia, no es un refactor: es una feature o un bug fix.
    refactorizar.
 
    ```bash
-   cd backend && python -m pytest -q
-   cd frontend && npx tsc --noEmit && npm run build
+   (cd backend && ruff check . && python -m pytest -q)
+   (cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build)
    ```
 2. **Mapear** con [`/analyze`](./analyze.md) qué archivos toca y qué reglas viven ahí, para no
    alterarlas sin querer.
@@ -20,7 +20,7 @@ Si el comportamiento cambia, no es un refactor: es una feature o un bug fix.
    contrato de los endpoints.
 4. **Preservar invariantes** del repo aunque "se vean feos": Decimal en montos, `hoy_art()`/
    `localIsoDate()` en fechas, filtro `organizacion_id` en cada query, doble fuente DDL
-   (Alembic + safety net en `main.py`) sincronizada, Org A intacta.
+   (Alembic + safety net en `app/db_safety.py`) sincronizada, Org A intacta.
 5. **Tests verdes DESPUÉS**, idénticos a antes (mismos casos pasando). Si algún test cambió de
    resultado, el refactor alteró comportamiento → revisar.
 

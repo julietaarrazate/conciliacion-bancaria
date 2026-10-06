@@ -99,6 +99,19 @@ export interface DiagnosticoConciliacion {
   solapan_fechas: boolean
 }
 
+// GET /extractos/{id}/resumen — read-only (services/gastos_bancarios.py).
+// Los montos llegan como number o string (Decimal serializado): usar Number().
+export interface GastoBancarioConcepto {
+  concepto: string
+  cantidad: number
+  total: number | string
+}
+
+export interface ResumenExtracto {
+  gastos_bancarios: { conceptos: GastoBancarioConcepto[]; cantidad: number; total: number | string }
+  explicado: { creditos: number; acreditados: number; sin_acreditar: number; porcentaje: number | null }
+}
+
 export interface ConciliacionResultado {
   planilla_id: number
   filas_procesadas: number
@@ -377,6 +390,74 @@ export interface ImportarComprobantesIvaResult {
   duplicados: number
   fuera_de_periodo: number
   periodo: string
+}
+
+// ── Comprobantes por revisar (facturas de compra por mail + IA) ──────────────
+export type EstadoBorradorComprobante =
+  | 'procesando' | 'listo' | 'error' | 'sin_adjunto' | 'confirmado' | 'descartado'
+
+export interface DatosComprobanteCompra {
+  tipo_codigo: number | null
+  punto_venta: number | null
+  numero: number | null
+  fecha: string | null
+  cuit_emisor: string | null
+  razon_social: string | null
+  cae: string | null
+  // { "21%": { neto: "1000.00", iva: "210.00" } } — montos como string (Decimal en backend)
+  alicuotas: Record<string, { neto: string; iva: string }>
+  neto_no_gravado: string | null
+  exento: string | null
+  percepciones_iva: string | null
+  percepciones_iibb: string | null
+  otros_tributos: string | null
+  total: string | null
+}
+
+export interface BorradorComprobante {
+  id: number
+  organizacion_id: number
+  origen: 'email' | 'subida'
+  estado: EstadoBorradorComprobante
+  remitente: string | null
+  asunto: string | null
+  archivo_nombre: string | null
+  archivo_mime: string | null
+  archivo: string | null
+  datos: DatosComprobanteCompra | null
+  alertas: string[]
+  error: string | null
+  comprobante_iva_id: number | null
+  egreso_id: number | null
+  confirmado_at: string | null
+  created_at: string
+}
+
+export interface BorradoresComprobanteResponse {
+  items: BorradorComprobante[]
+  conteo: Record<EstadoBorradorComprobante, number>
+}
+
+export interface BuzonComprobantes {
+  configurado: boolean
+  activo: boolean
+  direccion: string | null
+}
+
+export interface ConfirmarComprobantePayload {
+  datos?: Record<string, unknown>
+  periodo?: string
+  registrar_pago?: boolean
+  fecha_pago?: string
+}
+
+export interface ConfirmarComprobanteResult {
+  ok: boolean
+  comprobante_iva_id: number
+  periodo: string
+  egreso_id: number | null
+  contabilidad_ok: boolean | null
+  borrador: BorradorComprobante
 }
 
 export interface LiquidacionIvaCalculoPayload {

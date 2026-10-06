@@ -30,7 +30,7 @@ export const Privacidad: React.FC = () => {
               Cuadra — Sistema de Conciliación Bancaria
             </p>
             <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">
-              Última actualización: 12 de junio de 2026
+              Última actualización: 26 de septiembre de 2026
             </p>
           </div>
 
@@ -41,7 +41,16 @@ export const Privacidad: React.FC = () => {
               (julietaarrazate@gmail.com), con domicilio en la República Argentina, responsable
               del tratamiento de los datos personales conforme a la{' '}
               <strong>Ley 25.326 de Protección de Datos Personales</strong> y su Decreto
-              Reglamentario 1558/2001.
+              Reglamentario 1558/2001, respecto de los datos de sus propios usuarios (datos
+              de acceso, auditoría y facturación del servicio).
+            </p>
+            <p>
+              Respecto de los datos de terceros que cada organización cliente carga en el
+              sistema (sus clientes, proveedores y empleados), la responsable de esa base de
+              datos es la organización cliente. Cuadra actúa como{' '}
+              <strong>encargada del tratamiento</strong> en los términos del Art. 25 de la Ley
+              25.326: trata esos datos solo para prestar el servicio y según las instrucciones
+              de la organización cliente, no los usa con fines propios ni los cede a terceros.
             </p>
             <p>
               El sistema está destinado a empresas y profesionales de Argentina que requieran
@@ -61,6 +70,17 @@ export const Privacidad: React.FC = () => {
                 <strong>Datos financieros:</strong> extractos bancarios, planillas de pago, CUIT,
                 CBU/CVU, importes, titulares de cuentas y referencias de movimientos aportados
                 por el usuario para fines de conciliación.
+              </li>
+              <li>
+                <strong>Datos laborales (módulo Sueldos, opcional):</strong> nombre, CUIL,
+                categoría, fecha de ingreso, cargas de familia y remuneraciones de los empleados que la
+                organización cliente cargue para liquidar sueldos y generar el F931.
+              </li>
+              <li>
+                <strong>Datos fiscales (módulos de impuestos, opcionales):</strong> comprobantes
+                de ventas y compras importados de ARCA, CUIT de clientes y proveedores,
+                percepciones, retenciones y bases imponibles de IVA, Ingresos Brutos y
+                Monotributo.
               </li>
               <li>
                 <strong>Datos de auditoría:</strong> registros de acceso, acciones realizadas en
@@ -178,9 +198,30 @@ export const Privacidad: React.FC = () => {
                     <td className="py-2 pr-4">Email del destinatario, contenido del correo</td>
                     <td className="py-2">EE. UU.</td>
                   </tr>
+                  <tr>
+                    <td className="py-2 pr-4">Cloudflare R2*</td>
+                    <td className="py-2 pr-4">Almacenamiento de imágenes</td>
+                    <td className="py-2 pr-4">Fotos de cheques y órdenes de pago</td>
+                    <td className="py-2">EE. UU.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-4">Sentry*</td>
+                    <td className="py-2 pr-4">Monitoreo de errores</td>
+                    <td className="py-2 pr-4">Datos técnicos del error (sin datos personales)</td>
+                    <td className="py-2">EE. UU.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-4">Google*</td>
+                    <td className="py-2 pr-4">Inicio de sesión con Google</td>
+                    <td className="py-2 pr-4">Nombre y email de la cuenta de Google</td>
+                    <td className="py-2">EE. UU.</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
+            <p>
+              * Solo intervienen cuando la función correspondiente está habilitada.
+            </p>
             <p>
               Las transferencias internacionales se realizan al amparo del{' '}
               <strong>Art. 12 de la Ley 25.326</strong>. Ningún subprocesador recibe datos
@@ -196,10 +237,11 @@ export const Privacidad: React.FC = () => {
               </li>
               <li>
                 <strong>Datos financieros:</strong> mientras el usuario los conserve en el
-                sistema o hasta que solicite su eliminación.
+                sistema, hasta que solicite su eliminación o hasta 30 días después de la baja
+                de la organización.
               </li>
               <li>
-                <strong>Backups:</strong> los respaldos completos se conservan por 30 días.
+                <strong>Backups:</strong> los respaldos completos se conservan hasta 30 días.
                 Una solicitud de eliminación se replica en los backups en ese período.
               </li>
               <li>
@@ -299,7 +341,7 @@ export const Privacidad: React.FC = () => {
               <li>Rate limiting en endpoints de autenticación.</li>
               <li>Control de acceso por roles (superadmin, admin, operador, revisor, contador).</li>
               <li>Registros de auditoría de acceso y operaciones.</li>
-              <li>Backups cifrados diarios enviados por correo electrónico.</li>
+              <li>Backups diarios enviados por correo electrónico a la administradora del sistema.</li>
             </ul>
           </Section>
 

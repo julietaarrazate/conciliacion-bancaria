@@ -42,6 +42,6 @@ frontend. Pegar el nombre del test.)
 ## Verificación
 
 ```bash
-cd backend && python -m pytest -q
-cd frontend && npx tsc --noEmit && npm run build   # si tocó frontend
+(cd backend && ruff check . && python -m pytest -q)
+(cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build)   # si tocó frontend
 ```

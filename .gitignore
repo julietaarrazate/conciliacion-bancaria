@@ -68,8 +68,9 @@ logs/
 .claude/settings.local.json
 
 # .claude/ — runtime de Claude Code (volátil, NO se commitea).
-# Los entregables de proceso SÍ se trackean: commands/, checklists/, templates/, memory/.
-.claude/settings.json
+# Los entregables de proceso SÍ se trackean: commands/, checklists/, templates/, memory/,
+# hooks/ y settings.json (solo declara el hook de inicio; los permisos/tokens locales
+# van en settings.local.json, que sigue ignorado).
 .claude/worktrees/
 .claude/checkpoints/
 .claude/mailbox/

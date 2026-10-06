@@ -16,6 +16,7 @@ from .proyeccion_iva import ProyeccionIva
 from .iva_liquidacion import ComprobanteIva, LiquidacionIva
 from .password_reset import PasswordResetToken
 from .arca import ArcaConfig, ComprobanteArca
+from .comprobante_compra import BuzonComprobantes, BorradorComprobante
 
 __all__ = [
     "Organizacion", "User", "Cliente",
@@ -32,4 +33,5 @@ __all__ = [
     "ComprobanteIva", "LiquidacionIva",
     "PasswordResetToken",
     "ArcaConfig", "ComprobanteArca",
+    "BuzonComprobantes", "BorradorComprobante",
 ]

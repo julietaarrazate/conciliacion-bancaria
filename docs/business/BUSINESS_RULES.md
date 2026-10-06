@@ -192,6 +192,31 @@ Archivo: `backend/app/routers/planillas.py` (`upload_planilla`), migración 026.
 
 ---
 
+### 1.8. Motivo del match y resumen del extracto (read-only) — desde oct 2026
+
+Dos lecturas que **no participan de la decisión del motor** ni cambian ningún
+status (inspiradas en la comparación con Caliper Contable):
+
+- **Motivo de cada match** — `explicar_match()` (`services/conciliacion.py`).
+  Para cada fila `ok` de `/planillas/{id}/detalle` devuelve `motivo_match`: qué
+  dato coincide hoy entre la fila y su movimiento, probando `_score_identidad`
+  con UNA señal por vez y sin bonus de fecha (mismas reglas que §1.1, sin
+  duplicarlas). Orden: `cuit` → `dni` → `cbu` → `numero` → `titular` →
+  `referencia` → `monto` (solo coincide el importe). Describe la coincidencia,
+  no cómo se decidió, así que vale igual para matches automáticos, aprendidos o
+  manuales. La UI lo muestra bajo el estado ("Coincide: monto + CUIT"; "solo
+  monto" en ámbar).
+- **Resumen del extracto** — `GET /extractos/{id}/resumen`
+  (`services/gastos_bancarios.py`):
+  - `gastos_bancarios`: solo **débitos** (monto < 0) agrupados por concepto con
+    regex sobre el texto del movimiento, primera regla que matchea gana:
+    Impuesto Ley 25.413 → SIRCREB / Ingresos Brutos → Percepción IVA → IVA →
+    Comisiones y mantenimiento → Intereses y sellos. Total en positivo, Decimal.
+    Un crédito nunca es gasto (un cliente "IVA SRL" no cuenta).
+  - `explicado`: créditos (monto > 0) del extracto con cliente acreditado
+    (`es_libre()` falso) sobre el total de créditos; `porcentaje` None si no hay
+    créditos.
+
 ## 2. Deduplicación de Últimos Movimientos (UM)
 
 Archivo: `backend/app/services/extracto_merger.py`,
