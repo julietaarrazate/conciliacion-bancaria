@@ -4,9 +4,12 @@ Con el token+sign que entrega WSAA (ver `arca_wsaa.py`) se consulta el último
 número de comprobante autorizado para un punto de venta + tipo, y se solicita
 el CAE (Código de Autorización Electrónico) del comprobante siguiente.
 
-Solo dos operaciones del WS se usan acá (las únicas que Cuadra necesita hoy):
+Operaciones del WS que usa Cuadra:
   - FECompUltimoAutorizado: último número ya autorizado (para saber qué número sigue).
   - FECAESolicitar: pide el CAE de un comprobante nuevo.
+  - FECompConsultar: consulta un comprobante puntual. Se usa para reintentar sin
+    duplicar: si la respuesta de FECAESolicitar se perdió, antes de pedir otro
+    número se verifica si ARCA ya autorizó el número reservado.
 
 Sin librería SOAP pesada (no hay zeep/suds en el proyecto) — se construyen los
 envelopes a mano con XML simple, igual estilo liviano que el resto de Cuadra
@@ -138,6 +141,59 @@ def consultar_ultimo_autorizado(token: str, sign: str, cuit: str, ambiente: str,
         raise ArcaWsfeError(f"WSFEv1 error {codigo.text if codigo is not None else '?'}: {msg.text if msg is not None else ''}")
     nro = _find_local(root, "CbteNro")
     return int(nro.text) if nro is not None and nro.text else 0
+
+
+# WSFEv1 devuelve este código cuando el comprobante consultado no existe.
+_ERR_COMPROBANTE_INEXISTENTE = "602"
+
+
+def consultar_comprobante(
+    token: str, sign: str, cuit: str, ambiente: str,
+    punto_venta: int, tipo_comprobante: int, numero: int,
+) -> Optional[dict]:
+    """Consulta un comprobante ya emitido (FECompConsultar).
+
+    Devuelve None si ARCA no tiene ese número (error 602), o
+    {cae, cae_vencimiento, importe_total, doc_nro, resultado} si existe.
+    """
+    body = (
+        "<ar:FECompConsultar>"
+        "<ar:Auth>"
+        f"<ar:Token>{token}</ar:Token><ar:Sign>{sign}</ar:Sign><ar:Cuit>{cuit}</ar:Cuit>"
+        "</ar:Auth>"
+        "<ar:FeCompConsReq>"
+        f"<ar:CbteTipo>{tipo_comprobante}</ar:CbteTipo>"
+        f"<ar:CbteNro>{numero}</ar:CbteNro>"
+        f"<ar:PtoVta>{punto_venta}</ar:PtoVta>"
+        "</ar:FeCompConsReq>"
+        "</ar:FECompConsultar>"
+    )
+    root = _soap_call(ambiente, "FECompConsultar", body)
+    err = _find_local(root, "Err")
+    if err is not None:
+        codigo = _find_local(err, "Code")
+        msg = _find_local(err, "Msg")
+        codigo_txt = (codigo.text or "").strip() if codigo is not None else "?"
+        if codigo_txt == _ERR_COMPROBANTE_INEXISTENTE:
+            return None
+        raise ArcaWsfeError(f"WSFEv1 error {codigo_txt}: {msg.text if msg is not None else ''}")
+
+    result = _find_local(root, "ResultGet")
+    if result is None:
+        return None
+
+    def _txt(name: str) -> Optional[str]:
+        el = _find_local(result, name)
+        return el.text.strip() if el is not None and el.text else None
+
+    total = _txt("ImpTotal")
+    return {
+        "cae": _txt("CodAutorizacion"),
+        "cae_vencimiento": _txt("FchVto"),
+        "importe_total": Decimal(total) if total else None,
+        "doc_nro": _txt("DocNro"),
+        "resultado": _txt("Resultado"),
+    }
 
 
 def solicitar_cae(token: str, sign: str, ambiente: str, datos: DatosComprobante) -> dict:

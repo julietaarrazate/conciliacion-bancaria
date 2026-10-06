@@ -47,6 +47,7 @@ Todos los routers se montan en `backend/app/main.py` (`app.include_router(...)`)
 | `iibb.py` | `/iibb` | — |
 | `sueldos.py` | `/sueldos` | — |
 | `arca.py` | `/arca` | — |
+| `comprobantes_compra.py` | `/comprobantes-compra` | webhook `/webhook/resend` sin JWT (firma Svix) |
 
 > Las rutas públicas sin auth (`/p/:token`, `/privacidad`, `/terminos`) son
 > servidas por `public_router.py` (`/public`) + páginas frontend dedicadas.
@@ -170,6 +171,16 @@ Todos los routers se montan en `backend/app/main.py` (`app.include_router(...)`)
 | Services | `arca_crypto.py` (cifrado Fernet del certificado) · `arca_wsaa.py` (autenticación WSAA) · `arca_wsfe.py` (emisión WSFEv1 / CAE) · `motor_contable.registrar_factura_arca` |
 | Modelos | `ArcaConfig`, `ComprobanteArca` (`arca.py`) |
 | Página | `Arca.tsx` |
+
+## 13b. Comprobantes por revisar (facturas de compra por mail + IA) — v3.30
+
+| Aspecto | Ubicación |
+|---|---|
+| Router | `comprobantes_compra.py` (`/comprobantes-compra`) |
+| Service | `comprobantes_compra_service.py` (lectura Gemini, controles, firma Svix, confirmación → `ComprobanteIva` + `Egreso` opcional vía `motor_contable.registrar_egreso`) |
+| Modelos | `BuzonComprobantes`, `BorradorComprobante` (`comprobante_compra.py`) |
+| Página | `ComprobantesCompra.tsx` |
+| Reglas | [../business/COMPROBANTES_POR_REVISAR.md](../business/COMPROBANTES_POR_REVISAR.md) |
 
 ## 14. Asistente IA (Gemini)
 

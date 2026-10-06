@@ -29,3 +29,20 @@ export function statusLabel(status: string | null | undefined): string {
   if (low.startsWith('no está') || low.startsWith('no esta')) return 'No encontrado ✕'
   return s  // desconocido: se muestra tal cual
 }
+
+// Motivo de un match (`motivo_match` de /planillas/{id}/detalle): qué dato
+// coincide entre la fila de la planilla y el movimiento del banco.
+const MOTIVOS: Record<string, string> = {
+  cuit: 'monto + CUIT',
+  dni: 'monto + DNI',
+  cbu: 'monto + CBU/CVU',
+  numero: 'monto + n° de cuenta/operación',
+  titular: 'monto + titular',
+  referencia: 'monto + referencia',
+  monto: 'solo monto',
+}
+
+export function motivoMatchLabel(motivo: string | null | undefined): string | null {
+  if (!motivo) return null
+  return MOTIVOS[motivo] ?? null
+}

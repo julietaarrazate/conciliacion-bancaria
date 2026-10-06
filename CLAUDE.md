@@ -38,8 +38,9 @@ Env vars opcionales en Render (feature flags — sin la var, la feature se degra
 · `GEMINI_API_KEY`(+`GEMINI_MODEL`) asistente IA/OCR/transcripción · `SENTRY_DSN` (Render) /
 `VITE_SENTRY_DSN` (Vercel) monitoreo errores · `GOOGLE_CLIENT_ID` (Render) /
 `VITE_GOOGLE_CLIENT_ID` (Vercel) login Google · `S3_*` (5 vars) storage fotos R2 ·
+`INBOUND_EMAIL_DOMAIN` + `RESEND_INBOUND_SECRET` recepción de facturas por mail (Comprobantes por revisar) ·
 `ARCA_ENCRYPTION_KEY` ya seteada, módulo ARCA construido pero desactivado a propósito (ver
-"Pendiente para próximas sesiones"). Stack: Python 3.11 / Node 20, Neon free tier (puede dormir),
+"Pendiente para próximas sesiones"). Stack: Python 3.11 / Node 24 (Vercel deja de buildear con Node 20 desde oct 2026), Neon free tier (puede dormir),
 Render free tier (cold start ~30s, mitigado con UptimeRobot + retry en frontend).
 
 ---
@@ -107,23 +108,27 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
                    Planilla, PlanillaRow, AuditoriaLog, PatronAprendido,
                    Liquidacion, CierrePeriodo, Cheque, Pago, Gasto,
                    ArqueoDiario, OrdenDePago, PlanCuenta, ReglaContable,
-                   Asiento, AsientoDetalle, PasswordResetToken, PushSubscription
+                   Asiento, AsientoDetalle, PasswordResetToken, PushSubscription,
+                   BuzonComprobantes, BorradorComprobante
   /app/routers   — auth, me, extractos, planillas, historial, auditoria, admin,
                    clientes_dir, organizaciones, liquidaciones, caja, cheques,
-                   pagos_gastos, contabilidad, analisis, search,
+                   pagos, contabilidad (+ ctb_*), analisis, search, iva, monotributo,
+                   iibb, sueldos, tarjetas, arca, comprobantes_compra, agente, papelera,
                    public_router, push_router
+                   (lista completa: `docs/architecture/SYSTEM_MAP.md`)
   /app/services  — conciliacion.py, aprendizaje.py, excel_export.py, pdf_export.py,
                    extracto_merger.py, excel_parser.py, motor_contable.py,
                    backup_service.py, backup_scheduler.py, push_service.py,
                    email_sender.py, password_reset.py
-  /alembic/versions — 001_baseline, 002_soft_delete, 003_password_reset, 004_performance_indexes,
-                      006_unique_constraints, 007_float_to_numeric
+  /alembic/versions — 001 a 027. En el arranque Alembic solo hace `stamp head`: el esquema real lo
+                      sostienen `create_all` + los safety-nets de `app/db_safety.py`
 
 /frontend/src
   /pages   — Dashboard (Individual + Carga masiva auto-conciliar), Clientes,
              ExtractosArchivo, Movimientos, Conciliaciones, Historial, Auditoria,
              Usuarios, Perfil, Login, Organizaciones, Liquidaciones, Caja,
-             OrdenDePago, Cheques, PagosGastos, Contabilidad, Resumen,
+             Pagos, Cheques, Tarjetas, Iva, Monotributo, IngresosBrutos, Sueldos, Arca,
+             Papelera, Contabilidad, Resumen, ComprobantesCompra,
              EstadoCuenta, FlujoCaja, Revision, Actividad,
              PaginaPublica (/p/:token — sin auth), RecuperarPassword, RestablecerPassword,
              Privacidad (/privacidad — sin auth), Terminos (/terminos — sin auth)
@@ -198,14 +203,16 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ## Estado actual y changelog
 
-**Versión actual: v3.29.** Historial completo de versiones (v3.6 a v3.29, con detalle de cada
+**Versión actual: v3.30.** Historial completo de versiones (v3.6 a v3.30, con detalle de cada
 feature/fix/PR) en **`CHANGELOG.md`** — no se carga automáticamente en cada sesión, así que si
 necesitás contexto histórico detallado de una versión puntual, leelo directamente.
 
 Últimas versiones: **v3.27** estandarización universal de planillas de clientes (embudo de mapeo) +
 capa de diagnóstico de conciliación · **v3.28** archivar extractos (cierre de período) + exports
 estéticos con PDF de planilla conciliada + alertas de descuadre/filas ambiguas + UX de estados
-(labels humanos) · **v3.29** carga masiva de cheques (varios cheques por foto en el OCR).
+(labels humanos) · **v3.29** carga masiva de cheques (varios cheques por foto en el OCR) ·
+**v3.30** Comprobantes por revisar: facturas de compra por mail (Resend Inbound) o subidas, leídas
+con IA y confirmadas hacia IVA y Pagos (`docs/business/COMPROBANTES_POR_REVISAR.md`).
 
 Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,
 sin efectos) y la operadora la rechazó — se revirtió a la landing anterior completa (gradiente,
@@ -218,7 +225,7 @@ Liquidaciones, Contabilidad con cuentas corrientes); 5 módulos de liquidación 
 (IVA Proyección, IVA Liquidación real con "Mis Comprobantes" de ARCA, Monotributo, Ingresos Brutos,
 Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
 ARCA (facturación electrónica WSFEv1) construido pero desactivado a propósito (ver "Pendiente para
-próximas sesiones" abajo). **~575 tests backend + ~40 tests frontend** pasando.
+próximas sesiones" abajo). **~655 tests backend + ~42 tests frontend** pasando.
 
 Profesionalización de ingeniería (jun 2026): base de documentación en `/docs` (arquitectura,
 negocio, API, BD, seguridad, UX, playbooks, ADR — cada doc con su "Pendiente de revisar"),
@@ -231,7 +238,14 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
 
 ### Pendiente para próximas sesiones
 
-- **🔔 MAÑANA — activar Sentry (observabilidad)**: el código ya está 100% cableado (backend en
+- **Activar la recepción de facturas por mail (v3.30)**: el código está mergeado; la subida manual
+  con IA ya funciona sin configurar nada. Para el mail: en Resend activar Receiving (confirmar que el
+  plan lo incluya), crear un webhook `email.received` a
+  `https://conciliacion-api.onrender.com/comprobantes-compra/webhook/resend` y pegar en Render
+  `INBOUND_EMAIL_DOMAIN` (el `<id>.resend.app` que da Resend) y `RESEND_INBOUND_SECRET` (el
+  `whsec_...` del webhook). Después, en `/comprobantes-compra`, "Crear dirección de mail". Detalle en
+  `docs/business/COMPROBANTES_POR_REVISAR.md`.
+- **Activar Sentry (observabilidad)**: el código ya está 100% cableado (backend en
   `main.py` con 5% de performance tracing; frontend lazy, auto-captura errores globales al iniciar).
   Solo falta que Julieta pegue los DSN: en su cuenta de Sentry crear/abrir **dos proyectos** (uno
   Python/FastAPI = backend, uno React = frontend), cada uno da un DSN. Luego: Render → env var
@@ -240,13 +254,13 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
   `SLOW <método> <path> → <status> en <ms>` las requests que superan `SLOW_REQUEST_MS` (default
   1500ms) y expone el header `X-Process-Time`. Después de unos días con datos reales, revisar
   errores recurrentes en Sentry + los `SLOW` en logs de Render para decidir el próximo foco de
-  performance con evidencia (no con auditorías — esta sesión la auditoría se equivocó 2 veces).
+  performance con datos medidos, no con auditorías estáticas.
 - **Próximos módulos del plan de liquidación de impuestos** (ver "Plan de expansión" abajo): orden a
   decidir con Julieta por valor — candidato: Intake Exportador de Servicios.
 - **⏰ RECORDATORIO SEMESTRAL — actualizar escala de Monotributo**: ARCA actualiza los límites de
-  facturación anual por categoría cada semestre (ajuste por IPC, próxima actualización
-  julio/agosto 2026). Los valores sembrados en `monotributo_service.py` (`_LIMITES_VIGENTES`)
-  vencen con esa actualización. Cuando se abra una sesión después de esa fecha: ir a
+  facturación anual por categoría cada semestre (ajuste por IPC, en febrero y en julio/agosto).
+  Los valores sembrados en `monotributo_service.py` (`_LIMITES_VIGENTES`) son la escala vigente
+  desde el 1/feb/2026: si ya salió una escala posterior, están vencidos. Para actualizarlos: ir a
   arca.gob.ar/monotributo/categorias.asp (el fetch directo devuelve 403 por anti-bot — usar
   WebSearch cruzando 2-3 medios especializados como Ámbito/iProfesional, o pedirle el dato a
   Julieta) y actualizar la escala vía `PUT /monotributo/categorias/{id}` o re-sembrando el array.
@@ -342,12 +356,14 @@ git commit --allow-empty --author="Julieta Arrazate <julietaarrazate@gmail.com>"
 
 ### Protocolo de orquestación ultracode (definido por Julieta, junio 2026)
 
-El modelo orquestador (Fable) se reserva SOLO para: diseño y descomposición en tareas atómicas,
-detección de dependencias (archivos compartidos → secuenciar), resolución de conflictos de merge
-y auditoría de resultados cuando se requiera. Todo lo demás se delega para no gastar de más:
-- **Opus** — implementación compleja (motor contable, parsers, migraciones, lógica financiera).
-- **Sonnet** — implementación estándar (CRUD, UI, refactors mecánicos, tipado).
-- **Haiku** — tareas simples (renombres, docs menores, búsquedas).
+**Ruteo por costo de modelo** (única fuente de esta regla; para no gastar de más):
+- **Fable** (orquestador) — solo diseño y descomposición en tareas atómicas, detección de
+  dependencias (archivos compartidos → secuenciar), conflictos de merge y auditoría de resultados.
+- **Opus** — lógica compleja/riesgosa (motor contable, parsers, migraciones, lógica financiera).
+- **Sonnet** — implementación estándar (CRUD, UI, endpoints, refactors, tipado).
+- **Haiku** — leer, buscar, resumir impacto y tareas mecánicas (renombres, docs menores).
+- El orquestador delega la lectura/análisis a Haiku y reserva Opus para el razonamiento difícil:
+  no leer 4 docs con un modelo caro si Haiku puede resumirlos.
 
 Reglas del bucle (cuanto más corta y verificable cada unidad, más robusto el bucle):
 1. Unidad de trabajo atómica (~30-45 min por agente); módulos grandes se parten en 2-3 agentes.
@@ -356,14 +372,14 @@ Reglas del bucle (cuanto más corta y verificable cada unidad, más robusto el b
 3. Commit por sub-paso, no al final — una muerte de sesión pierde minutos, no horas.
 4. Mapear qué archivos toca cada tarea ANTES de paralelizar; si dos tocan el mismo, van en serie.
 5. Orden de merge planificado de antemano (backend → frontend → splits/docs).
-6. Criterio de terminado verificable en el prompt: pytest + tsc --noEmit + build.
+6. Criterio de terminado verificable en el prompt: los mismos checks del CI (ver "Reglas de calidad").
 7. Si un agente muere: auditar el worktree (`git log` + `git status`) y relanzar uno nuevo que
    continúe desde el estado exacto, con instrucción de no terminar sin pushear.
 
 **Checkpoints/tags**: ver `CHANGELOG.md` → sección "Checkpoints / releases" para la lista completa
 con descripción por versión. Son en su mayoría referencias documentales, no siempre tags físicos de
 git — antes de un `git checkout vX.Y` correr `git tag` y confirmar que existe; tags reales hoy:
-`v2.1`, `v2.2`, `v3.14-stable`, `v3.22`, `dnda-software-2026-v1`.
+`v2.1`, `v2.2`, `dnda-software-2026-v1`.
 
 ### Ciclo de trabajo obligatorio — Claude como Software Architect (Fase 3)
 
@@ -371,23 +387,18 @@ Claude mantiene la calidad del sistema a medida que evoluciona. El rigor **se es
 riesgo del cambio** (no gastar tokens de más: leer con cerebros baratos, razonar/implementar lo
 complejo con los caros).
 
-**Ruteo por costo de modelo** (clave para no gastar de más):
-- **Haiku** → leer, buscar, resumir impacto, tareas mecánicas (renombres, docs menores).
-- **Sonnet** → implementación estándar (CRUD, UI, endpoints, refactors, tipado).
-- **Opus** → lógica compleja/riesgosa (motor contable, parsers, migraciones, lógica financiera).
-- **Fable** → orquesta: diseño, descomposición, dependencias, conflictos de merge, auditoría.
-- Regla de oro: el orquestador **delega la lectura/análisis a Haiku** y reserva Opus para el
-  razonamiento difícil. Nunca leer 4 docs con un modelo caro si Haiku puede resumirlos.
+Qué modelo hace cada cosa: ver "Ruteo por costo de modelo" en el protocolo de orquestación, arriba.
 
 **Nivel del cambio → ceremonia:**
 - **Trivial** (fix de 1 línea, typo, refactor mecánico): reproducir/verificar → corregir → test →
   doc si aplica. (Haiku/Sonnet)
 - **Estándar** (endpoint, CRUD, UI): leer SOLO el/los doc(s) del área tocada → analizar impacto →
   implementar → tests → actualizar doc. (Sonnet)
-- **Complejo** (feature/módulo nuevo, cambio de esquema, lógica financiera): **ciclo completo** →
-  1) PRODUCT_BIBLE 2) SYSTEM_MAP 3) DOMAIN_MODEL 4) DECISIONS 5) analizar impacto 6) buscar
-  reutilización 7) diseñar 8) implementar 9) tests 10) docs 11) CHANGELOG 12) detectar deuda
-  técnica 13) proponer mejoras arquitectónicas. (Fable diseña · Opus implementa lo difícil)
+- **Complejo** (feature/módulo nuevo, cambio de esquema, lógica financiera): antes de diseñar,
+  leer `docs/business/PRODUCT_BIBLE.md`, `SYSTEM_MAP`, `DOMAIN_MODEL` y `docs/adr/DECISIONS.md`
+  y buscar qué se puede reutilizar. Se da por terminado con tests, docs y CHANGELOG al día, y
+  con la deuda técnica detectada anotada en `.claude/memory/PROJECT_MEMORY.md`.
+  (Fable diseña · Opus implementa lo difícil)
 
 Los flujos detallados (entrada/salida/docs afectada por tipo de trabajo) están en
 **`docs/playbooks/LOOPS.md`** (Feature/Bug/Refactor/Documentation/Security/Database/AI/Release/
@@ -396,7 +407,9 @@ Architecture/Product), operacionalizados en `.claude/commands/`.
 **Reglas de calidad permanentes** (innegociables en todo cambio):
 no duplicar lógica · no romper compatibilidad · mantener el aislamiento multi-tenant ·
 mantener la auditoría · mantener la trazabilidad contable (partida doble) · mantener/crear tests ·
-actualizar la documentación afectada. Verificación siempre: `pytest` + `tsc --noEmit` + `build`.
+actualizar la documentación afectada. Verificación siempre: lo mismo que corre el CI
+(`.github/workflows/ci.yml`) — backend `ruff check .` + `pytest -q`; frontend `npm run lint` +
+`tsc --noEmit` + `vitest run` + `build`.
 
 ---
 
@@ -423,4 +436,4 @@ de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing exc
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.29
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.30

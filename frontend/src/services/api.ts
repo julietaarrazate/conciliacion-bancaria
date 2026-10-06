@@ -17,6 +17,7 @@ import {
   UserRole,
   ExtractoListItem,
   MovimientoFiltrado,
+  ResumenExtracto,
   MergeUMResult,
   MovimientosFiltros,
   ConciliacionItem,
@@ -28,6 +29,11 @@ import {
   ProyeccionIva,
   ComprobantesIvaResponse,
   ImportarComprobantesIvaResult,
+  BorradorComprobante,
+  BorradoresComprobanteResponse,
+  BuzonComprobantes,
+  ConfirmarComprobantePayload,
+  ConfirmarComprobanteResult,
   LiquidacionIva,
   LiquidacionIvaCalculoPayload,
   MonotributoConfig,
@@ -573,6 +579,12 @@ class ApiClient {
     })
   }
 
+  // Sin cache: tiene que reflejar al instante una acreditación recién hecha.
+  async getResumenExtracto(extractoId: number): Promise<ResumenExtracto> {
+    const res = await this.client.get(`/extractos/${extractoId}/resumen`)
+    return res.data
+  }
+
   async getClientesArchivos(orgId?: number | null): Promise<any> {
     const cacheKey = orgId ? `/clientes/archivos?org_id=${orgId}` : '/clientes/archivos'
     return this._cached(cacheKey, 60_000, async () => {
@@ -986,6 +998,74 @@ class ApiClient {
   async presentarLiquidacionIva(id: number, orgId?: number): Promise<{ ok: boolean }> {
     const res = await this.client.post(`/iva/liquidacion/${id}/presentar`, null, {
       params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  // ── Comprobantes por revisar (facturas de compra por mail + IA) ─────────────
+  private _orgParams(orgId?: number): Record<string, number> {
+    return orgId ? { org_id: orgId } : {}
+  }
+
+  async getBuzonComprobantes(orgId?: number): Promise<BuzonComprobantes> {
+    const res: AxiosResponse<BuzonComprobantes> = await this.client.get('/comprobantes-compra/buzon', {
+      params: this._orgParams(orgId),
+    })
+    return res.data
+  }
+
+  async activarBuzonComprobantes(regenerar: boolean, orgId?: number): Promise<BuzonComprobantes> {
+    const res: AxiosResponse<BuzonComprobantes> = await this.client.post('/comprobantes-compra/buzon/activar', null, {
+      params: { ...this._orgParams(orgId), regenerar },
+    })
+    return res.data
+  }
+
+  async subirComprobantesCompra(files: File[], orgId?: number): Promise<{ borradores: BorradorComprobante[] }> {
+    const formData = new FormData()
+    files.forEach(f => formData.append('files', f))
+    const res = await this.client.post('/comprobantes-compra/subir', formData, {
+      params: this._orgParams(orgId),
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return res.data
+  }
+
+  async getBorradoresComprobante(estado: string, orgId?: number): Promise<BorradoresComprobanteResponse> {
+    const res: AxiosResponse<BorradoresComprobanteResponse> = await this.client.get('/comprobantes-compra', {
+      params: { ...this._orgParams(orgId), estado },
+    })
+    return res.data
+  }
+
+  async getBorradorComprobante(id: number, orgId?: number): Promise<BorradorComprobante> {
+    const res: AxiosResponse<BorradorComprobante> = await this.client.get(`/comprobantes-compra/${id}`, {
+      params: this._orgParams(orgId),
+    })
+    return res.data
+  }
+
+  async reprocesarBorradorComprobante(id: number, orgId?: number): Promise<BorradorComprobante> {
+    const res: AxiosResponse<BorradorComprobante> = await this.client.post(`/comprobantes-compra/${id}/reprocesar`, null, {
+      params: this._orgParams(orgId),
+    })
+    return res.data
+  }
+
+  async confirmarBorradorComprobante(
+    id: number, payload: ConfirmarComprobantePayload, orgId?: number,
+  ): Promise<ConfirmarComprobanteResult> {
+    const res: AxiosResponse<ConfirmarComprobanteResult> = await this.client.post(
+      `/comprobantes-compra/${id}/confirmar`, payload, { params: this._orgParams(orgId) },
+    )
+    this.invalidateCache('/iva')
+    this.invalidateCache('/pagos')
+    return res.data
+  }
+
+  async descartarBorradorComprobante(id: number, orgId?: number): Promise<BorradorComprobante> {
+    const res: AxiosResponse<BorradorComprobante> = await this.client.post(`/comprobantes-compra/${id}/descartar`, null, {
+      params: this._orgParams(orgId),
     })
     return res.data
   }
