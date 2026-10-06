@@ -10,6 +10,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # SQLAlchemy 2.1 cambia el driver por defecto de postgresql:// a psycopg 3
+    # (no instalado) y el backend no arranca en Render (ver #226). Subirlo
+    # requiere migrar el driver a mano.
+    ignore:
+      - dependency-name: sqlalchemy
+        versions: [">=2.1"]
     groups:
       backend-deps:
         patterns: ["*"]
