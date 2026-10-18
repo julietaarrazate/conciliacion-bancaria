@@ -1,9 +1,9 @@
 # Roadmap — Sistema de Conciliación Bancaria
 
-> ⚠️ **DESACTUALIZADO** (auditoría 2026-07-10): varios ítems ya están hechos
+> ⚠️ **DESACTUALIZADO** (jul 2026): varios ítems ya están hechos
 > (multi-banco con detección automática, monitoreo, backups) — no planificar
-> sesiones contra este archivo hasta reescribirlo. Estado real y prioridades
-> vigentes: [`docs/AUDITORIA_EKP_2026-07.md`](docs/AUDITORIA_EKP_2026-07.md) §8.
+> contra este archivo hasta reescribirlo. Estado real: [`CHANGELOG.md`](CHANGELOG.md)
+> y [`ENGINEERING_AUDIT.md`](ENGINEERING_AUDIT.md).
 
 Plan de evolución del producto pensando en clientes piloto y venta a
 financieras, cooperativas y estudios contables.
@@ -157,8 +157,7 @@ Sin esto el ciclo legal queda abierto — siempre hay un paso "afuera".
 
 ## Lo que decidimos NO hacer (al menos por ahora)
 
-- Compete con Mambu / Bantotal / Temenos (cores bancarios) — escala
-  fuera de alcance de un equipo chico
+- Competir con cores bancarios — escala fuera de alcance de un equipo chico
 - Licencia BCRA / cumplimiento UIF pesado — requiere infraestructura
   legal y compliance dedicado
 - Conexión a Central de Deudores BCRA — solo si hay cliente regulado
@@ -176,19 +175,5 @@ Sin esto el ciclo legal queda abierto — siempre hay un paso "afuera".
 - Cooperativas de crédito barriales
 - Prestamistas formales
 
-**Competencia directa**: Xubio, Colppy, Tango Gestión, Holded, Alegra.
 **Diferencial**: motor de conciliación con scoring + IA de aprendizaje,
 UX moderna, multi-tenant nativo, foco operacional (no solo contable).
-
----
-
-## Pricing tentativo
-
-| Plan | Precio (USD/mes) | Incluye |
-|------|----------------|---------|
-| Básico | 30-50 | 1 organización, 2 usuarios, 1 banco, 500 mov/mes |
-| Pro | 80-120 | 1 organización, 10 usuarios, multi-banco, ilimitado |
-| Multi | 200-350 | Multi-organización (estudios contables) |
-| Enterprise | A medida | SLA dedicado, multi-tenant aislado |
-
-Setup gratis primer mes piloto.

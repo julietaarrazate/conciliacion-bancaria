@@ -72,10 +72,10 @@ def test_resumen_agrupa_al_centavo_y_calcula_explicado():
         _mov(Decimal("-32800.00"), "COMISION MANTENIMIENTO"),
         _mov(Decimal("-6888.00"), "IVA TASA GENERAL"),
         _mov(Decimal("-734900.00"), "TRANSF. ENVIADA TALLER"),  # no es gasto
-        _mov(Decimal("400000.00"), "DEP. EFECTIVO CAJA 03", cliente_acreditado="Green"),
+        _mov(Decimal("400000.00"), "DEP. EFECTIVO CAJA 03", cliente_acreditado="Cliente Norte"),
         _mov(Decimal("250000.00"), "DEP. EFECTIVO CAJA 03", cliente_acreditado="No identificado"),
         _mov(Decimal("180500.00"), "DEP. EFECTIVO CAJA 01"),
-        _mov(Decimal("612000.00"), "TRANSF. RECIBIDA", cliente_acreditado="Tucu"),
+        _mov(Decimal("612000.00"), "TRANSF. RECIBIDA", cliente_acreditado="Cliente Sur"),
     ]
     r = resumen_extracto(movs)
 
@@ -115,7 +115,7 @@ def _row(cuit=None, titular=None, referencia=None):
 @pytest.mark.parametrize("row,titular_mov,esperado", [
     (_row(cuit="20-11223344-0"), "TRANSF 20112233440 GARCIA MARIA", "cuit"),
     (_row(cuit="11223344"), "TRANSF 20112233440 GARCIA MARIA", "dni"),
-    (_row(titular="CBU 2850590940090418135201"), "CBU 2850590940090418135201 EMPRESA", "cbu"),
+    (_row(titular="CBU 2850999400000000012342"), "CBU 2850999400000000012342 EMPRESA", "cbu"),
     (_row(referencia="0004512"), "TRANSF. RECIBIDA OP 0004512 LOS ALAMOS", "numero"),
     (_row(titular="Garcia Maria"), "TRANSF GARCIA MARIA", "titular"),
     (_row(referencia="FAC-A"), "COBRO FAC-A LOS ALAMOS", "referencia"),
@@ -174,7 +174,7 @@ def _extracto_org1(db):
     db.add_all([
         MovimientoBanco(extracto_id=e.id, organizacion_id=1, monto=Decimal("-32800.00"), titular="COMISION MANTENIMIENTO"),
         MovimientoBanco(extracto_id=e.id, organizacion_id=1, monto=Decimal("-196.80"), titular="IMP. LEY 25.413 S/DEBIT"),
-        MovimientoBanco(extracto_id=e.id, organizacion_id=1, monto=Decimal("1000.00"), titular="TRANSF", cliente_acreditado="Green"),
+        MovimientoBanco(extracto_id=e.id, organizacion_id=1, monto=Decimal("1000.00"), titular="TRANSF", cliente_acreditado="Cliente Norte"),
     ])
     db.commit()
     return e

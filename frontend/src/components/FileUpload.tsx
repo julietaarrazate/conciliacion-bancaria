@@ -1,4 +1,5 @@
 import React, { useRef } from 'react'
+import { useLockStore } from '@/store/lock'
 
 interface FileUploadProps {
   onFileSelected?: (file: File) => void
@@ -55,14 +56,25 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       e.target.value = ''
     } else if (onFileSelected && files.length > 0) {
       onFileSelected(files[0])
+      // Sin esto, volver a elegir el MISMO archivo (p. ej. tras cancelar la revisión
+      // de un PDF) no dispara onChange y parece que no pasa nada.
+      e.target.value = ''
     }
+  }
+
+  const abrirSelector = () => {
+    if (loading) return
+    // En el celular el selector de archivos manda la PWA a segundo plano: sin esto
+    // el bloqueo por PIN salta al volver y se pierde la selección.
+    try { useLockStore.getState().suppressLock(20000) } catch { /* noop */ }
+    inputRef.current?.click()
   }
 
   return (
     <div>
       <button
         type="button"
-        onClick={() => !loading && inputRef.current?.click()}
+        onClick={abrirSelector}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}

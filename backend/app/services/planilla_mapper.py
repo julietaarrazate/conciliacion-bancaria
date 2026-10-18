@@ -1,6 +1,6 @@
 """Pipeline de estandarización de planillas de clientes → esquema canónico.
 
-Estandariza CUALQUIER planilla (formatos heterogéneos: Tucu, Green, Dani, …) al
+Estandariza CUALQUIER planilla (formatos heterogéneos de distintos clientes) al
 mismo esquema que consume el motor de conciliación:
 
     {monto: Decimal, cuit: str|None, titular: str|None, referencia: str|None, fecha: date|None}
@@ -13,7 +13,7 @@ Pipeline de 3 capas — la primera que resuelve con confianza alta gana:
      (corrección del usuario desde el modal).
   2. HEURÍSTICA: detecta la fila de headers (escanea 1..15, soporta offset de
      columna), mapea columnas por diccionario de sinónimos y VALIDA el contenido
-     (monto parsea, cuit son dígitos, titular no es constante — trampa "Caneland").
+     (monto parsea, cuit son dígitos, titular no es una columna constante).
   3. IA (Gemini): solo si la heurística quedó con confianza < umbral. Degradación
      total: sin GEMINI_API_KEY o si Gemini falla → cae a la mejor apuesta de la
      heurística. NUNCA lanza excepción por la IA.
@@ -42,7 +42,7 @@ FIELDS = ["monto", "cuit", "titular", "fecha", "referencia"]
 # Umbral de confianza: por debajo se intenta la capa IA.
 UMBRAL_CONFIANZA = 0.7
 
-# Límites de escaneo (defensivos: las planillas tipo Tucu tienen ~1M filas vacías).
+# Límites de escaneo (defensivos: algunas planillas reales traen ~1M filas vacías).
 MAX_COLS = 60
 MAX_HEADER_SCAN = 15
 MAX_DATA_ROWS = 200_000
@@ -60,7 +60,7 @@ def _norm(s) -> str:
 
 
 # Sinónimos ya normalizados con _norm. "cliente" y "cuenta" NO están en titular
-# a propósito (trampa Caneland: son columnas constantes, no el titular real).
+# a propósito (trampa de columna constante: no es el titular real).
 SINONIMOS = {
     "monto": {"monto", "importe", "total", "neto", "pago", "valor", "montotransferido"},
     "cuit": {"cuit", "cuil", "dni", "cuitcuildni", "cuitcuil", "documento", "cuitcuit"},
@@ -211,7 +211,7 @@ def _valida_contenido(field: str, vals: list) -> bool:
         textos = [str(v).strip() for v in vals if str(v).strip()]
         if not textos:
             return False
-        # Trampa Caneland: columna constante (mismo valor en todas las filas) NO
+        # Trampa de columna constante (mismo valor en todas las filas): NO
         # es el titular.
         if len(textos) >= 2 and len({t.lower() for t in textos}) == 1:
             return False

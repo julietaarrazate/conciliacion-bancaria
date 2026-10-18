@@ -30,6 +30,11 @@ Agregá un banco específico solo si su layout confunde al genérico o querés q
    layout en `detectar_columnas` / un parser propio (ver [NEW_PARSER](./NEW_PARSER.md)).
 5. **Test** — agregá un fixture y un test en `tests/test_excel_parser.py` que verifique
    `banco_detectado` y la cantidad/signos de movimientos. Verificá contra un archivo real.
+6. **PDF** — el lector de PDF (`services/extracto_pdf/bancos.py`) reusa `INDICADORES_BANCO`, así
+   que el banco nuevo también se detecta en PDF. Si su nombre es una palabra común (como
+   "provincia" o "ciudad"), sumala a `_DEBILES` para que solo cuente como "banco <palabra>".
+   Si tenés un PDF real del banco, agregá un caso en `tests/test_extracto_pdf_casos_dificiles.py`
+   (ver [EXTRACTOS_PDF](../business/EXTRACTOS_PDF.md)).
 
 ## Checklist
 
@@ -37,6 +42,7 @@ Agregá un banco específico solo si su layout confunde al genérico o querés q
 - [ ] `_BANCO_NOMBRE` tiene el nombre visible
 - [ ] El parser produce movimientos con signo correcto (créditos +, débitos −)
 - [ ] Test con fixture + verificación contra archivo real
+- [ ] Se detecta también en PDF (`extracto_pdf/bancos.py`)
 - [ ] Sin tocar lógica de otros bancos
 
 ## Pendiente de revisar

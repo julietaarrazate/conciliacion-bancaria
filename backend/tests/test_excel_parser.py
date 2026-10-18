@@ -106,7 +106,7 @@ def _wb_macro():
     ws.cell(4, 2).value = 1002
     ws.cell(4, 3).value = date(2026, 5, 11)
     ws.cell(4, 4).value = 5
-    ws.cell(4, 5).value = "GREEN SRL 30987654321"
+    ws.cell(4, 5).value = "CLIENTE NORTE SRL 30987654321"
     ws.cell(4, 6).value = 8500.50
     ws.cell(4, 7).value = 208500.50
     return wb
@@ -145,7 +145,7 @@ def test_macro_titular_correcto():
     try:
         movs = parsear_extracto_bancario(path)["movimientos"]
         assert movs[0]["titular"] == "EMPRESA SA 20123456789"
-        assert movs[1]["titular"] == "GREEN SRL 30987654321"
+        assert movs[1]["titular"] == "CLIENTE NORTE SRL 30987654321"
     finally:
         _cleanup(path)
 
@@ -525,14 +525,14 @@ def test_bancos_nuevos_no_rompen_generico():
 
 
 # ── Regresión: "rio" no debe matchear adentro de "período" / "anterior" ──────
-# (encontrado con un extracto real subido por la usuaria, banco no identificado)
+# (encontrado con un extracto real de un banco no identificado)
 
 def test_rio_no_matchea_dentro_de_periodo():
     """'Período' contiene la substring 'rio' — no debe detectar Santander."""
     wb = Workbook()
     ws = wb.active
     ws.cell(3, 1).value = "CBU de la cuenta:"
-    ws.cell(3, 2).value = "4320001010003448310015"
+    ws.cell(3, 2).value = "4320999400000000056782"
     ws.cell(3, 4).value = "Período:"
     ws.cell(3, 5).value = "17/06/2026 al 24/06/2026"
     assert detectar_banco(ws) == "generico"
@@ -562,9 +562,9 @@ def _wb_resumen_antes_de_header():
     wb = Workbook()
     ws = wb.active
     ws.cell(3, 1).value = "CBU de la cuenta:"
-    ws.cell(3, 2).value = "4320001010003448310015"
+    ws.cell(3, 2).value = "4320999400000000056782"
     ws.cell(6, 1).value = "Total débitos:"
-    ws.cell(6, 2).value = "$ 27.489,34"
+    ws.cell(6, 2).value = "$ 90,00"
     ws.cell(6, 4).value = "Total créditos:"
     ws.cell(6, 5).value = "$ 900.000,00"
     ws.cell(8, 1).value = "Fecha"
@@ -576,12 +576,12 @@ def _wb_resumen_antes_de_header():
     ws.cell(9, 2).value = "SIRCREB"
     ws.cell(9, 3).value = "Débito"
     ws.cell(9, 4).value = 90.0
-    ws.cell(9, 5).value = 98192956.14
+    ws.cell(9, 5).value = 1499910.00
     ws.cell(10, 1).value = date(2026, 6, 24)
     ws.cell(10, 2).value = "CRÉDITO POR TRANSFERENCIA"
     ws.cell(10, 3).value = "Crédito"
     ws.cell(10, 4).value = 900000.0
-    ws.cell(10, 5).value = 98193046.14
+    ws.cell(10, 5).value = 2399910.00
     return wb
 
 

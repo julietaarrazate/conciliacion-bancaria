@@ -44,7 +44,7 @@ def extraer_todos_numeros(texto: str) -> set:
     Incluye: CUIT (10-11), CBU/CVU (22), numeros de cuenta/operacion (6-21).
     Util para el campo 'titular' del extracto Banco Macro que mezcla todo.
     Ej: "TRANSF 20112233440 GARCIA MARIA" -> {"20112233440"}
-        "CBU 2850590940090418135201 EMPRESA" -> {"2850590940090418135201"}
+        "CBU 2850999400000000012342 EMPRESA" -> {"2850999400000000012342"}
         "ACRED 00001234567 RODRIGUEZ JUAN" -> {"1234567"}
     """
     if not texto:

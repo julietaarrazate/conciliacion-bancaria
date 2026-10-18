@@ -3,7 +3,7 @@
 
 > Documento de contexto para analizar qué **modificar, pulir o mejorar**. Autocontenido: describe
 > todo lo que el sistema tiene construido hasta hoy. Fecha de corte: **agosto 2026, v3.29**.
-> Autora: Julieta Arrazate. Repo privado→público `julietaarrazate/conciliacion-bancaria`.
+> Autora: Julieta Arrazate.
 
 ---
 
@@ -112,7 +112,7 @@ Aprobaciones · Tarjetas · **Impuestos**: Iva, Monotributo, IngresosBrutos, Sue
 
 Componentes clave: Layout (drawer mobile + búsqueda ⌘K), PlanillaPanel (paginado 100 filas, bulk edit),
 FileUpload multi-archivo, charts (Line/Bar/Donut), ConfirmModal, SearchModal. Stores: auth, org, theme,
-lock (PIN + biometría), confirm, toast. Diseño app: Linear-inspired, Inter, dark mode; landing: estilo marketing
+lock (PIN + biometría), confirm, toast. Diseño app: minimalista, Inter, dark mode; landing: estilo marketing
 distinto (Fraunces + efectos).
 
 ---
@@ -134,7 +134,7 @@ un cliente lo pida (requiere certificado de homologación → producción). Una 
 ## 8. Seguridad y multi-tenant
 
 - Todo dato cuelga de `organizacion_id`; aislamiento por organización en cada query.
-- Julieta = superadmin (ve/gestiona todas las orgs). Roles/permisos en 3 capas por módulo.
+- Superadmin: ve/gestiona todas las orgs. Roles/permisos en 3 capas por módulo.
 - Config por organización (JSON): reglas de match, tolerancias, si requiere cierre de período.
 - Auditoría (`auditoria`): registra INSERT/UPDATE/DELETE con antes/después.
 - Soft-delete + papelera (restore). 2FA (Resend) para admin/superadmin. Rate limiting. Headers de seguridad.
@@ -160,13 +160,13 @@ Documentados en `BUGS.md` con causa raíz + cómo evitarlos. **Áreas de riesgo 
 10. **Deadlock de DDL en deploy caliente** — DDL de arranque debe ir por `_exec_startup_ddl` (lock_timeout + commit por sentencia).
 
 **Robustez de plataforma**: Render/Neon free tier (cold start ~30s, DB autosuspende) — mitigado con keepalive + retry
-en frontend, pero es un límite real de performance/UX. Sin observabilidad activa aún (Sentry cableado, falta pegar DSN).
+en frontend, pero es un límite real de performance/UX. Sin observabilidad activa aún (Sentry cableado, falta configurar el DSN).
 
 ---
 
 ## 10. Pendientes / roadmap (según el equipo)
 
-- **🔔 Activar Sentry** (observabilidad): código 100% cableado, falta que Julieta pegue los DSN en Render/Vercel.
+- **🔔 Activar Sentry** (observabilidad): código 100% cableado, falta configurar `SENTRY_DSN` / `VITE_SENTRY_DSN`.
   El backend ya loguea `SLOW` las requests > 1500ms y expone `X-Process-Time` → decidir foco de performance con datos reales.
 - **Activar R2** (storage de fotos): código listo, solo crear bucket y pegar 5 env vars.
 - **Próximo módulo impositivo**: candidato "Intake Exportador de Servicios".
@@ -183,7 +183,7 @@ en frontend, pero es un límite real de performance/UX. Sin observabilidad activ
 
 ---
 
-## 12. Cómo pedirle mejoras a ChatGPT (sugerencia de foco)
+## 12. Áreas sugeridas para una revisión externa
 
 Áreas donde una revisión externa aporta más valor:
 - **Precisión del motor de conciliación**: casos borde de scoring, falsos positivos/negativos, tolerancias.
@@ -192,6 +192,3 @@ en frontend, pero es un límite real de performance/UX. Sin observabilidad activ
 - **UX**: flujos de carga masiva, conciliación manual, mobile/PWA, ambos modos de color.
 - **Performance**: cold start, queries N+1, saldos calculados al vuelo vs materializados, paginación.
 - **Deuda técnica de la sección 9** (fechas, Decimal, estados de cheque) — patrones a erradicar de raíz.
-
-> Nota: los datos operativos se acaban de resetear a cero (agosto 2026) conservando clientes y plan de cuentas;
-> el sistema arranca "limpio" para registrar todo desde ahora.

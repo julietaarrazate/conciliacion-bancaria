@@ -57,8 +57,8 @@ async def bulk_ocr(
 ):
     """Recibe hasta 30 fotos y aplica OCR a cada una en paralelo.
 
-    Cada foto puede contener UNO o VARIOS cheques (Julieta fotografía un lote
-    sobre la mesa). Por eso el modelo devuelve un array y los resultados de
+    Cada foto puede contener UNO o VARIOS cheques (es habitual fotografiar un
+    lote sobre la mesa). Por eso el modelo devuelve un array y los resultados de
     todas las fotos se aplanan en una única lista `items`, cada uno con el
     `index` de su foto de origen (para mapear el preview en el frontend).
     """

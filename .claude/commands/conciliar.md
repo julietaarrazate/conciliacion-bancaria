@@ -1,4 +1,4 @@
-# Flujo de Conciliación Manual — Julieta Arrazate
+# Flujo de Conciliación Manual
 
 Usá este flujo cuando necesites conciliar sin abrir la app,
 o para guiar a un empleado paso a paso.
@@ -78,7 +78,7 @@ Checklist antes de cerrar:
 Si necesitás hacer algo por API directamente:
 
 ```bash
-# Login (con un usuario real: el demo admin@julieta.com solo existe con debug=true, no en producción)
+# Login (con un usuario real: los usuarios demo solo existen en desarrollo, no en producción)
 TOKEN=$(curl -s -X POST https://conciliacion-api.onrender.com/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"<email>","password":"<password>"}' | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)

@@ -65,7 +65,7 @@ distribución o uso comercial sin autorización expresa de la autora.
 - **Backend**: FastAPI + SQLAlchemy + PostgreSQL (Neon) · Python 3.11 · Alembic
 - **Frontend**: React 18 + TypeScript + Vite + TailwindCSS · PWA instalable (Android/iOS)
 - **Auth**: JWT 8h · `pbkdf2_sha256` · rate limiting (slowapi) · headers de seguridad · 2FA opcional
-- **Diseño**: inspirado en Linear · Inter · dark mode
+- **Diseño**: minimalista · Inter · dark mode
 
 ## Arquitectura de producción
 
@@ -211,7 +211,7 @@ UX/diseño, decisiones (ADR) y **playbooks** para extender el sistema. Empezá p
 | [`SECURITY.md`](SECURITY.md) | Política de seguridad y reporte de vulnerabilidades |
 | [`SUPPORT.md`](SUPPORT.md) | Canales de soporte |
 | [`.claude/`](.claude/) | Comandos, checklists, templates y [memoria de ingeniería](.claude/memory/PROJECT_MEMORY.md) para Claude Code |
-| [`CHANGELOG.md`](CHANGELOG.md) | Historial de versiones (v3.6 → v3.24) |
+| [`CHANGELOG.md`](CHANGELOG.md) | Historial de versiones (v3.6 → v3.31) |
 | [`BUGS.md`](BUGS.md) | Bitácora de bugs recurrentes (causa raíz + cómo evitarlos) |
 | [`ROADMAP.md`](ROADMAP.md) | Roadmap por valor/esfuerzo |
 
@@ -220,8 +220,6 @@ UX/diseño, decisiones (ADR) y **playbooks** para extender el sistema. Empezá p
 |---|---|
 | [`DEPLOY.md`](DEPLOY.md) | Guía de despliegue |
 | [`BACKUP_Y_RECUPERACION.md`](BACKUP_Y_RECUPERACION.md) | Backups y recuperación |
-| [`PROBAR_EN_CELULAR.md`](PROBAR_EN_CELULAR.md) | Cómo probar la PWA en el celular |
-| [`COSTEO.md`](COSTEO.md) | Costeo de infraestructura |
 
 > **CI**: cada push/PR corre tests del backend + type-check/build del frontend
 > ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).

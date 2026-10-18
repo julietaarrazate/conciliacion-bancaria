@@ -38,6 +38,7 @@ from app.routers import sueldos
 from app.routers import google_auth
 from app.routers import arca
 from app.routers import comprobantes_compra
+from app.routers import extractos_pdf
 from app.models import User, Cliente, ExtractoBancario, MovimientoBanco, Planilla, PlanillaRow, AuditoriaLog, PasswordResetToken  # noqa: F401
 from app.models.egreso import Egreso, CategoriaEgreso  # noqa: F401
 from app.models.monotributo import CategoriaMonotributo, MonotributoConfig, ControlMonotributo  # noqa: F401
@@ -519,7 +520,7 @@ def _init_db():
         # Usuarios demo — solo en entorno de desarrollo
         if settings.debug:
             seeds_demo = [
-                ("admin@julieta.com", "admin123", "Administrador", RoleEnum.ADMIN, False),
+                ("admin@demo.local", "admin123", "Administrador", RoleEnum.ADMIN, False),
             ]
             created = 0
             for email, pwd, name, role, superadmin in seeds_demo:
@@ -629,7 +630,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="3.29.0",
+    version="3.31.0",
     debug=settings.debug,
     lifespan=lifespan,
     default_response_class=JSONResponse,
@@ -717,6 +718,7 @@ app.include_router(sueldos.router)
 app.include_router(google_auth.router)
 app.include_router(arca.router)
 app.include_router(comprobantes_compra.router)
+app.include_router(extractos_pdf.router)
 
 
 @app.get("/")

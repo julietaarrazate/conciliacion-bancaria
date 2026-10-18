@@ -30,6 +30,5 @@ Misma suite que en el paso 1, sin regresiones. `tsc --noEmit` + `build` sin nuev
 
 ## PR
 
-Rama `claude/...` → PR squash a `main`, commits atómicos con
-`git commit --author="Julieta Arrazate <julietaarrazate@gmail.com>"`. Describir en el PR que es
-refactor sin cambio de comportamiento.
+Rama `claude/...` → PR squash a `main`, commits atómicos con la autoría autorizada (ver [`CONTRIBUTING.md`](../../CONTRIBUTING.md)).
+Describir en el PR que es refactor sin cambio de comportamiento.

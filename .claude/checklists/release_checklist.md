@@ -25,8 +25,8 @@ Para usar con [`/release`](../commands/release.md) y [`/deploy`](../commands/dep
 
 ## Deploy
 
-- [ ] Merge a `main` vía PR squash; commits con autor `Julieta Arrazate
-      <julietaarrazate@gmail.com>` (Vercel bloquea otros).
+- [ ] Merge a `main` vía PR squash; commits con la autoría autorizada (ver [`CONTRIBUTING.md`](../../CONTRIBUTING.md))
+      (Vercel bloquea otros).
 - [ ] Vercel (frontend) y Render (backend) dispararon deploy; o deploy manual de Render por API.
 - [ ] Tag `vX.Y` creado y pusheado si la versión lleva tag físico (ver CHANGELOG → Checkpoints).
 

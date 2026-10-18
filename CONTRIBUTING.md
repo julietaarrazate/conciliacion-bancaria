@@ -17,7 +17,7 @@ cd frontend && npm install && npm run dev
 
 ## Flujo de trabajo
 
-1. **Rama**: desarrollá en una rama (`claude/...` o `feature/...`), nunca directo a `main` sin PR.
+1. **Rama**: desarrollá en una rama (`feature/...` o `fix/...`), nunca directo a `main` sin PR.
 2. **Commits**: autoría obligatoria
    `git commit --author="Julieta Arrazate <julietaarrazate@gmail.com>"` (Vercel bloquea otros
    autores). Mensajes claros y atómicos.

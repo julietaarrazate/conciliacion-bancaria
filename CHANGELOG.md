@@ -5,6 +5,38 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.31 (oct 2026) — Extractos en PDF: lectura sin IA, cuadre de saldos y revisión
+
+Importa el extracto en PDF con revisión y validación de saldos, y está hecha para depender lo
+menos posible de la IA. Aditivo: no toca el motor de conciliación; el extracto que sale de un PDF
+es igual al del Excel.
+
+- **Lector propio sin IA** (`services/extracto_pdf/`): texto con posiciones (pdfminer), columnas por
+  encabezado reconocido o por estructura, importes AR/US con signo, fechas sin año, orden asc/desc,
+  saldo por fila o por día, transportes entre hojas, descripciones de varios renglones, filas de dos
+  renglones, cuadros de resumen, pies legales y retenciones que no se suman, banco por membrete.
+- **Formatos aprendidos por organización** (`MoldeExtractoPdf`): si el PDF cerró y se corrigió poco,
+  el próximo mes se lee con ese formato. La **IA (Gemini)** queda como último recurso (escaneados,
+  sin movimientos, no cierra, renglones ilegibles o a pedido), con tope diario
+  `EXTRACTOS_PDF_IA_DAILY_LIMIT` (default 100).
+- **Cuadre en Decimal** (`validar_saldos`, espejado en centavos en `saldoExtracto.ts`): saldo
+  inicial + créditos − débitos = saldo final, y saldo corrido fila por fila. Dos errores que se
+  compensan no cierran. Si no cierra, solo se guarda con confirmación explícita.
+- **Pantalla de revisión**: filas editables, dudosas marcadas con su motivo, alertas, cuadre en vivo,
+  PDF al lado. Desde Conciliar (soltar un `.pdf`) o Extractos → "Importar PDF".
+- **Sin duplicados**: mismo archivo, mismos movimientos (por fecha e importe, también contra
+  extractos archivados) o solapado → "agregar solo los nuevos" con el merge de UM, avisando las
+  filas más viejas que no se agregan. Reintento tras un corte idempotente.
+- `parse_importe_ar` (`decimal_utils.py`) nunca lanza; importes inválidos al confirmar dan 422.
+- Tablas `borradores_extracto_pdf` y `moldes_extracto_pdf` (migración 028 + safety net).
+  `extracto_import.py` centraliza la creación del extracto y el asiento de UM (compartido con el
+  upload de Excel, sin cambio de comportamiento).
+- Tests: 184 backend (`test_extracto_pdf_lector.py`, `test_extracto_pdf_casos_dificiles.py`,
+  `test_extractos_pdf_api.py`, `test_extracto_import.py`) + 64 frontend.
+- Ver `docs/business/EXTRACTOS_PDF.md`. Pendiente: probar con PDFs reales de cada banco.
+
+---
+
 ### Fix (oct 2026) — ARCA: reintentar una emisión ya no puede duplicar la factura
 
 ARCA no acepta clave de idempotencia: si la respuesta de `FECAESolicitar` se perdía (timeout,
@@ -19,15 +51,15 @@ podía emitir una segunda factura real. Ahora (`routers/arca.py`, sección "Emis
   se frena hasta verificar ese primero.
 - Emisiones simultáneas del mismo punto de venta + tipo se serializan (advisory lock de Postgres).
 
-Idea tomada del SDK npm `facturas` (LaPyme); no se adoptó el SDK porque es solo Node y el backend
-es Python. El módulo ARCA sigue desactivado (ADR-011).
+Implementado directamente en el backend (Python), sin SDK externo. El módulo ARCA sigue
+desactivado (ADR-011).
 
 ---
 
 ### v3.30 (oct 2026) — Comprobantes por revisar: facturas de compra por mail + lectura con IA
 
-Idea tomada del análisis de LaPyme (carga de facturas con IA + recepción por email). Aditivo: no
-toca la conciliación ni el cálculo de la liquidación de IVA.
+Carga de facturas con IA + recepción por email. Aditivo: no toca la conciliación ni el cálculo de
+la liquidación de IVA.
 
 - **Dirección de mail por organización** (`facturas-<token>@<INBOUND_EMAIL_DOMAIN>`, opt-in, se
   crea/regenera desde la pantalla). Resend Inbound llama a `POST /comprobantes-compra/webhook/resend`
@@ -51,8 +83,7 @@ toca la conciliación ni el cálculo de la liquidación de IVA.
 
 ### Feature (oct 2026) — Gastos bancarios al centavo, % acreditado y motivo de cada match
 
-Ideas tomadas de la comparación con Caliper Contable. Todo read-only: no cambia el scoring, los
-estados ni la contabilidad.
+Todo read-only: no cambia el scoring, los estados ni la contabilidad.
 
 - **Resumen del extracto** (`GET /extractos/{id}/resumen`, barra desplegable arriba de
   Movimientos): % de ingresos del extracto ya acreditados a un cliente, y gastos bancarios
@@ -66,8 +97,8 @@ estados ni la contabilidad.
 
 ### Legal (sep 2026) — Términos y Política de Privacidad actualizados
 
-Revisión contra la Ley 25.326 y contra los términos de software contable argentino (Xubio, Colppy,
-Contabilium). Solo texto de `/terminos` y `/privacidad`; no cambia código de negocio.
+Revisión contra la Ley 25.326 y las prácticas habituales del software contable. Solo texto de
+`/terminos` y `/privacidad`; no cambia código de negocio.
 
 - **Términos**: tope de responsabilidad (lo pagado en los últimos 12 meses, salvo dolo o culpa
   grave), rol de encargado del tratamiento (Art. 25) para los datos de terceros, confidencialidad
@@ -110,7 +141,7 @@ es admin/superadmin.
 ### Feature (ago 2026) — Asiento por cliente al conciliar: neto + comisión aparte (cuentas corrientes)
 
 Seguimiento del fix de asientos duplicados/mal imputados: con el backfill viejo eliminado, las
-cuentas corrientes por cliente (Alojando, Green, ...) seguían en cero — el flujo vivo de
+cuentas corrientes por cliente seguían en cero — el flujo vivo de
 conciliación nunca generaba asiento para pagos conciliados contra el **extracto bancario
 principal** (solo lo hacía para "Últimos Movimientos"). Se definió el tratamiento contable con el
 contador y se implementó:
@@ -140,7 +171,7 @@ contador y se implementó:
 
 **Pendiente / conocido**: `reset-y-rebuild` borra TODOS los asientos de la org, incluido el de
 `extracto` (Banco D / Pasivo Corriente H), y no lo reconstruye — gap preexistente, no introducido
-acá. Para backfillear el asiento por cliente de planillas ya conciliadas (Alojando, Green) sin
+acá. Para backfillear el asiento por cliente de planillas ya conciliadas sin
 riesgo, alcanza con volver a apretar "Conciliar" una vez desplegado (upsert idempotente); no hace
 falta tocar el botón de reset.
 
@@ -148,8 +179,8 @@ falta tocar el botón de reset.
 
 ### Fix (ago 2026) — Asientos de planilla duplicados / mal imputados (backfill viejo)
 
-Al revisar el Libro Diario tras el arranque limpio aparecían: (a) el asiento de Green **duplicado**,
-(b) **ninguna** cuenta corriente de cliente con movimientos, y (c) planillas sin asiento (Alojando).
+Al revisar el Libro Diario tras el arranque limpio aparecían: (a) el asiento de un cliente **duplicado**,
+(b) **ninguna** cuenta corriente de cliente con movimientos, y (c) planillas sin asiento (otro cliente).
 Causa raíz única: el **backfill de arranque** (`main.py` paso 7) usaba la función vieja
 `registrar_planilla` (regla `carga_planilla` → cuenta **genérica** `2-1-2-0 "Cliente"`, no la cuenta
 corriente propia de cada cliente), recorría **también planillas borradas** (no filtraba `deleted_at`)
@@ -167,7 +198,7 @@ madre genérica, los saldos por cliente (que leen la cuenta propia `2-1-2-X`) sa
 
 ### Fix (ago 2026) — "Error en la conciliación" fantasma por timeout del cliente
 
-Tras el fix del timeout de parseo, subir la planilla de Alojando seguía mostrando "Error en la
+Tras el fix del timeout de parseo, subir la planilla de un cliente seguía mostrando "Error en la
 conciliación" — pero en la base la planilla quedaba **conciliada 7/7** (todas las filas en `ok` con
 su movimiento acreditado). Se reprodujo el endpoint completo con la config real de la org: devuelve
 200. El "error" venía del **timeout de 60 s del cliente axios**: subir+conciliar encadena
@@ -185,7 +216,7 @@ trabajo. La operadora veía "error", reintentaba, y el reintento chocaba con el 
 
 ### Fix (ago 2026) — Timeout al subir planillas cortas (dimensión de hoja inflada)
 
-**Causa raíz del "Error en la conciliación" de Alojando** (que los PRs anteriores hicieron visible
+**Causa raíz del "Error en la conciliación" de esa planilla** (que los PRs anteriores hicieron visible
 y descartaron como problema de datos): `_preview` en `planilla_mapper.py` juntaba hasta `n=8` filas
 no vacías para el modal, pero **sin corte por filas vacías**. Una planilla con menos de 8 filas de
 datos hacía que el loop escaneara hasta `ws.max_row` — y muchas planillas de clientes (Excel de
@@ -193,7 +224,7 @@ Google Sheets / exportados) declaran una dimensión de ~1.048.576 filas, que ope
 `max_row`. Resultado: `estandarizar_planilla` tardaba **~25 s por archivo** (medido con el archivo
 real), y como se llama dos veces (endpoint `/preview` + `/upload`), superaba el timeout de 60 s del
 cliente → el frontend mostraba "error" sin `detail` (error de red, no del backend) y no quedaba
-planilla persistida. Explicaba por qué Green (47 filas) conciliaba y Alojando (7 filas) no.
+planilla persistida. Explicaba por qué una planilla de 47 filas conciliaba y otra de 7 filas no.
 
 - **Fix** (`services/planilla_mapper.py`): `_preview` corta tras `CORTE_FILAS_VACIAS` filas vacías
   consecutivas y respeta `MAX_DATA_ROWS`, igual que `_parsear_filas`. Con el archivo real:
@@ -394,7 +425,7 @@ se tocó** — cero riesgo sobre el matcheo).
   o de perfil, sube directo (sin fricción); si duda, muestra un modal con las primeras filas y un
   desplegable por columna ("Usar como: Monto/CUIT/Titular/Referencia/Fecha/Ignorar") para confirmar
   o corregir. Avisa cuántas filas detectó (no más filas desaparecidas en silencio).
-- Probado contra **3 formatos reales** (Tucu/Green en Org A/Macro, Dani en Org Prueba/Comercio):
+- Probado contra **3 formatos reales** (dos clientes de Org A/Macro y uno de la org de prueba/Comercio):
   los tres parsean con la heurística sola a confianza 1.00 (header en fila distinta, offset de
   columna, trampa del cliente-constante, 1M de filas vacías — todo resuelto). Multi-tenant: el
   perfil vive en `Cliente` (scopeado por org). **20 tests nuevos** (500 backend + 31 frontend).
@@ -404,7 +435,7 @@ se tocó** — cero riesgo sobre el matcheo).
   ≈ suma de los movimientos, y solo en filas trailing sin CUIT → no borra movimientos reales), la
   **excluye** de los movimientos, la guarda como `Planilla.total_declarado` y calcula el **cuadre**:
   la UI muestra "Total de la planilla" (suma de movimientos) vs. "Declarado por el cliente" con un
-  badge ✓ Cuadra / ⚠ Difiere en $X. Verificado con Tucu real (8 mov + total 5.089.000 detectado
+  badge ✓ Cuadra / ⚠ Difiere en $X. Verificado con una planilla real (8 mov + total detectado
   correctamente). Migración 023 + safety-net. **+6 tests** (506 backend + 33 frontend).
 
 - **Capa de diagnóstico de conciliación** (por qué las filas no matchean, sin tocar el matcher —
@@ -415,7 +446,7 @@ se tocó** — cero riesgo sobre el matcheo).
   fechas** planilla vs. período del extracto. El frontend (`DiagnosticoPanel`) lo muestra en el
   resultado: "este banco no trae identidad → solo por monto", "faltan N montos, ¿extracto correcto?",
   "las fechas no coinciden". Resuelve el falso "está roto" cuando en realidad el banco no da el dato.
-  Verificado con datos reales de Dani/Comercio (banco sin identidad, 12/33). Además se persiste la
+  Verificado con datos reales de un cliente (banco Comercio, sin identidad, 12/33). Además se persiste la
   **fecha de pago** de la planilla (`PlanillaRow.fecha`, antes se descartaba; migración 024) para el
   cálculo del período. **+10 tests** (536 backend + 37 frontend).
 
@@ -490,7 +521,7 @@ Sesión de calidad (no features de negocio): consolidar el sistema como producto
   lazy-load Sentry, logging de requests lentas (`SLOW`, header `X-Process-Time`).
 - **Deuda técnica saldada**: ruff, eslint (config sobria + react-hooks), `parseMonto`/`fecha`
   consolidados con tests, convención de paginación fijada en `offset`, `mobile/` eliminado.
-- **Verde de marca mode-aware**: un token `--ml-green` (claro `#16A34A` / oscuro `#4ADE80` "Matrix").
+- **Verde de marca mode-aware**: un token `--ml-green` (claro `#16A34A` / oscuro `#4ADE80` brillante).
 - **Tests de frontend** (Testing Library + jsdom): smoke de `CuadraLogo`/`Skeleton`/`DonutChart`.
 - **Guard de idempotencia del safety-net DDL**: lista extraída a `app/db_safety.py` + test que
   exige `IF NOT EXISTS`/`IF EXISTS` en toda sentencia (evita crash del 2º boot en Render).
@@ -556,7 +587,7 @@ Sesión de calidad (no features de negocio): consolidar el sistema como producto
   `POST /clientes/{id}/fusionar` reasigna planillas+movimientos al cliente destino y elimina el origen.
   UI en `/clientes`: botones ✏️ y 🔀 visibles solo en desktop (`hidden md:inline-flex`).
 - **Normalización nombres de clientes**: primera letra mayúscula; búsqueda `ilike` en crear cliente,
-  subir planilla y caja — "green" y "Green" son el mismo cliente.
+  subir planilla y caja — "empresa abc" y "Empresa Abc" son el mismo cliente.
 - **Fix botón ⬇️ Excel en Historial**: endpoint `/planillas/{id}/download` tenía NameError (`_` vs
   `current_user`) → 500 sin exportar. Corregido. Botón `📁 Exportar` en fila de planilla exporta el
   detalle completo (reemplazó el Excel global que era redundante).
@@ -570,7 +601,7 @@ Sesión de calidad (no features de negocio): consolidar el sistema como producto
   `planillas.porcentaje_comision` y `cheques.porcentaje_comision` — evita crashes si Alembic falla.
 - **Responsive fixes**: Liquidaciones mobile — números usan `text-xs md:text-sm` + `truncate` + tabla
   con `overflow-x-auto`. Clientes mobile — botones ✏️/🔀 ocultos en mobile para que se vea el nombre.
-- **Diseño unificado**: header/sidebar usan `bg-ml-blue` (Linear purple-blue #5E6AD2) en light mode
+- **Diseño unificado**: header/sidebar usan `bg-ml-blue` (azul-violeta #5E6AD2) en light mode
   en lugar del amarillo previo. `btn-yellow` también usa `bg-ml-blue` en light mode. Dark mode sin cambios.
 
 ### v3.6 — Contabilidad automática + Cuentas Corrientes (mayo 2026)
@@ -1073,7 +1104,7 @@ Sesión de calidad (no features de negocio): consolidar el sistema como producto
   `activeOrgId` → el historial no se actualizaba al cambiar de organización en el sidebar.
 - **Pendiente deliberado**: paginación de rows en `GET /planillas/{id}` (retorna todas las filas
   sin paginar). No implementado porque `PlanillaPanel` asume todas las filas juntas — requiere
-  refactor coordinado de frontend+backend+componente. Tarea para próxima sesión si el volumen crece.
+  refactor coordinado de frontend+backend+componente. Pendiente si el volumen crece.
 
 ### v3.13 — Asientos agrupados por planilla + liquidación con asientos + arranque limpio (junio 2026 — PR #119)
 
@@ -1148,7 +1179,7 @@ Sesión de calidad (no features de negocio): consolidar el sistema como producto
 - Pendientes del plan de expansión (tareas 5-8): split router contabilidad.py, tipar `any` en TS,
   paginación en 5 endpoints (plan-cuentas, reglas, clientes-cuentas, clientes-aging, papelera),
   tests para cheques/contabilidad/planillas.
-- Deuda anotada por auditoría de agentes: `_parse_monto` devuelve float por contrato (conversión
+- Deuda anotada por auditoría: `_parse_monto` devuelve float por contrato (conversión
   Decimal la hace SQLAlchemy en DB — mover al parser requiere tocar el merger); `_convertir_csv_a_xlsx`
   frágil con montos "1.234,56" (separador de miles); pdfminer no está en requirements (parser de
   tarjetas degrada a manual para PDFs).
@@ -1294,8 +1325,8 @@ Sesión de calidad (no features de negocio): consolidar el sistema como producto
   con 403 anti-bot). El límite anual por categoría es el MISMO para servicios (A-H) y bienes (A-K) —
   lo que difiere entre actividades es la cuota mensual a pagar, no la escala de ingresos (este módulo
   no calcula esa cuota). **Vence con la próxima actualización semestral de ARCA (jul/ago 2026)** —
-  ver recordatorio en "Pendiente para próximas sesiones" más arriba. Completamente editable vía
-  `PUT /monotributo/categorias/{id}`, sin valores hardcodeados en la lógica.
+  ver el recordatorio semestral en CLAUDE.md ("Pendiente para próximas sesiones"). Completamente
+  editable vía `PUT /monotributo/categorias/{id}`, sin valores hardcodeados en la lógica.
 - **Router `/monotributo`** — permisos en 3 capas: `GET/PUT /monotributo/config` → `admin_accounting`;
   `GET /monotributo/categorias`/`GET /monotributo/control` (preview)/`GET /monotributo/historial`
   (paginado) → `view_accounting`; `PUT /monotributo/categorias/{id}` → `admin_accounting`;
@@ -1478,7 +1509,7 @@ Sesión de calidad (no features de negocio): consolidar el sistema como producto
 
 ### v3.23 — Asistente IA proactivo y explicativo (junio 2026 — PR #159)
 
-- **Qué hace**: primer paso del plan de mejora del asistente acordado con Julieta — que deje de ser
+- **Qué hace**: primer paso del plan de mejora del asistente — que deje de ser
   "solo respuestas a lo que se le pregunta" y empiece a (a) avisar proactivamente lo importante del
   día sin que se le pregunte, y (b) explicar en lenguaje claro POR QUÉ algo no concilió, en vez de
   devolver solo números.
@@ -1519,7 +1550,7 @@ Sesión de calidad (no features de negocio): consolidar el sistema como producto
 
 - **Qué hace**: emisión de comprobantes electrónicos (Factura A/B/C) con CAE real de ARCA, integrando
   Cuadra DIRECTAMENTE contra los web services SOAP de ARCA (WSAA + WSFEv1) — sin tercerizar en un
-  proveedor intermediario. Decisión explícita de Julieta: "Integración propia con WSFEv1".
+  proveedor intermediario. Decisión explícita: integración propia con WSFEv1.
 - **Seguridad del certificado — la parte más sensible del sistema**: el certificado y clave privada
   de cada org se cifran con Fernet (`services/arca_crypto.py`, clave `ARCA_ENCRYPTION_KEY` — env var
   SOLO en Render, nunca en el repo) antes de persistir en `arca_config.certificado_enc` /
@@ -1561,12 +1592,9 @@ Sesión de calidad (no features de negocio): consolidar el sistema como producto
 - **Setup en producción**: generar `ARCA_ENCRYPTION_KEY` (Fernet, 32 bytes urlsafe-base64) y pegarla en
   Render. Sin esa env var el módulo no cifra/descifra y la activación queda bloqueada — degradación
   segura, nunca cae a texto plano.
-- **Revisión de correctitud pre-merge** (mismo PR, antes de salir de draft): se evaluó AfipSDK
-  (afip.php/js/py/rb) como posible referencia y se descartó — sus repos públicos son clientes
-  delgados contra `app.afipsdk.com` (su backend propio con Bearer token), no implementaciones
-  abiertas de WSAA/WSFEv1; no firman CMS ni hablan SOAP directo con ARCA. Se usó en cambio
-  `PyAr/pyafipws` (implementación abierta y activamente mantenida) como criterio de comparación:
-  confirmó que las URLs de WSAA/WSFEv1 (`afip.gov.ar`, no `arca.gov.ar`) y el `SOAPAction` vacío de
+- **Revisión de correctitud pre-merge** (mismo PR, antes de salir de draft): se contrastó la
+  implementación con la especificación oficial de WSAA/WSFEv1 de ARCA. Confirmó que las URLs de
+  WSAA/WSFEv1 (`afip.gov.ar`, no `arca.gov.ar`) y el `SOAPAction` vacío de
   `loginCms` ya estaban correctos en `arca_wsaa.py`/`arca_wsfe.py`. Encontró y corrigió dos problemas
   reales: (1) **bug de datos faltantes** — `FchServDesde`/`FchServHasta`/`FchVtoPago` son obligatorios
   ante ARCA cuando `Concepto` es 2 (servicios) o 3 (ambos), y no existían en `DatosComprobante` ni en
@@ -1661,8 +1689,8 @@ Nota: son referencias documentales del changelog, no siempre tags físicos de gi
   sin activeOrgId, cargarAsientos en paralelo en Contabilidad, fix dep array Historial
   (junio 2026 — PR #114).
 
-- `v3.12-dnda-docs` — expediente DNDA completo en `REGISTRO_OBRA_SOFTWARE/`, rutas locales
-  normalizadas (sin usuario de PC), privacidad auditada (junio 2026 — PR #112 mergeado a main)
+- `v3.12-dnda-docs` — documentación del registro de obra (el expediente se guarda fuera del
+  repositorio) (junio 2026 — PR #112 mergeado a main)
 - `v3.12.1-performance` — auditoría performance completa (N+1, índices, cache TTL, payload,
   rendering). Ver sección v3.12.1 arriba. (junio 2026 — PR #114 mergeado a main)
 - `v3.14-stable-checkpoint` — RAMA de checkpoint pre-expansión: legales v3.14 + contabilidad v3.13.

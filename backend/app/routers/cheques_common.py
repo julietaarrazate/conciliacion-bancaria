@@ -150,7 +150,7 @@ def _parse_date(v) -> Optional[date]:
 
 # ── OCR de cheques (carga masiva por foto) ────────────────────────
 #
-# Una misma foto puede traer UNO o VARIOS cheques (Julieta fotografía
+# Una misma foto puede traer UNO o VARIOS cheques (es habitual fotografiar
 # un lote sobre la mesa). Gemini devuelve entonces un array JSON. Estas
 # dos funciones son puras (sin red) para poder testear el parseo/normalización
 # sin depender de la API de Gemini.

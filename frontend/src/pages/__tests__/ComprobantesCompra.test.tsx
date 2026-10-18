@@ -14,7 +14,7 @@ const borrador: BorradorComprobante = {
   archivo: null,
   datos: {
     tipo_codigo: 1, punto_venta: 10, numero: 999, fecha: '2026-09-15',
-    cuit_emisor: '30690783521', razon_social: 'INTERBANKING SA', cae: null,
+    cuit_emisor: '30555555551', razon_social: 'PROVEEDOR DEMO SA', cae: null,
     alicuotas: { '21%': { neto: '20000.00', iva: '4200.00' } },
     neto_no_gravado: null, exento: null, percepciones_iva: '600.00',
     percepciones_iibb: '500.00', otros_tributos: null, total: '25300.00',
@@ -54,14 +54,14 @@ describe('ComprobantesCompra', () => {
 
   it('muestra la dirección de mail y la bandeja', async () => {
     render(<ComprobantesCompra />)
-    expect(await screen.findByText('INTERBANKING SA')).toBeInTheDocument()
+    expect(await screen.findByText('PROVEEDOR DEMO SA')).toBeInTheDocument()
     expect(screen.getByText('facturas-abc123def456ghij@x.resend.app')).toBeInTheDocument()
     expect(screen.getByText('Para revisar')).toBeInTheDocument()
   })
 
   it('abre la revisión, muestra que cierra y confirma', async () => {
     render(<ComprobantesCompra />)
-    fireEvent.click(await screen.findByText('INTERBANKING SA'))
+    fireEvent.click(await screen.findByText('PROVEEDOR DEMO SA'))
     expect(await screen.findByText(/Cierra: la suma da/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
     await waitFor(() => expect(api.confirmarBorradorComprobante).toHaveBeenCalled())

@@ -60,7 +60,7 @@ def seed_users():
     print("[seed] Creando usuarios...")
     db = SessionLocal()
     try:
-        # Superadmin Julieta
+        # Superadmin
         julieta_email = "julietaarrazate@gmail.com"
         julieta_pwd = os.environ.get("SUPERADMIN_PASSWORD", "")
         existing_julieta = db.query(User).filter(User.email == julieta_email).first()

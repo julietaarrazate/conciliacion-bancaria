@@ -27,7 +27,7 @@ from app.database import Base
 #   procesando  → recién llegado, la IA todavía no lo leyó
 #   listo       → leído, esperando revisión
 #   error       → no se pudo leer (archivo ilegible, sin IA configurada, etc.)
-#   sin_adjunto → mail sin PDF/foto (p. ej. la confirmación de reenvío de Gmail)
+#   sin_adjunto → mail sin PDF/foto (p. ej. la confirmación de reenvío del proveedor de correo)
 #   confirmado  → ya impactó en IVA (y en Pagos si se pidió)
 #   descartado  → descartado a mano
 ESTADOS_BORRADOR = ["procesando", "listo", "error", "sin_adjunto", "confirmado", "descartado"]

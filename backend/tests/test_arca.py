@@ -13,6 +13,7 @@ Cubre:
 from decimal import Decimal
 
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -31,7 +32,7 @@ from app.services import arca_crypto
 from app.services.arca_wsfe import ArcaWsfeRechazo, ArcaWsfeError
 from app.routers import arca as arca_router
 
-TEST_KEY = "3pjU0i9o7Bw3o6F0bU9nQ8b1qk6m1n0Q3z2x1y4w5z0="  # 32-byte base64, formato Fernet
+TEST_KEY = Fernet.generate_key().decode()  # clave efímera, se genera en cada corrida
 
 
 @pytest.fixture

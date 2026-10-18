@@ -34,7 +34,7 @@ def db():
     session.add(Organizacion(id=ORG_ID, nombre="Test SA", plan="pro", activo=True))
     session.add(User(id=1, email="x@x.com", full_name="X",
                      hashed_password="h", role="admin", is_active=True, organizacion_id=ORG_ID))
-    session.add(Cliente(id=1, nombre="Green", organizacion_id=ORG_ID))
+    session.add(Cliente(id=1, nombre="Cliente Norte", organizacion_id=ORG_ID))
     session.commit()
 
     ext = ExtractoBancario(id=1, nombre_archivo="e.xlsx", fingerprint="abc",

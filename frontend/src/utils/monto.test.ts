@@ -54,3 +54,51 @@ describe('parseMonto', () => {
     expect(parseMonto('547.796,00')).toBe(547796)
   })
 })
+
+describe('parseMonto — signo', () => {
+  it('menos adelante respeta puntos de miles y coma decimal', () => {
+    expect(parseMonto('-1.234,56')).toBe(-1234.56)
+    expect(parseMonto('-15.000')).toBe(-15000)
+    expect(parseMonto('-1.200.000,50')).toBe(-1200000.5)
+    expect(parseMonto('-15000,50')).toBe(-15000.5)
+    expect(parseMonto('-15000.50')).toBe(-15000.5)
+    expect(parseMonto('-1,200,000.50')).toBe(-1200000.5)
+  })
+
+  it('menos atrás (como lo imprimen varios bancos)', () => {
+    expect(parseMonto('1.234,56-')).toBe(-1234.56)
+    expect(parseMonto('500,00-')).toBe(-500)
+    expect(parseMonto('1,234.56-')).toBe(-1234.56)
+  })
+
+  it('paréntesis contables', () => {
+    expect(parseMonto('(1.234,56)')).toBe(-1234.56)
+    expect(parseMonto('($ 1.234,56)')).toBe(-1234.56)
+    expect(parseMonto('(500)')).toBe(-500)
+  })
+
+  it('menos tipográfico, $ y espacios', () => {
+    expect(parseMonto('−1.234,56')).toBe(-1234.56)
+    expect(parseMonto('-$ 1.234,56')).toBe(-1234.56)
+    expect(parseMonto('$ -1.234,56')).toBe(-1234.56)
+    expect(parseMonto(' - 1.234,56 ')).toBe(-1234.56)
+  })
+
+  it('más explícito y cero con signo no dan -0', () => {
+    expect(parseMonto('+1.234,56')).toBe(1234.56)
+    expect(Object.is(parseMonto('-0,00'), 0)).toBe(true)
+    expect(Object.is(parseMonto('(0)'), 0)).toBe(true)
+  })
+
+  it('un signo suelto o doble es basura (null), no un número', () => {
+    expect(parseMonto('-')).toBeNull()
+    expect(parseMonto('--')).toBeNull()
+    expect(parseMonto('()')).toBeNull()
+    expect(parseMonto('(-)')).toBeNull()
+  })
+
+  it('los positivos de siempre no cambian', () => {
+    expect(parseMonto('1.234,56')).toBe(1234.56)
+    expect(parseMonto('3.607.774,80')).toBe(3607774.8)
+  })
+})

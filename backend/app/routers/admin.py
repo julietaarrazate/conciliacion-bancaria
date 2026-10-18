@@ -25,7 +25,7 @@ def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
-    """Lista todos los usuarios. Solo superadmin (Julieta)."""
+    """Lista todos los usuarios. Solo superadmin."""
     q = db.query(User)
     if role is not None:
         q = q.filter(User.role == role)

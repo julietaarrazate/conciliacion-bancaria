@@ -71,7 +71,7 @@ Cross-ref:
 
 ## ADR-004 — Multi-tenant por `organizacion_id` + cambio de org controlado
 
-- **Contexto:** Julieta (superadmin) opera varias organizaciones; cada una debe
+- **Contexto:** la superadmin opera varias organizaciones; cada una debe
   ver solo sus datos, sin tablas separadas.
 - **Decisión:** todas las entidades llevan `organizacion_id`
   (default `1` = Org A). El usuario tiene `is_superadmin` y `allowed_org_ids`
@@ -139,8 +139,7 @@ Cross-ref:
   acepta clave de idempotencia, la emisión reserva el número en la fila antes de
   pedir el CAE y, si la respuesta se pierde, el reintento consulta ese número en
   ARCA (`FECompConsultar`) antes de emitir otro; las emisiones de un mismo punto
-  de venta + tipo se serializan con un advisory lock de Postgres (oct 2026, idea
-  tomada del SDK npm `facturas` de LaPyme, que no se adoptó por ser solo Node). Coherente con el estilo liviano
+  de venta + tipo se serializan con un advisory lock de Postgres (oct 2026). Coherente con el estilo liviano
   del resto (excel_parser, motor_contable tampoco usan frameworks externos).
 - **Estado:** Aceptada. Construida pero **desactivada a propósito** (ver ADR-011).
 
@@ -210,13 +209,13 @@ Cross-ref:
 - **Consecuencias:** decisión de negocio reversible que difiere el riesgo fiscal
   hasta que haya un cliente real. Detalle del procedimiento en `../../CLAUDE.md`
   → "Activación de ARCA en producción — diferida a pedido".
-- **Estado:** Aceptada y vigente (diferida a pedido de la autora).
+- **Estado:** Aceptada y vigente (diferida por decisión de negocio).
 
 ---
 
 ## ADR-012 — PWA instalable en vez de app nativa
 
-- **Contexto:** Julieta y clientes usan mobile (Android/Chrome) para cargar
+- **Contexto:** la operadora y los clientes usan mobile (Android/Chrome) para cargar
   fotos, compartir por WhatsApp y recibir notificaciones, sin presupuesto para
   apps nativas en dos tiendas.
 - **Decisión:** el frontend es una PWA instalable (React 18 + Vite) con

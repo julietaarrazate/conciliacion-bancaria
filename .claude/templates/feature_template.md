@@ -5,7 +5,7 @@ Plantilla para describir una feature antes de implementarla. Usar con
 
 ## Problema / motivación
 
-(Qué necesidad de negocio resuelve. Quién lo pide. Para quién — Julieta superadmin, contador,
+(Qué necesidad de negocio resuelve. Quién lo pide. Para quién — superadmin, contador,
 operador, cliente.)
 
 ## Alcance

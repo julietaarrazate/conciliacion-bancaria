@@ -363,7 +363,7 @@ async def webhook_resend(
     adjuntos = svc.adjuntos_utiles(data.get("attachments") or [])
 
     if not adjuntos:
-        # Sin PDF/foto: queda visible igual (p. ej. el código de confirmación del reenvío de Gmail).
+        # Sin PDF/foto: queda visible igual (p. ej. el código de confirmación al activar un reenvío de correo).
         db.add(BorradorComprobante(
             organizacion_id=oid, origen="email", estado="sin_adjunto",
             email_id=email_id, remitente=remitente, asunto=asunto,

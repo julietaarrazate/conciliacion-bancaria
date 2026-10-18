@@ -3,7 +3,7 @@
 - GET  /admin/backup/status   -> estado del scheduler y ultimo backup
 - POST /admin/backup/run-now  -> dispara backup manual on-demand (sin esperar al cron)
 
-Solo accesible para superadmin (Julieta).
+Solo accesible para el superadmin.
 """
 
 import logging

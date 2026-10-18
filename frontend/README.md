@@ -196,4 +196,4 @@ npm run build
 
 ## Licencia
 
-Privado - Organización A
+© Julieta Arrazate — Todos los derechos reservados.

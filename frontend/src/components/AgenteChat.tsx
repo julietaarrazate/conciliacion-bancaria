@@ -27,7 +27,7 @@ const CloseIcon = () => (
 )
 
 const SUGERENCIAS = [
-  '¿Cuánto pagó Green este mes?',
+  '¿Qué cliente pagó más este mes?',
   '¿Qué cheques tenemos pendientes?',
   '¿Cuál es el saldo de caja hoy?',
   'Resumen financiero de mayo',

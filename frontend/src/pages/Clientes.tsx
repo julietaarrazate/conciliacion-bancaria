@@ -756,11 +756,11 @@ export const Clientes: React.FC = () => {
               </div>
               <div>
                 <label className="label text-xs">Código de referencia</label>
-                <input className="input-field" placeholder="00194624" value={acrRef} onChange={e => setAcrRef(e.target.value)} />
+                <input className="input-field" placeholder="00123456" value={acrRef} onChange={e => setAcrRef(e.target.value)} />
               </div>
               <div>
                 <label className="label text-xs">Origen / titular</label>
-                <input className="input-field" placeholder="Walter Daniel Leguisa o DNI 20221499" value={acrOrigen} onChange={e => setAcrOrigen(e.target.value)} />
+                <input className="input-field" placeholder="Juan Pérez o DNI 12345678" value={acrOrigen} onChange={e => setAcrOrigen(e.target.value)} />
               </div>
               <div className="border-t border-gray-200 dark:border-slate-700 pt-2">
                 <label className="label text-xs flex items-center gap-1">

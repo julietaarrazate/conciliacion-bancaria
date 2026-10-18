@@ -1,4 +1,4 @@
-# Analizar extracto o planilla Excel — Julieta Arrazate
+# Analizar extracto o planilla Excel
 
 Pre-valida un archivo Excel (extracto bancario o planilla de cliente) **antes** de
 subirlo al sistema, usando el mismo parser de producción. Detecta problemas de

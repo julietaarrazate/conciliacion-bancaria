@@ -2,9 +2,9 @@
 Genera archivos de prueba realistas:
 - extracto_prueba.xlsx    -> 30 movimientos, orden DESCENDENTE (30 arriba, 1 abajo)
 - ultimos_movimientos.xlsx-> UM con 5 filas: 2 ya estan en extracto + 3 nuevos (31,32,33)
-- planilla_green.xlsx     -> 8 pagos (5 OK, 2 faltan_datos, 1 no_esta)
-- planilla_alojando.xlsx  -> 6 pagos (5 OK, 1 no_esta)
-- planilla_tucu.xlsx      -> 7 pagos (6 OK, 1 faltan_datos)
+- planilla_cliente_norte.xlsx -> 8 pagos (5 OK, 2 faltan_datos, 1 no_esta)
+- planilla_cliente_este.xlsx  -> 6 pagos (5 OK, 1 no_esta)
+- planilla_cliente_sur.xlsx   -> 7 pagos (6 OK, 1 faltan_datos)
 
 Salida (configurable con la variable de entorno DATOS_PRUEBA_DIR):
     <carpeta del usuario>/Desktop/INBOX/datos_prueba/
@@ -174,10 +174,10 @@ def crear_ultimos_movimientos():
     return path
 
 
-def crear_planilla_green():
+def crear_planilla_norte():
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Planilla Green"
+    ws.title = "Planilla Cliente Norte"
 
     headers = ["Fecha", "Descripcion", "Importe", "CUIT", "Observaciones"]
     for col, h in enumerate(headers, 1):
@@ -207,19 +207,19 @@ def crear_planilla_green():
     ws.column_dimensions["C"].width = 16
     ws.column_dimensions["D"].width = 16
 
-    path = os.path.join(OUT_DIR, "planilla_green.xlsx")
+    path = os.path.join(OUT_DIR, "planilla_cliente_norte.xlsx")
     wb.save(path)
-    print("[OK] planilla_green.xlsx       8 filas: 5 OK, 2 faltan_datos, 1 no_esta")
+    print("[OK] planilla_cliente_norte.xlsx  8 filas: 5 OK, 2 faltan_datos, 1 no_esta")
     return path
 
 
-def crear_planilla_alojando():
+def crear_planilla_este():
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Alojando ABR"
+    ws.title = "Cliente Este ABR"
 
-    # Header corrido en fila 2 (como el real de Alojando)
-    ws["A1"] = "ALOJANDO SA - Rendicion Abril 2026"
+    # Header corrido en fila 2 (formato real de algunos clientes)
+    ws["A1"] = "CLIENTE ESTE SA - Rendicion Abril 2026"
     ws["A1"].font = Font(bold=True, size=11)
 
     headers = ["N", "Fecha pago", "Concepto", "Monto", "CUIT ordenante", "Estado"]
@@ -250,16 +250,16 @@ def crear_planilla_alojando():
     ws.column_dimensions["D"].width = 16
     ws.column_dimensions["E"].width = 18
 
-    path = os.path.join(OUT_DIR, "planilla_alojando.xlsx")
+    path = os.path.join(OUT_DIR, "planilla_cliente_este.xlsx")
     wb.save(path)
-    print("[OK] planilla_alojando.xlsx    6 filas: 5 OK, 1 no_esta")
+    print("[OK] planilla_cliente_este.xlsx   6 filas: 5 OK, 1 no_esta")
     return path
 
 
-def crear_planilla_tucu():
+def crear_planilla_sur():
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Tucu"
+    ws.title = "Cliente Sur"
 
     headers = ["Importe", "Titular", "Fecha"]
     for col, h in enumerate(headers, 1):
@@ -286,9 +286,9 @@ def crear_planilla_tucu():
     ws.column_dimensions["B"].width = 24
     ws.column_dimensions["C"].width = 14
 
-    path = os.path.join(OUT_DIR, "planilla_tucu.xlsx")
+    path = os.path.join(OUT_DIR, "planilla_cliente_sur.xlsx")
     wb.save(path)
-    print("[OK] planilla_tucu.xlsx        7 filas: 6 OK, 1 faltan_datos")
+    print("[OK] planilla_cliente_sur.xlsx    7 filas: 6 OK, 1 faltan_datos")
     return path
 
 
@@ -298,9 +298,9 @@ if __name__ == "__main__":
     print()
     crear_extracto()
     crear_ultimos_movimientos()
-    crear_planilla_green()
-    crear_planilla_alojando()
-    crear_planilla_tucu()
+    crear_planilla_norte()
+    crear_planilla_este()
+    crear_planilla_sur()
     print()
     print("=" * 60)
     print(f"  Archivos en: {OUT_DIR}")
@@ -316,14 +316,14 @@ if __name__ == "__main__":
     print("    -> total extracto queda con 33 movs")
     print()
     print("  PASO 2 - Conciliar planillas:")
-    print("    planilla_green.xlsx     cliente: Green")
-    print("    planilla_alojando.xlsx  cliente: Alojando")
-    print("    planilla_tucu.xlsx      cliente: Tucu")
+    print("    planilla_cliente_norte.xlsx  cliente: Cliente Norte")
+    print("    planilla_cliente_este.xlsx   cliente: Cliente Este")
+    print("    planilla_cliente_sur.xlsx    cliente: Cliente Sur")
     print()
     print("  RESULTADOS ESPERADOS:")
-    print("    Green:    5 OK | 2 faltan_datos | 1 no_esta")
-    print("    Alojando: 5 OK | 1 no_esta")
-    print("    Tucu:     6 OK | 1 faltan_datos")
+    print("    Cliente Norte: 5 OK | 2 faltan_datos | 1 no_esta")
+    print("    Cliente Este:  5 OK | 1 no_esta")
+    print("    Cliente Sur:   6 OK | 1 faltan_datos")
     print()
     print("  MONTO COMUN: 500.000 aparece 3 veces (ord 23, 25, 27)")
     print("  -> requiere CUIT o titular exacto para acreditar")
