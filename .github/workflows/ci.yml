@@ -21,6 +21,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# paths-filter lee la lista de archivos del PR por la API: hace falta el permiso
+# pull-requests (el token del workflow, por defecto, solo lee el contenido).
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   changes:
     name: Detectar áreas cambiadas
