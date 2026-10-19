@@ -65,7 +65,12 @@ https://TU-URL.up.railway.app/docs            → Swagger UI
 4. Deploy
 
 ### Re-deploy (cuando hay cambios):
-Vercel redeploya automáticamente en cada `git push` a `main`.
+Vercel redeploya automáticamente en cada `git push` a `main`. Si el push no cambia nada dentro de
+`frontend/`, el build se saltea (`ignoreCommand` en `frontend/vercel.json`) y queda publicado el
+deploy anterior, que ya es el mismo front. Pasa igual en las ramas de los PR.
+
+Después de cambiar una variable de entorno, hay que usar **Redeploy** a mano: un push que no toca
+`frontend/` no la toma.
 
 ### Si cambia la URL del backend:
 Vercel → tu proyecto → **Settings** → **Environment Variables** → editar `VITE_API_URL` → **Redeploy**
