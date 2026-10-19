@@ -65,6 +65,10 @@ fila por fila del saldo corrido (`saldo[i] = saldo[i−1] + monto[i]` en orden c
 - El **saldo final** sale del PDF; si no figura, solo se toma el saldo de la **última** fila.
   Si la última fila no trae saldo, queda sin verificar: deducirlo de importes que no se pueden
   controlar sería darlos por buenos.
+- Si los movimientos siguen el saldo fila por fila pero el saldo inicial o final impreso en el
+  PDF no coincide con el de las filas (pasa en resúmenes de home banking con el cuadro de
+  arriba de otra fecha), el aviso lo dice con los dos importes y propone revisar que estén
+  todas las hojas o borrar ese saldo en la revisión para usar el de los movimientos.
 - Si no cierra, se puede guardar igual con confirmación explícita (`confirmar_sin_cuadre`).
 - El frontend (`saldoExtracto.ts`) espeja `validar_saldos` en centavos enteros; el servidor es
   la autoridad al confirmar.
@@ -101,6 +105,10 @@ Reglas:
   absurdo (más dígitos que la precisión de Decimal) no es un importe: nunca lanza.
 - Columnas Débito/Crédito, Importe con signo o sin signo (el signo se deduce del saldo; con
   varios movimientos sin saldo, la única combinación de signos que llega al saldo siguiente).
+- Columna de tipo con la palabra "Débito"/"Crédito" (o D/C) y el importe sin signo en otra
+  columna: la columna da el signo (campo `signo` del layout). Se reconoce por el encabezado,
+  aunque venga partido en dos renglones, y por el contenido (si trae marcas y casi ningún
+  importe). Una marca D/C pegada al importe también da el signo de esa fila.
 - Orden ascendente o descendente; fechas sin año (con el período del PDF o el año más reciente).
 - Saldo por fila o por día, "Saldo anterior" como transporte arriba de cada hoja, subtotales,
   descripciones de varios renglones, filas de dos renglones con el importe abajo, cuadros de
@@ -123,7 +131,11 @@ Reglas:
 
 - Probar con PDFs reales de cada banco soportado (los tests usan PDFs generados que imitan los
   formatos). Lo que falle con un PDF real se agrega como test en
-  `test_extracto_pdf_casos_dificiles.py`.
+  `test_extracto_pdf_casos_dificiles.py`, con datos inventados que copian el formato (el PDF
+  real nunca entra al repo). Probado hasta ahora con un resumen de movimientos de home banking
+  real (columna Débito/Crédito, cuadro de saldos de otra fecha).
+- Un PDF de home banking que no nombra al banco en ninguna parte queda como genérico (se lee
+  igual; el banco no se puede deducir solo del CBU sin una tabla de códigos de entidad).
 - Listados monoespaciados con columnas a menos de un espacio entre sí (fecha pegada al número
   de comprobante): la fecha no se reconoce y la fila queda "Sin fecha" (cierra igual, se ve).
 - Columnas de importes que se superponen físicamente no se pueden separar: la lectura no cierra

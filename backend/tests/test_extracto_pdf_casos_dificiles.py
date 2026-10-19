@@ -18,7 +18,7 @@ import pytest
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-from app.services.extracto_pdf import leer_extracto_pdf
+from app.services.extracto_pdf import formatear_pesos, leer_extracto_pdf
 from app.services.extracto_pdf import ia as ia_mod
 
 HOY = date(2026, 10, 16)
@@ -354,3 +354,177 @@ def test_renglon_con_fecha_e_importes_ilegibles_avisa_y_no_da_por_bueno_el_cierr
     assert len(r["movimientos"]) == 2
     codigos = {a["codigo"] for a in r["alertas"]}
     assert "renglones_ilegibles" in codigos and "ia_no_disponible" in codigos
+
+
+# ── Columna "Débito/Crédito" con el importe sin signo en otra columna ───────
+# Formato de un PDF real de "Movimientos de cuenta" de home banking (datos
+# inventados): orden descendente, columna "Débito/Crédito" que dice la palabra,
+# "Monto" sin signo con "$", saldo por fila, el título "Débito/Crédito" partido
+# en dos renglones desde la hoja 2 y un cuadro arriba con saldos y totales.
+
+def _dc(m: Mov) -> str:
+    return "Crédito" if m.monto > 0 else "Débito"
+
+
+def extracto_debito_credito(
+    movs: list[Mov], *, saldo_inicial_pdf: D, saldo_final_pdf: D, por_hoja: int = 6
+) -> bytes:
+    desc = list(reversed(movs))                     # el más nuevo primero
+    hojas = [desc[i:i + por_hoja] for i in range(0, len(desc), por_hoja)]
+    paginas = []
+    for n, hoja in enumerate(hojas, 1):
+        textos = [T(40, 760, "Movimientos de cuenta 0000003100099999990012", size=10),
+                  T(40, 740, "Período: 01/09/2026 al 30/09/2026")]
+        y = 700
+        if n == 1:
+            textos += [T(43, y, "Moneda:"), T(287.6, y, "$", "der"),
+                       T(300.5, y, "Nro de cuenta:"), T(545.3, y, "00099999990", "der")]
+            y -= 19
+            textos += [T(43, y, "Saldo inicial:"), T(287.6, y, "$ " + ar(saldo_inicial_pdf), "der"),
+                       T(300.5, y, "Saldo actual:"), T(545.3, y, "$ " + ar(saldo_final_pdf), "der")]
+            y -= 19
+            textos += [T(43, y, "Saldo disponible:"), T(287.6, y, "$ " + ar(saldo_final_pdf), "der"),
+                       T(300.5, y, "Total débitos:"), T(545.3, y, "$ 1.234,56", "der")]
+            y -= 19
+            textos += [T(43, y, "Total créditos:"), T(287.6, y, "$ 7.890,12", "der")]
+            y -= 60
+            textos += [T(40, y, "Fecha"), T(110, y, "Tipo de transacción"), T(287, y, "Débito/Crédito"),
+                       T(426.5, y, "Monto"), T(524.9, y, "Saldo")]
+        else:
+            textos += [T(40, y, "Fecha"), T(110, y, "Tipo de transacción"), T(310, y, "Débito/"),
+                       T(423, y, "Monto"), T(524.9, y, "Saldo"), T(310, y - 14, "Crédito")]
+            y -= 14
+        y -= 27
+        for m in hoja:
+            textos += [T(40, y, m.fecha.strftime("%d/%m/%Y")), T(110, y, m.descripcion), T(310, y, _dc(m)),
+                       T(457.6, y, "$ " + ar(m.monto), "der"), T(555.3, y, "$ " + ar(m.saldo), "der")]
+            y -= 16.7
+        textos.append(T(555.3, 40, f"{n}/{len(hojas)}", "der"))
+        paginas.append(textos)
+    return pdf(paginas)
+
+
+SI_DC = D("880000.00")
+MOVS_DC = con_saldos(SI_DC, [
+    (date(2026, 9, 1), "CRÉDITO POR TRANSFERENCIA", D("76000.00")),
+    (date(2026, 9, 1), "SIRCREB", D("-7.60")),
+    (date(2026, 9, 1), "Imp. Ley 25413 s/créditos", D("-456.00")),
+    (date(2026, 9, 2), "Debito Transf. HB", D("-400000.00")),
+    (date(2026, 9, 2), "Imp. Ley 25413 s/débitos", D("-2400.00")),
+    (date(2026, 9, 2), "Debito Transf. HB", D("400000.00")),          # transferencia devuelta
+    (date(2026, 9, 2), "Imp. Ley 25413 s/débitos", D("2400.00")),
+    (date(2026, 9, 3), "CRÉDITO POR CREDIN", D("123456.78")),
+    (date(2026, 9, 3), "SIRCREB", D("-12.35")),
+    (date(2026, 9, 3), "Imp. Ley 25413 s/créditos", D("-740.74")),
+    (date(2026, 9, 4), "Debito Transf. HB", D("-250000.00")),
+    (date(2026, 9, 4), "Imp. Ley 25413 s/débitos", D("-1500.00")),
+    (date(2026, 9, 4), "CRÉDITO POR TRANSFERENCIA", D("19100.00")),
+])
+
+
+def test_columna_debito_credito_da_el_signo_del_monto():
+    """El signo sale de la columna "Débito/Crédito" (también en las hojas donde
+    el título viene partido en dos renglones), no se deduce del saldo, y la
+    palabra no se pega a la descripción. La transferencia devuelta dice "Debito
+    Transf. HB" en la descripción pero es un crédito."""
+    contenido = extracto_debito_credito(MOVS_DC, saldo_inicial_pdf=SI_DC, saldo_final_pdf=MOVS_DC[-1].saldo)
+
+    r = leer_extracto_pdf(contenido, hoy=HOY)
+
+    assert r["orden"] == "desc"
+    assert_movs(r, list(reversed(MOVS_DC)))
+    assert [m["descripcion"] for m in r["movimientos"]] == [m.descripcion for m in reversed(MOVS_DC)]
+    assert r["cuadre"]["cierra"] and r["saldo_inicial"] == SI_DC
+    codigos = {a["codigo"] for a in r["alertas"]}
+    assert "signo_deducido" not in codigos and "filas_dudosas" not in codigos
+    layout = r["aprendizaje"]["layout"]
+    assert "signo" in [c["campo"] for c in layout["columnas"]]
+
+    # El formato aprendido (con la columna del signo) lee el mes siguiente.
+    molde = {"id": 7, "banco_clave": r["aprendizaje"]["banco_clave"], "firma": r["aprendizaje"]["firma"],
+             "layout": layout}
+    r2 = leer_extracto_pdf(contenido, moldes=[molde], hoy=HOY)
+    assert r2["metodo"] == "molde" and r2["molde_id"] == 7
+    assert_movs(r2, list(reversed(MOVS_DC)))
+
+
+def test_saldos_del_cuadro_que_no_coinciden_con_los_movimientos():
+    """El cuadro de arriba trae un saldo inicial y un saldo actual que no son los
+    de los movimientos (pasó con un PDF real). Los movimientos se leen bien,
+    con el signo del PDF (el más viejo no se da vuelta por el saldo inicial
+    equivocado), no se da por cerrado, y el aviso dice qué saldo no coincide."""
+    contenido = extracto_debito_credito(MOVS_DC, saldo_inicial_pdf=D("1000000.00"), saldo_final_pdf=SI_DC)
+
+    r = leer_extracto_pdf(contenido, hoy=HOY)
+
+    assert_movs(r, list(reversed(MOVS_DC)))
+    assert not r["cuadre"]["cierra"]
+    aviso = next(a["mensaje"] for a in r["alertas"] if a["codigo"] == "no_cierra")
+    assert "siguen el saldo fila por fila" in aviso
+    assert "saldo inicial que figura en el PDF ($ 1.000.000,00)" in aviso and "($ 880.000,00)" in aviso
+    assert "saldo final que figura en el PDF ($ 880.000,00)" in aviso
+    assert f"({formatear_pesos(MOVS_DC[-1].saldo)})" in aviso and "esos saldos" in aviso
+
+
+def test_marca_d_o_c_al_lado_del_importe_sin_saldo_por_fila():
+    """"1.500,00 D" en la columna Importe, sin saldo por fila: el signo sale de la
+    marca (antes quedaba "Signo sin confirmar") y cierra con el saldo anterior
+    y el final del PDF."""
+    si = D("10000.00")
+    movs = con_saldos(si, [
+        (date(2026, 9, 1), "DEPOSITO EFECTIVO", D("2000.00")),
+        (date(2026, 9, 2), "PAGO TARJETA", D("-1500.00")),
+        (date(2026, 9, 5), "COMISION", D("-120.50")),
+    ])
+    textos = [T(40, 800, "Resumen de cuenta - Período 01/09/2026 al 30/09/2026"),
+              T(40, 770, "Fecha", font="Helvetica-Bold"), T(110, 770, "Concepto", font="Helvetica-Bold"),
+              T(470, 770, "Importe", "der", font="Helvetica-Bold"),
+              T(110, 756, "SALDO ANTERIOR"), T(470, 756, ar(si), "der")]
+    y = 756
+    for m in movs:
+        y -= 12
+        textos += [T(40, y, m.fecha.strftime("%d/%m/%Y")), T(110, y, m.descripcion),
+                   T(470, y, ar(m.monto), "der"), T(474, y, "C" if m.monto > 0 else "D")]
+    y -= 14
+    textos += [T(110, y, "SALDO FINAL"), T(470, y, ar(movs[-1].saldo), "der")]
+
+    r = leer_extracto_pdf(pdf([textos]), hoy=HOY)
+
+    assert_movs(r, movs, con_saldo=False)
+    assert r["cuadre"]["cierra"]
+    assert not any(m["dudosa"] for m in r["movimientos"])
+    assert [m["descripcion"] for m in r["movimientos"]] == [m.descripcion for m in movs]
+
+
+def test_columna_debito_credito_con_importes_con_signo_sigue_siendo_el_importe():
+    """"Débito/Crédito" como única columna de importes (con signo): es el importe,
+    como antes. Y si hay otra columna de importes ("Importe origen") pero los
+    números están debajo de "Débito/Crédito", esa es la del importe."""
+    si = D("5000.00")
+    movs = con_saldos(si, [
+        (date(2026, 9, 1), "TRANSFERENCIA RECIBIDA", D("1000.00")),
+        (date(2026, 9, 3), "PAGO SERVICIO", D("-250.00")),
+        (date(2026, 9, 8), "COMPRA DEBITO", D("-99.90")),
+    ])
+
+    def armar(con_origen: bool) -> bytes:
+        enc = [T(40, 770, "Fecha"), T(110, 770, "Concepto"), T(430, 770, "Débito/Crédito", "der"),
+               T(560, 770, "Saldo", "der")]
+        if con_origen:
+            enc.append(T(330, 770, "Importe origen", "der"))
+        textos = [T(40, 800, "Resumen de cuenta - Período 01/09/2026 al 30/09/2026"), *enc,
+                  T(110, 756, "SALDO ANTERIOR"), T(560, 756, ar(si), "der")]
+        y = 756
+        for m in movs:
+            y -= 12
+            signo = "-" if m.monto < 0 else ""
+            textos += [T(40, y, m.fecha.strftime("%d/%m/%Y")), T(110, y, m.descripcion),
+                       T(430, y, signo + ar(m.monto), "der"), T(560, y, ar(m.saldo), "der")]
+            if con_origen:
+                textos.append(T(330, y, "USD " + ar(m.monto / 1000), "der"))
+        return pdf([textos])
+
+    for con_origen in (False, True):
+        r = leer_extracto_pdf(armar(con_origen), hoy=HOY)
+        assert_movs(r, movs)
+        assert r["cuadre"]["cierra"], con_origen

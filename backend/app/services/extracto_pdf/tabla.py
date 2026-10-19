@@ -11,8 +11,9 @@ horizontal. Es un dict JSON-serializable (lo mismo que se guarda como molde):
       "ancla_x0": 40.0,
     }
 
-`campo` ∈ fecha | descripcion | referencia | otro | debito | credito | importe | saldo.
-Cada palabra cae en la banda que contiene su centro. El `ancla` es la línea que
+`campo` ∈ fecha | descripcion | referencia | otro | signo | debito | credito | importe | saldo.
+`signo` es la columna que dice "Débito"/"Crédito" (o D/C) con el importe sin signo
+en otra columna. Cada palabra cae en la banda que contiene su centro. El `ancla` es la línea que
 marca el comienzo de la tabla en cada página (el encabezado de columnas, o la
 línea de arriba de la primera fila si no hay encabezado reconocible).
 
@@ -35,7 +36,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from itertools import product
@@ -58,7 +59,7 @@ from .texto import Documento, Linea
 
 CAMPOS_IMPORTE = ("debito", "credito", "importe", "saldo")
 CAMPOS_MOVIMIENTO = ("debito", "credito", "importe")
-CAMPOS_TEXTO = ("fecha", "descripcion", "referencia", "otro")
+CAMPOS_TEXTO = ("fecha", "descripcion", "referencia", "otro", "signo")
 BANDA_MAX = 10000.0
 CERO = Decimal("0.00")
 TOL = Decimal("0.01")
@@ -147,6 +148,21 @@ def tokens(linea: Linea) -> list[Token]:
 def texto_normalizado(texto: str) -> str:
     """Minúsculas, sin acentos, solo palabras de letras (sin dígitos)."""
     return " ".join(re.findall(r"[a-z]+", _normalizar((texto or "").lower())))
+
+
+_PALABRAS_DEBITO = {"debito", "deb", "db", "d", "debe"}
+_PALABRAS_CREDITO = {"credito", "cred", "cr", "c", "haber"}
+
+
+def signo_de_texto(texto: str) -> Optional[int]:
+    """−1 / +1 si el texto es solo la marca de débito o crédito ("Débito", "D",
+    "CR", "Haber"); None si es cualquier otra cosa."""
+    palabra = texto_normalizado(texto)
+    if palabra in _PALABRAS_DEBITO:
+        return -1
+    if palabra in _PALABRAS_CREDITO:
+        return 1
+    return None
 
 
 def texto_ancla(linea: Linea) -> str:
@@ -241,6 +257,7 @@ def celdas_encabezado(linea: Linea) -> Optional[list[Celda]]:
         else:
             frases.append([t])
     celdas: list[Celda] = []
+    dobles: list[Celda] = []
     for frase in frases:
         por_palabra = [_campo_de_palabra(t.texto) for t in frase]
         fuertes = {c for cs in por_palabra for c in cs if c in _FUERTES}
@@ -253,7 +270,8 @@ def celdas_encabezado(linea: Linea) -> Optional[list[Celda]]:
             texto_grupo = _normalizar(" ".join(t.texto for t in grupo).lower())
             if re.match(r"^f(ec)?\s*\.?\s*valor\b", texto_grupo):
                 campos = {"otro"}                    # "F.Valor" (fecha valor), no un importe
-            if len(grupo) == 1 and {"debito", "credito"} <= campos:
+            doble = len(grupo) == 1 and {"debito", "credito"} <= campos
+            if doble:
                 campo = "importe"                    # "Débito/Crédito" = una sola columna con signo
             else:
                 campo = _prioritario(campos)
@@ -263,6 +281,13 @@ def celdas_encabezado(linea: Linea) -> Optional[list[Celda]]:
                     continue
                 campo = "otro"
             celdas.append(Celda(campo, grupo[0].x0, grupo[-1].x1))
+            if doble:
+                dobles.append(celdas[-1])
+    # "Débito/Crédito" junto a otra columna "Monto"/"Importe": dice el signo del
+    # importe de la otra columna (los datos de abajo son "Débito" o "Crédito").
+    if dobles and any(c.campo == "importe" and all(c is not d for d in dobles) for c in celdas):
+        for c in dobles:
+            c.campo = "signo"
     # Solo la primera columna de cada campo cuenta ("Fecha" y "Fecha valor").
     vistos: set[str] = set()
     for c in celdas:
@@ -338,12 +363,64 @@ def _distancia_alineacion(t: Token, c: Celda) -> float:
     return min(abs(t.x1 - c.x1), abs(t.cx - c.cx), abs(t.x0 - c.x0))
 
 
+def _columnas_de_signo(celdas: list[Celda], datos: list[tuple[Linea, int]]) -> None:
+    """Corrige el campo de las columnas según lo que tienen abajo. Una columna de
+    importes cuyo título es "Débito" (o "Débito/", con el "Crédito" en el renglón
+    de abajo) pero que debajo tiene solo "Débito"/"Crédito" es la del signo, si
+    hay otra columna con los importes. Y al revés: una columna "signo" (por el
+    título) que debajo tiene importes vuelve a ser la de los importes."""
+    if not datos:
+        return
+    marcas = {id(c): 0 for c in celdas}
+    importes = {id(c): 0 for c in celdas}
+    for ln, nf in datos:
+        margen = max(ln.size, 1.0)
+        for t in tokens(ln)[nf:]:
+            debajo = [c for c in celdas if c.x0 - margen <= t.cx <= c.x1 + margen]
+            if not debajo:
+                continue
+            c = min(debajo, key=lambda c: abs(t.cx - c.cx))
+            if t.importe is not None:
+                importes[id(c)] += 1
+            elif signo_de_texto(t.texto) is not None:
+                marcas[id(c)] += 1
+    n = len(datos)
+    movimiento = [c for c in celdas if c.campo in CAMPOS_MOVIMIENTO]
+    for c in celdas:
+        solo_marcas = marcas[id(c)] >= max(2, 0.5 * n) and importes[id(c)] <= 0.1 * marcas[id(c)]
+        if c.campo in CAMPOS_MOVIMIENTO and solo_marcas and any(o is not c for o in movimiento):
+            c.campo = "signo"
+        elif c.campo == "signo" and not marcas[id(c)] and importes[id(c)] >= max(1, 0.5 * n):
+            c.campo = "importe"
+            for o in celdas:
+                if o is not c and o.campo == "importe":
+                    o.campo = "otro"
+
+
 def _layout_desde_encabezado(doc: Documento, encabezados: list[Linea], celdas: list[Celda]) -> dict:
     """Ajusta las bandas del encabezado con la posición real de los datos."""
     celdas = sorted(celdas, key=lambda c: c.x0)
+    fecha = next(c for c in celdas if c.campo == "fecha")
+    # Filas de datos: debajo del primer encabezado, empiezan con fecha y tienen importes.
+    ids_enc = {id(ln) for ln in encabezados}
+    en_tabla = False
+    datos: list[tuple[Linea, int]] = []
+    for ln in doc.lineas:
+        if id(ln) in ids_enc:
+            en_tabla = True
+            continue
+        if not en_tabla:
+            continue
+        toks = tokens(ln)
+        f, nf = fecha_al_inicio(ln)
+        if f is None or toks[0].x0 > fecha.x1 + 3 * ln.size:
+            continue
+        if not any(t.importe is not None for t in toks[nf:]):
+            continue
+        datos.append((ln, nf))
+    _columnas_de_signo(celdas, datos)
     numericas = [c for c in celdas if c.campo in CAMPOS_IMPORTE]
     textos = [c for c in celdas if c.campo not in CAMPOS_IMPORTE]
-    fecha = next(c for c in celdas if c.campo == "fecha")
     # Cuánto puede correrse un importe respecto de su título (títulos centrados o
     # alineados distinto que los números): ~45% de la distancia al título vecino.
     tolerancia: dict[int, float] = {}
@@ -358,23 +435,10 @@ def _layout_desde_encabezado(doc: Documento, encabezados: list[Linea], celdas: l
         ext[0] = min(ext[0], t.x0)
         ext[1] = max(ext[1], t.x1)
 
-    # Filas de datos: debajo del primer encabezado, empiezan con fecha y tienen importes.
-    ids_enc = {id(ln) for ln in encabezados}
-    en_tabla = False
     textuales: list[Token] = []
     tamanos: list[float] = []
-    for ln in doc.lineas:
-        if id(ln) in ids_enc:
-            en_tabla = True
-            continue
-        if not en_tabla:
-            continue
+    for ln, _ in datos:
         toks = tokens(ln)
-        f, nf = fecha_al_inicio(ln)
-        if f is None or toks[0].x0 > fecha.x1 + 3 * ln.size:
-            continue
-        if not any(t.importe is not None for t in toks[nf:]):
-            continue
         tamanos.append(ln.size)
         for t in toks:
             if t.importe is not None and numericas:
@@ -497,14 +561,35 @@ def layouts_estructurales(doc: Documento, repetidas: set[int]) -> list[dict]:
     if not clusters:
         return []
     clusters = clusters[-3:]
+    # Columna con la palabra "Débito"/"Crédito" (o D/C) justo antes de los importes,
+    # alineada en la mayoría de las filas: dice el signo del importe.
+    marcas: list[tuple[float, object]] = []
+    for idx, (ln, nf) in enumerate(filas):
+        resto = tokens(ln)[nf:]
+        k = next((k for k, t in enumerate(resto) if t.importe is not None), None)
+        if k and resto[k - 1].importe is None and signo_de_texto(resto[k - 1].texto) is not None:
+            marcas.append((resto[k - 1].cx, (idx, resto[k - 1])))
+    signo: list[tuple[str, float, float]] = []
+    de_signo: set[int] = set()
+    if marcas:
+        grupo = max(_agrupar(marcas, max(3.0, size)), key=len)
+        if len({item[1][0] for item in grupo}) >= max(2, math.ceil(0.5 * n)):
+            toks_s = [item[1][1] for item in grupo]
+            signo = [("signo", min(t.x0 for t in toks_s), max(t.x1 for t in toks_s))]
+            de_signo = {id(t) for t in toks_s}
     fecha_x1 = max(tokens(ln)[nf - 1].x1 for ln, nf in filas)
-    texto_x0 = [tokens(ln)[nf].x0 for ln, nf in filas if len(tokens(ln)) > nf and tokens(ln)[nf].importe is None]
+    texto_x0 = [
+        tokens(ln)[nf].x0 for ln, nf in filas
+        if len(tokens(ln)) > nf and tokens(ln)[nf].importe is None and id(tokens(ln)[nf]) not in de_signo
+    ]
     texto_x1 = [
-        t.x1 for ln, nf in filas for t in tokens(ln)[nf:] if t.importe is None and t.x0 < clusters[0]["x0"]
+        t.x1 for ln, nf in filas for t in tokens(ln)[nf:]
+        if t.importe is None and t.x0 < clusters[0]["x0"] and id(t) not in de_signo
     ]
     desc_x0 = min(texto_x0) if texto_x0 else fecha_x1 + size
     desc_x1 = max(texto_x1) if texto_x1 else desc_x0 + size
-    base = [("fecha", min(ln.palabras[0].x0 for ln, _ in filas), fecha_x1), ("descripcion", desc_x0, desc_x1)]
+    base = [("fecha", min(ln.palabras[0].x0 for ln, _ in filas), fecha_x1), ("descripcion", desc_x0, desc_x1),
+            *signo]
     if len(clusters) == 1:
         variantes = [["importe"]]
     elif len(clusters) == 2:
@@ -598,6 +683,7 @@ class _Fila:
     y: float
     motivos: list[str]
     heredada: bool = False             # sin fecha propia: tomó la de la fila anterior
+    signo: Optional[int] = None        # −1/+1 si el PDF dice "Débito"/"Crédito" (o D/C)
 
 
 @dataclass
@@ -727,6 +813,7 @@ def leer_con_layout(doc: Documento, layout: dict, ctx: ContextoFechas, repetidas
             por_campo: dict[str, list[Token]] = {}
             previo: Optional[tuple[Token, str]] = None
             basura_numerica = False
+            marca_signo: Optional[int] = None
             for t in toks:
                 campo = bandas.campo(t.cx, dx)
                 if campo is None:
@@ -741,6 +828,8 @@ def leer_con_layout(doc: Documento, layout: dict, ctx: ContextoFechas, repetidas
                 ):
                     campo = "descripcion"           # descripción larga que se pasa de su columna
                 if campo in CAMPOS_IMPORTE and t.importe is None:
+                    if campo == "importe" and marca_signo is None:
+                        marca_signo = signo_de_texto(t.texto)    # "1.234,56 D" en la columna Importe
                     basura_numerica = basura_numerica or any(ch.isdigit() for ch in t.texto)
                     continue                        # "$", "D", "C", basura en columnas numéricas
                 if campo in CAMPOS_TEXTO and t.importe is not None and campo == "fecha":
@@ -756,7 +845,15 @@ def leer_con_layout(doc: Documento, layout: dict, ctx: ContextoFechas, repetidas
                         parcial = parsear_fecha(" ".join(partes[:n]))
                         if parcial:
                             break
-            textos = [t.texto for t in toks if t.importe is None and not parsear_fecha(t.texto)]
+            de_signo = {id(t) for t in por_campo.get("signo", [])}
+            for t in por_campo.get("signo", []):
+                s_ = signo_de_texto(t.texto)
+                if s_ is not None:
+                    marca_signo = s_
+                    break
+            textos = [
+                t.texto for t in toks if t.importe is None and id(t) not in de_signo and not parsear_fecha(t.texto)
+            ]
             importes_mov = [t for c in CAMPOS_MOVIMIENTO for t in por_campo.get(c, []) if t.importe is not None]
             especial = _especial(texto_normalizado(" ".join(textos)), parcial is not None, bool(importes_mov))
             if especial == "saldo" and importes_mov:
@@ -849,6 +946,7 @@ def leer_con_layout(doc: Documento, layout: dict, ctx: ContextoFechas, repetidas
                     y=ln.y,
                     motivos=list(dict.fromkeys(motivos)),
                     heredada=heredada,
+                    signo=marca_signo,
                 )
                 filas.append(fila)
                 ids_linea.append(id(ln))
@@ -1055,6 +1153,27 @@ def _resolver_signos(
                 continue
             montos.append(cred - deb)
         return "columnas", montos
+    if any(f.signo is not None for f in filas if f.importe is not None):
+        # Columna "Débito/Crédito" (o D/C junto al importe): el signo lo dice el PDF.
+        # Las filas que no lo traen salen del signo explícito o del saldo.
+        faltan = [f.signo is None and f.importe is not None for f in filas]
+        if not any(faltan):
+            return "explicito", [f.signo * abs(f.importe) if f.importe is not None else None for f in filas]
+        explicitos = any(f.importe_negativo for f in filas)
+        copias = [replace(f, motivos=list(f.motivos)) for f in filas]
+        deducidos = None if explicitos else _signos_por_saldo(copias, orden, saldo_inicial)
+        montos = []
+        for i, f in enumerate(filas):
+            if f.importe is None:
+                montos.append(None)
+            elif f.signo is not None:
+                montos.append(f.signo * abs(f.importe))
+            elif deducidos is None:
+                montos.append(f.importe)
+            else:
+                montos.append(deducidos[i])
+                f.motivos[:] = copias[i].motivos
+        return ("explicito" if explicitos else "saldo"), montos
     if any(f.importe_negativo for f in filas):
         return "explicito", [f.importe for f in filas]
     if not any(f.saldo is not None for f in filas):

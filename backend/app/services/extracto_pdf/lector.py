@@ -335,7 +335,10 @@ def _armar_salida(
                     "comprobar que el extracto cierre.",
                 ))
         elif not cuadre["cierra"]:
-            if saltos and abs(cuadre["diferencia"]) <= Decimal("0.01"):
+            encabezado = _saldos_del_pdf_que_no_coinciden(filas, elegido.orden, cuadre)
+            if encabezado:
+                mensaje = encabezado
+            elif saltos and abs(cuadre["diferencia"]) <= Decimal("0.01"):
                 mensaje = (
                     f"Los totales dan, pero el saldo no sigue en {saltos} "
                     f"{'movimiento' if saltos == 1 else 'movimientos'}: revisá los marcados."
@@ -405,6 +408,36 @@ def _armar_salida(
         "ia_usada": ia_usada,
         "ia_disponible": ia_disponible,
     }
+
+
+def _saldos_del_pdf_que_no_coinciden(filas: list[dict], orden: str, cuadre: dict) -> Optional[str]:
+    """Si los movimientos siguen el saldo fila por fila de punta a punta y lo que no
+    cierra es el saldo inicial o final que figura en el PDF, el mensaje que lo dice
+    (los movimientos están bien: falta una hoja o el encabezado trae otro saldo)."""
+    interno = validar_saldos(filas, orden=orden, saldo_inicial=None, saldo_final=None)
+    if not interno["cierra"]:
+        return None
+    partes = []
+    for clave, nombre in (("saldo_inicial", "inicial"), ("saldo_final", "final")):
+        del_pdf, de_filas = cuadre[clave], interno[clave]
+        if (
+            not cuadre[f"{clave}_inferido"]
+            and del_pdf is not None
+            and de_filas is not None
+            and abs(del_pdf - de_filas) > Decimal("0.01")
+        ):
+            partes.append(
+                f"el saldo {nombre} que figura en el PDF ({formatear_pesos(del_pdf)}) no coincide con el "
+                f"de los movimientos ({formatear_pesos(de_filas)})"
+            )
+    if not partes:
+        return None
+    return (
+        "Los movimientos siguen el saldo fila por fila, pero " + " y ".join(partes) + ". Revisá que el PDF "
+        "tenga todas las hojas; si está completo, "
+        + ("borrá ese saldo y se usa el" if len(partes) == 1 else "borrá esos saldos y se usan los")
+        + " de los movimientos."
+    )
 
 
 def _sin_repetidas(alertas: list[dict]) -> list[dict]:

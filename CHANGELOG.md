@@ -31,9 +31,12 @@ es igual al del Excel.
 - Tablas `borradores_extracto_pdf` y `moldes_extracto_pdf` (migración 028 + safety net).
   `extracto_import.py` centraliza la creación del extracto y el asiento de UM (compartido con el
   upload de Excel, sin cambio de comportamiento).
-- Tests: 184 backend (`test_extracto_pdf_lector.py`, `test_extracto_pdf_casos_dificiles.py`,
+- Probado con un PDF real (resumen de movimientos de home banking): columna
+  Débito/Crédito que da el signo de un importe sin signo, y aviso claro cuando el saldo inicial o
+  final del cuadro de arriba no coincide con el de los movimientos.
+- Tests: 188 backend (`test_extracto_pdf_lector.py`, `test_extracto_pdf_casos_dificiles.py`,
   `test_extractos_pdf_api.py`, `test_extracto_import.py`) + 64 frontend.
-- Ver `docs/business/EXTRACTOS_PDF.md`. Pendiente: probar con PDFs reales de cada banco.
+- Ver `docs/business/EXTRACTOS_PDF.md`. Pendiente: probar con PDFs reales del resto de los bancos.
 
 ---
 
