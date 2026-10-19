@@ -65,6 +65,19 @@ describe('evaluarFilas', () => {
     expect(ev.filasDudosas).toBe(2)
   })
 
+  it('"El saldo no sigue" de la lectura se recalcula: al borrar el saldo inicial que no coincide, se va', () => {
+    const a = filaDesdeMovimiento({ ...mov('500.00', '1500.00'), dudosa: true, motivos: ['El saldo no sigue'] })
+    const b = filaDesdeMovimiento({ ...mov('-200.00', '1300.00'), dudosa: true, motivos: ['Sin fecha', 'El saldo no sigue'] })
+    expect(a.motivosLectura).toEqual([])
+    expect(b.motivosLectura).toEqual(['Sin fecha'])
+    const conElDelPdf = evaluarFilas([a, b], 'asc', '2.000,00', '')
+    expect(conElDelPdf.filas[0].avisos).toEqual(['El saldo no sigue'])
+    const borrado = evaluarFilas([a, b], 'asc', '', '')
+    expect(borrado.cuadre.cierra).toBe(true)
+    expect(borrado.filas[0].avisos).toEqual([])
+    expect(borrado.filasDudosas).toBe(1)
+  })
+
   it('el saldo inicial o final escrito pero ilegible se reporta', () => {
     const ev = evaluarFilas([], 'asc', 'x', '1.000,00')
     expect(ev.saldoInicialInvalido).toBe(true)

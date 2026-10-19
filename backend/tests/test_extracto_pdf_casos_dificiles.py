@@ -16,6 +16,7 @@ from decimal import Decimal as D
 
 import pytest
 from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 from app.services.extracto_pdf import formatear_pesos, leer_extracto_pdf
@@ -460,7 +461,7 @@ def test_saldos_del_cuadro_que_no_coinciden_con_los_movimientos():
     assert_movs(r, list(reversed(MOVS_DC)))
     assert not r["cuadre"]["cierra"]
     aviso = next(a["mensaje"] for a in r["alertas"] if a["codigo"] == "no_cierra")
-    assert "siguen el saldo fila por fila" in aviso
+    assert aviso.startswith("Los movimientos cierran entre sí")
     assert "saldo inicial que figura en el PDF ($ 1.000.000,00)" in aviso and "($ 880.000,00)" in aviso
     assert "saldo final que figura en el PDF ($ 880.000,00)" in aviso
     assert f"({formatear_pesos(MOVS_DC[-1].saldo)})" in aviso and "esos saldos" in aviso
@@ -528,3 +529,271 @@ def test_columna_debito_credito_con_importes_con_signo_sigue_siendo_el_importe()
         r = leer_extracto_pdf(armar(con_origen), hoy=HOY)
         assert_movs(r, movs)
         assert r["cuadre"]["cierra"], con_origen
+
+
+# ── Lo que la columna del signo no tiene que tocar (revisión adversaria) ────
+
+def _sin_titulos(movs: list[Mov], si: D, *, con_signo: bool = False, canal: dict | None = None) -> bytes:
+    """Tabla sin títulos reconocibles (lectura estructural): Fch | Texto libre |
+    [canal] | Valor $ | Acum."""
+    textos = [T(40, 800, "Cooperativa de Crédito Ejemplo", size=12),
+              T(40, 785, "Período: 01/09/2026 al 30/09/2026"),
+              T(40, 760, "Fch"), T(100, 760, "Texto libre"), T(450, 760, "Valor $", "der"), T(550, 760, "Acum.", "der"),
+              T(100, 746, "SALDO ANTERIOR"), T(550, 746, ar(si), "der")]
+    y = 746
+    for i, m in enumerate(movs):
+        y -= 12
+        valor = ("-" if con_signo and m.monto < 0 else "") + ar(m.monto)
+        textos += [T(40, y, m.fecha.strftime("%d/%m/%Y")), T(100, y, m.descripcion),
+                   T(450, y, valor, "der"), T(550, y, ar(m.saldo), "der")]
+        if canal:
+            textos.append(T(370, y, canal[i]))
+    return pdf([textos])
+
+
+MOVS_DESC_DC = con_saldos(D("50000.00"), [
+    (date(2026, 9, 1), "Compra con tarjeta de debito", D("-1500.00")),
+    (date(2026, 9, 2), "Compra con tarjeta de debito", D("-2300.50")),
+    (date(2026, 9, 3), "Transferencia recibida", D("50000.00")),
+    (date(2026, 9, 4), "Compra con tarjeta de debito", D("-800.00")),
+    (date(2026, 9, 5), "Devolucion compra tarjeta de debito", D("1500.00")),
+    (date(2026, 9, 6), "Compra con tarjeta de debito", D("-950.25")),
+    (date(2026, 9, 7), "PAGO TARJETA CREDITO", D("-150.00")),
+    (date(2026, 9, 8), "Compra con tarjeta de debito", D("-430.00")),
+])
+
+
+@pytest.mark.parametrize("con_signo", [False, True])
+def test_sin_titulos_la_palabra_debito_o_credito_de_la_descripcion_no_es_el_signo(con_signo):
+    """Sin títulos, muchas descripciones terminan en "debito"/"credito": siguen
+    enteras y el signo sale del saldo (o del "-" impreso), no de esa palabra."""
+    r = leer_extracto_pdf(_sin_titulos(MOVS_DESC_DC, D("50000.00"), con_signo=con_signo), hoy=HOY)
+
+    assert_movs(r, MOVS_DESC_DC)
+    assert [m["descripcion"] for m in r["movimientos"]] == [m.descripcion for m in MOVS_DESC_DC]
+    assert r["cuadre"]["cierra"]
+
+
+def test_sin_titulos_una_columna_de_letras_no_es_el_signo():
+    """Una columna de canal (C caja, D depósito, I internet) antes del importe
+    sin signo: el signo sigue saliendo del saldo."""
+    movs = con_saldos(D("8000.00"), [
+        (date(2026, 9, 1), "DEPOSITO", D("1200.00")),
+        (date(2026, 9, 2), "IMPUESTO", D("-60.00")),
+        (date(2026, 9, 3), "PAGO SERVICIO", D("-300.00")),
+        (date(2026, 9, 4), "TRANSFERENCIA", D("900.00")),
+        (date(2026, 9, 7), "COMISION", D("-45.00")),
+    ])
+    r = leer_extracto_pdf(_sin_titulos(movs, D("8000.00"), canal=dict(enumerate("DCCID"))), hoy=HOY)
+
+    assert_movs(r, movs)
+    assert r["cuadre"]["cierra"]
+
+
+def test_descripciones_que_terminan_en_credito_bajo_el_titulo_debito():
+    """Cuenta recaudadora: casi todo créditos, con descripciones largas que llegan
+    hasta debajo del título "Débito" y terminan en "CREDITO". La columna Débito no
+    pasa a ser la del signo: el débito que hay no se pierde y la palabra queda en
+    la descripción."""
+    items = [(date(2026, 9, 1 + i), f"TRANSFERENCIA RECIBIDA CLIENTE {i:02d} CREDITO", D("1000.00") + i)
+             for i in range(10)]
+    items.insert(5, (date(2026, 9, 6), "COMISION", D("-150.00")))
+    movs = con_saldos(D("20000.00"), items)
+    x_deb = 90 + stringWidth(items[0][1], "Helvetica", 8) + 2       # termina justo después de "CREDITO"
+    textos = [T(40, 800, "Resumen de cuenta - Período 01/09/2026 al 30/09/2026"),
+              T(40, 770, "Fecha"), T(90, 770, "Descripción"), T(x_deb, 770, "Débito", "der"),
+              T(470, 770, "Crédito", "der"), T(560, 770, "Saldo", "der"),
+              T(90, 756, "SALDO ANTERIOR"), T(560, 756, ar(D("20000.00")), "der")]
+    y = 756
+    for m in movs:
+        y -= 12
+        textos += [T(40, y, m.fecha.strftime("%d/%m/%Y")), T(90, y, m.descripcion),
+                   T(x_deb if m.monto < 0 else 470, y, ar(m.monto), "der"), T(560, y, ar(m.saldo), "der")]
+
+    r = leer_extracto_pdf(pdf([textos]), hoy=HOY)
+
+    assert_movs(r, movs)
+    assert [m["descripcion"] for m in r["movimientos"]] == [m.descripcion for m in movs]
+    assert r["cuadre"]["cierra"]
+
+
+def _tabla_signo(movs: list[Mov], si_pdf: D, *, titulo: str = "Débito/Crédito", marca=_dc,
+                 pesos_suelto: bool = False, saldo_en: set | None = None) -> bytes:
+    """Fecha | Concepto | <titulo> | Monto | Saldo, orden ascendente, con
+    "Saldo inicial" arriba. `saldo_en`: filas que traen saldo (None = todas)."""
+    textos = [T(40, 800, "Movimientos de cuenta", size=10), T(40, 785, "Período: 01/09/2026 al 30/09/2026"),
+              T(43, 760, "Saldo inicial:"), T(287.6, 760, "$ " + ar(si_pdf), "der"),
+              T(40, 740, "Fecha"), T(110, 740, "Concepto"), T(287, 740, titulo), T(426.5, 740, "Monto"),
+              T(524.9, 740, "Saldo")]
+    y = 740
+    for i, m in enumerate(movs):
+        y -= 16.7
+        textos += [T(40, y, m.fecha.strftime("%d/%m/%Y")), T(110, y, m.descripcion)]
+        if marca(m):
+            textos.append(T(310, y, marca(m)))
+        con_saldo = saldo_en is None or i in saldo_en
+        if pesos_suelto:
+            textos += [T(400, y, "$"), T(457.6, y, ar(m.monto), "der")]
+            if con_saldo:
+                textos += [T(500, y, "$"), T(555.3, y, ar(m.saldo), "der")]
+        else:
+            textos.append(T(457.6, y, "$ " + ar(m.monto), "der"))
+            if con_saldo:
+                textos.append(T(555.3, y, "$ " + ar(m.saldo), "der"))
+    return pdf([textos])
+
+
+def test_columna_de_signo_con_el_pesos_suelto_y_el_saldo_inicial_equivocado():
+    """El "$" va como palabra suelta y el saldo inicial impreso está mal: gana la
+    lectura con el signo de la columna, no una que lo deduce del saldo equivocado
+    y por eso da una diferencia más chica."""
+    r = leer_extracto_pdf(_tabla_signo(MOVS_DC, D("1000000.00"), pesos_suelto=True), hoy=HOY)
+
+    assert_movs(r, MOVS_DC)
+    aviso = next(a["mensaje"] for a in r["alertas"] if a["codigo"] == "no_cierra")
+    assert aviso.startswith("Los movimientos cierran entre sí") and "borrá ese saldo y se usa el" in aviso
+
+
+@pytest.mark.parametrize("titulo,marca", [
+    ("D/C", lambda m: "C" if m.monto > 0 else "D"),
+    ("Tipo", _dc),
+])
+def test_columna_de_signo_con_otro_titulo(titulo, marca):
+    """La columna del signo titulada "D/C" (con letras) o con un título que no
+    dice nada ("Tipo", con las palabras enteras)."""
+    r = leer_extracto_pdf(_tabla_signo(MOVS_DC, SI_DC, titulo=titulo, marca=marca), hoy=HOY)
+
+    assert_movs(r, MOVS_DC)
+    assert [m["descripcion"] for m in r["movimientos"]] == [m.descripcion for m in MOVS_DC]
+    assert r["cuadre"]["cierra"]
+    assert "signo_deducido" not in {a["codigo"] for a in r["alertas"]}
+
+
+def test_el_menos_impreso_manda_sobre_la_palabra_de_la_columna():
+    """Si el importe trae un "-" impreso, ese es el signo aunque la columna diga
+    "Crédito"; la fila queda para revisar."""
+    movs = con_saldos(D("10000.00"), [
+        (date(2026, 9, 1), "DEPOSITO", D("500.00")),
+        (date(2026, 9, 2), "AJUSTE", D("-400.00")),
+        (date(2026, 9, 3), "COMISION", D("-12.00")),
+    ])
+    textos = [T(40, 800, "Movimientos de cuenta", size=10), T(40, 785, "Período: 01/09/2026 al 30/09/2026"),
+              T(43, 760, "Saldo inicial:"), T(287.6, 760, "$ " + ar(D("10000.00")), "der"),
+              T(40, 740, "Fecha"), T(110, 740, "Concepto"), T(287, 740, "Débito/Crédito"), T(426.5, 740, "Monto"),
+              T(524.9, 740, "Saldo")]
+    y = 740
+    for m in movs:
+        y -= 16.7
+        palabra, monto = ("Crédito", "-$ " + ar(m.monto)) if m.descripcion == "AJUSTE" else (_dc(m), "$ " + ar(m.monto))
+        textos += [T(40, y, m.fecha.strftime("%d/%m/%Y")), T(110, y, m.descripcion), T(310, y, palabra),
+                   T(457.6, y, monto, "der"), T(555.3, y, "$ " + ar(m.saldo), "der")]
+
+    r = leer_extracto_pdf(pdf([textos]), hoy=HOY)
+
+    assert_movs(r, movs)
+    assert r["cuadre"]["cierra"]
+    assert [m["dudosa"] for m in r["movimientos"]] == [False, True, False]
+
+
+def test_fila_sin_marca_usa_los_signos_que_el_pdf_ya_dice():
+    """Saldo solo al final de cada día y una fila sin la palabra: su signo sale
+    del saldo del día descontando las filas que sí la traen (+100 −30 −70 = 0)."""
+    movs = con_saldos(D("10000.00"), [
+        (date(2026, 9, 1), "DEPOSITO", D("500.00")),
+        (date(2026, 9, 2), "TRANSFERENCIA RECIBIDA", D("100.00")),
+        (date(2026, 9, 2), "IMPUESTO LEY 25413", D("-30.00")),
+        (date(2026, 9, 2), "PAGO PROVEEDOR", D("-70.00")),
+        (date(2026, 9, 3), "COMISION", D("-12.00")),
+    ])
+    ultimo_del_dia = {i for i, m in enumerate(movs) if i == len(movs) - 1 or movs[i + 1].fecha != m.fecha}
+
+    r = leer_extracto_pdf(_tabla_signo(movs, D("10000.00"), marca=lambda m: "" if m.monto == D("-30.00") else _dc(m),
+                                       saldo_en=ultimo_del_dia), hoy=HOY)
+
+    assert_movs(r, movs, con_saldo=False)
+    assert r["cuadre"]["cierra"]
+    assert not any(m["dudosa"] for m in r["movimientos"])
+
+
+def test_un_solo_movimiento_bajo_el_titulo_partido():
+    """Una sola fila debajo de "Débito/" + "Crédito" (partido en dos renglones):
+    también es la columna del signo."""
+    movs = con_saldos(D("5000.00"), [(date(2026, 9, 3), "PAGO SERVICIO", D("-1000.00"))])
+    textos = [T(40, 800, "Movimientos de cuenta", size=10), T(40, 785, "Período: 01/09/2026 al 30/09/2026"),
+              T(40, 740, "Fecha"), T(110, 740, "Tipo de transacción"), T(310, 740, "Débito/"), T(423, 740, "Monto"),
+              T(524.9, 740, "Saldo"), T(310, 726, "Crédito")]
+    textos += [T(40, 700, "03/09/2026"), T(110, 700, "PAGO SERVICIO"), T(310, 700, "Débito"),
+               T(457.6, 700, "$ " + ar(D("1000.00")), "der"), T(555.3, 700, "$ " + ar(movs[0].saldo), "der")]
+
+    r = leer_extracto_pdf(pdf([textos]), hoy=HOY)
+
+    assert_movs(r, movs)
+
+
+def test_descripcion_que_llega_a_la_columna_del_signo_con_el_formato_aprendido():
+    """Con el formato aprendido de un mes, el mes siguiente trae descripciones más
+    largas que se meten en la columna del signo: no pierden palabras y la que
+    termina en "DEBITO" no da vuelta un crédito."""
+    r1 = leer_extracto_pdf(extracto_debito_credito(MOVS_DC, saldo_inicial_pdf=SI_DC,
+                                                   saldo_final_pdf=MOVS_DC[-1].saldo), hoy=HOY)
+    molde = {"id": 7, "banco_clave": r1["aprendizaje"]["banco_clave"], "firma": r1["aprendizaje"]["firma"],
+             "layout": r1["aprendizaje"]["layout"]}
+    si = MOVS_DC[-1].saldo
+    movs = con_saldos(si, [
+        (date(2026, 10, 1), "CRÉDITO POR TRANSFERENCIA", D("5000.00")),
+        (date(2026, 10, 2), "PAGO SERVICIOS AGUAS Y CLOACAS SA", D("-800.00")),
+        (date(2026, 10, 3), "REINTEGRO COMPRA EXTERIOR TARJ DEBITO", D("250.00")),
+        (date(2026, 10, 6), "Imp. Ley 25413 s/débitos", D("-4.80")),
+    ])
+
+    r = leer_extracto_pdf(extracto_debito_credito(movs, saldo_inicial_pdf=si, saldo_final_pdf=movs[-1].saldo),
+                          moldes=[molde], hoy=HOY)
+
+    assert r["metodo"] == "molde"
+    assert_movs(r, list(reversed(movs)))
+    assert [m["descripcion"] for m in r["movimientos"]] == [m.descripcion for m in reversed(movs)]
+
+
+# El aviso "los movimientos cierran entre sí" solo cuando de verdad lo sabe.
+
+def test_aviso_de_saldos_no_culpa_al_saldo_final_si_un_renglon_no_se_leyo():
+    """El último movimiento no se pudo leer (importes pegados) y el saldo final
+    impreso está bien: el aviso sigue siendo la diferencia, no "borrá ese saldo"."""
+    textos = [T(40, 800, "BBVA", size=20, font="Helvetica-Bold"),
+              T(40, 775, "Resumen de cuenta - Período 01/09/2026 al 30/09/2026"), *encabezado(750),
+              T(90, 736, "SALDO ANTERIOR"), T(560, 736, ar(SI), "der")]
+    y = 736
+    for m in MOVS_BASE[:2]:
+        y -= 12
+        textos += fila(y, m)
+    y -= 12
+    textos += [T(40, y, "30/09/2026"), T(90, y, "COMISION MANT CTA"), T(560, y, "2.500,00297.500,00", "der")]
+    y -= 14
+    textos += [T(90, y, "SALDO FINAL"), T(560, y, ar(MOVS_BASE[-1].saldo), "der")]
+
+    r = leer_extracto_pdf(pdf([textos]), hoy=HOY)
+
+    aviso = next(a["mensaje"] for a in r["alertas"] if a["codigo"] == "no_cierra")
+    assert aviso == "El saldo no cierra: hay una diferencia de -$ 2.500,00."
+
+
+@pytest.mark.parametrize("formato", ["sin_signo", "saldo_por_dia"])
+def test_aviso_de_saldos_no_culpa_al_saldo_inicial_si_la_primera_fila_no_se_controla(formato):
+    """Saldo inicial impreso equivocado, pero sin forma de saber que la primera
+    fila está bien: con el signo deducido del saldo (se eligió para llegar a ese
+    saldo) o con la primera fila sin saldo propio. El aviso es la diferencia."""
+    movs = con_saldos(D("880000.00"), [
+        (date(2026, 9, 1), "CRÉDITO POR TRANSFERENCIA", D("76000.00")),
+        (date(2026, 9, 1), "SIRCREB", D("-7.60")),
+        (date(2026, 9, 2), "Debito Transf. HB", D("-400000.00")),
+        (date(2026, 9, 3), "CRÉDITO POR CREDIN", D("123456.78")),
+    ])
+    if formato == "sin_signo":
+        contenido = _tabla_signo(movs, D("1000000.00"), titulo="Origen", marca=lambda m: "")
+    else:
+        contenido = _tabla_signo(movs, D("1000000.00"), saldo_en={1, 2, 3})
+
+    r = leer_extracto_pdf(contenido, hoy=HOY)
+
+    aviso = next(a["mensaje"] for a in r["alertas"] if a["codigo"] == "no_cierra")
+    assert aviso.startswith("El saldo no cierra: hay una diferencia de")

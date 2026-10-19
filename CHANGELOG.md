@@ -34,8 +34,8 @@ es igual al del Excel.
 - Probado con un PDF real (resumen de movimientos de home banking): columna
   Débito/Crédito que da el signo de un importe sin signo, y aviso claro cuando el saldo inicial o
   final del cuadro de arriba no coincide con el de los movimientos.
-- Tests: 188 backend (`test_extracto_pdf_lector.py`, `test_extracto_pdf_casos_dificiles.py`,
-  `test_extractos_pdf_api.py`, `test_extracto_import.py`) + 64 frontend.
+- Tests: 202 backend (`test_extracto_pdf_lector.py`, `test_extracto_pdf_casos_dificiles.py`,
+  `test_extractos_pdf_api.py`, `test_extracto_import.py`) + 65 frontend.
 - Ver `docs/business/EXTRACTOS_PDF.md`. Pendiente: probar con PDFs reales del resto de los bancos.
 
 ---

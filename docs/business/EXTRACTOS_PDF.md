@@ -65,10 +65,14 @@ fila por fila del saldo corrido (`saldo[i] = saldo[i−1] + monto[i]` en orden c
 - El **saldo final** sale del PDF; si no figura, solo se toma el saldo de la **última** fila.
   Si la última fila no trae saldo, queda sin verificar: deducirlo de importes que no se pueden
   controlar sería darlos por buenos.
-- Si los movimientos siguen el saldo fila por fila pero el saldo inicial o final impreso en el
-  PDF no coincide con el de las filas (pasa en resúmenes de home banking con el cuadro de
+- Si los movimientos cierran entre sí pero el saldo inicial o final impreso en el PDF no
+  coincide con el que sale de las filas (pasa en resúmenes de home banking con el cuadro de
   arriba de otra fecha), el aviso lo dice con los dos importes y propone revisar que estén
-  todas las hojas o borrar ese saldo en la revisión para usar el de los movimientos.
+  todas las hojas o borrar ese saldo en la revisión. Solo cuando la lectura lo sabe: todas las
+  páginas y renglones leídos, ningún signo supuesto y la fila del extremo con su saldo; del
+  lado del inicial, además, el signo lo tiene que decir el PDF (deducido, se eligió para llegar
+  a ese saldo). Si no, queda el aviso de la diferencia. En la pantalla, "El saldo no sigue" se
+  recalcula al editar los saldos (no queda la marca de la lectura).
 - Si no cierra, se puede guardar igual con confirmación explícita (`confirmar_sin_cuadre`).
 - El frontend (`saldoExtracto.ts`) espeja `validar_saldos` en centavos enteros; el servidor es
   la autoridad al confirmar.
@@ -105,10 +109,17 @@ Reglas:
   absurdo (más dígitos que la precisión de Decimal) no es un importe: nunca lanza.
 - Columnas Débito/Crédito, Importe con signo o sin signo (el signo se deduce del saldo; con
   varios movimientos sin saldo, la única combinación de signos que llega al saldo siguiente).
-- Columna de tipo con la palabra "Débito"/"Crédito" (o D/C) y el importe sin signo en otra
-  columna: la columna da el signo (campo `signo` del layout). Se reconoce por el encabezado,
-  aunque venga partido en dos renglones, y por el contenido (si trae marcas y casi ningún
-  importe). Una marca D/C pegada al importe también da el signo de esa fila.
+- Columna con la palabra "Débito"/"Crédito" (o D/C) y el importe sin signo en otra columna:
+  la columna da el signo (campo `signo` del layout). Se reconoce por el título ("Débito/Crédito"
+  junto a "Monto", también partido en dos renglones, o "D/C") o por el contenido: debajo de un
+  título de importe solo marcas y ningún importe, o debajo de un título desconocido ("Tipo") las
+  palabras enteras en casi todas las filas. Una marca pegada a la descripción ("COMPRA TARJETA
+  DE DEBITO") no cuenta. Sin títulos reconocibles no se busca: la última palabra de muchas
+  descripciones es "debito" o "credito". Un "-" impreso manda sobre la palabra (la fila queda
+  para revisar); una fila sin palabra saca el signo del saldo, descontando los que ya se
+  conocen. Una marca D/C pegada al importe ("1.500,00 D") también da el signo de esa fila.
+- Entre lecturas automáticas que no cierran gana la que menos signos tuvo que suponer: un
+  signo deducido contra un saldo inicial mal impreso puede dar una diferencia más chica.
 - Orden ascendente o descendente; fechas sin año (con el período del PDF o el año más reciente).
 - Saldo por fila o por día, "Saldo anterior" como transporte arriba de cada hoja, subtotales,
   descripciones de varios renglones, filas de dos renglones con el importe abajo, cuadros de

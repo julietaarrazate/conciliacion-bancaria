@@ -64,6 +64,9 @@ export const nuevaClave = () => `f${++secuencia}`
 export function filaDesdeMovimiento(m: MovimientoPdf): FilaForm {
   const monto = aCentavos(m.monto)
   const saldo = aCentavos(m.saldo)
+  // "El saldo no sigue" se recalcula en vivo (evaluarFilas): si viniera de la lectura
+  // quedaría marcado aunque la persona corrija el saldo inicial y ya cierre.
+  const motivos = m.motivos.filter(x => x !== MOTIVO_SALTO)
   return {
     key: nuevaClave(),
     fecha: m.fecha || '',
@@ -72,7 +75,7 @@ export function filaDesdeMovimiento(m: MovimientoPdf): FilaForm {
     credito: monto != null && monto > 0 ? centavosAInput(monto) : '',
     saldo: saldo != null ? formatearSaldoInput(saldo) : '',
     pagina: m.pagina ?? null,
-    motivosLectura: m.dudosa ? (m.motivos.length ? [...m.motivos] : ['Revisá esta fila']) : [],
+    motivosLectura: m.dudosa ? (m.motivos.length ? motivos : ['Revisá esta fila']) : [],
   }
 }
 
