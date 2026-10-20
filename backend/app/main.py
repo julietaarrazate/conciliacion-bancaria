@@ -29,6 +29,7 @@ from app.routers import analisis
 from app.routers import search as search_router
 from app.routers import public_router
 from app.routers import vencimientos
+from app.routers import procesos_masivos
 from app.routers import push_router
 from app.routers import agente
 from app.routers import tarjetas
@@ -728,6 +729,7 @@ app.include_router(arca.router)
 app.include_router(comprobantes_compra.router)
 app.include_router(extractos_pdf.router)
 app.include_router(vencimientos.router)
+app.include_router(procesos_masivos.router)
 
 
 @app.get("/")
