@@ -475,4 +475,22 @@ SAFETY_NET_DDL = [
     "marcado_at TIMESTAMP DEFAULT NOW(), "
     "CONSTRAINT uq_vencimiento_marcado UNIQUE (organizacion_id, impuesto, periodo))",
     "CREATE INDEX IF NOT EXISTS ix_vencimientos_marcados_org ON vencimientos_marcados (organizacion_id)",
+    # migración 032 — ficha de proveedores propios de la org + vínculo desde Pagos
+    "CREATE TABLE IF NOT EXISTS proveedores ("
+    "id SERIAL PRIMARY KEY, "
+    "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+    "cuit VARCHAR(11), "
+    "razon_social VARCHAR(255) NOT NULL, "
+    "condicion_iva VARCHAR(30), "
+    "email VARCHAR(255), "
+    "cbu VARCHAR(22), "
+    "notas TEXT, "
+    "origen VARCHAR(20) NOT NULL DEFAULT 'manual', "
+    "activo BOOLEAN NOT NULL DEFAULT TRUE, "
+    "created_at TIMESTAMP DEFAULT NOW(), "
+    "updated_at TIMESTAMP DEFAULT NOW(), "
+    "CONSTRAINT uq_proveedor_org_cuit UNIQUE (organizacion_id, cuit))",
+    "CREATE INDEX IF NOT EXISTS ix_proveedores_organizacion_id ON proveedores (organizacion_id)",
+    "ALTER TABLE egresos ADD COLUMN IF NOT EXISTS proveedor_id INTEGER REFERENCES proveedores(id) ON DELETE SET NULL",
+    "CREATE INDEX IF NOT EXISTS ix_egresos_proveedor_id ON egresos (proveedor_id)",
 ]
