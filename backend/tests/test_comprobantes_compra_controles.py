@@ -1,5 +1,5 @@
 # ruff: noqa: F811  (db y client son fixtures importadas de test_comprobantes_compra)
-"""Controles nuevos de Comprobantes por revisar (benchmark Ola 1, punto 4):
+"""Controles nuevos de Comprobantes por revisar:
 
 - La factura tiene que estar a nombre de la organización: la IA lee el CUIT del
   receptor y se compara con el CUIT de la org (configuracion["cuit"], o el de

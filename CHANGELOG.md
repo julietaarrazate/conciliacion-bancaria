@@ -7,15 +7,15 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ### v3.34 (oct 2026) — Comprobantes por revisar: factura a nombre de la empresa y período cerrado
 
-Controles tomados del benchmark (Contabilium), adaptados a Cuadra:
+Controles nuevos al cargar facturas de compra:
 
 - La IA lee también el **CUIT del comprador**; si no es el de la organización, alerta "La factura
   está a nombre de otro CUIT". El CUIT de la empresa se carga en la misma pantalla
   (`CuitOrganizacionCard`, `GET/PUT /comprobantes-compra/cuit-organizacion`, guardado en
   `configuracion["cuit"]`, con el de ARCA como respaldo). Sin migración.
 - **Período con IVA presentado**: alerta al leer y 409 al confirmar en ese período (se elige uno
-  posterior). Reemplaza a la regla "más de 60 días" de Contabilium, que en IVA no dice si el
-  crédito todavía se puede tomar.
+  posterior). Es más preciso que una regla fija de antigüedad ("más de 60 días"), que en IVA no
+  dice si el crédito todavía se puede tomar.
 - No se crean proveedores: Cuadra no tiene maestro de proveedores (queda como idea aparte).
 - Los campos del editor quedaron con la etiqueta asociada al input (accesibilidad).
 - Tests: `test_comprobantes_compra_controles.py` (12) + `CuitOrganizacionCard.test.tsx` (4) + 1 en
@@ -25,8 +25,8 @@ Controles tomados del benchmark (Contabilium), adaptados a Cuadra:
 
 ### v3.33 (oct 2026) — Comparar "Mis Comprobantes" de ARCA antes de importar + deshacer
 
-Idea tomada del benchmark (Colppy: "importador de faltantes"), con revisión previa y **deshacer**
-(Colppy no lo permite). No se conecta a ARCA: usa el Excel que se baja de la web, como antes.
+Importa solo los comprobantes que faltan, con revisión previa y **deshacer**. No se conecta a
+ARCA: usa el Excel que se baja de la web, como antes.
 
 - Subir el Excel en IVA → Comprobantes abre **Comparar con ARCA**: faltan en Cuadra (con el IVA
   que suman, tildadas para importar), ya cargadas con importe distinto, en Cuadra y no en ARCA
@@ -44,8 +44,8 @@ Idea tomada del benchmark (Colppy: "importador de faltantes"), con revisión pre
 
 ### v3.32 (oct 2026) — Resolver un débito pendiente sin salir de Movimientos
 
-Idea tomada del benchmark de competidores (Xubio: crear el pago desde el movimiento pendiente y
-ver la "diferencia no justificada"). Aditivo: no toca el motor de conciliación ni los asientos.
+Crear el pago desde el movimiento pendiente y ver cuánto de los egresos queda sin explicar.
+Aditivo: no toca el motor de conciliación ni los asientos.
 
 - **"＋ Resolver"** en cada débito sin explicar de Movimientos: abre un modal con importe, fecha y
   concepto precargados (banco fijo) y registra el pago o gasto que lo explica. La fila pasa a
