@@ -22,6 +22,8 @@ import {
   PagoCandidato,
   CompararComprobantesIvaResult,
   GrillaVencimientos,
+  Proveedor,
+  ProveedorInput,
   AccionMasiva,
   ResultadoMasivo,
   ComparacionMisComprobantesArchivo,
@@ -1115,6 +1117,38 @@ class ApiClient {
       params: { direccion, periodo }, headers: { 'Content-Type': 'multipart/form-data' },
     })
     this.invalidateCache('/iva')
+    return res.data
+  }
+
+  // ── Proveedores propios de la organización ────────────────────────────────
+  async listarProveedores(orgId?: number | null, opts: { q?: string; incluirInactivos?: boolean } = {}): Promise<Proveedor[]> {
+    const res = await this.client.get('/proveedores', { params: {
+      ...(orgId ? { org_id: orgId } : {}),
+      ...(opts.q ? { q: opts.q } : {}),
+      ...(opts.incluirInactivos ? { incluir_inactivos: true } : {}),
+    } })
+    return res.data
+  }
+
+  async crearProveedor(datos: ProveedorInput, orgId?: number): Promise<Proveedor> {
+    const res = await this.client.post('/proveedores', { ...datos, ...(orgId ? { org_id: orgId } : {}) })
+    return res.data
+  }
+
+  async actualizarProveedor(id: number, datos: ProveedorInput & { activo?: boolean }): Promise<Proveedor> {
+    const res = await this.client.patch(`/proveedores/${id}`, datos)
+    return res.data
+  }
+
+  /** Baja lógica: deja de listarse, sus pagos y facturas quedan. */
+  async bajaProveedor(id: number): Promise<{ ok: boolean }> {
+    const res = await this.client.delete(`/proveedores/${id}`)
+    return res.data
+  }
+
+  /** Da de alta los emisores de las facturas recibidas que no estén en la ficha. */
+  async sincronizarProveedores(orgId?: number): Promise<{ creados: number }> {
+    const res = await this.client.post('/proveedores/sincronizar', null, { params: this._orgParams(orgId) })
     return res.data
   }
 

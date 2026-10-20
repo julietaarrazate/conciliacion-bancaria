@@ -54,6 +54,7 @@ const navItems: Array<{ to: string; label: string; Icon: () => JSX.Element; perm
   { to: '/cheques',       label: 'Cheques',     Icon: Icon.Check,  permission: 'reconcile' },
   { to: '/tarjetas',      label: 'Tarjetas',    Icon: Icon.CreditCard, permission: 'manage_finance' },
   { to: '/pagos',         label: 'Pagos',       Icon: Icon.Bolt, permission: 'reconcile' },
+  { to: '/proveedores',   label: 'Proveedores', Icon: Icon.Building, permission: 'view_accounting' },
   { to: '/caja',          label: 'Caja',        Icon: Icon.Wallet, permission: 'reconcile' },
   { to: '/revision',       label: 'Revisión',      Icon: Icon.Flag, permission: 'reconcile' },
   { to: '/cuentas-corrientes', label: 'Cuentas corrientes', Icon: Icon.Bank, permission: 'manage_finance' },
