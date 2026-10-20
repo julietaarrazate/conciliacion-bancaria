@@ -22,6 +22,10 @@ import {
   PagoCandidato,
   CompararComprobantesIvaResult,
   GrillaVencimientos,
+  AccionMasiva,
+  ResultadoMasivo,
+  ComparacionMisComprobantesArchivo,
+  ImportacionMisComprobantesArchivo,
   ImpuestoVencimiento,
   BloqueCalendario,
   CalendarioVencimientoFila,
@@ -1070,6 +1074,36 @@ class ApiClient {
   // ── Comprobantes por revisar (facturas de compra por mail + IA) ─────────────
   private _orgParams(orgId?: number): Record<string, number> {
     return orgId ? { org_id: orgId } : {}
+  }
+
+  // ── Procesos masivos ───────────────────────────────────────────────────────
+  async calcularMasivo(accion: AccionMasiva, periodo: string): Promise<{ resultados: ResultadoMasivo[] }> {
+    const res = await this.client.post('/procesos-masivos/calcular', { accion, periodo })
+    return res.data
+  }
+
+  private _formArchivos(files: File[]): FormData {
+    const formData = new FormData()
+    files.forEach(f => formData.append('files', f))
+    return formData
+  }
+
+  /** Asigna cada Excel de Mis Comprobantes a su org por el CUIT del título y compara. No importa. */
+  async compararMisComprobantesVarios(files: File[], direccion: 'emitido' | 'recibido', periodo: string):
+    Promise<{ archivos: ComparacionMisComprobantesArchivo[] }> {
+    const res = await this.client.post('/procesos-masivos/mis-comprobantes/comparar', this._formArchivos(files), {
+      params: { direccion, periodo }, headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return res.data
+  }
+
+  async importarMisComprobantesVarios(files: File[], direccion: 'emitido' | 'recibido', periodo: string):
+    Promise<{ archivos: ImportacionMisComprobantesArchivo[] }> {
+    const res = await this.client.post('/procesos-masivos/mis-comprobantes/importar', this._formArchivos(files), {
+      params: { direccion, periodo }, headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    this.invalidateCache('/iva')
+    return res.data
   }
 
   // ── Vencimientos ───────────────────────────────────────────────────────────

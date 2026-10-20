@@ -9,11 +9,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.middleware.auth import can_switch_org, require_permission
-from app.models.organizacion import Organizacion
+from app.middleware.auth import require_permission
 from app.models.user import User
 from app.models.vencimientos import IMPUESTOS, CalendarioVencimiento, VencimientoMarcado
 from app.services import vencimientos as svc
+from app.services.acceso_orgs import orgs_accesibles, puede_org
 from app.services.auditoria import registrar_log
 from app.services.tz import hoy_art
 
@@ -26,19 +26,6 @@ def _validar_mes(mes: str) -> str:
     if not re.fullmatch(_RE_MES, mes or ""):
         raise HTTPException(422, "El mes debe tener formato AAAA-MM")
     return mes
-
-
-def _orgs_accesibles(db: Session, user: User) -> List[int]:
-    """Superadmin: todas las activas. Resto: la propia + las de allowed_org_ids."""
-    q = db.query(Organizacion.id).filter(Organizacion.activo.isnot(False))
-    if not user.is_superadmin:
-        ids = {user.organizacion_id or 1, *(user.allowed_org_ids or [])}
-        q = q.filter(Organizacion.id.in_(ids))
-    return [o.id for o in q.order_by(Organizacion.id).all()]
-
-
-def _puede_org(user: User, org_id: int) -> bool:
-    return org_id == (user.organizacion_id or 1) or can_switch_org(user, org_id)
 
 
 @router.get("/grilla")
@@ -54,7 +41,7 @@ def get_grilla(
         "mes": mes,
         "hoy": hoy,
         "impuestos": IMPUESTOS,
-        "filas": svc.grilla(db, _orgs_accesibles(db, current_user), mes, hoy),
+        "filas": svc.grilla(db, orgs_accesibles(db, current_user), mes, hoy),
     }
 
 
@@ -123,7 +110,7 @@ class MarcaIn(BaseModel):
 def _validar_marca(body: MarcaIn, user: User) -> None:
     if body.impuesto not in IMPUESTOS:
         raise HTTPException(422, f"Impuesto desconocido: {body.impuesto}")
-    if not _puede_org(user, body.organizacion_id):
+    if not puede_org(user, body.organizacion_id):
         raise HTTPException(403, "Sin acceso a esa organización")
 
 

@@ -972,3 +972,39 @@ export interface CalendarioVencimientoFila extends BloqueCalendario {
   periodo: string
   fuente: string | null
 }
+
+// ── Procesos masivos ──────────────────────────────────────────────────────────
+export type AccionMasiva = 'iva_liquidacion' | 'iva_proyeccion' | 'iibb_proyeccion' | 'monotributo_control' | 'sueldos_liquidacion'
+
+export interface ResultadoMasivo {
+  organizacion_id: number
+  nombre: string
+  resultado: 'calculado' | 'ya_presentado' | 'omitido' | 'error'
+  detalle: string | null
+  resumen: Record<string, number | string | boolean | null> | null
+}
+
+export interface ComparacionMisComprobantesArchivo {
+  archivo: string
+  cuit: string | null
+  organizacion_id: number | null
+  nombre: string | null
+  error: string | null
+  faltantes: number
+  iva_faltante: number
+  ya_cargados: number
+  importes_distintos: number
+  solo_en_cuadra: number
+  fuera_de_periodo: number
+}
+
+export interface ImportacionMisComprobantesArchivo {
+  archivo: string
+  cuit: string | null
+  organizacion_id: number | null
+  nombre: string | null
+  error: string | null
+  importados: number
+  duplicados: number
+  lote: string | null
+}

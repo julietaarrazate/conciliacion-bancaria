@@ -7,13 +7,16 @@ filas de `parsear_mis_comprobantes` (el Excel que se baja de la web).
 Misma identidad de comprobante que el unique `uq_comprobante_iva_dedup`:
 (dirección, tipo, punto de venta, número, CUIT de la contraparte), en la org.
 
-Read-only: no carga ni borra nada (la importación sigue en `routers/iva.py`).
+`comparar` es read-only. `importar_filas` carga (la usan la importación de IVA y
+la masiva de Procesos masivos).
 """
 
 import re
+import uuid
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.iva_liquidacion import ComprobanteIva
@@ -106,3 +109,43 @@ def comparar(
         "solo_en_cuadra": solo_en_cuadra,
         "fuera_de_periodo": fuera,
     }
+
+
+def importar_filas(
+    db: Session, org_id: int, direccion: str, periodo: str, filas: List[Dict[str, Any]],
+    archivo: Optional[str], elegidas: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    """Carga las filas del período como ComprobanteIva en una tanda (`lote`).
+
+    Dedup por el unique `uq_comprobante_iva_dedup` (las ya cargadas cuentan como
+    duplicadas). Con `elegidas` (claves de `comparar`) se cargan solo esas. Cada
+    fila se commitea sola: un duplicado no corta al resto.
+    """
+    elegidas = set(elegidas) if elegidas is not None else None
+    lote = str(uuid.uuid4())
+    importados = duplicados = fuera = no_elegidos = 0
+    for row in filas:
+        fecha = row["fecha"]
+        if f"{fecha.year:04d}-{fecha.month:02d}" != periodo:
+            fuera += 1
+            continue
+        if elegidas is not None and clave_de_fila(row) not in elegidas:
+            no_elegidos += 1
+            continue
+        db.add(ComprobanteIva(
+            organizacion_id=org_id, direccion=direccion, periodo=periodo, fecha=fecha,
+            tipo_codigo=row["tipo_codigo"], tipo_desc=row["tipo_desc"],
+            punto_venta=row["punto_venta"], numero=row["numero"],
+            cuit_contraparte=row["cuit_contraparte"], denominacion=row["denominacion"],
+            neto_gravado_total=row["neto_gravado_total"], total_iva=row["total_iva"],
+            imp_total=row["imp_total"], detalle_alicuotas=row["detalle_alicuotas"],
+            archivo_origen=archivo, lote_importacion=lote,
+        ))
+        try:
+            db.commit()
+            importados += 1
+        except IntegrityError:
+            db.rollback()
+            duplicados += 1
+    return {"importados": importados, "duplicados": duplicados, "fuera_de_periodo": fuera,
+            "no_elegidos": no_elegidos, "periodo": periodo, "lote": lote if importados else None}

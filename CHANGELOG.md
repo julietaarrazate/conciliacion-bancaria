@@ -5,6 +5,26 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.36 (oct 2026) — Procesos masivos
+
+Ola 2 del benchmark, punto 8 (Onvio: procesos multi-empresa). Ver `docs/business/PROCESOS_MASIVOS.md`.
+
+- **Calcular para todas**: liquidación y proyección de IVA, proyección de IIBB, control de
+  Monotributo y liquidación de sueldos para cada organización accesible con el módulo activo.
+  Resultado por org: calculado / ya presentado (no se toca) / omitido / error, sin que un error
+  corte al resto. La liquidación de IVA conserva las retenciones y percepciones cargadas a mano.
+- **Mis Comprobantes de varias organizaciones**: se suben todos los Excels juntos, cada uno va a su org
+  por el CUIT del título; primero se compara y después se importan las faltantes, con un lote por
+  org que se puede deshacer.
+- Solo para quien maneja varias organizaciones (superadmin o contador con organizaciones extra): el
+  menú se oculta al resto (`utils/orgs.manejaVariasOrgs`, compartido con el selector de organización).
+  Organización = empresa que usa Cuadra; sus clientes (los de las planillas) no entran acá.
+- Refactors sin cambio de comportamiento: `importar_filas` (compartido con la importación de IVA) y
+  `services/acceso_orgs.py` (compartido con Vencimientos).
+- Tests primero: `test_procesos_masivos.py` (13) + `ProcesosMasivos.test.tsx` (6) + `orgs.test.ts` (3).
+
+---
+
 ### v3.35 (oct 2026) — Grilla de vencimientos por organización
 
 Ola 2 del benchmark, punto 5 (Onvio / Aconpy). Ver `docs/business/VENCIMIENTOS.md`.

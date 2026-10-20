@@ -11,6 +11,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { confirmDialog } from '@/store/confirm'
 import { SearchModal } from './SearchModal'
 import { AgenteChat } from './AgenteChat'
+import { manejaVariasOrgs } from '@/utils/orgs'
 
 // ── SVG Icons (Heroicons outline style) ──────────────────────
 const Icon = {
@@ -41,7 +42,7 @@ const Icon = {
   DocCheck: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3 3m0 0l-3-3m3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>,
 }
 
-const navItems: Array<{ to: string; label: string; Icon: () => JSX.Element; permission?: string; superadmin?: boolean }> = [
+const navItems: Array<{ to: string; label: string; Icon: () => JSX.Element; permission?: string; superadmin?: boolean; variasOrgs?: boolean }> = [
   { to: '/resumen',        label: 'Resumen',       Icon: Icon.Chart },
   { to: '/flujo-de-caja',  label: 'Flujo de Caja', Icon: Icon.Activity },
   { to: '/dashboard',      label: 'Conciliar',     Icon: Icon.Bolt },
@@ -59,6 +60,7 @@ const navItems: Array<{ to: string; label: string; Icon: () => JSX.Element; perm
   { to: '/contabilidad',   label: 'Contabilidad',  Icon: Icon.Stack, permission: 'view_accounting' },
   { to: '/comprobantes-compra', label: 'Comprobantes por revisar', Icon: Icon.DocCheck, permission: 'view_accounting' },
   { to: '/vencimientos',   label: 'Vencimientos',  Icon: Icon.Bell, permission: 'view_accounting' },
+  { to: '/procesos-masivos', label: 'Procesos masivos', Icon: Icon.Stack, permission: 'manage_finance', variasOrgs: true },
   { to: '/iva',            label: 'IVA',           Icon: Icon.Receipt, permission: 'view_accounting' },
   { to: '/monotributo',   label: 'Monotributo',  Icon: Icon.Gauge, permission: 'view_accounting' },
   { to: '/ingresos-brutos', label: 'Ingresos Brutos', Icon: Icon.Building, permission: 'view_accounting' },
@@ -132,7 +134,7 @@ export const Layout: React.FC = () => {
 
   useEffect(() => {
     if (!user) return
-    if (user.is_superadmin || (user.allowed_org_ids && user.allowed_org_ids.length > 0)) {
+    if (manejaVariasOrgs(user)) {
       apiClient.getAllowedOrgs()
         .then(setOrgs)
         .catch(() => {})
@@ -176,6 +178,7 @@ export const Layout: React.FC = () => {
   const visibleItems = navItems.filter(
     item => {
       if (item.superadmin) return !!user?.is_superadmin
+      if (item.variasOrgs && !manejaVariasOrgs(user)) return false
       return !item.permission || hasPermission(item.permission)
     }
   )
@@ -213,7 +216,7 @@ export const Layout: React.FC = () => {
       <div className="px-2 py-3 border-t border-ml-gray dark:border-ml-dark-border space-y-1">
 
         {/* Org switcher — superadmin y contadores con orgs extra */}
-        {(user?.is_superadmin || (user?.allowed_org_ids && user.allowed_org_ids.length > 0)) && orgs.length > 0 && (
+        {manejaVariasOrgs(user) && orgs.length > 0 && (
           <div className="px-1 pb-1">
             <p className="text-2xs uppercase tracking-widest font-semibold text-ml-text-soft dark:text-gray-600 px-1.5 mb-1">Organización</p>
             <select
