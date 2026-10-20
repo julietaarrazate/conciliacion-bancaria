@@ -15,6 +15,10 @@ class MovimientoBancoResponse(BaseModel):
     cliente_acreditado: Optional[str] = None
     fecha_acred: Optional[date] = None
     source: Optional[str] = 'extracto'  # 'extracto' | 'um'
+    # Solo en el listado de movimientos: pago que explica el débito, y concepto de
+    # gasto bancario reconocido por el texto (ver services/gastos_bancarios.py).
+    egreso_id: Optional[int] = None
+    gasto_bancario: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -21,6 +21,7 @@ from app.models.cliente import Cliente
 from app.models.egreso import Egreso, CategoriaEgreso, TIPOS_EGRESO, FORMAS_PAGO
 from app.models.caja import ArqueoDiario, denominaciones_vacias
 from app.services.auditoria import registrar_log
+from app.services.movimiento_egreso import VinculoInvalido, validar_vinculo
 from app.services.storage import upload_comprobante
 from app.services.tz import hoy_art
 
@@ -55,6 +56,7 @@ def _egreso_dict(e: Egreso, con_foto: bool = False) -> dict:
         "tiene_foto":       bool(e.foto_comprobante),
         "foto_base64":      e.foto_comprobante if con_foto else None,
         "notas":            e.notas,
+        "movimiento_banco_id": e.movimiento_banco_id,
         "created_at":       e.created_at,
     }
 
@@ -148,6 +150,14 @@ def crear_egreso(
     if tipo == "pago_cliente" and not cliente:
         raise HTTPException(400, "Un pago a cliente requiere cliente_id o cliente_nombre")
 
+    # Resolver un pendiente del extracto: el egreso explica ese débito
+    movimiento = None
+    if payload.get("movimiento_banco_id") is not None:
+        try:
+            movimiento = validar_vinculo(db, payload["movimiento_banco_id"], oid, monto, forma_pago)
+        except VinculoInvalido as ex:
+            raise HTTPException(400, str(ex))
+
     # Foto del comprobante (S3/R2 con fallback base64)
     foto = upload_comprobante(payload.get("foto_base64"), prefix=f"egreso/{oid}")
 
@@ -189,6 +199,7 @@ def crear_egreso(
         arqueo_id=arqueo.id if arqueo else None,
         denominaciones_usadas={str(k): int(v) for k, v in dens_usadas.items()} if (forma_pago == "efectivo" and dens_usadas) else None,
         notas=notas,
+        movimiento_banco_id=movimiento.id if movimiento else None,
         usuario_id=current_user.id,
     )
     db.add(egreso)
@@ -199,6 +210,7 @@ def crear_egreso(
         "tipo": tipo, "forma_pago": forma_pago,
         "beneficiario": beneficiario or (cliente.nombre if cliente else None),
         "monto": monto,
+        "movimiento_banco_id": egreso.movimiento_banco_id,
     })
 
     # Motor contable — asiento automático (fault-tolerant: el egreso ya se
@@ -340,6 +352,21 @@ def editar_egreso(
 
         e.forma_pago = nueva_forma_pago
 
+    # Vínculo con el movimiento del extracto: null lo desvincula, un id lo
+    # vincula. Si queda vinculado, el monto y la forma de pago tienen que seguir
+    # coincidiendo con el movimiento (también al editar solo el monto).
+    if "movimiento_banco_id" in payload:
+        nuevo_mov = payload.get("movimiento_banco_id")
+        e.movimiento_banco_id = None if nuevo_mov is None else nuevo_mov
+    if e.movimiento_banco_id is not None:
+        try:
+            mov = validar_vinculo(db, e.movimiento_banco_id, e.organizacion_id,
+                                  e.monto, e.forma_pago, egreso_id=e.id)
+        except VinculoInvalido as ex:
+            db.rollback()
+            raise HTTPException(400, str(ex))
+        e.movimiento_banco_id = mov.id
+
     # Reversar asiento anterior y crear uno nuevo con los valores corregidos
     try:
         from app.services.motor_contable import reversar_asientos, registrar_egreso as _reg_egreso
@@ -362,7 +389,7 @@ def editar_egreso(
 
     registrar_log(db, current_user.id, "egresos", e.id, "UPDATE", {
         "monto": str(e.monto), "fecha": str(e.fecha), "beneficiario": e.beneficiario,
-        "forma_pago": e.forma_pago,
+        "forma_pago": e.forma_pago, "movimiento_banco_id": e.movimiento_banco_id,
     })
     db.commit()
     return {"ok": True, "egreso": _egreso_dict(e)}
