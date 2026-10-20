@@ -45,6 +45,7 @@ su liquidación; si no existe, se conservan los cargados (si no, quedarían en 0
 ## Pendiente de revisar
 
 - El endpoint individual `POST /iva/liquidacion/calcular` también pone en 0 retenciones y
-  percepciones si el frontend no las manda: confirmar que la pantalla de IVA siempre las envía.
+  percepciones si no las recibe. Revisado (oct 2026): `pages/Iva.tsx` precarga las guardadas y
+  las manda, así que solo quedan en 0 si se borra el campo.
 - Los procesos corren dentro del request (sin cola): con muchas orgs puede tardar; si crece,
   pasarlo a tarea en segundo plano con progreso.
