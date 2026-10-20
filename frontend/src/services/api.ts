@@ -601,6 +601,18 @@ class ApiClient {
     return res.data
   }
 
+  /** Todos los clientes de la organización (incluso sin planillas), ordenados por nombre. */
+  async listarClientesOrg(orgId?: number | null): Promise<{ id: number; nombre: string }[]> {
+    const res = await this.client.get('/clientes/archivos', { params: orgId ? { org_id: orgId } : {} })
+    // r.data.clientes solo incluye clientes con planillas; organizaciones[].clientes trae todos
+    const orgs: { clientes?: { id: number; nombre: string }[] }[] = res.data.organizaciones || []
+    const todos = orgs.flatMap(o => o.clientes || [])
+    const lista: { id: number; nombre: string }[] = todos.length
+      ? todos.map(c => ({ id: c.id, nombre: c.nombre }))
+      : (res.data.clientes?.map((c: { id?: number; nombre: string }) => ({ id: c.id || 0, nombre: c.nombre })) || [])
+    return lista.sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }
+
   async listarCategoriasEgreso(orgId?: number | null): Promise<{ id: number; nombre: string }[]> {
     const res = await this.client.get('/pagos/categorias', { params: orgId ? { org_id: orgId } : {} })
     return res.data || []

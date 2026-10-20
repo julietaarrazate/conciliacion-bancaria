@@ -134,7 +134,9 @@ export interface PagoCandidato {
 /** POST /pagos para explicar un débito del extracto ("Resolver" en Movimientos). */
 export interface PagoDesdeMovimientoPayload {
   movimiento_banco_id: number
-  tipo: 'gasto' | 'proveedor'
+  /** gasto/proveedor: de la organización. pago_cliente: OP pagada por cuenta de un cliente (va a su cuenta corriente). */
+  tipo: 'gasto' | 'proveedor' | 'pago_cliente'
+  cliente_nombre?: string
   forma_pago: 'banco'
   monto: number
   fecha: string

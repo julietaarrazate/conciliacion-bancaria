@@ -433,6 +433,10 @@ Los flujos detallados (entrada/salida/docs afectada por tipo de trabajo) están 
 **`docs/playbooks/LOOPS.md`** (Feature/Bug/Refactor/Documentation/Security/Database/AI/Release/
 Architecture/Product), operacionalizados en `.claude/commands/`.
 
+**Primero se arregla, después se implementa** (pedido de la operadora, oct 2026): si al trabajar
+se encuentra una falla, se corrige (con su test) antes de seguir con lo nuevo, y lo nuevo se
+construye recién cuando el diseño está confirmado.
+
 **Reglas de calidad permanentes** (innegociables en todo cambio):
 no duplicar lógica · no romper compatibilidad · mantener el aislamiento multi-tenant ·
 mantener la auditoría · mantener la trazabilidad contable (partida doble) · mantener/crear tests ·
