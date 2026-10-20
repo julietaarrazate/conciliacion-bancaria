@@ -87,6 +87,8 @@ es la referencia profunda. **Consultá el doc correspondiente ANTES de tocar su 
 - Agregar módulo/endpoint/banco/parser/reporte/módulo-contable → `docs/playbooks/`
 - Mapa general y entidades → `docs/architecture/SYSTEM_MAP.md`, `DOMAIN_MODEL.md` · Índice: `docs/README.md`
 - Auditoría de ingeniería (madurez, deuda técnica, roadmap de ingeniería) → `ENGINEERING_AUDIT.md`
+- Benchmark de competidores (oct 2026: qué incorporar de Xubio, Colppy, Contabilium, Alegra,
+  LaPyme, Onvio, en 3 olas por valor/esfuerzo) → `docs/ekp/BENCHMARK_COMPETIDORES_2026-10.md`
 
 Cada doc tiene una sección `## Pendiente de revisar` con discrepancias código↔doc detectadas.
 Si cambiás el código de un área, actualizá su doc (la doc describe el código tal como está).
@@ -114,7 +116,7 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
                    backup_service.py, backup_scheduler.py, push_service.py,
                    email_sender.py, password_reset.py, decimal_utils.py,
                    extracto_pdf/ (lector de PDF), extracto_pdf_service.py, extracto_import.py
-  /alembic/versions — 001 a 028. En el arranque Alembic solo hace `stamp head`: el esquema real lo
+  /alembic/versions — 001 a 030. En el arranque Alembic solo hace `stamp head`: el esquema real lo
                       sostienen `create_all` + los safety-nets de `app/db_safety.py`
 
 /frontend/src
@@ -203,7 +205,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ## Estado actual y changelog
 
-**Versión actual: v3.31.** Historial completo de versiones (v3.6 a v3.31, con detalle de cada
+**Versión actual: v3.34.** Historial completo de versiones (v3.6 a v3.34, con detalle de cada
 feature/fix/PR) en **`CHANGELOG.md`** — no se carga automáticamente en cada sesión, así que si
 necesitás contexto histórico detallado de una versión puntual, leelo directamente.
 
@@ -214,7 +216,13 @@ estéticos con PDF de planilla conciliada + alertas de descuadre/filas ambiguas 
 **v3.30** Comprobantes por revisar: facturas de compra por mail (Resend Inbound) o subidas, leídas
 con IA y confirmadas hacia IVA y Pagos (`docs/business/COMPROBANTES_POR_REVISAR.md`) ·
 **v3.31** extractos en PDF: lector sin IA + formatos aprendidos, cuadre de saldos en Decimal,
-pantalla de revisión y "agregar solo los nuevos" (`docs/business/EXTRACTOS_PDF.md`).
+pantalla de revisión y "agregar solo los nuevos" (`docs/business/EXTRACTOS_PDF.md`) ·
+**v3.32** resolver un débito pendiente desde Movimientos con un pago vinculado + % de egresos
+explicados en el resumen del extracto (`docs/business/BUSINESS_RULES.md` §1.9) ·
+**v3.33** comparar "Mis Comprobantes" de ARCA con lo cargado antes de importar (faltantes, importes
+distintos, en Cuadra y no en ARCA), importar solo lo elegido y deshacer la tanda (§5.5) ·
+**v3.34** Comprobantes por revisar: alerta si la factura está a nombre de otro CUIT y no se confirma
+en un período con la liquidación de IVA presentada.
 
 Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,
 sin efectos) y la operadora la rechazó — se revirtió a la landing anterior completa (gradiente,
@@ -423,4 +431,4 @@ Registro de obra: el expediente se guarda fuera del repositorio.
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.31
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.34

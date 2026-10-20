@@ -31,7 +31,8 @@ from app.services.extracto_import import (  # noqa: F401
 )
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_movimientos, export_extracto_contador
-from app.services.gastos_bancarios import resumen_extracto as resumen_gastos_extracto
+from app.services.gastos_bancarios import clasificar_gasto, resumen_extracto as resumen_gastos_extracto
+from app.services.movimiento_egreso import egresos_por_movimiento
 import logging
 from app.middleware.auth import get_current_user, require_permission, can_switch_org
 from app.config import get_settings
@@ -480,6 +481,11 @@ def listar_movimientos(extracto_id: int,
     if limit > 0:
         q = q.limit(limit)
     items = q.all()
+    egresos = egresos_por_movimiento(db, [m.id for m in items])
+    for m in items:
+        # atributos de respuesta, no columnas (no se persisten)
+        m.egreso_id = egresos.get(m.id)
+        m.gasto_bancario = clasificar_gasto(m.titular, m.monto)
     return {"extracto_id": extracto_id, "total": total, "items": items}
 
 
@@ -666,6 +672,11 @@ def delete_movimiento(
         db.query(PlanillaRow).filter(
             PlanillaRow.orden_movimiento_acreditado == mov_id
         ).update({"orden_movimiento_acreditado": None}, synchronize_session="fetch")
+        # El pago que lo explicaba queda (sin vínculo); en Postgres lo hace también
+        # el ON DELETE SET NULL de la FK.
+        from app.models.egreso import Egreso
+        db.query(Egreso).filter(Egreso.movimiento_banco_id == mov_id).update(
+            {"movimiento_banco_id": None}, synchronize_session="fetch")
         orden_borrado = mov.orden
         db.flush()
         db.delete(mov)
@@ -692,12 +703,15 @@ def delete_movimiento(
 @router.get("/{extracto_id}/resumen")
 def resumen_extracto(extracto_id: int, db: Session = Depends(get_db),
                      current_user: User = Depends(get_current_user)):
-    """Gastos bancarios agrupados por concepto + % de ingresos ya acreditados.
+    """Gastos bancarios agrupados por concepto + % de ingresos ya acreditados +
+    % de débitos explicados (gasto bancario reconocido o pago vinculado).
     Read-only: no toca movimientos ni asientos (ver services/gastos_bancarios.py)."""
     _extracto_for_user(db, extracto_id, current_user, include_deleted=True)
-    movs = (db.query(MovimientoBanco.titular, MovimientoBanco.monto, MovimientoBanco.cliente_acreditado)
+    movs = (db.query(MovimientoBanco.id, MovimientoBanco.titular, MovimientoBanco.monto,
+                     MovimientoBanco.cliente_acreditado)
             .filter(MovimientoBanco.extracto_id == extracto_id).all())
-    return resumen_gastos_extracto(movs)
+    con_egreso = set(egresos_por_movimiento(db, [m.id for m in movs]))
+    return resumen_gastos_extracto(movs, ids_con_egreso=con_egreso)
 
 
 @router.get("/{extracto_id}", response_model=ExtractoBancarioResponse)

@@ -110,6 +110,38 @@ export interface GastoBancarioConcepto {
 export interface ResumenExtracto {
   gastos_bancarios: { conceptos: GastoBancarioConcepto[]; cantidad: number; total: number | string }
   explicado: { creditos: number; acreditados: number; sin_acreditar: number; porcentaje: number | null }
+  /** Débitos explicados por un gasto bancario reconocido o un pago vinculado (opcional: backend viejo). */
+  debitos?: {
+    debitos: number
+    explicados: number
+    sin_explicar: number
+    total_sin_explicar: number | string
+    porcentaje: number | null
+  }
+}
+
+/** Pago ya cargado que podría explicar un débito (GET /pagos/candidatos-movimiento/{id}). */
+export interface PagoCandidato {
+  id: number
+  fecha?: string | null
+  beneficiario?: string | null
+  concepto?: string | null
+  cliente_nombre?: string | null
+  monto: number | string
+  dias_diferencia?: number | null
+}
+
+/** POST /pagos para explicar un débito del extracto ("Resolver" en Movimientos). */
+export interface PagoDesdeMovimientoPayload {
+  movimiento_banco_id: number
+  tipo: 'gasto' | 'proveedor'
+  forma_pago: 'banco'
+  monto: number
+  fecha: string
+  beneficiario?: string
+  concepto?: string
+  categoria?: string
+  org_id?: number
 }
 
 export interface ConciliacionResultado {
@@ -230,6 +262,8 @@ export interface MovimientoFiltrado {
   cliente_acreditado?: string | null
   fecha_acred?: string | null
   source?: string  // 'extracto' | 'um'
+  egreso_id?: number | null       // pago que explica el débito
+  gasto_bancario?: string | null  // concepto de gasto bancario reconocido
 }
 
 export interface MergeUMResult {
@@ -389,7 +423,42 @@ export interface ImportarComprobantesIvaResult {
   importados: number
   duplicados: number
   fuera_de_periodo: number
+  no_elegidos?: number
   periodo: string
+  /** Tanda de importación: se puede deshacer con DELETE /iva/comprobantes/lote/{lote}. */
+  lote?: string | null
+}
+
+/** Fila del Excel "Mis Comprobantes" de ARCA comparada con Cuadra. */
+export interface FilaMisComprobantes {
+  clave: string
+  fecha: string
+  tipo_codigo: number
+  tipo_desc: string | null
+  punto_venta: number | null
+  numero: number | null
+  cuit_contraparte: string | null
+  denominacion: string | null
+  neto_gravado_total: number
+  total_iva: number
+  imp_total: number
+  es_nota_credito: boolean
+  // solo en ya_cargados
+  comprobante_id?: number
+  importe_distinto?: boolean
+  total_iva_cuadra?: number
+  imp_total_cuadra?: number
+}
+
+/** POST /iva/comprobantes/comparar — no importa nada. */
+export interface CompararComprobantesIvaResult {
+  periodo: string
+  direccion: 'emitido' | 'recibido'
+  faltantes: FilaMisComprobantes[]
+  iva_faltante: number
+  ya_cargados: FilaMisComprobantes[]
+  solo_en_cuadra: ComprobanteIva[]
+  fuera_de_periodo: number
 }
 
 // ── Comprobantes por revisar (facturas de compra por mail + IA) ──────────────
@@ -403,6 +472,8 @@ export interface DatosComprobanteCompra {
   fecha: string | null
   cuit_emisor: string | null
   razon_social: string | null
+  /** CUIT a nombre de quién está la factura (se controla contra el de la organización). */
+  cuit_receptor?: string | null
   cae: string | null
   // { "21%": { neto: "1000.00", iva: "210.00" } } — montos como string (Decimal en backend)
   alicuotas: Record<string, { neto: string; iva: string }>

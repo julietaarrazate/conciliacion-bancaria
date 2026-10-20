@@ -19,7 +19,10 @@ Permisos:
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+import json
+import uuid
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -38,6 +41,7 @@ from app.services.iva_service import (
     IvaServiceError,
 )
 from app.services.mis_comprobantes_parser import parsear_mis_comprobantes
+from app.services.comparar_mis_comprobantes import clave_de_fila, comparar
 from app.services.iva_liquidacion_service import (
     calcular_liquidacion,
     marcar_presentada as marcar_liquidacion_presentada,
@@ -346,12 +350,64 @@ def _liq_por_id_con_acceso(db: Session, current_user: User, liq_id: int) -> Liqu
 
 # ── Comprobantes: import / listado / toggle / delete ──────────────
 
+def _fila_dict(fila: dict) -> dict:
+    """Fila del Excel de ARCA lista para JSON (fecha ISO, importes float)."""
+    return {
+        **{k: v for k, v in fila.items() if k not in ("fecha",)},
+        "fecha": fila["fecha"].isoformat() if fila.get("fecha") else None,
+        "neto_gravado_total": _f(fila.get("neto_gravado_total")),
+        "total_iva": _f(fila.get("total_iva")),
+        "imp_total": _f(fila.get("imp_total")),
+        **({"total_iva_cuadra": _f(fila["total_iva_cuadra"]),
+            "imp_total_cuadra": _f(fila["imp_total_cuadra"])} if "total_iva_cuadra" in fila else {}),
+        "es_nota_credito": es_nota_credito(fila["tipo_codigo"]),
+    }
+
+
+async def _leer_mis_comprobantes(file: UploadFile, direccion: str) -> list:
+    if direccion not in ("emitido", "recibido"):
+        raise HTTPException(422, "direccion debe ser 'emitido' o 'recibido'")
+    contenido = await file.read()
+    try:
+        return parsear_mis_comprobantes(contenido, direccion)
+    except ValueError as ex:
+        raise HTTPException(400, str(ex))
+
+
+@router.post("/comprobantes/comparar")
+async def comparar_comprobantes(
+    file: UploadFile = File(...),
+    direccion: str = Query(..., description="'emitido' o 'recibido'"),
+    periodo: str = Query(..., description="Período YYYY-MM"),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_finance")),
+):
+    """Compara el Excel "Mis Comprobantes" de ARCA con lo cargado en Cuadra, sin
+    importar nada: qué falta, qué ya está (y si coincide el importe), qué está en
+    Cuadra y ARCA no tiene, y cuántos son de otro período. No se conecta a ARCA."""
+    filas = await _leer_mis_comprobantes(file, direccion)
+    periodo = _validar_periodo(periodo)
+    oid = _org_id(current_user, org_id)
+    r = comparar(db, oid, direccion, periodo, filas)
+    return {
+        "periodo": periodo,
+        "direccion": direccion,
+        "faltantes": [_fila_dict(f) for f in r["faltantes"]],
+        "iva_faltante": _f(r["iva_faltante"]),
+        "ya_cargados": [_fila_dict(f) for f in r["ya_cargados"]],
+        "solo_en_cuadra": [_comprobante_dict(c) for c in r["solo_en_cuadra"]],
+        "fuera_de_periodo": r["fuera_de_periodo"],
+    }
+
+
 @router.post("/comprobantes/importar")
 async def importar_comprobantes(
     file: UploadFile = File(...),
     direccion: str = Query(..., description="'emitido' o 'recibido'"),
     periodo: str = Query(..., description="Período YYYY-MM"),
     org_id: Optional[int] = Query(None),
+    claves: Optional[str] = Form(None, description="JSON: lista de claves a importar (de /comparar)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("manage_finance")),
 ):
@@ -360,26 +416,33 @@ async def importar_comprobantes(
     Solo se importan los comprobantes cuya fecha cae en el período. La dedup es
     por el unique (org, direccion, tipo, PV, número, cuit): los ya existentes
     cuentan como duplicados (no error). Los de otra fecha cuentan como
-    fuera_de_periodo y se ignoran."""
-    if direccion not in ("emitido", "recibido"):
-        raise HTTPException(422, "direccion debe ser 'emitido' o 'recibido'")
+    fuera_de_periodo y se ignoran. Con `claves` (las de /comparar) se importan
+    solo esas. Todo lo importado queda en una tanda (`lote`) que se puede deshacer
+    con DELETE /comprobantes/lote/{lote}."""
+    filas = await _leer_mis_comprobantes(file, direccion)
     periodo = _validar_periodo(periodo)
     oid = _org_id(current_user, org_id)
 
-    contenido = await file.read()
-    try:
-        filas = parsear_mis_comprobantes(contenido, direccion)
-    except ValueError as ex:
-        raise HTTPException(400, str(ex))
+    elegidas = None
+    if claves:
+        try:
+            elegidas = set(json.loads(claves))
+        except (ValueError, TypeError):
+            raise HTTPException(422, "claves debe ser una lista JSON")
+    lote = str(uuid.uuid4())
 
     importados = 0
     duplicados = 0
     fuera_de_periodo = 0
+    no_elegidos = 0
     for row in filas:
         fecha = row["fecha"]
         fila_periodo = f"{fecha.year:04d}-{fecha.month:02d}"
         if fila_periodo != periodo:
             fuera_de_periodo += 1
+            continue
+        if elegidas is not None and clave_de_fila(row) not in elegidas:
+            no_elegidos += 1
             continue
 
         comp = ComprobanteIva(
@@ -398,6 +461,7 @@ async def importar_comprobantes(
             imp_total=row["imp_total"],
             detalle_alicuotas=row["detalle_alicuotas"],
             archivo_origen=file.filename,
+            lote_importacion=lote,
         )
         db.add(comp)
         try:
@@ -410,14 +474,50 @@ async def importar_comprobantes(
     registrar_log(db, current_user.id, "comprobantes_iva", 0, "IMPORTAR",
                   {"direccion": direccion, "periodo": periodo,
                    "importados": importados, "duplicados": duplicados,
-                   "fuera_de_periodo": fuera_de_periodo})
+                   "fuera_de_periodo": fuera_de_periodo, "no_elegidos": no_elegidos,
+                   "lote": lote})
     db.commit()
     return {
         "importados": importados,
         "duplicados": duplicados,
         "fuera_de_periodo": fuera_de_periodo,
+        "no_elegidos": no_elegidos,
         "periodo": periodo,
+        "lote": lote if importados else None,
     }
+
+
+@router.delete("/comprobantes/lote/{lote}")
+def deshacer_lote(
+    lote: str,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_finance")),
+):
+    """Deshace una importación: borra los comprobantes de esa tanda (solo de la
+    org). 409 si la liquidación de IVA de alguno de sus períodos ya está presentada."""
+    oid = _org_id(current_user, org_id)
+    comps = db.query(ComprobanteIva).filter(
+        ComprobanteIva.organizacion_id == oid,
+        ComprobanteIva.lote_importacion == lote,
+    ).all()
+    if not comps:
+        raise HTTPException(404, "Importación no encontrada")
+    periodos = sorted({c.periodo for c in comps})
+    presentada = db.query(LiquidacionIva).filter(
+        LiquidacionIva.organizacion_id == oid,
+        LiquidacionIva.periodo.in_(periodos),
+        LiquidacionIva.estado == "presentada",
+    ).first()
+    if presentada:
+        raise HTTPException(409, f"La liquidación de IVA de {presentada.periodo} ya está presentada: "
+                                 "no se puede deshacer la importación")
+    for c in comps:
+        db.delete(c)
+    registrar_log(db, current_user.id, "comprobantes_iva", 0, "DESHACER_IMPORTACION",
+                  {"lote": lote, "borrados": len(comps), "periodos": periodos})
+    db.commit()
+    return {"ok": True, "borrados": len(comps), "periodos": periodos}
 
 
 @router.get("/comprobantes")

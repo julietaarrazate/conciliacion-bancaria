@@ -5,6 +5,67 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.34 (oct 2026) — Comprobantes por revisar: factura a nombre de la empresa y período cerrado
+
+Controles tomados del benchmark (Contabilium), adaptados a Cuadra:
+
+- La IA lee también el **CUIT del comprador**; si no es el de la organización, alerta "La factura
+  está a nombre de otro CUIT". El CUIT de la empresa se carga en la misma pantalla
+  (`CuitOrganizacionCard`, `GET/PUT /comprobantes-compra/cuit-organizacion`, guardado en
+  `configuracion["cuit"]`, con el de ARCA como respaldo). Sin migración.
+- **Período con IVA presentado**: alerta al leer y 409 al confirmar en ese período (se elige uno
+  posterior). Reemplaza a la regla "más de 60 días" de Contabilium, que en IVA no dice si el
+  crédito todavía se puede tomar.
+- No se crean proveedores: Cuadra no tiene maestro de proveedores (queda como idea aparte).
+- Los campos del editor quedaron con la etiqueta asociada al input (accesibilidad).
+- Tests: `test_comprobantes_compra_controles.py` (12) + `CuitOrganizacionCard.test.tsx` (4) + 1 en
+  `ComprobantesCompra.test.tsx`, escritos antes del código.
+
+---
+
+### v3.33 (oct 2026) — Comparar "Mis Comprobantes" de ARCA antes de importar + deshacer
+
+Idea tomada del benchmark (Colppy: "importador de faltantes"), con revisión previa y **deshacer**
+(Colppy no lo permite). No se conecta a ARCA: usa el Excel que se baja de la web, como antes.
+
+- Subir el Excel en IVA → Comprobantes abre **Comparar con ARCA**: faltan en Cuadra (con el IVA
+  que suman, tildadas para importar), ya cargadas con importe distinto, en Cuadra y no en ARCA
+  (crédito fiscal en riesgo) y de otro período.
+- `POST /iva/comprobantes/comparar` (read-only, `services/comparar_mis_comprobantes.py`) e
+  importación de solo las elegidas (`claves` en `POST /iva/comprobantes/importar`; sin `claves`
+  funciona igual que antes).
+- **Deshacer**: cada importación queda en un lote (`comprobantes_iva.lote_importacion`, migración
+  030 + safety net); `DELETE /iva/comprobantes/lote/{lote}` lo borra salvo que la liquidación del
+  período esté presentada (409).
+- Tests: `test_iva_comparar_arca.py` (9) + `CompararArcaModal.test.tsx` (4), escritos antes del
+  código. Ver `docs/business/BUSINESS_RULES.md` §5.5.
+
+---
+
+### v3.32 (oct 2026) — Resolver un débito pendiente sin salir de Movimientos
+
+Idea tomada del benchmark de competidores (Xubio: crear el pago desde el movimiento pendiente y
+ver la "diferencia no justificada"). Aditivo: no toca el motor de conciliación ni los asientos.
+
+- **"＋ Resolver"** en cada débito sin explicar de Movimientos: abre un modal con importe, fecha y
+  concepto precargados (banco fijo) y registra el pago o gasto que lo explica. La fila pasa a
+  "✓ Pago #id". Un débito reconocido como gasto bancario sugiere la categoría bancaria.
+- `egresos.movimiento_banco_id` (migración 029 + safety net, `ON DELETE SET NULL`) y
+  `services/movimiento_egreso.py`: solo débitos y forma de pago banco, mismo importe al centavo,
+  un pago por movimiento (índice único), misma organización, período no cerrado. `POST /pagos` y
+  `PATCH /pagos/{id}` aceptan `movimiento_banco_id` (`null` desvincula).
+- **Resumen del extracto**: nuevo bloque `debitos` (explicados por gasto bancario o pago vinculado,
+  cantidad y total sin explicar) y "% de los egresos explicados" en la barra de Movimientos.
+- **Pago ya cargado**: el modal sugiere primero los pagos con el mismo importe, banco, sin vincular
+  y fecha a ±10 días (`GET /pagos/candidatos-movimiento/{id}`) y los vincula con
+  `POST /pagos/{id}/vincular-movimiento`, que no toca el asiento. Evita registrar el pago dos veces.
+- El listado de movimientos devuelve `egreso_id` y `gasto_bancario` por fila.
+- Contabilidad igual que cargar el pago a mano en Pagos (`registrar_egreso`).
+- Tests: `test_resolver_pendientes.py` (26) + `ResolverMovimientoModal.test.tsx` (7) y 2 nuevos
+  en `ResumenExtracto.test.tsx`. Ver `docs/business/BUSINESS_RULES.md` §1.9 (con diagrama).
+
+---
+
 ### v3.31 (oct 2026) — Extractos en PDF: lectura sin IA, cuadre de saldos y revisión
 
 Importa el extracto en PDF con revisión y validación de saldos, y está hecha para depender lo

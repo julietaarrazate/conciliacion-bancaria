@@ -58,6 +58,11 @@ class Egreso(Base):
 
     notas           = Column(Text, nullable=True)
 
+    # Movimiento del extracto que este egreso explica (resuelto desde Movimientos,
+    # "Resolver pendiente"). Solo débitos y forma_pago=banco, mismo importe.
+    movimiento_banco_id = Column(Integer, ForeignKey("movimientos_banco.id", ondelete="SET NULL"),
+                                 nullable=True, index=True, unique=True)
+
     usuario_id      = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at      = Column(DateTime, default=datetime.utcnow)
 

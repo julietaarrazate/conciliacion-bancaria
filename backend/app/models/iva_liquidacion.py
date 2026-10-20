@@ -47,6 +47,8 @@ class ComprobanteIva(Base):
     detalle_alicuotas    = Column(JSON, nullable=True)           # {alícuota: {neto, iva}} solo no-nulas
     incluido             = Column(Boolean, nullable=False, default=True)
     archivo_origen       = Column(String(255), nullable=True)
+    # Tanda de importación del Excel de ARCA (uuid): permite deshacerla entera.
+    lote_importacion     = Column(String(36), nullable=True, index=True)
     created_at           = Column(DateTime, default=datetime.utcnow)
 
     organizacion = relationship("Organizacion", foreign_keys=[organizacion_id])

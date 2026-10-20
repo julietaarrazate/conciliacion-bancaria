@@ -58,8 +58,12 @@ def clasificar_gasto(titular: Optional[str], monto) -> Optional[str]:
     return None
 
 
-def resumen_extracto(movimientos: Iterable) -> Dict[str, Any]:
-    """Gastos bancarios agrupados por concepto + % de ingresos ya explicados.
+def resumen_extracto(movimientos: Iterable, ids_con_egreso: Optional[Iterable[int]] = None) -> Dict[str, Any]:
+    """Gastos bancarios agrupados por concepto + % de ingresos y egresos explicados.
+
+    Args:
+        ids_con_egreso: ids de los movimientos que ya tienen un pago vinculado
+            (`Egreso.movimiento_banco_id`). Solo se usa si los movimientos traen `id`.
 
     Returns:
         gastos_bancarios: {conceptos: [{concepto, cantidad, total}], cantidad, total}
@@ -67,10 +71,18 @@ def resumen_extracto(movimientos: Iterable) -> Dict[str, Any]:
         explicado: {creditos, acreditados, sin_acreditar, porcentaje}
             créditos (monto > 0) del extracto acreditados a un cliente.
             `porcentaje` es None si el extracto no tiene créditos.
+        debitos: {debitos, explicados, sin_explicar, total_sin_explicar, porcentaje}
+            débitos (monto < 0) explicados por un gasto bancario reconocido o por
+            un pago vinculado. `total_sin_explicar` en positivo; `porcentaje` None
+            si el extracto no tiene débitos.
     """
+    con_egreso = set(ids_con_egreso or ())
     por_concepto: Dict[str, Dict[str, Any]] = {}
     creditos = 0
     acreditados = 0
+    debitos = 0
+    debitos_explicados = 0
+    total_sin_explicar = Decimal("0")
 
     for m in movimientos or []:
         monto = getattr(m, "monto", None)
@@ -87,11 +99,19 @@ def resumen_extracto(movimientos: Iterable) -> Dict[str, Any]:
                 acreditados += 1
             continue
 
+        if monto_d == 0:
+            continue
+
+        debitos += 1
         concepto = clasificar_gasto(getattr(m, "titular", None), monto_d)
         if concepto:
             g = por_concepto.setdefault(concepto, {"concepto": concepto, "cantidad": 0, "total": Decimal("0")})
             g["cantidad"] += 1
             g["total"] += -monto_d
+        if concepto or getattr(m, "id", None) in con_egreso:
+            debitos_explicados += 1
+        else:
+            total_sin_explicar += -monto_d
 
     orden = {c: i for i, (c, _) in enumerate(_REGLAS)}
     conceptos = sorted(por_concepto.values(), key=lambda g: orden[g["concepto"]])
@@ -102,6 +122,10 @@ def resumen_extracto(movimientos: Iterable) -> Dict[str, Any]:
     porcentaje = (
         float((Decimal(acreditados) * 100 / Decimal(creditos)).quantize(Decimal("0.1")))
         if creditos else None
+    )
+    porcentaje_debitos = (
+        float((Decimal(debitos_explicados) * 100 / Decimal(debitos)).quantize(Decimal("0.1")))
+        if debitos else None
     )
 
     return {
@@ -115,5 +139,12 @@ def resumen_extracto(movimientos: Iterable) -> Dict[str, Any]:
             "acreditados": acreditados,
             "sin_acreditar": creditos - acreditados,
             "porcentaje": porcentaje,
+        },
+        "debitos": {
+            "debitos": debitos,
+            "explicados": debitos_explicados,
+            "sin_explicar": debitos - debitos_explicados,
+            "total_sin_explicar": total_sin_explicar.quantize(Decimal("0.01")),
+            "porcentaje": porcentaje_debitos,
         },
     }

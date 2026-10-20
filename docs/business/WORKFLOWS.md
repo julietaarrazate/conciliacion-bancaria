@@ -73,6 +73,12 @@ flowchart LR
 Ver `pages/Pagos.tsx`, `routers/pagos.py`, [AI_GUIDE](../ai/AI_GUIDE.md) (OCR) y
 [UX_RULES](../ux/UX_RULES.md) (compartir/lock).
 
+**Desde el extracto (v3.32):** en Movimientos, un débito sin explicar muestra
+"＋ Resolver" y abre `ResolverMovimientoModal` con el importe, la fecha y el
+concepto precargados (forma de pago banco fija). El egreso queda vinculado al
+movimiento y el resumen del extracto suma ese débito como explicado. Reglas y
+diagrama de secuencia en [BUSINESS_RULES §1.9](./BUSINESS_RULES.md).
+
 ## 5. Liquidación de comisiones + cierre de período
 
 1. Se calcula la liquidación de comisiones por cliente/período (`routers/liquidaciones.py`).

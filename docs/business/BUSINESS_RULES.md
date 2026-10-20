@@ -216,6 +216,58 @@ status:
   - `explicado`: créditos (monto > 0) del extracto con cliente acreditado
     (`es_libre()` falso) sobre el total de créditos; `porcentaje` None si no hay
     créditos.
+  - `debitos` (v3.32): débitos (monto < 0) **explicados** — por un gasto bancario
+    reconocido (regla de arriba) o por un pago vinculado (§1.9) — sobre el total
+    de débitos, más `total_sin_explicar` en positivo. Un débito que es gasto
+    bancario y además tiene pago cuenta una sola vez.
+
+### 1.9. Resolver un débito pendiente con un pago vinculado — v3.32
+
+Desde Movimientos, un débito sin explicar se resuelve registrando el pago o
+gasto que lo explica ("＋ Resolver"), sin ir a Pagos. El vínculo es
+`Egreso.movimiento_banco_id` (`services/movimiento_egreso.py`):
+
+- Solo **débitos** y egresos con `forma_pago=banco`. Un crédito se sigue
+  explicando acreditándolo a un cliente (`cliente_acreditado`), que no se toca
+  para los débitos porque alimenta reportes y cuentas corrientes de clientes.
+- **Mismo importe** al centavo (Decimal): |monto del movimiento| = monto del egreso.
+- **Un pago por movimiento**; misma organización; extracto no borrado; período
+  no cerrado.
+- `POST /pagos` acepta `movimiento_banco_id`; `PATCH /pagos/{id}` lo vincula
+  (id) o desvincula (`null`). Mientras siga vinculado, editar el monto o la forma
+  de pago a algo que no coincida se rechaza (400).
+- **Pago ya cargado**: si el pago se registró antes en Pagos, no hay que crear
+  otro (duplicaría el gasto y el asiento). `GET /pagos/candidatos-movimiento/{id}`
+  sugiere los pagos de la org con el mismo importe, banco, sin vincular y fecha a
+  ±10 días (`DIAS_CANDIDATOS`), el más cercano primero; el modal los muestra
+  arriba. `POST /pagos/{id}/vincular-movimiento` guarda solo el vínculo, **sin
+  reversar ni rehacer el asiento** (el PATCH sí los rehace).
+- **Contabilidad sin cambios**: el egreso genera el mismo asiento que cargado a
+  mano en Pagos (`registrar_egreso`). Borrar el movimiento deja el pago sin
+  vínculo; borrar el pago libera el movimiento.
+
+```mermaid
+sequenceDiagram
+  actor U as Usuario
+  participant M as Movimientos.tsx
+  participant P as routers/pagos.py
+  participant V as movimiento_egreso
+  participant C as motor_contable
+  U->>M: "＋ Resolver" en un débito
+  M->>P: GET /pagos/candidatos-movimiento/{id}
+  P-->>M: pagos ya cargados (mismo importe, banco, fecha ±10 días)
+  alt el pago ya estaba cargado
+    U->>M: "Vincular"
+    M->>P: POST /pagos/{id}/vincular-movimiento (sin tocar asientos)
+    P->>V: validar_vinculo
+  else pago nuevo
+    M->>P: POST /pagos (monto=|débito|, banco, movimiento_banco_id)
+    P->>V: validar_vinculo (débito, importe, org, período, sin otro pago)
+    V-->>P: ok / motivo
+    P->>C: registrar_egreso (igual que en Pagos)
+  end
+  P-->>M: egreso.id → la fila muestra "✓ Pago #id"
+```
 
 ## 2. Deduplicación de Últimos Movimientos (UM)
 
@@ -459,6 +511,29 @@ intacto** (no recalcula ni sobreescribe). `marcar_presentada` / `marcar_revisado
 sellan el estado y registran la fecha (`iva_service.py:222-243`,
 `iibb_service.py:239-262`, `monotributo_service.py:263-286`); exigen que el
 snapshot ya exista (se calcula primero).
+
+### 5.5. Comparar "Mis Comprobantes" de ARCA antes de importar — v3.33
+
+Antes de importar el Excel de "Mis Comprobantes" (el que se descarga de la web
+de ARCA; **no hay conexión con ARCA**), la pantalla de IVA lo compara con lo
+cargado (`services/comparar_mis_comprobantes.py`, read-only):
+
+- **Identidad** del comprobante: la del unique `uq_comprobante_iva_dedup` —
+  (org, dirección, tipo, punto de venta, número, CUIT de la contraparte); el CUIT
+  se compara solo por dígitos. `clave_comprobante()` = "tipo-pv-número-cuit".
+- `POST /iva/comprobantes/comparar` devuelve:
+  - `faltantes`: del período y no cargados, con su `clave`; `iva_faltante` suma
+    su IVA (las notas de crédito restan).
+  - `ya_cargados`: con `importe_distinto` si el IVA o el total no coinciden con
+    lo cargado.
+  - `solo_en_cuadra`: comprobantes del período que el Excel no trae (en compras:
+    crédito fiscal en riesgo si el proveedor no lo informó).
+  - `fuera_de_periodo`: cantidad; no se comparan.
+- `POST /iva/comprobantes/importar` acepta `claves` (form, JSON) para importar
+  solo las elegidas; sin `claves` importa todo como antes. Cada importación tiene
+  un `lote` (uuid en `comprobantes_iva.lote_importacion`).
+- `DELETE /iva/comprobantes/lote/{lote}` deshace la tanda (solo la org propia).
+  **409** si la liquidación de IVA de alguno de sus períodos está `presentada`.
 
 ---
 

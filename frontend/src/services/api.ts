@@ -18,6 +18,9 @@ import {
   ExtractoListItem,
   MovimientoFiltrado,
   ResumenExtracto,
+  PagoDesdeMovimientoPayload,
+  PagoCandidato,
+  CompararComprobantesIvaResult,
   MergeUMResult,
   MovimientosFiltros,
   ConciliacionItem,
@@ -590,6 +593,33 @@ class ApiClient {
     return res.data
   }
 
+  async listarCategoriasEgreso(orgId?: number | null): Promise<{ id: number; nombre: string }[]> {
+    const res = await this.client.get('/pagos/categorias', { params: orgId ? { org_id: orgId } : {} })
+    return res.data || []
+  }
+
+  /** Pagos ya cargados (mismo importe, banco, sin vincular, fecha cercana) que podrían explicar el débito. */
+  async pagosCandidatosMovimiento(movimientoId: number, orgId?: number | null): Promise<PagoCandidato[]> {
+    const res = await this.client.get(`/pagos/candidatos-movimiento/${movimientoId}`, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data || []
+  }
+
+  /** Vincula un pago ya cargado al débito que explica (no toca su asiento). */
+  async vincularPagoAMovimiento(egresoId: number, movimientoId: number): Promise<{ ok: boolean; egreso: { id: number } }> {
+    const res = await this.client.post(`/pagos/${egresoId}/vincular-movimiento`, { movimiento_banco_id: movimientoId })
+    this.invalidateCache('/pagos')
+    return res.data
+  }
+
+  /** Crea el pago/gasto que explica un débito del extracto y lo deja vinculado. */
+  async crearPagoDesdeMovimiento(payload: PagoDesdeMovimientoPayload): Promise<{ ok: boolean; egreso: { id: number } }> {
+    const res = await this.client.post('/pagos', payload)
+    this.invalidateCache('/pagos')
+    return res.data
+  }
+
   async getClientesArchivos(orgId?: number | null): Promise<any> {
     const cacheKey = orgId ? `/clientes/archivos?org_id=${orgId}` : '/clientes/archivos'
     return this._cached(cacheKey, 60_000, async () => {
@@ -934,11 +964,37 @@ class ApiClient {
   }
 
   // ── IVA — Comprobantes ARCA y Liquidación real ──────────────────────────────
-  async importarComprobantesIva(
+  /** Compara el Excel de Mis Comprobantes con lo cargado, sin importar nada. */
+  async compararComprobantesIva(
     file: File, direccion: 'emitido' | 'recibido', periodo: string, orgId?: number,
+  ): Promise<CompararComprobantesIvaResult> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const params: Record<string, string | number> = { direccion, periodo }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<CompararComprobantesIvaResult> = await this.client.post(
+      '/iva/comprobantes/comparar', formData, {
+        params,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      },
+    )
+    return res.data
+  }
+
+  /** Deshace una importación de Mis Comprobantes (borra esa tanda). */
+  async deshacerImportacionIva(lote: string, orgId?: number): Promise<{ ok: boolean; borrados: number }> {
+    const res = await this.client.delete(`/iva/comprobantes/lote/${lote}`, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async importarComprobantesIva(
+    file: File, direccion: 'emitido' | 'recibido', periodo: string, orgId?: number, claves?: string[],
   ): Promise<ImportarComprobantesIvaResult> {
     const formData = new FormData()
     formData.append('file', file)
+    if (claves) formData.append('claves', JSON.stringify(claves))
     const params: Record<string, string | number> = { direccion, periodo }
     if (orgId) params.org_id = orgId
     const res: AxiosResponse<ImportarComprobantesIvaResult> = await this.client.post(
@@ -1010,6 +1066,17 @@ class ApiClient {
   // ── Comprobantes por revisar (facturas de compra por mail + IA) ─────────────
   private _orgParams(orgId?: number): Record<string, number> {
     return orgId ? { org_id: orgId } : {}
+  }
+
+  /** CUIT de la organización contra el que se controla a nombre de quién está cada factura. */
+  async getCuitOrganizacion(orgId?: number): Promise<{ cuit: string | null }> {
+    const res = await this.client.get('/comprobantes-compra/cuit-organizacion', { params: this._orgParams(orgId) })
+    return res.data
+  }
+
+  async setCuitOrganizacion(cuit: string, orgId?: number): Promise<{ cuit: string }> {
+    const res = await this.client.put('/comprobantes-compra/cuit-organizacion', { cuit }, { params: this._orgParams(orgId) })
+    return res.data
   }
 
   async getBuzonComprobantes(orgId?: number): Promise<BuzonComprobantes> {

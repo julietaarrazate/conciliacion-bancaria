@@ -6,6 +6,7 @@ import { confirmDialog } from '@/store/confirm'
 import { toast } from '@/store/toast'
 import { parseMonto } from '@/utils/monto'
 import { fmtFechaCorta, hoyIso } from '@/utils/fecha'
+import { CuitOrganizacionCard } from '@/components/CuitOrganizacionCard'
 import type {
   BorradorComprobante,
   BuzonComprobantes,
@@ -64,6 +65,7 @@ interface FormState {
   fecha: string
   cuit_emisor: string
   razon_social: string
+  cuit_receptor: string
   alicuotas: { alicuota: string; neto: string; iva: string }[]
   neto_no_gravado: string
   exento: string
@@ -87,6 +89,7 @@ const formDesde = (d: DatosComprobanteCompra | null): FormState => {
     fecha: d?.fecha || '',
     cuit_emisor: d?.cuit_emisor || '',
     razon_social: d?.razon_social || '',
+    cuit_receptor: d?.cuit_receptor || '',
     alicuotas: ali.length ? ali : [{ alicuota: '21%', neto: '', iva: '' }],
     neto_no_gravado: aStr(d?.neto_no_gravado),
     exento: aStr(d?.exento),
@@ -187,6 +190,7 @@ const Revision: React.FC<{
       fecha: form.fecha || null,
       cuit_emisor: form.cuit_emisor || null,
       razon_social: form.razon_social || null,
+      cuit_receptor: form.cuit_receptor || null,
       cae: b.datos?.cae || null,
       alicuotas: form.alicuotas
         .filter(a => a.neto.trim() || a.iva.trim())
@@ -252,8 +256,8 @@ const Revision: React.FC<{
   const esNC = TIPOS_NC.has(Number(form.tipo_codigo))
   const campo = (k: keyof FormState, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
     <div>
-      <label className={labelClass}>{label}</label>
-      <input className={inputClass} value={form[k] as string} disabled={!editable}
+      <label className={labelClass} htmlFor={`cc-${k}`}>{label}</label>
+      <input id={`cc-${k}`} className={inputClass} value={form[k] as string} disabled={!editable}
         onChange={e => set(k, e.target.value)} {...props} />
     </div>
   )
@@ -307,6 +311,7 @@ const Revision: React.FC<{
               {campo('fecha', 'Fecha', { type: 'date' })}
               {campo('cuit_emisor', 'CUIT proveedor', { inputMode: 'numeric', placeholder: '30-12345678-9' })}
               {campo('razon_social', 'Proveedor')}
+              {campo('cuit_receptor', 'CUIT comprador', { inputMode: 'numeric', placeholder: 'A nombre de quién está' })}
             </div>
 
             <div>
@@ -507,6 +512,8 @@ export const ComprobantesCompra: React.FC = () => {
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
         Facturas de proveedores que llegan por mail o se suben acá. La IA completa los datos; nada entra a IVA ni a Pagos hasta que alguien lo confirma.
       </p>
+
+      <CuitOrganizacionCard orgId={orgId} puedeEditar={isAdmin} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {/* Mail */}

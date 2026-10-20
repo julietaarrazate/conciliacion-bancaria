@@ -41,4 +41,21 @@ describe('ResumenExtracto', () => {
     expect(screen.getByText('Total según extracto')).toBeInTheDocument()
     expect(screen.getByText(/Queda 1 ingreso sin acreditar/)).toBeInTheDocument()
   })
+
+  it('muestra el % de débitos explicados y lo que falta justificar', () => {
+    const conDebitos: ResumenExtractoData = {
+      ...base,
+      debitos: { debitos: 4, explicados: 3, sin_explicar: 1, total_sin_explicar: '300.50', porcentaje: 75 },
+    }
+    render(<ResumenExtracto resumen={conDebitos} />)
+    expect(screen.getByText(/de los egresos explicados/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button'))
+    expect(screen.getByText(/Queda 1 egreso sin explicar/)).toBeInTheDocument()
+    expect(screen.getByText(/300,50/)).toBeInTheDocument()
+  })
+
+  it('sin bloque de débitos (backend viejo) no rompe', () => {
+    render(<ResumenExtracto resumen={base} />)
+    expect(screen.queryByText(/egresos explicados/)).not.toBeInTheDocument()
+  })
 })
