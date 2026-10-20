@@ -99,6 +99,8 @@ erDiagram
 | `Planilla` | `planillas` | `cliente_id`, `extracto_id`, `usuario_id`, `organizacion_id` | **`deleted_at`**, `porcentaje_comision` |
 | `PlanillaRow` | `planilla_rows` | `planilla_id`, `orden_movimiento_acreditado`→MovimientoBanco, `organizacion_id` | `status` (resultado de conciliación), `monto`, `cuit`, `titular`, `referencia` |
 | `PatronAprendido` | `patrones_aprendidos` | `organizacion_id` | IA Nivel 2: `veces_visto`/`veces_correcto` |
+| `MoldeExtractoPdf` | `moldes_extracto_pdf` | `organizacion_id`, `creado_por`→User | Formato de PDF de un banco aprendido por org (`firma` del encabezado, `layout` JSON de columnas, `confirmaciones`). UNIQUE(org, firma). Ver [EXTRACTOS_PDF.md](../business/EXTRACTOS_PDF.md) |
+| `BorradorExtractoPdf` | `borradores_extracto_pdf` | `organizacion_id`, `molde_id`, `extracto_id` (al confirmar), `creado_por`/`confirmado_por`→User | Lo leído de un PDF pendiente de revisión: `estado` (procesando/listo/confirmando/confirmado/error), `metodo` (molde/automatico/ia), `datos` (filas) y `alertas` JSON, saldos `Numeric(16,2)`, `contenido_sha256` |
 
 ---
 

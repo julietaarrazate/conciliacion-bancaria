@@ -24,7 +24,7 @@ En el servicio web → **Variables** → agregar:
 
 | Variable | Valor |
 |---|---|
-| `SECRET_KEY` | Cualquier string largo y aleatorio (ej: `abc123xyz789...`) |
+| `SECRET_KEY` | Cadena aleatoria larga (generar con `openssl rand -hex 32`) |
 | `ALGORITHM` | `HS256` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `480` |
 | `ROOT_DIRECTORY` | `backend` ← IMPORTANTE |
@@ -34,7 +34,7 @@ En el servicio web → **Variables** → agregar:
 - Redeploy
 
 ### Paso 6: Obtener la URL
-La URL queda como: `https://conciliacion-api-production.up.railway.app`
+La URL queda como: `https://<tu-servicio>.up.railway.app`
 
 ### Paso 7: Verificar
 ```
@@ -49,7 +49,7 @@ https://TU-URL.up.railway.app/docs            → Swagger UI
 1. https://dashboard.render.com → **New** → **Blueprint**
 2. Seleccionar repo `conciliacion-bancaria` → detecta `render.yaml`
 3. Clic **Apply** → esperar ~10 min
-4. URL: `https://conciliacion-api.onrender.com`
+4. URL: `https://<tu-servicio>.onrender.com`
 
 ⚠️ **Free tier duerme tras 15 min de inactividad** (primera request tarda 60 seg)
 
@@ -115,6 +115,5 @@ cd backend && pip install -r requirements.txt && python seed.py && uvicorn app.m
 cd frontend && npm install && npm run dev
 ```
 
-Credenciales locales:
-- `admin@demo.com` / `admin123`
-- `operador@demo.com` / `operador123`
+Usuarios locales: `seed.py` crea el superadmin (contraseña desde `SUPERADMIN_PASSWORD`) y usuarios
+demo solo para desarrollo (ver el docstring de `backend/seed.py`). Nunca usarlos en producción.

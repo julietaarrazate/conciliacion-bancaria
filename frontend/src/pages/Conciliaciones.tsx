@@ -131,7 +131,7 @@ export const Conciliaciones: React.FC = () => {
       <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-lg p-3 shadow-sm">
         <div className="col-span-2 md:col-span-1">
           <label className="label text-xs">Cliente</label>
-          <input list="conc-clientes" className="input-field" placeholder="Green, Tucu..." value={cliente} onChange={e => setCliente(e.target.value)} />
+          <input list="conc-clientes" className="input-field" placeholder="Nombre del cliente..." value={cliente} onChange={e => setCliente(e.target.value)} />
           <datalist id="conc-clientes">
             {clienteOpts.map(c => <option key={c} value={c} />)}
           </datalist>

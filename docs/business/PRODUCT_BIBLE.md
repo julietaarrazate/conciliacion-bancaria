@@ -73,7 +73,7 @@ Pilares:
 - La **Organización A** (`organizacion_id=1`) es la org base productiva: por
   regla del repo, sus datos existentes **nunca se modifican** (solo cambios
   aditivos — ver [`../../CLAUDE.md`](../../CLAUDE.md)).
-- **Superadmin** (Julieta Arrazate) ve y gestiona **todas** las organizaciones.
+- **Superadmin** ve y gestiona **todas** las organizaciones.
 - Cada org configura su comportamiento por JSON (`match_rules`,
   `tolerancia_monto`, `dias_tolerancia_fecha`, `requiere_cierre_periodo`,
   `comisiones`). El detalle de cómo afecta al motor está en

@@ -33,5 +33,4 @@ tag y deploy a Render (backend) + Vercel (frontend).
 
 ## PR
 
-Merge a `main` vía PR squash desde `claude/...`, commits con
-`git commit --author="Julieta Arrazate <julietaarrazate@gmail.com>"`.
+Merge a `main` vía PR squash desde `claude/...`, commits con la autoría autorizada (ver [`CONTRIBUTING.md`](../../CONTRIBUTING.md)).

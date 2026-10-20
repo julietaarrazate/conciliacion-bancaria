@@ -461,7 +461,7 @@ export const Perfil: React.FC = () => {
                 Copiá ambas a Render → Environment antes de cerrar esta pantalla. No se vuelven a mostrar.
               </p>
               <p className="text-[11px] text-ml-text-soft dark:text-zinc-500 italic">
-                Render Dashboard → conciliacion-api → Environment → Add Variable → Save and Deploy.
+                Panel de Render → servicio del backend → Environment → Add Variable → Save and Deploy.
               </p>
               <button onClick={() => setVapidKeys(null)} className="btn-ghost text-xs">Ocultar</button>
             </div>

@@ -73,8 +73,8 @@ permissions = {
 
 Notas (del propio código):
 - **superadmin** (`is_superadmin=True`): `require_permission` retorna el usuario antes de mirar la
-  matriz → tiene **todos** los permisos, en **todas** las organizaciones. Es Julieta
-  (`julietaarrazate@gmail.com`).
+  matriz → tiene **todos** los permisos, en **todas** las organizaciones. Es la cuenta de la
+  autora del sistema, sembrada en el arranque (`main.py`) con la password de `SUPERADMIN_PASSWORD`.
 - **contador**: opera (sube, concilia, finanzas, liquidaciones) y ve contabilidad + auditoría/
   actividad en solo lectura. **NO** tiene `delete_records` (no borra nada) ni `manage_users` (no
   ve Usuarios/Orgs/Papelera). Login directo, sin aprobación (desde ago 2026 — ver §6); la cuenta
@@ -212,6 +212,18 @@ por ARCA para facturar bajo su CUIT) — el material más sensible que maneja el
   si existe.
 - **Nada impacta sin confirmación humana**: el webhook solo crea borradores; pasar a IVA/Pagos requiere
   `manage_finance`. Adjuntos limitados a PDF/JPG/PNG/WebP de hasta 5 MB.
+
+## 8c. Extractos en PDF (v3.31)
+
+- Permisos: leer, confirmar y descartar borradores requieren `upload_files`; borrar un formato
+  aprendido (`DELETE /extractos-pdf/moldes/{id}`) requiere `delete_records`. Todo se filtra por
+  `organizacion_id` (`_org_id` + `can_switch_org`); un borrador o molde de otra org da 404.
+- Subida limitada a `10/minute`; validación de archivo en [../api/API_RULES.md](../api/API_RULES.md) §7.
+- Nada impacta sin revisión humana: la lectura solo crea un borrador; al confirmar, el servidor
+  revalida cada importe y el cuadre (un importe inválido da 422, nunca 500).
+- El texto del PDF es dato bancario del cliente: la lectura con IA lo manda a Gemini con la
+  `GEMINI_API_KEY` del servidor. Esa key debe ser de un plan pago: el free tier de Gemini puede usar
+  lo que recibe para mejorar sus modelos.
 
 ## 9. Rate limiting (brute force)
 

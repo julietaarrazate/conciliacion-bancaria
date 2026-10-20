@@ -29,6 +29,5 @@ La regla de oro: **un test que falla antes del fix y pasa después**.
 
 ## PR
 
-Rama `claude/...` → PR squash a `main`, commits con
-`git commit --author="Julieta Arrazate <julietaarrazate@gmail.com>"`. El PR debe incluir el test
-de regresión.
+Rama `claude/...` → PR squash a `main`, commits con la autoría autorizada (ver [`CONTRIBUTING.md`](../../CONTRIBUTING.md)).
+El PR debe incluir el test de regresión.

@@ -61,7 +61,7 @@ Fuentes de verdad (código):
 - El token tiene 16 caracteres aleatorios; un mail a un token inexistente o viejo se ignora con
   200 (no se revela si existe).
 - Un mail sin PDF/foto queda como `sin_adjunto` con su asunto, para que se vea, por ejemplo, el
-  código de confirmación del reenvío de Gmail.
+  código de confirmación que manda el proveedor de correo al activar el reenvío automático.
 - El webhook es idempotente por `email_id` (Resend reintenta).
 
 ### Configuración (Render)
@@ -75,7 +75,7 @@ Fuentes de verdad (código):
 | `FACTURAS_OCR_DAILY_LIMIT` | opcional, tope diario de lecturas (default 200, aparte del OCR de cheques) |
 
 En Resend: activar Receiving, crear un webhook a
-`https://conciliacion-api.onrender.com/comprobantes-compra/webhook/resend` con el evento
+`https://<backend>/comprobantes-compra/webhook/resend` (la URL pública del backend) con el evento
 `email.received` y copiar su signing secret. Sin `INBOUND_EMAIL_DOMAIN` + `RESEND_INBOUND_SECRET`
 la pantalla oculta la dirección y la subida manual sigue funcionando.
 

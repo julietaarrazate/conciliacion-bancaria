@@ -376,7 +376,7 @@ class TestResetYRebuild:
         from app.models.extracto import ExtractoBancario, MovimientoBanco
         from app.models.planilla import Planilla, PlanillaRow
 
-        cliente = Cliente(nombre="Alojando", organizacion_id=1)
+        cliente = Cliente(nombre="Cliente Este", organizacion_id=1)
         db.add(cliente)
         db.flush()
 
@@ -389,20 +389,20 @@ class TestResetYRebuild:
 
         mov_extracto = MovimientoBanco(
             extracto_id=extracto.id, orden=1, fecha=date(2026, 8, 19),
-            titular="Alojando", monto=Decimal("98000"), source="extracto",
-            cliente_acreditado="Alojando", organizacion_id=1,
+            titular="Cliente Este", monto=Decimal("98000"), source="extracto",
+            cliente_acreditado="Cliente Este", organizacion_id=1,
         )
         mov_um = MovimientoBanco(
             extracto_id=extracto.id, orden=2, fecha=date(2026, 8, 19),
-            titular="Alojando", monto=Decimal("49000"), source="um",
-            cliente_acreditado="Alojando", organizacion_id=1,
+            titular="Cliente Este", monto=Decimal("49000"), source="um",
+            cliente_acreditado="Cliente Este", organizacion_id=1,
         )
         db.add_all([mov_extracto, mov_um])
         db.flush()
 
         planilla = Planilla(
             cliente_id=cliente.id, extracto_id=extracto.id, usuario_id=1,
-            nombre_archivo="alojando.xlsx", organizacion_id=1,
+            nombre_archivo="cliente_este.xlsx", organizacion_id=1,
             fecha_carga=datetime.utcnow(),
             porcentaje_comision=Decimal(str(comision_pct)) if comision_pct else None,
         )
@@ -410,12 +410,12 @@ class TestResetYRebuild:
         db.flush()
 
         row_extracto = PlanillaRow(
-            planilla_id=planilla.id, monto=Decimal("98000"), titular="Alojando",
+            planilla_id=planilla.id, monto=Decimal("98000"), titular="Cliente Este",
             status="ok", orden_movimiento_acreditado=mov_extracto.id,
             fecha_acred=date(2026, 8, 20), organizacion_id=1,
         )
         row_um = PlanillaRow(
-            planilla_id=planilla.id, monto=Decimal("49000"), titular="Alojando",
+            planilla_id=planilla.id, monto=Decimal("49000"), titular="Cliente Este",
             status="ok", orden_movimiento_acreditado=mov_um.id,
             fecha_acred=date(2026, 8, 20), organizacion_id=1,
         )

@@ -21,6 +21,7 @@ from app.models.cheque import Cheque
 from app.models.cliente import Cliente
 from app.models.contabilidad import Asiento, AsientoDetalle, PlanCuenta, ReglaContable
 from app.models.extracto import ExtractoBancario, MovimientoBanco
+from app.models.extracto_pdf import BorradorExtractoPdf, MoldeExtractoPdf
 from app.models.organizacion import Organizacion
 from app.models.planilla import Planilla, PlanillaRow
 from app.models.user import User
@@ -79,6 +80,13 @@ def _seed_org(session, org_id: int, nombre: str):
                        estado="registrado", organizacion_id=org_id))
     session.add(AuditoriaLog(usuario_id=user.id, tabla="planillas", registro_id=pl.id,
                              accion="INSERT"))
+    molde = MoldeExtractoPdf(id=org_id + 95, organizacion_id=org_id, firma=f"f{org_id}",
+                             layout={"version": 1}, origen="automatico", confirmaciones=1)
+    session.add(molde)
+    session.flush()
+    session.add(BorradorExtractoPdf(id=org_id + 96, organizacion_id=org_id, creado_por=user.id,
+                                    nombre_archivo="e.pdf", estado="confirmado",
+                                    extracto_id=ext.id, molde_id=molde.id))
     session.flush()
 
 
@@ -113,6 +121,15 @@ def test_borra_transaccional_de_la_org(db):
     assert db.query(Asiento).filter_by(organizacion_id=ORG_A).count() == 0
     assert db.query(AsientoDetalle).count() == 2  # sólo quedan los de ORG_B
     assert db.query(Cheque).filter_by(organizacion_id=ORG_A).count() == 0
+
+
+def test_borra_borradores_y_formatos_pdf_solo_de_la_org(db):
+    reset_datos_operativos(db, ORG_A)
+    db.commit()
+    assert db.query(BorradorExtractoPdf).filter_by(organizacion_id=ORG_A).count() == 0
+    assert db.query(MoldeExtractoPdf).filter_by(organizacion_id=ORG_A).count() == 0
+    assert db.query(BorradorExtractoPdf).filter_by(organizacion_id=ORG_B).count() == 1
+    assert db.query(MoldeExtractoPdf).filter_by(organizacion_id=ORG_B).count() == 1
 
 
 def test_conserva_maestros_y_config(db):

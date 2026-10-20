@@ -644,7 +644,7 @@ def _get_o_crear_cuenta_cliente(db: Session, cliente_id: int, org_id: int, reusa
 
     nombre_norm = (cliente.nombre or "").strip().title()
 
-    # 2. Adoptar cuenta existente por nombre (ej. Green/Tucu/Alojando del seed)
+    # 2. Adoptar cuenta existente por nombre (ej. cuentas de cliente ya sembradas)
     cuenta = (
         db.query(PlanCuenta)
         .filter(

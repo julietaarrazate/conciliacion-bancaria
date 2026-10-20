@@ -88,12 +88,11 @@ echo  Backend:   http://localhost:8000
 echo  Swagger:   http://localhost:8000/docs
 echo  Web:       http://localhost:3000
 echo.
-echo  Login:
-echo    admin@caneland.com    / admin123
-echo    operador@caneland.com / operador123
+echo  Login: usuarios creados por backend\seed.py
+echo    - ver el docstring de seed.py -
 echo ================================================
 echo.
-echo  Si algo no anda, mira las 2 ventanas que se
-echo  abrieron (Backend y Frontend Web) y mandame el error.
+echo  Si algo no anda, revisa los errores en las 2
+echo  ventanas que se abrieron (Backend y Frontend Web).
 echo.
 pause

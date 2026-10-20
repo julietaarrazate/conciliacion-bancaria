@@ -1,8 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
-import { ExtractoHistorialItem } from '@/types'
+import { BorradorExtractoPdfResumen, ConfirmarExtractoPdfResult, ExtractoHistorialItem } from '@/types'
 import { useOrgStore } from '@/store/org'
+import { useAuthStore } from '@/store/auth'
+import { useLockStore } from '@/store/lock'
+import { confirmDialog } from '@/store/confirm'
+import { toast } from '@/store/toast'
+import { ImportarExtractoPdfModal } from '@/components/extractos/ImportarExtractoPdfModal'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -42,9 +47,18 @@ function agrupar(items: ExtractoHistorialItem[]): GroupBanco[] {
   }))
 }
 
+const PENDIENTE_ESTADO: Record<string, { label: string; cls: string }> = {
+  procesando: { label: 'Leyendo…', cls: 'badge-info' },
+  listo: { label: 'Para revisar', cls: 'badge-warn' },
+  error: { label: 'No se pudo leer', cls: 'badge-error' },
+}
+
+const fmtFechaAr = (iso: string | null) => (iso ? iso.split('-').reverse().join('/') : '')
+
 export const ExtractosArchivo: React.FC = () => {
   const navigate = useNavigate()
   const { activeOrgId } = useOrgStore()
+  const canUpload = useAuthStore(s => s.hasPermission('upload_files'))
   const [items, setItems]         = useState<ExtractoHistorialItem[]>([])
   const [loading, setLoading]     = useState(true)
   const [openBancos, setOpenBancos] = useState<Set<string>>(new Set())
@@ -56,6 +70,12 @@ export const ExtractosArchivo: React.FC = () => {
   const [renameVal, setRenameVal]       = useState('')
   const [renameSaving, setRenameSaving] = useState(false)
   const renameRef                       = useRef<HTMLInputElement>(null)
+
+  // ── Importar extracto en PDF ────────────────────────────────────────
+  const [modalPdf, setModalPdf] = useState<{ file: File | null; borradorId: number | null } | null>(null)
+  const [pendientes, setPendientes] = useState<BorradorExtractoPdfResumen[]>([])
+  const [pdfMsg, setPdfMsg] = useState('')
+  const pdfInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     apiClient.getHistorialExtractos({ limit: 200, org_id: activeOrgId }).then(d => {
@@ -75,6 +95,79 @@ export const ExtractosArchivo: React.FC = () => {
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [activeOrgId])
+
+  const cargarPendientes = useCallback(async () => {
+    if (!canUpload) { setPendientes([]); return }
+    try {
+      const r = await apiClient.getBorradoresExtractoPdf(activeOrgId)
+      setPendientes(r.items)
+    } catch { /* es un extra: si falla, la lista queda como estaba */ }
+  }, [activeOrgId, canUpload])
+
+  useEffect(() => { void cargarPendientes() }, [cargarPendientes])
+
+  // Mientras alguno se está leyendo con IA, se refresca solo.
+  const hayLeyendo = pendientes.some(p => p.estado === 'procesando')
+  useEffect(() => {
+    if (!hayLeyendo) return
+    const t = setInterval(() => { void cargarPendientes() }, 4000)
+    return () => clearInterval(t)
+  }, [hayLeyendo, cargarPendientes])
+
+  const elegirPdf = () => {
+    // El selector de archivos le saca el foco a la app: sin esto el PIN la bloquea al volver.
+    try { useLockStore.getState().suppressLock() } catch { /* noop */ }
+    pdfInputRef.current?.click()
+  }
+
+  const onPdfElegido = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') {
+      setDlError('El archivo tiene que ser un PDF.')
+      return
+    }
+    setDlError('')
+    setPdfMsg('')
+    setModalPdf({ file: f, borradorId: null })
+  }
+
+  const descartarPendiente = async (p: BorradorExtractoPdfResumen) => {
+    const ok = await confirmDialog({
+      title: 'Descartar este PDF',
+      message: `«${p.nombre_archivo}» no se guarda. Si lo necesitás más adelante, tenés que volver a subirlo.`,
+      confirmLabel: 'Descartar',
+      danger: true,
+    })
+    if (!ok) return
+    try {
+      await apiClient.descartarBorradorExtractoPdf(p.id, activeOrgId)
+      setPendientes(prev => prev.filter(x => x.id !== p.id))
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'No se pudo descartar el PDF.')
+    }
+  }
+
+  // Después de guardar: trae la lista de nuevo y abre el grupo donde cayó el extracto nuevo.
+  const onPdfGuardado = async (r: ConfirmarExtractoPdfResult) => {
+    setPdfMsg(r.mensaje || 'Extracto guardado')
+    try {
+      const d = await apiClient.getHistorialExtractos({ limit: 200, org_id: activeOrgId })
+      setItems(d.items)
+      for (const gb of agrupar(d.items)) {
+        for (const ga of gb.anios) {
+          for (const gm of ga.meses) {
+            if (gm.items.some(x => x.id === r.extracto_id)) {
+              setOpenBancos(prev => new Set(prev).add(gb.banco))
+              setOpenAnios(prev => new Set(prev).add(`${gb.banco}-${ga.anio}`))
+              setOpenMeses(prev => new Set(prev).add(`${gb.banco}-${ga.anio}-${gm.mes}`))
+            }
+          }
+        }
+      }
+    } catch { /* se actualiza al recargar la página */ }
+  }
 
   const toggle = <T extends string | number>(set: Set<T>, val: T): Set<T> => {
     const n = new Set(set); n.has(val) ? n.delete(val) : n.add(val); return n
@@ -133,14 +226,75 @@ export const ExtractosArchivo: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <div>
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold text-ml-text dark:text-white">Archivo de Extractos</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             Organizados por banco · año · mes — descargá el conciliado en cualquier momento
           </p>
         </div>
+        {canUpload && (
+          <>
+            <button type="button" onClick={elegirPdf} className="btn-primary shrink-0">
+              Importar PDF
+            </button>
+            <input ref={pdfInputRef} type="file" hidden accept=".pdf,application/pdf" onChange={onPdfElegido} aria-label="Elegir el PDF del extracto" />
+          </>
+        )}
       </div>
+
+      {pdfMsg && (
+        <div role="status" className="mb-4 px-4 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-700 dark:text-green-400">
+          {pdfMsg}
+        </div>
+      )}
+
+      {pendientes.length > 0 && (
+        <section aria-label="PDF por revisar" className="mb-6 border border-amber-200 dark:border-amber-500/30 rounded-xl overflow-hidden">
+          <h2 className="px-4 py-2.5 text-sm font-semibold bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-200">
+            PDF por revisar ({pendientes.length})
+          </h2>
+          <ul className="divide-y divide-gray-100 dark:divide-slate-700">
+            {pendientes.map(p => {
+              const est = PENDIENTE_ESTADO[p.estado] ?? { label: p.estado, cls: 'badge-neutral' }
+              const detalle = [
+                p.banco,
+                p.periodo_desde && p.periodo_hasta ? `${fmtFechaAr(p.periodo_desde)} al ${fmtFechaAr(p.periodo_hasta)}` : null,
+                p.estado === 'listo' ? `${p.cantidad.toLocaleString('es-AR')} movimientos` : null,
+              ].filter(Boolean).join(' · ')
+              return (
+                <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
+                  <div className="min-w-0 flex-1 basis-48">
+                    <p className="text-xs font-medium text-ml-text dark:text-gray-200 truncate" title={p.nombre_archivo}>{p.nombre_archivo}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                      {p.estado === 'error' && p.error ? p.error : detalle || 'Todavía sin datos'}
+                    </p>
+                  </div>
+                  <span className={est.cls}>{est.label}</span>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setModalPdf({ file: null, borradorId: p.id })}
+                      className="px-2.5 py-1 text-[11px] text-ml-blue border border-ml-blue/30 rounded-md hover:bg-ml-blue/5 dark:hover:bg-ml-blue/10 transition-colors whitespace-nowrap"
+                      aria-label={`Revisar ${p.nombre_archivo}`}
+                    >
+                      Revisar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => descartarPendiente(p)}
+                      className="px-2.5 py-1 text-[11px] text-gray-500 border border-gray-300 dark:border-ml-dark-border rounded-md hover:bg-gray-50 dark:hover:bg-ml-dark-hover transition-colors whitespace-nowrap"
+                      aria-label={`Descartar ${p.nombre_archivo}`}
+                    >
+                      Descartar
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
 
       {dlError && (
         <div className="mb-4 px-4 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
@@ -330,6 +484,17 @@ export const ExtractosArchivo: React.FC = () => {
             )
           })}
         </div>
+      )}
+
+      {modalPdf && (
+        <ImportarExtractoPdfModal
+          file={modalPdf.file}
+          borradorId={modalPdf.borradorId}
+          orgId={activeOrgId}
+          onCerrar={() => { setModalPdf(null); void cargarPendientes() }}
+          onGuardado={onPdfGuardado}
+          onAbrirExtracto={(id) => { setModalPdf(null); navigate(`/movimientos?extracto=${id}`) }}
+        />
       )}
     </div>
   )

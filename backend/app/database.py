@@ -3,10 +3,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Leer DATABASE_URL del entorno
-# Railway/Render inyectan postgres://... → normalizar a postgresql://
+# Algunos proveedores (p. ej. Render) inyectan postgres://... → normalizar a postgresql://
 _raw_url = os.getenv("DATABASE_URL", "sqlite:///./conciliacion.db")
 
-# Normalizar esquema (Render/Heroku dan "postgres://" pero SQLAlchemy 2.x pide "postgresql://")
+# Normalizar esquema (el proveedor puede dar "postgres://" pero SQLAlchemy 2.x pide "postgresql://")
 if _raw_url.startswith("postgres://"):
     _raw_url = _raw_url.replace("postgres://", "postgresql://", 1)
 

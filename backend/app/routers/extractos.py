@@ -8,7 +8,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 _ARG = _ZI('America/Argentina/Buenos_Aires')
 from typing import Optional
-import tempfile, os, io, hashlib
+import tempfile, os, io
 
 from app.database import get_db
 from app.models.extracto import ExtractoBancario, MovimientoBanco
@@ -20,6 +20,15 @@ from app.schemas.extracto import (
 )
 from app.services.excel_parser import parsear_extracto_bancario
 from app.services.extracto_merger import mergear_movimientos
+# Helpers de persistencia compartidos con el importador de PDF (mismos nombres que
+# tenían acá antes de moverse a extracto_import).
+from app.services.extracto_import import (  # noqa: F401
+    _BANCO_NOMBRE,
+    resolver_banco as _resolver_banco,
+    fingerprint as _fingerprint,
+    crear_extracto_con_movimientos,
+    registrar_asiento_um,
+)
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_movimientos, export_extracto_contador
 from app.services.gastos_bancarios import resumen_extracto as resumen_gastos_extracto
@@ -46,44 +55,6 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/extractos", tags=["extractos"])
 limiter = Limiter(key_func=get_remote_address)
-
-# Mapeo de clave interna del parser → nombre de banco legible
-_BANCO_NOMBRE = {
-    "macro":     "Banco Macro",
-    "bbva":      "BBVA",
-    "santander": "Santander",
-    "galicia":   "Galicia",
-    "icbc":      "ICBC",
-    "nacion":    "Banco Nación",
-    "provincia": "Bapro",
-    "ciudad":    "Banco Ciudad",
-    "hsbc":      "HSBC",
-}
-
-def _resolver_banco(banco_param: str, banco_detectado: str) -> str:
-    """
-    Usa el banco detectado por el parser cuando es más específico que el default.
-    Si el usuario pasó un banco explícito distinto del default, se respeta siempre.
-    """
-    if banco_detectado != "generico":
-        nombre_detectado = _BANCO_NOMBRE.get(banco_detectado, banco_detectado.capitalize())
-        # Usar detectado si el parámetro es el default ("Banco Macro") o coincide
-        if banco_param == "Banco Macro" or banco_param == nombre_detectado:
-            return nombre_detectado
-    return banco_param
-
-
-def _fingerprint(movimientos: list) -> str:
-    """Huella digital del extracto: hash de total+ordenes+suma_montos"""
-    total = len(movimientos)
-    if total == 0:
-        return "empty"
-    primer_orden = movimientos[0].get("orden") or 0
-    ultimo_orden = movimientos[-1].get("orden") or 0
-    suma = round(sum(m.get("monto", 0) for m in movimientos), 2)
-    raw = f"{total}|{primer_orden}|{ultimo_orden}|{suma}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
-
 
 @router.get("", response_model=ExtractoListResponse)
 def list_extractos(skip: int = 0, limit: int = 50,
@@ -207,35 +178,10 @@ async def upload_extracto(request: Request,
                           {"archivo": file.filename, "actualizados": actualizados})
             return existente
 
-        extracto = ExtractoBancario(nombre_archivo=file.filename, creado_por=current_user.id, fingerprint=fp,
-                                     banco=banco_final, organizacion_id=org_destino)
-        db.add(extracto)
-        db.flush()
-        # Orden: contador secuencial POR EXTRACTO — NO usar valores del banco.
-        # Cada extracto arranca su propia numeración desde 1 (un extracto recién
-        # creado no tiene movimientos → max 0 → el más antiguo recibe 1, el más
-        # reciente N). Mismo criterio que el append de UM (extracto_merger), y evita
-        # que un extracto de otra empresa/banco continúe la numeración de otro.
-        from sqlalchemy import func as _func
-        max_global = (
-            db.query(_func.max(MovimientoBanco.orden))
-            .filter(MovimientoBanco.extracto_id == extracto.id)
-            .scalar() or 0
+        extracto = crear_extracto_con_movimientos(
+            db, movs=movs, nombre_archivo=file.filename, banco=banco_final,
+            huella=fp, org_id=org_destino, usuario_id=current_user.id,
         )
-        n_movs = len(movs)
-        for i, m in enumerate(movs):
-            # i=0 es el más reciente → orden más alto
-            orden_asignado = max_global + (n_movs - i)
-            db.add(MovimientoBanco(
-                extracto_id=extracto.id, orden=orden_asignado,
-                fecha=m.get("fecha"), mes=m.get("mes"),
-                titular=m.get("titular"), monto=m.get("monto"), saldo=m.get("saldo"),
-                cliente_acreditado=m.get("cliente_acreditado"),
-                fecha_acred=m.get("fecha_acred"),
-                organizacion_id=org_destino,
-            ))
-        db.commit()
-        db.refresh(extracto)
         registrar_log(db, current_user.id, "extractos_bancarios", extracto.id, "INSERT",
                       {"nombre_archivo": file.filename, "movimientos": len(movs)})
         # El extracto NO genera asiento propio: el UM importa los movimientos
@@ -479,28 +425,10 @@ async def agregar_ultimos_movimientos(
         # un fallo aquí no debe bloquearla, pero se reporta para que no quede silencioso)
         contabilidad_ok = True
         if stats["agregados"] > 0 and stats.get("nuevo_lote"):
-            try:
-                from app.services.motor_contable import registrar_um_import
-                from app.models.organizacion import Organizacion as _Org
-                _org_id = extracto.organizacion_id or 1
-                movs_nuevos = db.query(MovimientoBanco).filter(
-                    MovimientoBanco.extracto_id == extracto_id,
-                    MovimientoBanco.um_lote == stats["nuevo_lote"],
-                ).all()
-                _org = db.query(_Org).filter(_Org.id == _org_id).first()
-                _modo_config = ((_org.configuracion or {}).get("modo_asiento_um", "agrupado")) if _org else "agrupado"
-                _modo = modo_asiento if modo_asiento in ("individual", "agrupado") else _modo_config
-                registrar_um_import(
-                    db=db,
-                    extracto_id=extracto_id,
-                    org_id=_org_id,
-                    usuario_id=current_user.id,
-                    movimientos_nuevos=movs_nuevos,
-                    modo=_modo,
-                )
-            except Exception as _mc_ex:
-                logger.error("motor_contable UM falló (extracto %s, lote %s): %s", extracto_id, stats.get("nuevo_lote"), _mc_ex)
-                contabilidad_ok = False
+            contabilidad_ok = registrar_asiento_um(
+                db, extracto=extracto, nuevo_lote=stats["nuevo_lote"],
+                usuario_id=current_user.id, modo_asiento=modo_asiento,
+            )
 
         return {"extracto_id": extracto_id, **stats, "contabilidad_ok": contabilidad_ok}
     except HTTPException:

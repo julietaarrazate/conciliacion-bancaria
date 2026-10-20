@@ -35,7 +35,7 @@ def test_match_por_numeros_del_plan_no_rompe(db):
     # Patrón confirmado (veces_correcto>=2) con números propios que NO están en el
     # movimiento, y sin fragmento de titular → fuerza la rama "numeros_plan & nums_mov".
     db.add(PatronAprendido(
-        organizacion_id=1, cliente_nombre="Dani",
+        organizacion_id=1, cliente_nombre="Cliente Oeste",
         numeros_clave="111111", titular_extracto_fragmento=None,
         veces_correcto=2, activo=True,
     ))
@@ -44,7 +44,7 @@ def test_match_por_numeros_del_plan_no_rompe(db):
     mov = _Mov(id=10, titular="CREDITO POR CREDIN 999999")
     # referencia del plan aporta 999999, que sí está en el titular del movimiento
     resultado = buscar_por_patrones(
-        db, org_id=1, cliente_nombre="Dani", monto=1000.0,
+        db, org_id=1, cliente_nombre="Cliente Oeste", monto=1000.0,
         cuit=None, titular=None, referencia="999999",
         movimientos_libres=[mov], procesados=set(),
     )

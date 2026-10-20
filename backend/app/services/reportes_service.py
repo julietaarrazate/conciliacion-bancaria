@@ -115,7 +115,7 @@ def _suma_planilla_rows(
 
 def _kpis_periodo(db: Session, org_id: int, desde: date, hasta: date) -> dict:
     """KPIs base de un periodo arbitrario. Se reutiliza para periodo actual y anterior."""
-    # Conciliado: por fecha_acred (cuando Julieta marcó la acreditación)
+    # Conciliado: por fecha_acred (cuando se marcó la acreditación)
     conciliado = _suma_planilla_rows(db, org_id, desde, hasta, STATUS_OK, usar_fecha_acred=True)
     # Pendiente y total: por fecha_carga (planillas cargadas en el período)
     pendiente = _suma_planilla_rows(db, org_id, desde, hasta, STATUS_PENDIENTE)

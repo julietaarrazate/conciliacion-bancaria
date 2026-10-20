@@ -49,7 +49,7 @@ class TestScoreIdentidadNumeros:
         assert _score(cuit_plan="20112233440", mov=mov) == 12
 
     def test_cbu_22_digitos_en_comun_score_10(self):
-        cbu = "2850590940090418135201"
+        cbu = "2850999400000000012342"
         mov = _mov(titular="CBU " + cbu + " EMPRESA SA")
         assert _score(cbu_plan=cbu, nums={cbu}, mov=mov) == 10
 

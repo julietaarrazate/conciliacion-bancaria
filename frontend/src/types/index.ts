@@ -727,3 +727,137 @@ export interface ComprobanteArcaPayload {
   fecha_serv_hasta?: string | null
   fecha_vto_pago?: string | null
 }
+
+// ── Importar extracto bancario en PDF ────────────────────────────────────────
+// Los montos viajan como string con punto decimal y 2 decimales ("-1234.56"):
+// nunca como float. Se convierten a centavos con `aCentavos` (utils/saldoExtracto).
+export type EstadoBorradorExtractoPdf =
+  | 'procesando' | 'listo' | 'error' | 'confirmando' | 'confirmado' | 'descartado'
+
+/** Cómo se leyó el PDF: formato aprendido, lectura automática o IA. */
+export type MetodoLecturaExtractoPdf = 'molde' | 'automatico' | 'ia'
+
+export interface MovimientoPdf {
+  fecha: string | null            // YYYY-MM-DD
+  descripcion: string
+  monto: string | null            // crédito +, débito −
+  saldo: string | null
+  pagina: number | null
+  dudosa: boolean
+  motivos: string[]
+}
+
+export interface CuadreExtractoPdf {
+  saldo_inicial: string | null
+  saldo_inicial_inferido: boolean
+  saldo_final: string | null
+  saldo_final_inferido: boolean
+  total_creditos: string | null
+  total_debitos: string | null    // positivo
+  cantidad: number
+  saldo_final_calculado: string | null
+  diferencia: string | null
+  cierra: boolean
+  filas_con_salto: number[]
+}
+
+export interface AlertaExtractoPdf {
+  nivel: 'info' | 'aviso' | 'error'
+  codigo: string
+  mensaje: string
+}
+
+export interface DuplicadoExtractoPdf {
+  tipo: 'mismo_archivo' | 'mismos_movimientos' | 'solapado'
+  extracto_id: number
+  nombre: string | null
+  banco: string | null
+  coincidencias: number
+  nuevos: number
+  /** Filas del PDF más viejas que el último movimiento del extracto que no están en él. */
+  anteriores: number
+  /** El extracto está archivado (período cerrado): no se le pueden agregar filas. */
+  archivado: boolean
+}
+
+export interface BorradorExtractoPdf {
+  id: number
+  estado: EstadoBorradorExtractoPdf
+  nombre_archivo: string
+  creado_at: string | null
+  metodo: MetodoLecturaExtractoPdf | null
+  banco: string | null
+  banco_clave: string | null
+  periodo_desde: string | null
+  periodo_hasta: string | null
+  saldo_inicial: string | null
+  saldo_final: string | null
+  orden: 'asc' | 'desc'           // orden de las filas en el PDF (asc = la más vieja primero)
+  paginas: number
+  escaneado: boolean
+  movimientos: MovimientoPdf[]
+  cuadre: CuadreExtractoPdf
+  alertas: AlertaExtractoPdf[]
+  duplicado: DuplicadoExtractoPdf | null
+  extracto_id: number | null
+  ia_disponible: boolean
+  ia_usada: boolean
+  puede_aprender: boolean
+  error: string | null
+}
+
+export interface BorradorExtractoPdfResumen {
+  id: number
+  estado: EstadoBorradorExtractoPdf
+  nombre_archivo: string
+  creado_at: string | null
+  metodo: MetodoLecturaExtractoPdf | null
+  banco: string | null
+  periodo_desde: string | null
+  periodo_hasta: string | null
+  cantidad: number
+  cierra: boolean
+  extracto_id: number | null
+  error: string | null
+}
+
+export interface MovimientoConfirmarPdf {
+  fecha: string                   // YYYY-MM-DD
+  descripcion: string
+  monto: string                   // "-200.00"
+  saldo: string | null
+}
+
+export interface ConfirmarExtractoPdfPayload {
+  movimientos: MovimientoConfirmarPdf[]   // en el MISMO orden en que se mostraron (`orden` del borrador)
+  saldo_inicial: string | null
+  saldo_final: string | null
+  banco: string | null
+  nombre: string | null
+  destino: 'nuevo' | 'existente'
+  extracto_id: number | null
+  confirmar_sin_cuadre: boolean
+}
+
+export interface ConfirmarExtractoPdfResult {
+  extracto_id: number
+  destino: 'nuevo' | 'existente'
+  ya_existia: boolean
+  agregados: number
+  duplicados: number
+  /** Filas del PDF que no se agregaron por ser anteriores al último movimiento del extracto. */
+  no_agregados: number
+  molde_aprendido: boolean
+  contabilidad_ok: boolean
+  mensaje: string
+}
+
+export interface MoldeExtractoPdf {
+  id: number
+  banco: string | null
+  banco_clave: string | null
+  origen: 'automatico' | 'ia' | null
+  confirmaciones: number
+  creado_at: string | null
+  ultimo_uso_at: string | null
+}

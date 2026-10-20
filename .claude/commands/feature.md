@@ -38,6 +38,6 @@ sin romper reglas transversales.
 
 ## PR
 
-Rama `claude/...` → PR squash a `main`. Commits con
-`git commit --author="Julieta Arrazate <julietaarrazate@gmail.com>"` (Vercel bloquea otros autores).
+Rama `claude/...` → PR squash a `main`. Commits con la autoría autorizada (ver [`CONTRIBUTING.md`](../../CONTRIBUTING.md))
+(Vercel bloquea otros autores).
 Commit por sub-paso, no al final.

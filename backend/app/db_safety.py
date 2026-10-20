@@ -407,4 +407,44 @@ SAFETY_NET_DDL = [
     "CONSTRAINT uq_borrador_email_adjunto UNIQUE (organizacion_id, email_id, adjunto_id))",
     "CREATE INDEX IF NOT EXISTS ix_borrador_comprobante_org_estado ON borradores_comprobante (organizacion_id, estado)",
     "CREATE INDEX IF NOT EXISTS ix_borrador_comprobante_email ON borradores_comprobante (email_id)",
+    # migración 028 — Extractos en PDF: formatos aprendidos + borradores de revisión
+    # (moldes primero: el borrador tiene FK al molde).
+    "CREATE TABLE IF NOT EXISTS moldes_extracto_pdf ("
+    "id SERIAL PRIMARY KEY, "
+    "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+    "banco_clave VARCHAR(40), "
+    "firma VARCHAR(64) NOT NULL, "
+    "layout JSON NOT NULL, "
+    "origen VARCHAR(20), "
+    "confirmaciones INTEGER NOT NULL DEFAULT 0, "
+    "creado_at TIMESTAMP DEFAULT NOW(), "
+    "ultimo_uso_at TIMESTAMP, "
+    "creado_por INTEGER REFERENCES users(id) ON DELETE SET NULL, "
+    "CONSTRAINT uq_molde_extracto_pdf_org_firma UNIQUE (organizacion_id, firma))",
+    "CREATE TABLE IF NOT EXISTS borradores_extracto_pdf ("
+    "id SERIAL PRIMARY KEY, "
+    "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+    "creado_por INTEGER REFERENCES users(id) ON DELETE SET NULL, "
+    "creado_at TIMESTAMP DEFAULT NOW(), "
+    "actualizado_at TIMESTAMP DEFAULT NOW(), "
+    "nombre_archivo VARCHAR(255) NOT NULL, "
+    "contenido_sha256 VARCHAR(64), "
+    "tamano_bytes INTEGER, "
+    "estado VARCHAR(20) NOT NULL DEFAULT 'procesando', "
+    "metodo VARCHAR(20), "
+    "banco VARCHAR(120), "
+    "banco_clave VARCHAR(40), "
+    "molde_id INTEGER REFERENCES moldes_extracto_pdf(id) ON DELETE SET NULL, "
+    "periodo_desde DATE, "
+    "periodo_hasta DATE, "
+    "saldo_inicial NUMERIC(16,2), "
+    "saldo_final NUMERIC(16,2), "
+    "datos JSON, "
+    "alertas JSON, "
+    "error TEXT, "
+    "extracto_id INTEGER REFERENCES extractos_bancarios(id) ON DELETE SET NULL, "
+    "confirmado_por INTEGER REFERENCES users(id) ON DELETE SET NULL, "
+    "confirmado_at TIMESTAMP)",
+    "CREATE INDEX IF NOT EXISTS ix_borrador_extracto_pdf_org_estado ON borradores_extracto_pdf (organizacion_id, estado)",
+    "CREATE INDEX IF NOT EXISTS ix_borrador_extracto_pdf_org_sha ON borradores_extracto_pdf (organizacion_id, contenido_sha256)",
 ]

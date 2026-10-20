@@ -642,7 +642,7 @@ def export_liquidacion_excel(liquidacion, revisiones) -> bytes:
 
 def export_eft_historial(ops: list, periodo: str = "") -> bytes:
     """
-    Exporta el historial EFT identico a la planilla manual de Julieta.
+    Exporta el historial EFT con el mismo formato que la planilla manual original.
 
     Hoja 1 - Historico: Fecha | Cliente | Importe (mismo formato que pago eft.xlsx)
     Hoja 2 - Tabla dinamica: totales por fecha

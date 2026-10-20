@@ -263,6 +263,7 @@ Límites reales en el código (orientativos para endpoints nuevos del mismo tipo
 |----------|--------|---------|
 | `POST /extractos/upload` | `10/minute` | `extractos.py` |
 | `POST /extractos/{id}/agregar-um` | `20/minute` | `extractos.py` |
+| `POST /extractos-pdf/importar` | `10/minute` | `extractos_pdf.py` |
 | `POST /auth/login` | `10/minute` | `auth.py` |
 | `POST /auth/register` | `5/minute` | `auth.py` |
 | `POST /auth/verify-2fa` | `3/minute` | `auth.py` |
@@ -300,6 +301,13 @@ Los endpoints que reciben archivos validan en este orden (ver `upload_extracto` 
 4. **Temporales**: escribir a `NamedTemporaryFile` y **siempre** borrar en `finally`.
 5. **Validación semántica**: tras parsear, rechazar si no hay movimientos reconocibles o si todos
    los montos son cero (`HTTPException(400)` con mensaje accionable).
+
+Extractos en PDF (`POST /extractos-pdf/importar`, `validar_archivo` en
+`extracto_pdf_service.py`): extensión `.pdf`, tamaño (`max_file_size` → 413; se lee como mucho
+`max_file_size + 1` bytes), no vacío y firma `%PDF-` en el primer KB (la especificación tolera
+basura antes). El lector rechaza con 400 los PDF dañados, con contraseña de apertura o de más de
+80 páginas. La lectura con IA tiene cuota diaria propia (`EXTRACTOS_PDF_IA_DAILY_LIMIT`, default
+100). Ver [../business/EXTRACTOS_PDF.md](../business/EXTRACTOS_PDF.md).
 
 Imágenes/audio del asistente IA (`agente.py`) llegan como base64 o `UploadFile` y se validan por
 no-vacío; el procesamiento real lo hace Gemini. Ver [../ai/AI_GUIDE.md](../ai/AI_GUIDE.md).

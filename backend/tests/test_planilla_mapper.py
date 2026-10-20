@@ -1,12 +1,12 @@
 """Tests del pipeline de estandarización de planillas (`services/planilla_mapper.py`)
 y sus endpoints (`/planillas/preview`, `/planillas/upload` con mapeo).
 
-Los 3 formatos reales (Tucu, Green, Dani) se construyen INLINE con openpyxl y
+Los 3 formatos de planilla (A, B y C) se construyen INLINE con openpyxl y
 datos DUMMY — no hay datos reales de terceros en el repo. Estructuras replicadas:
 
-- TUCU: fila1 título "TRANSFERENCIAS"; fila2 headers; col "Cliente" constante.
-- GREEN: fila1 vacía; datos arrancan en col B (offset); headers en fila2.
-- DANI: headers en fila1; col "Cuenta" constante; algún CUIT de 10 dígitos.
+- FORMATO A: fila1 título "TRANSFERENCIAS"; fila2 headers; col "Cliente" constante.
+- FORMATO B: fila1 vacía; datos arrancan en col B (offset); headers en fila2.
+- FORMATO C: headers en fila1; col "Cuenta" constante; algún CUIT de 10 dígitos.
 """
 import io
 from datetime import date, datetime
@@ -64,7 +64,7 @@ class _FakeWS:
 
 
 def test_preview_corta_en_planilla_corta_con_dimension_inflada():
-    """Regresión del timeout real (Alojando, 7 filas): _preview no debe escanear
+    """Regresión del timeout real (planilla de 7 filas): _preview no debe escanear
     hasta max_row cuando la planilla tiene menos filas que `n`. Antes recorría
     ~1.048.576 filas (>20s) y disparaba timeout al subir/previsualizar."""
     from app.services.planilla_mapper import _preview
@@ -77,21 +77,21 @@ def test_preview_corta_en_planilla_corta_con_dimension_inflada():
     assert ws.cell_calls < 1000, f"escaneó demasiadas celdas: {ws.cell_calls}"
 
 
-def _tucu_rows(extra_empty=0):
+def _formato_a_rows(extra_empty=0):
     rows = [
         ["TRANSFERENCIAS", None, None, None, None, None, None],
         ["FECHA TRANSFERENCIA", "Cliente", "CUENTA DEPOSITO", "Banco emisor",
          "Titular de la cuenta", "CUIT/CUIL/DNI", "MONTO"],
-        ["2026-06-04", "Caneland", "00012345", "Mercado Pago", "Juan Perez", "20940508925", 100000],
-        ["2026-06-05", "Caneland", "00012346", "Galicia", "Maria Lopez", "27123456784", 200000],
-        ["2026-06-06", "Caneland", "00012347", "BBVA", "Pedro Gomez", "20111111112", 50000],
+        ["2026-06-04", "Estudio Demo", "00012345", "Mercado Pago", "Juan Perez", "20444444445", 100000],
+        ["2026-06-05", "Estudio Demo", "00012346", "Galicia", "Maria Lopez", "27123456784", 200000],
+        ["2026-06-06", "Estudio Demo", "00012347", "BBVA", "Pedro Gomez", "20111111112", 50000],
     ]
     for _ in range(extra_empty):
         rows.append([None] * 7)
     return rows
 
 
-def _green_rows():
+def _formato_b_rows():
     return [
         [None] * 7,
         [None, "ORDEN", "FECHA TRANSFERENCIA", "Titular de la cuenta", "CUIT/CUIL",
@@ -103,13 +103,13 @@ def _green_rows():
     ]
 
 
-def _dani_rows():
+def _formato_c_rows():
     return [
         ["ID", "Importe", "Estado del pago", "Cuenta", "Fecha de transferencia",
          "Banco de origen", "Cuit", "Titular transferir", "Rendido"],
         # CUIT de 10 dígitos (no 11) — debe aceptarse.
-        [1, 100000, "Pago", "Caneland", "2026-06-04", "Mercado pago", "2094050892", "Juan Perez", "No"],
-        [2, 200000, "Pago", "Caneland", "2026-06-05", "Pvs", "20267910260", "Maria Lopez", "No"],
+        [1, 100000, "Pago", "Estudio Demo", "2026-06-04", "Mercado pago", "2044444444", "Juan Perez", "No"],
+        [2, 200000, "Pago", "Estudio Demo", "2026-06-05", "Pvs", "20555555556", "Maria Lopez", "No"],
     ]
 
 
@@ -117,15 +117,15 @@ def _dani_rows():
 
 class TestDeteccionHeuristica:
 
-    def test_tucu_header_en_fila_2_y_columnas(self):
-        r = estandarizar_planilla(_build_xlsx(_tucu_rows()), usar_ia=False)
+    def test_formato_a_header_en_fila_2_y_columnas(self):
+        r = estandarizar_planilla(_build_xlsx(_formato_a_rows()), usar_ia=False)
         assert r["header_row"] == 2
         assert r["columnas"] == {"monto": 7, "cuit": 6, "titular": 5, "fecha": 1, "referencia": None}
         assert r["confianza"] >= 0.7
         assert r["origen"] == "heuristica"
 
-    def test_green_header_fila_2_con_offset_columna_B(self):
-        r = estandarizar_planilla(_build_xlsx(_green_rows()), usar_ia=False)
+    def test_formato_b_header_fila_2_con_offset_columna_B(self):
+        r = estandarizar_planilla(_build_xlsx(_formato_b_rows()), usar_ia=False)
         assert r["header_row"] == 2
         # Datos arrancan en col B → índices desplazados.
         assert r["columnas"]["monto"] == 6
@@ -134,8 +134,8 @@ class TestDeteccionHeuristica:
         assert r["columnas"]["fecha"] == 3
         assert r["columnas"]["referencia"] == 2
 
-    def test_dani_header_en_fila_1(self):
-        r = estandarizar_planilla(_build_xlsx(_dani_rows()), usar_ia=False)
+    def test_formato_c_header_en_fila_1(self):
+        r = estandarizar_planilla(_build_xlsx(_formato_c_rows()), usar_ia=False)
         assert r["header_row"] == 1
         assert r["columnas"]["monto"] == 2
         assert r["columnas"]["cuit"] == 7
@@ -143,9 +143,9 @@ class TestDeteccionHeuristica:
         assert r["columnas"]["fecha"] == 5
         assert r["columnas"]["referencia"] == 1
 
-    def test_trampa_caneland_columna_cliente_no_es_titular(self):
-        """La col 'Cliente' (constante 'Caneland') NO debe mapearse a titular."""
-        r = estandarizar_planilla(_build_xlsx(_tucu_rows()), usar_ia=False)
+    def test_trampa_columna_constante_no_es_titular(self):
+        """La col 'Cliente' (constante 'Estudio Demo') NO debe mapearse a titular."""
+        r = estandarizar_planilla(_build_xlsx(_formato_a_rows()), usar_ia=False)
         assert r["columnas"]["titular"] == 5  # 'Titular de la cuenta', no 'Cliente' (2)
         assert r["columnas"]["titular"] != 2
 
@@ -154,9 +154,9 @@ class TestDeteccionHeuristica:
         descarta y se elige la columna con titulares variados."""
         rows = [
             ["Nombre", "Titular de la cuenta", "Importe", "CUIT"],
-            ["Caneland", "Juan Perez", 100000, "20940508925"],
-            ["Caneland", "Maria Lopez", 200000, "27123456784"],
-            ["Caneland", "Pedro Gomez", 50000, "20111111112"],
+            ["Estudio Demo", "Juan Perez", 100000, "20444444445"],
+            ["Estudio Demo", "Maria Lopez", 200000, "27123456784"],
+            ["Estudio Demo", "Pedro Gomez", 50000, "20111111112"],
         ]
         r = estandarizar_planilla(_build_xlsx(rows), usar_ia=False)
         assert r["columnas"]["titular"] == 2  # la variada, no 'Nombre' (1, constante)
@@ -167,30 +167,30 @@ class TestDeteccionHeuristica:
 
 class TestParseoCanonico:
 
-    def test_tucu_filas_canonicas_con_decimal(self):
-        r = estandarizar_planilla(_build_xlsx(_tucu_rows()), usar_ia=False)
+    def test_formato_a_filas_canonicas_con_decimal(self):
+        r = estandarizar_planilla(_build_xlsx(_formato_a_rows()), usar_ia=False)
         assert r["filas_totales"] == 3
         f0 = r["filas"][0]
         assert isinstance(f0["monto"], Decimal)
         assert f0["monto"] == Decimal("100000")
-        assert f0["cuit"] == "20940508925"
+        assert f0["cuit"] == "20444444445"
         assert f0["titular"] == "Juan Perez"
         assert f0["fecha"] == date(2026, 6, 4)
 
-    def test_green_filas_canonicas(self):
-        r = estandarizar_planilla(_build_xlsx(_green_rows()), usar_ia=False)
+    def test_formato_b_filas_canonicas(self):
+        r = estandarizar_planilla(_build_xlsx(_formato_b_rows()), usar_ia=False)
         assert r["filas_totales"] == 3
         montos = [f["monto"] for f in r["filas"]]
         assert montos == [Decimal("150000"), Decimal("250000"), Decimal("75000")]
 
-    def test_dani_cuit_10_digitos_aceptado(self):
-        r = estandarizar_planilla(_build_xlsx(_dani_rows()), usar_ia=False)
+    def test_formato_c_cuit_10_digitos_aceptado(self):
+        r = estandarizar_planilla(_build_xlsx(_formato_c_rows()), usar_ia=False)
         assert r["filas_totales"] == 2
-        assert r["filas"][0]["cuit"] == "2094050892"  # 10 dígitos, no se descarta
+        assert r["filas"][0]["cuit"] == "2044444444"  # 10 dígitos, no se descarta
         assert len(r["filas"][0]["cuit"]) == 10
 
     def test_fila_con_monto_sin_identidad_se_preserva(self):
-        r = estandarizar_planilla(_build_xlsx(_green_rows()), usar_ia=False)
+        r = estandarizar_planilla(_build_xlsx(_formato_b_rows()), usar_ia=False)
         ultima = r["filas"][-1]
         assert ultima["monto"] == Decimal("75000")
         assert ultima["cuit"] is None
@@ -198,7 +198,7 @@ class TestParseoCanonico:
 
     def test_corta_al_final_pese_a_filas_vacias_infinitas(self):
         """~20 filas vacías tras los datos no deben inflar el resultado."""
-        r = estandarizar_planilla(_build_xlsx(_tucu_rows(extra_empty=20)), usar_ia=False)
+        r = estandarizar_planilla(_build_xlsx(_formato_a_rows(extra_empty=20)), usar_ia=False)
         assert r["filas_totales"] == 3
 
 
@@ -210,7 +210,7 @@ class TestDeteccionTotales:
         """3 movimientos reales (suma 350000), headers en fila 1."""
         return [
             ["Fecha", "Titular de la cuenta", "CUIT/CUIL/DNI", "MONTO"],
-            ["2026-06-04", "Juan Perez", "20940508925", 100000],
+            ["2026-06-04", "Juan Perez", "20444444445", 100000],
             ["2026-06-05", "Maria Lopez", "27123456784", 200000],
             ["2026-06-06", "Pedro Gomez", "20111111112", 50000],
         ]
@@ -278,10 +278,10 @@ class TestDeteccionTotales:
         assert r["total_cuadra"] is False
 
 
-# ── Blindaje Dani: bloque de cálculos del cliente NO contamina los movimientos ─
+# ── Blindaje: bloque de cálculos del cliente NO contamina los movimientos ──────
 
-class TestBlindajeDaniBloqueCalculo:
-    """Regresión (blindaje Dani): una planilla con los movimientos reales, luego un
+class TestBlindajeBloqueCalculo:
+    """Regresión (blindaje de bloque de cálculo): una planilla con los movimientos reales, luego un
     HUECO de filas vacías y después un bloque de liquidación del cliente
     ("Suma"/"Comi"/"Bruto"/"Transfer 1/2"/"Neto") en otra columna NO debe:
       - contar el bloque de cálculo como movimientos,
@@ -289,14 +289,14 @@ class TestBlindajeDaniBloqueCalculo:
       - tomar el "Neto"/"Bruto"/"Transfer" del cliente como total_declarado espurio.
     """
 
-    def _dani_con_bloque_calculo(self):
+    def _con_bloque_calculo(self):
         # Movimientos reales: ID (col A), Importe (col B), Fecha, Cuit, Titular.
         # El monto vive en la col B; el bloque de cálculo del cliente pone sus
         # etiquetas en la col B (texto → no parsea como monto) y los importes
         # calculados en la col C.
         return [
             ["ID", "Importe", "Fecha", "Cuit", "Titular"],
-            [1, 100000, "2026-06-04", "20940508925", "Juan Perez"],
+            [1, 100000, "2026-06-04", "20444444445", "Juan Perez"],
             [2, 200000, "2026-06-05", "27123456784", "Maria Lopez"],
             [3, 50000, "2026-06-06", "20111111112", "Pedro Gomez"],
             # HUECO de filas vacías entre los movimientos y el bloque de cálculo.
@@ -313,7 +313,7 @@ class TestBlindajeDaniBloqueCalculo:
         ]
 
     def test_solo_extrae_los_movimientos_reales(self):
-        r = estandarizar_planilla(_build_xlsx(self._dani_con_bloque_calculo()), usar_ia=False)
+        r = estandarizar_planilla(_build_xlsx(self._con_bloque_calculo()), usar_ia=False)
         # Solo los 3 movimientos reales; el bloque de cálculo queda afuera.
         assert r["filas_totales"] == 3
         assert r["columnas"]["monto"] == 2  # col B "Importe", no la col del bloque
@@ -321,7 +321,7 @@ class TestBlindajeDaniBloqueCalculo:
         assert montos == {Decimal("100000"), Decimal("200000"), Decimal("50000")}
 
     def test_ninguna_etiqueta_de_calculo_queda_en_filas(self):
-        r = estandarizar_planilla(_build_xlsx(self._dani_con_bloque_calculo()), usar_ia=False)
+        r = estandarizar_planilla(_build_xlsx(self._con_bloque_calculo()), usar_ia=False)
         etiquetas_prohibidas = {"suma", "comi", "bruto", "neto",
                                 "transfer 1", "transfer 2"}
         for f in r["filas"]:
@@ -336,7 +336,7 @@ class TestBlindajeDaniBloqueCalculo:
         assert Decimal("173250") not in montos     # transfers
 
     def test_total_declarado_no_es_espurio(self):
-        r = estandarizar_planilla(_build_xlsx(self._dani_con_bloque_calculo()), usar_ia=False)
+        r = estandarizar_planilla(_build_xlsx(self._con_bloque_calculo()), usar_ia=False)
         # El bloque de cálculo NO debe interpretarse como total declarado.
         # total_declarado debe ser None (los movimientos reales tienen cuit, no
         # hay fila de resumen trailing) o, en el peor caso, el total real —
@@ -353,7 +353,7 @@ class TestMapeoManual:
     def test_mapeo_manual_dict_parsea_deterministico(self):
         mapeo = {"header_row": 2,
                  "columnas": {"monto": 7, "cuit": 6, "titular": 5, "fecha": 1, "referencia": None}}
-        r = estandarizar_planilla(_build_xlsx(_tucu_rows()), mapeo=mapeo, usar_ia=False)
+        r = estandarizar_planilla(_build_xlsx(_formato_a_rows()), mapeo=mapeo, usar_ia=False)
         assert r["origen"] == "manual"
         assert r["confianza"] == 1.0
         assert r["header_row"] == 2
@@ -363,15 +363,15 @@ class TestMapeoManual:
     def test_perfil_con_fingerprint_que_no_matchea_cae_a_heuristica(self):
         mapeo = {"fingerprint": "no-matchea-nada", "header_row": 2,
                  "columnas": {"monto": 7, "cuit": 6, "titular": 5, "fecha": 1, "referencia": None}}
-        r = estandarizar_planilla(_build_xlsx(_tucu_rows()), mapeo=mapeo, usar_ia=False)
+        r = estandarizar_planilla(_build_xlsx(_formato_a_rows()), mapeo=mapeo, usar_ia=False)
         assert r["origen"] == "heuristica"
 
     def test_perfil_con_fingerprint_correcto_usa_perfil(self):
         # Primero detecto para obtener el fingerprint real del archivo.
-        base = estandarizar_planilla(_build_xlsx(_tucu_rows()), usar_ia=False)
+        base = estandarizar_planilla(_build_xlsx(_formato_a_rows()), usar_ia=False)
         mapeo = {"fingerprint": base["fingerprint"], "header_row": 2,
                  "columnas": base["columnas"]}
-        r = estandarizar_planilla(_build_xlsx(_tucu_rows()), mapeo=mapeo, usar_ia=False)
+        r = estandarizar_planilla(_build_xlsx(_formato_a_rows()), mapeo=mapeo, usar_ia=False)
         assert r["origen"] == "perfil"
         assert r["confianza"] == 1.0
 
@@ -458,7 +458,7 @@ class TestPreviewEndpoint:
         token = _token(db)
         r = client.post(
             "/planillas/preview",
-            files={"file": ("tucu.xlsx", _build_xlsx(_tucu_rows()),
+            files={"file": ("formato_a.xlsx", _build_xlsx(_formato_a_rows()),
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
             headers=_auth(token),
         )
@@ -486,7 +486,7 @@ class TestPreviewEndpoint:
         token = _token(db)
         r = client.post(
             "/planillas/preview?cliente_id=99",
-            files={"file": ("tucu.xlsx", _build_xlsx(_tucu_rows()),
+            files={"file": ("formato_a.xlsx", _build_xlsx(_formato_a_rows()),
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
             headers=_auth(token),
         )
@@ -500,7 +500,7 @@ class TestUploadConPipeline:
     def test_upload_sin_mapeo_usa_heuristica(self, client, db):
         extracto = _seed_extracto(db)
         token = _token(db)
-        args = _upload("ClienteHeur", extracto.id, _build_xlsx(_dani_rows()))
+        args = _upload("ClienteHeur", extracto.id, _build_xlsx(_formato_c_rows()))
         r = client.post(args["url"], files=args["files"], headers=_auth(token))
         assert r.status_code == 200, r.text
         data = r.json()
@@ -516,7 +516,7 @@ class TestUploadConPipeline:
         token = _token(db)
         mapeo = {"header_row": 2,
                  "columnas": {"monto": 7, "cuit": 6, "titular": 5, "fecha": 1, "referencia": None}}
-        args = _upload("ClientePerfil", extracto.id, _build_xlsx(_tucu_rows()))
+        args = _upload("ClientePerfil", extracto.id, _build_xlsx(_formato_a_rows()))
         r = client.post(
             args["url"], files=args["files"],
             data={"mapeo": _json.dumps(mapeo)}, headers=_auth(token),
@@ -540,7 +540,7 @@ class TestUploadConPipeline:
         token = _token(db)
         mapeo = {"header_row": 2,
                  "columnas": {"monto": 7, "cuit": 6, "titular": 5, "fecha": 1, "referencia": None}}
-        args = _upload("ClienteReuso", extracto.id, _build_xlsx(_tucu_rows()))
+        args = _upload("ClienteReuso", extracto.id, _build_xlsx(_formato_a_rows()))
         client.post(args["url"], files=args["files"],
                     data={"mapeo": _json.dumps(mapeo)}, headers=_auth(token))
 
@@ -548,8 +548,8 @@ class TestUploadConPipeline:
         # datos distintos — como el envío real del mes siguiente. Reusar el mismo
         # contenido byte a byte chocaría con el bloqueo de planillas duplicadas
         # (misma planilla ya cargada para este cliente).
-        rows_mes_2 = _tucu_rows()
-        rows_mes_2[-1] = ["2026-07-04", "Caneland", "00099999", "Mercado Pago",
+        rows_mes_2 = _formato_a_rows()
+        rows_mes_2[-1] = ["2026-07-04", "Estudio Demo", "00099999", "Mercado Pago",
                            "Otro Cliente", "20222222223", 75000]
         args2 = _upload("ClienteReuso", extracto.id, _build_xlsx(rows_mes_2))
         r2 = client.post(args2["url"], files=args2["files"], headers=_auth(token))
@@ -559,9 +559,9 @@ class TestUploadConPipeline:
     def test_upload_los_3_formatos_parsean(self, client, db):
         extracto = _seed_extracto(db)
         token = _token(db)
-        for nombre, rows, n in [("Tucu", _tucu_rows(), 3),
-                                ("Green", _green_rows(), 3),
-                                ("Dani", _dani_rows(), 2)]:
+        for nombre, rows, n in [("ClienteFormatoA", _formato_a_rows(), 3),
+                                ("ClienteFormatoB", _formato_b_rows(), 3),
+                                ("ClienteFormatoC", _formato_c_rows(), 2)]:
             args = _upload(nombre, extracto.id, _build_xlsx(rows))
             r = client.post(args["url"], files=args["files"], headers=_auth(token))
             assert r.status_code == 200, f"{nombre}: {r.text}"

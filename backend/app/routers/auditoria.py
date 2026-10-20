@@ -258,7 +258,7 @@ def importar_patrones_historicos(
 ):
     """
     Importa patrones de aprendizaje desde planillas historicas ya conciliadas.
-    Body: {"patrones": [{"cliente": "Green", "titular": "Juan Perez", "cuit": "20123456789", "monto": 50000}]}
+    Body: {"patrones": [{"cliente": "Cliente Norte", "titular": "Juan Perez", "cuit": "20123456789", "monto": 50000}]}
     """
     from app.models.patron_aprendido import PatronAprendido
     import re

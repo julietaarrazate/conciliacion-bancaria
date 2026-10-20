@@ -4,11 +4,11 @@ export default {
   theme: {
     extend: {
       colors: {
-        // ── Light mode (Linear light) ──────────────────────
+        // ── Light mode ──────────────────────
         ml: {
           yellow:       '#FFE600',
           'yellow-dark':'#F5DC00',
-          blue:         '#5E6AD2',  // Linear purple-blue
+          blue:         '#5E6AD2',  // azul-violeta de marca
           'blue-dark':  '#4A55BE',
           'blue-darker':'#3A43A0',
           gray:         '#E4E4E7',
@@ -16,7 +16,7 @@ export default {
           'gray-bg':    '#F4F4F5',
           text:         '#18181B',
           'text-soft':  '#71717A',
-          // ── Dark mode (Linear dark) ─────────────────────
+          // ── Dark mode ─────────────────────
           'dark-bg':      '#0B0B0F',
           'dark-surface': '#111116',
           'dark-card':    '#16161C',

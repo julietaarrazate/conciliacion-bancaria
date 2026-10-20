@@ -196,4 +196,4 @@ pytest tests/ -v
 
 ## Licencia
 
-Privado - Organización A
+© Julieta Arrazate — Todos los derechos reservados.

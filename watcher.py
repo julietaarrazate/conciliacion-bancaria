@@ -24,7 +24,8 @@ def _resolver_fecha(v):
 
 FECHA_ACRED = _resolver_fecha(_CFG.get("fecha_acred", "hoy"))
 
-CLIENTS = ['green','tucu','david','smt','gwinn','innova','camparo','alojando','pinares','paraguay']
+# Subcarpetas del INBOX (una por cliente), definidas en config.json → "clientes"
+CLIENTS = [str(c).lower() for c in _CFG.get("clientes", [])]
 
 DATE_FMT   = 'dd/mm/yyyy'
 CURR_FMT   = r'"$"\ #,##0.00;"$"\ \-#,##0.00'
@@ -280,7 +281,7 @@ def conciliar_cliente(path, cliente):
     wb = openpyxl.load_workbook(path)
 
     # Siempre se procesa la primera solapa (índice 0) — es la más reciente
-    # Aplica tanto a SMT (60+ solapas, la primera es el día actual) como al resto
+    # Aplica también a planillas con muchas solapas (la primera es el día actual)
     ws_cliente = wb.worksheets[0]
     conciliar_hoja(ws_cliente, cliente, fecha, wb_ex, ws_ex, extracto,
                    idx_color, row_fill, usados, esta_planilla)

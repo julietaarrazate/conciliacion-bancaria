@@ -36,7 +36,7 @@ suma el **bonus por fecha** (§1.2). Las señales son **excluyentes y ordenadas*
 | Titular: única palabra presente | **3** | `conciliacion.py:225-227` |
 
 Notas fieles al código:
-- El caso DNI-embebido-en-CUIT (ago 2026, caso real cliente SMT) cubre planillas
+- El caso DNI-embebido-en-CUIT (ago 2026, caso real de un cliente) cubre planillas
   que solo anotan el DNI del titular (8 dígitos) en vez del CUIT/CUIL completo
   (11). Como el CUIT argentino es 2 dígitos de tipo + DNI + 1 verificador, el DNI
   aparece como substring contigua dentro de los dígitos del movimiento. Antes de
@@ -142,7 +142,7 @@ intercambiables:
 | La fila **ya existe** en una planilla del cliente y solo falta elegir cuál de los movimientos candidatos es | Botón "🔗" en la fila (Historial/PlanillaPanel) | Resuelve **esa fila en su lugar**: `status="ok"`, linkea `orden_movimiento_acreditado`, sincroniza `mov.cliente_acreditado` y dispara `registrar_reclasificacion_planilla` — mismo criterio que "Re-conciliar". No crea filas nuevas. | `GET /planillas/rows/{id}/candidatos-movimiento`, `POST /planillas/rows/{id}/asignar-movimiento` (`routers/planillas.py`) |
 | El movimiento es realmente **huérfano** — plata que llegó al banco sin que el cliente la declarara en ninguna planilla | Vista Movimientos (extracto) → "acreditar a cliente" | Marca `mov.cliente_acreditado` y agrega una fila a la planilla original del cliente para ese extracto (o crea una planilla "acreditación manual {d}.{m}" si no existe ninguna) | `POST /clientes/movimientos/{mov_id}/acreditar` (`routers/clientes_dir.py:429-559`) |
 
-> **Regresión ago 2026 (caso real SMT):** antes solo existía el segundo
+> **Regresión ago 2026 (caso real de un cliente):** antes solo existía el segundo
 > camino. Usarlo para resolver una fila ya existente (monto duplicado
 > ambiguo) dejaba la fila original huérfana en "no coincide" para siempre y
 > agregaba una fila nueva — funcionaba para el total de la cuenta corriente,
@@ -195,7 +195,7 @@ Archivo: `backend/app/routers/planillas.py` (`upload_planilla`), migración 026.
 ### 1.8. Motivo del match y resumen del extracto (read-only) — desde oct 2026
 
 Dos lecturas que **no participan de la decisión del motor** ni cambian ningún
-status (inspiradas en la comparación con Caliper Contable):
+status:
 
 - **Motivo de cada match** — `explicar_match()` (`services/conciliacion.py`).
   Para cada fila `ok` de `/planillas/{id}/detalle` devuelve `motivo_match`: qué
@@ -244,6 +244,17 @@ Solo se agregan los movimientos **anteriores al corte** (`extracto_merger.py:158
 y, como red de seguridad, se descartan los que ya existen
 (`extracto_merger.py:161`). Los nuevos se marcan `source='um'` con un `um_lote`
 incremental (`extracto_merger.py:184-188`).
+
+### 2bis. Extractos en PDF (v3.31)
+
+Detalle completo en [EXTRACTOS_PDF.md](./EXTRACTOS_PDF.md). Lo que toca a estas reglas:
+- Un PDF que se pisa con un extracto existente se agrega con **este mismo merge** de UM
+  (`source='um'`, `um_lote`, asiento automático): no hay una segunda lógica de deduplicación.
+- Antes de guardar, el PDF se valida con `saldo inicial + créditos − débitos = saldo final`
+  (Decimal, tolerancia $0,01) y el saldo corrido fila por fila; si no cierra, solo se guarda con
+  confirmación explícita.
+- Para decidir si el PDF ya está cargado se compara por **fecha e importe** contra extractos
+  activos o archivados cuyas fechas se pisan (no solo por la huella cantidad + suma).
 
 ---
 

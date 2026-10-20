@@ -26,7 +26,7 @@
 - [ ] No se modifican datos existentes de Org A (`organizacion_id=1`)
 - [ ] Sin secretos/keys en el código
 - [ ] Documentación de `/docs` actualizada si cambió el comportamiento
-- [ ] Commit con autoría `Julieta Arrazate <julietaarrazate@gmail.com>`
+- [ ] Commit con la autoría autorizada para deploy (ver [`CONTRIBUTING.md`](../CONTRIBUTING.md))
 
 ## Test plan
 
