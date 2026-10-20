@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 MAX_PAGINAS = 80
 # Menos de esto de caracteres útiles por página (en promedio) = PDF escaneado.
 _MIN_CARACTERES_POR_PAGINA = 40
+# Una imagen que tapa al menos esta parte de la página, o tantos caracteres girados
+# o ilegibles, pueden tener movimientos que no se leyeron.
+_AREA_IMAGEN_SIN_TEXTO = 0.06
+_MIN_DESCARTADOS_SIN_TEXTO = 20
 
 MENSAJE_CONTRASENA = (
     "El PDF tiene contraseña y no se puede leer. Abrilo con la contraseña y usá "
@@ -106,6 +110,19 @@ def _iter_chars(contenedor) -> Iterator:
             yield obj
         elif isinstance(obj, LTContainer):     # LTFigure (form XObjects)
             yield from _iter_chars(obj)
+
+
+def _area_de_imagenes(contenedor) -> float:
+    """Área de las imágenes de la página (también dentro de figuras)."""
+    from pdfminer.layout import LTContainer, LTImage
+
+    area = 0.0
+    for obj in contenedor:
+        if isinstance(obj, LTImage):
+            area += max(0.0, float(obj.width)) * max(0.0, float(obj.height))
+        elif isinstance(obj, LTContainer):
+            area += _area_de_imagenes(obj)
+    return area
 
 
 def _es_espacio(t: str) -> bool:
@@ -233,7 +250,7 @@ def extraer_documento(contenido: bytes) -> Documento:
     lineas: list[Linea] = []
     utiles = ilegibles = 0
     paginas_ilegibles: list[int] = []
-    paginas_sin_texto: list[int] = []
+    por_pagina: list[tuple[int, int, int, float]] = []    # (página, útiles, descartados, parte con imagen)
     for n, pagina in enumerate(paginas, start=1):
         try:
             interprete.process_page(pagina)
@@ -245,24 +262,41 @@ def extraer_documento(contenido: bytes) -> Documento:
             paginas_ilegibles.append(n)
             continue
         chars: list[_Char] = []
-        utiles_pagina = 0
+        utiles_pagina = descartados = 0
         for obj in _iter_chars(layout):
             a, b, c, d, _e, f = obj.matrix
+            t = obj.get_text()
             # Solo texto horizontal y derecho (los textos girados de los márgenes
             # suelen ser leyendas legales o códigos de control).
             if abs(b) > 1e-3 or abs(c) > 1e-3 or a <= 0 or d <= 0:
+                descartados += not _es_espacio(t)
                 continue
-            t = obj.get_text()
             if t.startswith("(cid:"):
                 ilegibles += 1
+                descartados += 1
                 continue
             if not _es_espacio(t):
                 utiles_pagina += 1
             chars.append(_Char(t, float(obj.x0), float(obj.x1), float(f), float(obj.size)))
         utiles += utiles_pagina
-        if utiles_pagina < _MIN_CARACTERES_POR_PAGINA:
-            paginas_sin_texto.append(n)
+        area = float(layout.width) * float(layout.height)
+        por_pagina.append((n, utiles_pagina, descartados, _area_de_imagenes(layout) / area if area > 0 else 0.0))
         lineas.extend(_armar_lineas(chars, n, float(layout.width), float(layout.height)))
+
+    # Una página con poco texto es "sin texto" solo si tiene algo que no se leyó:
+    # texto girado o ilegible, o una imagen grande (una hoja escaneada en el medio
+    # de un PDF con texto), más allá de lo que traen todas las páginas con texto (la
+    # leyenda al margen, el fondo con el membrete). En blanco, con solo "3/3" o con el
+    # logo del banco, no.
+    con_texto = [p for p in por_pagina if p[1] >= _MIN_CARACTERES_POR_PAGINA]
+    descartados_normal = min((p[2] for p in con_texto), default=0)
+    imagen_normal = min((p[3] for p in con_texto), default=0.0)
+    paginas_sin_texto = [
+        n for n, utiles_pagina, descartados, imagen in por_pagina
+        if utiles_pagina < _MIN_CARACTERES_POR_PAGINA
+        and (descartados - descartados_normal >= _MIN_DESCARTADOS_SIN_TEXTO
+             or imagen - imagen_normal >= _AREA_IMAGEN_SIN_TEXTO)
+    ]
 
     total = len(paginas)
     escaneado = utiles < _MIN_CARACTERES_POR_PAGINA * total or ilegibles > utiles

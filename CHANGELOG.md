@@ -98,7 +98,12 @@ es igual al del Excel.
   formatos parecidos de otros bancos: columna D/H, marcas al lado del importe, columnas de
   medio de pago o de canal que no son el signo, reversos con "-", resúmenes de un solo día,
   hojas sin texto y movimientos que empiezan con "Transporte".
-- Tests: 277 backend (`test_extracto_pdf_lector.py`, `test_extracto_pdf_casos_dificiles.py`,
+- Ajustes del lector después del merge: una hoja sin texto se detecta comparándola con las otras
+  hojas del PDF y se avisa aunque cierre si el saldo de ese lado se dedujo; las marcas D/C de una
+  o dos letras se controlan contra el saldo; entre la columna de signo y el "-" impreso decide el
+  saldo inicial y final; renglones de transporte y subtotales más estrictos; el pie sin saldo se
+  descarta también en orden descendente.
+- Tests: 338 backend (`test_extracto_pdf_lector.py`, `test_extracto_pdf_casos_dificiles.py`,
   `test_extractos_pdf_api.py`, `test_extracto_import.py`) + 65 frontend.
 - Ver `docs/business/EXTRACTOS_PDF.md`. Pendiente: probar con PDFs reales del resto de los bancos.
 

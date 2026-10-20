@@ -88,6 +88,11 @@ class _Candidato:
         )
 
     @property
+    def solo_dobles(self) -> bool:
+        """Todas las filas traen débito y crédito juntos: un cuadro de totales, no la tabla."""
+        return bool(self.filas) and all(MOTIVO_DOBLE in (f.get("motivos") or []) for f in self.filas)
+
+    @property
     def interno(self) -> dict:
         """El cuadre de los movimientos entre sí, sin los saldos inicial y final del PDF."""
         if self._interno is None:
@@ -106,20 +111,43 @@ class _Candidato:
 
 
 def _mismas_filas(a: _Candidato, b: _Candidato) -> bool:
+    """Mismas filas y mismos saldos leídos: una lectura que no leyó ningún saldo no
+    tiene saltos, y no por eso sigue mejor el saldo que la que sí los leyó."""
     def claves(c: _Candidato) -> Counter:
-        return Counter((f.get("fecha"), abs(f["monto"])) for f in c.filas)
+        return Counter((f.get("fecha"), abs(f["monto"]), f.get("saldo")) for f in c.filas)
     return claves(a) == claves(b)
 
 
 def _gana(nuevo: _Candidato, actual: Optional[_Candidato]) -> bool:
     """Para elegir entre layouts. Con filas distintas, o si alguna cierra, manda el
     puntaje de siempre (más filas leídas, menor diferencia); entre lecturas de las
-    mismas filas que no cierran, `puntaje_lectura`."""
+    mismas filas que no cierran, `puntaje_lectura`. Un cuadro de saldos leído como
+    filas con débito y crédito juntos no le gana a otra lectura con filas."""
     if actual is None:
         return True
+    if nuevo.filas and actual.filas and nuevo.solo_dobles != actual.solo_dobles and not _mismas_filas(nuevo, actual):
+        return actual.solo_dobles
     if nuevo.cierra or actual.cierra or not _mismas_filas(nuevo, actual):
         return nuevo.puntaje() > actual.puntaje()
     return nuevo.puntaje_lectura() > actual.puntaje_lectura()
+
+
+def _hojas_sin_leer_en_un_extremo(doc: Documento, cand: _Candidato) -> bool:
+    """Una hoja sin texto (imagen, girada) antes de la primera fila o después de la
+    última, del lado de un saldo que no estaba en el PDF y salió de las filas: el
+    cuadre "cierra" contra ese saldo deducido, pero los movimientos de esa hoja
+    pueden faltar."""
+    paginas = [f["pagina"] for f in cand.filas if f.get("pagina")]
+    sin_texto = [p for p in doc.paginas_sin_texto if p not in doc.paginas_ilegibles]
+    if not paginas or not sin_texto:
+        return False
+    antes = any(p < min(paginas) for p in sin_texto)
+    despues = any(p > max(paginas) for p in sin_texto)
+    inicial, final = (despues, antes) if cand.orden == "desc" else (antes, despues)
+    return bool(
+        (inicial and cand.cuadre.get("saldo_inicial_inferido"))
+        or (final and cand.cuadre.get("saldo_final_inferido"))
+    )
 
 
 def _alerta(nivel: str, codigo: str, mensaje: str) -> dict:
@@ -295,7 +323,10 @@ def leer_extracto_pdf(
             if deterministico is None:
                 deterministico = _capa_automatica(doc, banco, ctx, repetidas)
 
-    det_ok = deterministico is not None and bool(deterministico.filas) and deterministico.cierra
+    det_ok = (
+        deterministico is not None and bool(deterministico.filas) and deterministico.cierra
+        and not _hojas_sin_leer_en_un_extremo(doc, deterministico)
+    )
     necesita_ia = forzar_ia or doc.escaneado or not det_ok
     elegido = deterministico
     ia_usada = False
@@ -396,7 +427,9 @@ def _armar_salida(
                 mensaje = f"El saldo no cierra: hay una diferencia de {formatear_pesos(cuadre['diferencia'])}."
             alertas.append(_alerta("aviso", "no_cierra", mensaje))
         sin_texto = [p for p in doc.paginas_sin_texto if p not in doc.paginas_ilegibles]
-        if sin_texto and not cuadre["cierra"] and not doc.escaneado:
+        if sin_texto and not doc.escaneado and (
+            not cuadre["cierra"] or _hojas_sin_leer_en_un_extremo(doc, elegido)
+        ):
             paginas = ", ".join(str(p) for p in sin_texto)
             alertas.append(_alerta(
                 "aviso", "paginas_sin_texto",
