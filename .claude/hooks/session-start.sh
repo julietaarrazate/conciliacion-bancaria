@@ -12,7 +12,11 @@ fi
 cd "${CLAUDE_PROJECT_DIR:-$(pwd)}"
 
 echo "Instalando dependencias del backend..."
-python3 -m pip install -q --ignore-installed -r backend/requirements.txt -r backend/requirements-dev.txt ruff
+# --use-pep517: algunas dependencias sin wheel (http-ece, de pywebpush) se arman
+# con setup.py; con el setuptools de Debian del sistema eso falla
+# ("AttributeError: install_layout"). PEP 517 las arma con un setuptools aislado.
+python3 -m pip install -q --ignore-installed --use-pep517 \
+  -r backend/requirements.txt -r backend/requirements-dev.txt ruff
 
 echo "Instalando dependencias del frontend..."
 (cd frontend && npm ci --no-audit --no-fund --loglevel=error)
