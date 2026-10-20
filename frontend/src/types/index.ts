@@ -932,3 +932,43 @@ export interface MoldeExtractoPdf {
   creado_at: string | null
   ultimo_uso_at: string | null
 }
+
+// ── Vencimientos (grilla por organización) ───────────────────────────────────
+export type ImpuestoVencimiento = 'iva' | 'monotributo' | 'iibb_cm' | 'f931'
+
+export interface CeldaVencimiento {
+  impuesto: ImpuestoVencimiento
+  nombre: string
+  /** Período fiscal que vence (IVA/IIBB/F931: el mes anterior; Monotributo: el mismo mes). */
+  periodo: string
+  fecha: string | null
+  motivo: 'sin_cuit' | 'sin_calendario' | null
+  estado: 'presentado' | 'vencido' | 'proximo' | 'pendiente'
+  presentado_por: 'modulo' | 'manual' | null
+}
+
+export interface FilaVencimientos {
+  organizacion_id: number
+  nombre: string
+  cuit: string | null
+  obligaciones: CeldaVencimiento[]
+}
+
+export interface GrillaVencimientos {
+  mes: string
+  hoy: string
+  impuestos: Record<ImpuestoVencimiento, string>
+  filas: FilaVencimientos[]
+}
+
+export interface BloqueCalendario {
+  terminacion_desde: number
+  terminacion_hasta: number
+  fecha: string
+}
+
+export interface CalendarioVencimientoFila extends BloqueCalendario {
+  impuesto: ImpuestoVencimiento
+  periodo: string
+  fuente: string | null
+}

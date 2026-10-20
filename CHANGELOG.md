@@ -5,6 +5,24 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.35 (oct 2026) — Grilla de vencimientos por organización
+
+Ola 2 del benchmark, punto 5 (Onvio / Aconpy). Ver `docs/business/VENCIMIENTOS.md`.
+
+- Página **Vencimientos**: qué vence en el mes para cada organización que ve el usuario (IVA,
+  Monotributo, IIBB Convenio Multilateral, F.931), con fecha según la terminación del CUIT y estado
+  presentado / vencido / vence pronto / pendiente. Lo presentado en IVA, IIBB y Sueldos aparece solo;
+  el resto se marca a mano.
+- **Calendario cargado mes a mes** por el superadmin desde la web de ARCA (no hay calendario anual
+  oficial y cambia por RG): `calendario_vencimientos` + `vencimientos_marcados` (migración 031 +
+  safety net). Monotributo: día 20 o hábil siguiente si no está cargado. Sin fecha → "falta el
+  calendario", nunca una fecha inventada. Semilla con las fechas confirmadas de octubre 2026.
+- Qué le toca a cada org: módulos activos o `configuracion["obligaciones"]`.
+- El aviso diario de las 10:00 suma los vencimientos en 3 días sin presentar.
+- Tests primero: `test_vencimientos.py` (20) + `Vencimientos.test.tsx` (5).
+
+---
+
 ### v3.34 (oct 2026) — Comprobantes por revisar: factura a nombre de la empresa y período cerrado
 
 Controles tomados del benchmark (Contabilium), adaptados a Cuadra:

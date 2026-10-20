@@ -21,6 +21,10 @@ import {
   PagoDesdeMovimientoPayload,
   PagoCandidato,
   CompararComprobantesIvaResult,
+  GrillaVencimientos,
+  ImpuestoVencimiento,
+  BloqueCalendario,
+  CalendarioVencimientoFila,
   MergeUMResult,
   MovimientosFiltros,
   ConciliacionItem,
@@ -1066,6 +1070,35 @@ class ApiClient {
   // ── Comprobantes por revisar (facturas de compra por mail + IA) ─────────────
   private _orgParams(orgId?: number): Record<string, number> {
     return orgId ? { org_id: orgId } : {}
+  }
+
+  // ── Vencimientos ───────────────────────────────────────────────────────────
+  async getGrillaVencimientos(mes: string): Promise<GrillaVencimientos> {
+    const res = await this.client.get('/vencimientos/grilla', { params: { mes } })
+    return res.data
+  }
+
+  async marcarVencimiento(organizacionId: number, impuesto: ImpuestoVencimiento, periodo: string): Promise<{ ok: boolean }> {
+    const res = await this.client.post('/vencimientos/marcar', { organizacion_id: organizacionId, impuesto, periodo })
+    return res.data
+  }
+
+  async desmarcarVencimiento(organizacionId: number, impuesto: ImpuestoVencimiento, periodo: string): Promise<{ ok: boolean }> {
+    const res = await this.client.delete('/vencimientos/marcar', { data: { organizacion_id: organizacionId, impuesto, periodo } })
+    return res.data
+  }
+
+  async getCalendarioVencimientos(periodo: string): Promise<CalendarioVencimientoFila[]> {
+    const res = await this.client.get('/vencimientos/calendario', { params: { periodo } })
+    return res.data
+  }
+
+  /** Carga o reemplaza las fechas de un impuesto y período (solo superadmin; vale para todas las orgs). */
+  async guardarCalendarioVencimientos(body: {
+    impuesto: ImpuestoVencimiento; periodo: string; fuente?: string; fechas: BloqueCalendario[]
+  }): Promise<CalendarioVencimientoFila[]> {
+    const res = await this.client.put('/vencimientos/calendario', body)
+    return res.data
   }
 
   /** CUIT de la organización contra el que se controla a nombre de quién está cada factura. */

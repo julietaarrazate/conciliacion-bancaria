@@ -131,7 +131,8 @@ def start_alertas_push_job() -> None:
 
 def _run_alertas_push() -> None:
     """Revisa cheques por vencer, movimientos sin asignar, planillas con descuadre de
-    total y filas ambiguas por revisar. Manda push si hay urgentes."""
+    total, filas ambiguas por revisar y vencimientos impositivos en 3 días sin
+    presentar (services/vencimientos.py). Manda push si hay urgentes."""
     from datetime import datetime
     from sqlalchemy import func
     from app.models.cheque import Cheque
@@ -203,6 +204,15 @@ def _run_alertas_push() -> None:
         if filas_ambiguas:
             n = filas_ambiguas
             partes.append(f"{n} fila{'s' if n > 1 else ''} ambigua{'s' if n > 1 else ''} por revisar")
+        try:
+            from app.services.vencimientos import pendientes_proximos
+            n = len(pendientes_proximos(db, hoy=hoy, dias=3))
+        except Exception as ex_venc:   # una falla acá no corta las demás alertas
+            logger.warning("Push alertas: no se pudieron calcular los vencimientos: %s", ex_venc)
+            n = 0
+        if n:
+            partes.append(f"{n} vencimiento{'s' if n > 1 else ''} impositivo{'s' if n > 1 else ''} "
+                          "en 3 días sin presentar")
 
         if not partes:
             logger.info("Push alertas: sin novedades urgentes hoy")

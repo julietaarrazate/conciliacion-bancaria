@@ -116,7 +116,7 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
                    backup_service.py, backup_scheduler.py, push_service.py,
                    email_sender.py, password_reset.py, decimal_utils.py,
                    extracto_pdf/ (lector de PDF), extracto_pdf_service.py, extracto_import.py
-  /alembic/versions — 001 a 030. En el arranque Alembic solo hace `stamp head`: el esquema real lo
+  /alembic/versions — 001 a 031. En el arranque Alembic solo hace `stamp head`: el esquema real lo
                       sostienen `create_all` + los safety-nets de `app/db_safety.py`
 
 /frontend/src
@@ -191,7 +191,8 @@ IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ con
 - **03:00 ART** — backup completo JSON gzipeado por email (Resend). Activo si `RESEND_API_KEY` está seteada.
 - **03:30 ART** — purga de tokens revocados / login approvals / códigos 2FA vencidos. Siempre activo.
 - **09:00 ART** — alerta si el uso de R2 supera ~8 GB. Activa si `S3_*` está configurado.
-- **10:00 ART** — push alertas: cheques que vencen en ≤3 días + movimientos sin conciliar >7 días. Activo si `VAPID_PRIVATE_KEY` y `VAPID_PUBLIC_KEY` están seteadas.
+- **10:00 ART** — push alertas: cheques que vencen en ≤3 días + movimientos sin conciliar >7 días
+  + vencimientos impositivos en ≤3 días sin presentar. Activo si `VAPID_PRIVATE_KEY` y `VAPID_PUBLIC_KEY` están seteadas.
 
 ---
 
@@ -205,7 +206,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ## Estado actual y changelog
 
-**Versión actual: v3.34.** Historial completo de versiones (v3.6 a v3.34, con detalle de cada
+**Versión actual: v3.35.** Historial completo de versiones (v3.6 a v3.35, con detalle de cada
 feature/fix/PR) en **`CHANGELOG.md`** — no se carga automáticamente en cada sesión, así que si
 necesitás contexto histórico detallado de una versión puntual, leelo directamente.
 
@@ -222,7 +223,8 @@ explicados en el resumen del extracto (`docs/business/BUSINESS_RULES.md` §1.9) 
 **v3.33** comparar "Mis Comprobantes" de ARCA con lo cargado antes de importar (faltantes, importes
 distintos, en Cuadra y no en ARCA), importar solo lo elegido y deshacer la tanda (§5.5) ·
 **v3.34** Comprobantes por revisar: alerta si la factura está a nombre de otro CUIT y no se confirma
-en un período con la liquidación de IVA presentada.
+en un período con la liquidación de IVA presentada · **v3.35** grilla de vencimientos por
+organización con calendario cargado mes a mes (`docs/business/VENCIMIENTOS.md`).
 
 Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,
 sin efectos) y la operadora la rechazó — se revirtió a la landing anterior completa (gradiente,
@@ -247,6 +249,12 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
 ---
 
 ### Pendiente para próximas sesiones
+
+- **📅 TODOS LOS MESES — cargar el calendario de vencimientos (v3.35)**: en `/vencimientos` →
+  "Cargar calendario" (superadmin), copiar de argentina.gob.ar/arca/vencimientos las fechas del
+  mes por terminación de CUIT para IVA, F.931 y Convenio Multilateral (y Monotributo si hay
+  feriado o prórroga). Sin eso la grilla muestra "falta el calendario". Cada org necesita su CUIT
+  cargado (Comprobantes por revisar → "CUIT de la empresa").
 
 - **Probar los extractos en PDF (v3.31) con PDFs reales de cada banco**: los tests usan PDFs
   generados que imitan los formatos. Cada PDF real que no cierre o lea mal se agrega como test en
@@ -431,4 +439,4 @@ Registro de obra: el expediente se guarda fuera del repositorio.
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.34
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.35
