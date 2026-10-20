@@ -81,6 +81,9 @@ class Documento:
     caracteres_ilegibles: int           # glifos sin mapeo a Unicode: "(cid:N)"
     paginas_ilegibles: list[int]
     escaneado: bool
+    # Páginas que se abrieron pero casi no tienen texto horizontal (una imagen, una
+    # hoja girada): si tenían movimientos, no se leyeron.
+    paginas_sin_texto: list[int] = field(default_factory=list)
 
     def lineas_de_pagina(self, pagina: int) -> list[Linea]:
         return [ln for ln in self.lineas if ln.pagina == pagina]
@@ -230,6 +233,7 @@ def extraer_documento(contenido: bytes) -> Documento:
     lineas: list[Linea] = []
     utiles = ilegibles = 0
     paginas_ilegibles: list[int] = []
+    paginas_sin_texto: list[int] = []
     for n, pagina in enumerate(paginas, start=1):
         try:
             interprete.process_page(pagina)
@@ -241,6 +245,7 @@ def extraer_documento(contenido: bytes) -> Documento:
             paginas_ilegibles.append(n)
             continue
         chars: list[_Char] = []
+        utiles_pagina = 0
         for obj in _iter_chars(layout):
             a, b, c, d, _e, f = obj.matrix
             # Solo texto horizontal y derecho (los textos girados de los márgenes
@@ -252,8 +257,11 @@ def extraer_documento(contenido: bytes) -> Documento:
                 ilegibles += 1
                 continue
             if not _es_espacio(t):
-                utiles += 1
+                utiles_pagina += 1
             chars.append(_Char(t, float(obj.x0), float(obj.x1), float(f), float(obj.size)))
+        utiles += utiles_pagina
+        if utiles_pagina < _MIN_CARACTERES_POR_PAGINA:
+            paginas_sin_texto.append(n)
         lineas.extend(_armar_lineas(chars, n, float(layout.width), float(layout.height)))
 
     total = len(paginas)
@@ -265,6 +273,7 @@ def extraer_documento(contenido: bytes) -> Documento:
         caracteres_ilegibles=ilegibles,
         paginas_ilegibles=paginas_ilegibles,
         escaneado=escaneado,
+        paginas_sin_texto=paginas_sin_texto,
     )
 
 

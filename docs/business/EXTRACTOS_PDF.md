@@ -67,12 +67,18 @@ fila por fila del saldo corrido (`saldo[i] = saldo[i−1] + monto[i]` en orden c
   controlar sería darlos por buenos.
 - Si los movimientos cierran entre sí pero el saldo inicial o final impreso en el PDF no
   coincide con el que sale de las filas (pasa en resúmenes de home banking con el cuadro de
-  arriba de otra fecha), el aviso lo dice con los dos importes y propone revisar que estén
-  todas las hojas o borrar ese saldo en la revisión. Solo cuando la lectura lo sabe: todas las
-  páginas y renglones leídos, ningún signo supuesto y la fila del extremo con su saldo; del
-  lado del inicial, además, el signo lo tiene que decir el PDF (deducido, se eligió para llegar
-  a ese saldo). Si no, queda el aviso de la diferencia. En la pantalla, "El saldo no sigue" se
-  recalcula al editar los saldos (no queda la marca de la lectura).
+  arriba de otra fecha), el aviso lo dice con los dos importes y pide fijarse que no falte
+  ninguna hoja ni ningún movimiento; si está todo, borrar ese saldo en la revisión. Solo cuando
+  la lectura lo sabe: leyó el lector propio (no la IA), todas las páginas tienen texto y todos
+  los renglones se leyeron, hay dos filas o más y **todas traen su saldo** (una fila sin saldo
+  no se controla contra la anterior), y ninguna fila quedó con signo supuesto, signo impreso
+  que contradice la columna, débito y crédito juntos, varios importes en una columna, sin fecha
+  o con fecha fuera del período. Del lado del inicial, además, el signo lo tiene que decir el
+  PDF (deducido, se eligió para llegar a ese saldo). Si no, queda el aviso de la diferencia.
+  En la pantalla, "El saldo no sigue" se recalcula al editar los saldos (no queda la marca de
+  la lectura).
+- Una página que casi no tiene texto (una imagen o una hoja girada dentro de un PDF con texto)
+  avisa, si no cierra, que puede faltar algún movimiento de esa hoja.
 - Si no cierra, se puede guardar igual con confirmación explícita (`confirmar_sin_cuadre`).
 - El frontend (`saldoExtracto.ts`) espeja `validar_saldos` en centavos enteros; el servidor es
   la autoridad al confirmar.
@@ -109,19 +115,30 @@ Reglas:
   absurdo (más dígitos que la precisión de Decimal) no es un importe: nunca lanza.
 - Columnas Débito/Crédito, Importe con signo o sin signo (el signo se deduce del saldo; con
   varios movimientos sin saldo, la única combinación de signos que llega al saldo siguiente).
-- Columna con la palabra "Débito"/"Crédito" (o D/C) y el importe sin signo en otra columna:
-  la columna da el signo (campo `signo` del layout). Se reconoce por el título ("Débito/Crédito"
-  junto a "Monto", también partido en dos renglones, o "D/C") o por el contenido: debajo de un
-  título de importe solo marcas y ningún importe, o debajo de un título desconocido ("Tipo") las
-  palabras enteras en casi todas las filas. Una marca pegada a la descripción ("COMPRA TARJETA
-  DE DEBITO") no cuenta. Sin títulos reconocibles no se busca: la última palabra de muchas
-  descripciones es "debito" o "credito". Un "-" impreso manda sobre la palabra (la fila queda
-  para revisar); una fila sin palabra saca el signo del saldo, descontando los que ya se
-  conocen. Una marca D/C pegada al importe ("1.500,00 D") también da el signo de esa fila.
-- Entre lecturas automáticas que no cierran gana la que menos signos tuvo que suponer: un
-  signo deducido contra un saldo inicial mal impreso puede dar una diferencia más chica.
+- Columna con la palabra "Débito"/"Crédito" (o D/C, o D/H de Debe/Haber) y el importe sin
+  signo en otra columna: la columna da el signo (campo `signo` del layout). Se reconoce por el
+  título ("Débito/Crédito" junto a "Monto", también partido en dos renglones, "D/C" o "D/H") o
+  por el contenido: debajo de un título de importe solo marcas y ningún importe, o debajo de un
+  título desconocido ("Tipo") las palabras enteras (de 3 letras o más) en casi todas las filas.
+  Una marca pegada a la descripción ("COMPRA TARJETA DE DEBITO", "Débito automático") o al
+  importe ("1.000,00 C") no arma una columna. Sin títulos reconocibles no se busca: la última
+  palabra de muchas descripciones es "debito" o "credito". En esa columna, lo que no es una
+  marca no se suma a la descripción.
+- La columna de signo se descarta y los signos salen del saldo si no es confiable: dos filas o
+  más con un "-" impreso que la contradice, o un tramo entre dos saldos impresos donde los
+  signos de la columna no llegan al saldo y el saldo da una única combinación de signos. Con
+  la columna confiable, un "-" impreso igual manda sobre la palabra (la fila queda para revisar
+  con "El signo impreso no coincide con la columna"), y una fila sin palabra saca el signo del
+  saldo, descontando los que ya se conocen. Una marca D/C pegada al importe ("1.500,00 D")
+  también da el signo de esa fila.
+- Entre lecturas automáticas que no cierran y leyeron las mismas filas (fecha e importe), gana
+  la que menos saltos tiene en su propio saldo corrido y después la que menos signos tuvo que
+  suponer, antes que la de diferencia más chica: un signo deducido contra un saldo inicial mal
+  impreso puede dar una diferencia más chica.
 - Orden ascendente o descendente; fechas sin año (con el período del PDF o el año más reciente).
-- Saldo por fila o por día, "Saldo anterior" como transporte arriba de cada hoja, subtotales,
+- Saldo por fila o por día, "Saldo anterior" como transporte arriba de cada hoja ("Transporte",
+  "Viene de hoja 2" por palabra entera: "TRANSPORTES DEL SUR SRL" o "TRANSPORTE DE CAUDALES"
+  con fecha e importe son movimientos), subtotales,
   descripciones de varios renglones, filas de dos renglones con el importe abajo, cuadros de
   resumen con dos rótulos por renglón, descripciones que invaden la columna vecina.
 - No suma como movimiento: pies legales con importes, cuadros de retenciones al pie, totales

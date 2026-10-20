@@ -14,6 +14,7 @@ Embudo (igual que el de planillas):
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
@@ -30,6 +31,7 @@ from .tabla import (
     MOTIVO_DOBLE,
     MOTIVO_FUERA_PERIODO,
     MOTIVO_SIGNO,
+    MOTIVO_SIGNO_IMPRESO,
     MOTIVO_SIN_FECHA,
     MOTIVO_VARIOS,
     LecturaTabla,
@@ -60,6 +62,7 @@ class _Candidato:
     filas_sin_anio: int = 0
     otras_cuentas: bool = False
     renglones_ilegibles: list[int] = field(default_factory=list)
+    _interno: Optional[dict] = field(default=None, repr=False)
 
     @property
     def cierra(self) -> bool:
@@ -84,13 +87,39 @@ class _Candidato:
             -len(self.cuadre.get("filas_con_salto") or []),
         )
 
+    @property
+    def interno(self) -> dict:
+        """El cuadre de los movimientos entre sí, sin los saldos inicial y final del PDF."""
+        if self._interno is None:
+            self._interno = validar_saldos(self.filas, orden=self.orden, saldo_inicial=None, saldo_final=None)
+        return self._interno
+
     def puntaje_lectura(self) -> tuple:
-        """Para elegir entre layouts: entre lecturas que no cierran gana la que menos
-        signos tuvo que suponer. Un signo deducido contra un saldo inicial mal impreso
-        puede achicar la diferencia sin ser el bueno; el que dice el PDF, no."""
+        """Entre dos lecturas de las mismas filas que no cierran: primero la que sigue
+        mejor el saldo fila a fila, después la que menos signos tuvo que suponer (uno
+        deducido contra un saldo inicial mal impreso puede achicar la diferencia sin
+        ser el bueno; el que dice el PDF, no) y recién después la diferencia."""
         p = self.puntaje()
-        supuestos = 0 if self.cierra else sum(1 for f in self.filas if MOTIVO_SIGNO in (f.get("motivos") or []))
-        return p[:3] + (-supuestos,) + p[3:]
+        saltos = len(self.interno.get("filas_con_salto") or [])
+        supuestos = sum(1 for f in self.filas if MOTIVO_SIGNO in (f.get("motivos") or []))
+        return p[:3] + (-saltos, -supuestos) + p[3:]
+
+
+def _mismas_filas(a: _Candidato, b: _Candidato) -> bool:
+    def claves(c: _Candidato) -> Counter:
+        return Counter((f.get("fecha"), abs(f["monto"])) for f in c.filas)
+    return claves(a) == claves(b)
+
+
+def _gana(nuevo: _Candidato, actual: Optional[_Candidato]) -> bool:
+    """Para elegir entre layouts. Con filas distintas, o si alguna cierra, manda el
+    puntaje de siempre (más filas leídas, menor diferencia); entre lecturas de las
+    mismas filas que no cierran, `puntaje_lectura`."""
+    if actual is None:
+        return True
+    if nuevo.cierra or actual.cierra or not _mismas_filas(nuevo, actual):
+        return nuevo.puntaje() > actual.puntaje()
+    return nuevo.puntaje_lectura() > actual.puntaje_lectura()
 
 
 def _alerta(nivel: str, codigo: str, mensaje: str) -> dict:
@@ -172,12 +201,12 @@ def _capa_automatica(doc: Documento, banco: str, ctx: ContextoFechas, repetidas:
     mejor_layout: Optional[dict] = None
     for layout in layouts_por_encabezado(doc):
         cand = _desde_lectura("automatico", leer_con_layout(doc, layout, ctx, repetidas))
-        if mejor is None or cand.puntaje_lectura() > mejor.puntaje_lectura():
+        if _gana(cand, mejor):
             mejor, mejor_layout = cand, layout
     if mejor is None or not (mejor.filas and mejor.cierra):
         for layout in layouts_estructurales(doc, repetidas):
             cand = _desde_lectura("automatico", leer_con_layout(doc, layout, ctx, repetidas))
-            if mejor is None or cand.puntaje_lectura() > mejor.puntaje_lectura():
+            if _gana(cand, mejor):
                 mejor, mejor_layout = cand, layout
     if mejor is not None and mejor.filas and mejor_layout is not None:
         mejor.aprendizaje = aprendizaje_de(mejor_layout, banco)
@@ -346,7 +375,13 @@ def _armar_salida(
                     "comprobar que el extracto cierre.",
                 ))
         elif not cuadre["cierra"]:
-            incompleta = bool(elegido.renglones_ilegibles or doc.paginas_ilegibles)
+            # El aviso "borrá ese saldo" solo con una lectura completa del texto del
+            # PDF: si faltan hojas o renglones, o leyó la IA, el saldo del PDF puede
+            # estar bien y lo que falta es un movimiento.
+            incompleta = bool(
+                elegido.renglones_ilegibles or doc.paginas_ilegibles or doc.paginas_sin_texto
+                or elegido.otras_cuentas or elegido.metodo == "ia"
+            )
             encabezado = None if incompleta else _saldos_del_pdf_que_no_coinciden(
                 filas, elegido.orden, cuadre, signo_del_pdf=elegido.signo in ("columnas", "explicito")
             )
@@ -360,6 +395,15 @@ def _armar_salida(
             else:
                 mensaje = f"El saldo no cierra: hay una diferencia de {formatear_pesos(cuadre['diferencia'])}."
             alertas.append(_alerta("aviso", "no_cierra", mensaje))
+        sin_texto = [p for p in doc.paginas_sin_texto if p not in doc.paginas_ilegibles]
+        if sin_texto and not cuadre["cierra"] and not doc.escaneado:
+            paginas = ", ".join(str(p) for p in sin_texto)
+            alertas.append(_alerta(
+                "aviso", "paginas_sin_texto",
+                f"{'La página' if len(sin_texto) == 1 else 'Las páginas'} {paginas} casi no "
+                f"{'tiene' if len(sin_texto) == 1 else 'tienen'} texto para leer (puede ser una imagen o una "
+                "hoja girada): fijate en el PDF si falta algún movimiento y cargalo a mano.",
+            ))
         if elegido.renglones_ilegibles:
             n = len(elegido.renglones_ilegibles)
             paginas = ", ".join(str(p) for p in sorted(set(elegido.renglones_ilegibles)))
@@ -429,26 +473,30 @@ def _saldos_del_pdf_que_no_coinciden(
 ) -> Optional[str]:
     """Si los movimientos cierran entre sí y lo que no coincide es el saldo inicial o
     final que figura en el PDF, el mensaje que lo dice (falta una hoja o el cuadro de
-    arriba trae otro saldo). Solo con una lectura completa y sin dudas en los
-    importes: si un signo se supuso, el saldo "de los movimientos" es el dudoso. Del
-    lado del saldo inicial además hace falta que el signo lo diga el PDF (deducido,
-    se eligió para llegar a ese saldo) y que la primera fila traiga su saldo."""
-    dudas = (MOTIVO_SIGNO, MOTIVO_DOBLE, MOTIVO_VARIOS)
-    if not filas or any(m in (f.get("motivos") or []) for f in filas for m in dudas):
+    arriba trae otro saldo). Solo con dos movimientos o más, todos con su saldo (así
+    cada uno se controla contra el anterior) y sin dudas en ninguna fila: si un
+    signo se supuso, el saldo "de los movimientos" es el dudoso; y una fecha fuera
+    del período puede ser un movimiento que no va. Del lado del saldo inicial además
+    hace falta que el signo lo diga el PDF (deducido, se eligió para llegar a ese
+    saldo)."""
+    dudas = (MOTIVO_SIGNO, MOTIVO_SIGNO_IMPRESO, MOTIVO_DOBLE, MOTIVO_VARIOS, MOTIVO_SIN_FECHA, MOTIVO_FUERA_PERIODO)
+    if (
+        len(filas) < 2
+        or any(f.get("saldo") is None for f in filas)
+        or any(m in (f.get("motivos") or []) for f in filas for m in dudas)
+    ):
         return None
     interno = validar_saldos(filas, orden=orden, saldo_inicial=None, saldo_final=None)
     if not interno["cierra"]:
         return None
-    cronologicas = filas if orden != "desc" else filas[::-1]
-    lados = [("saldo_final", "final", cronologicas[-1])]
+    lados = [("saldo_final", "final")]
     if signo_del_pdf:
-        lados.insert(0, ("saldo_inicial", "inicial", cronologicas[0]))
+        lados.insert(0, ("saldo_inicial", "inicial"))
     partes = []
-    for clave, nombre, extremo in lados:
+    for clave, nombre in lados:
         del_pdf, de_filas = cuadre[clave], interno[clave]
         if (
-            extremo.get("saldo") is not None
-            and not cuadre[f"{clave}_inferido"]
+            not cuadre[f"{clave}_inferido"]
             and del_pdf is not None
             and de_filas is not None
             and abs(del_pdf - de_filas) > Decimal("0.01")
@@ -460,8 +508,8 @@ def _saldos_del_pdf_que_no_coinciden(
     if not partes:
         return None
     return (
-        "Los movimientos cierran entre sí, pero " + " y ".join(partes) + ". Revisá que el PDF tenga "
-        "todas las hojas; si está completo, "
+        "Los movimientos cierran entre sí, pero " + " y ".join(partes) + ". Fijate que no falte ninguna "
+        "hoja ni ningún movimiento; si está todo, "
         + ("borrá ese saldo y se usa el" if len(partes) == 1 else "borrá esos saldos y se usan los")
         + " de los movimientos."
     )
