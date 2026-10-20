@@ -104,11 +104,12 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
                    Liquidacion, CierrePeriodo, Cheque, Pago, Gasto,
                    ArqueoDiario, OrdenDePago, PlanCuenta, ReglaContable,
                    Asiento, AsientoDetalle, PasswordResetToken, PushSubscription,
-                   BuzonComprobantes, BorradorComprobante, BorradorExtractoPdf, MoldeExtractoPdf
+                   BuzonComprobantes, BorradorComprobante, BorradorExtractoPdf, MoldeExtractoPdf,
+                   Proveedor
   /app/routers   — auth, me, extractos, planillas, historial, auditoria, admin,
                    clientes_dir, organizaciones, liquidaciones, caja, cheques,
                    pagos, contabilidad (+ ctb_*), analisis, search, iva, monotributo,
-                   iibb, sueldos, tarjetas, arca, comprobantes_compra, extractos_pdf, agente, papelera,
+                   iibb, sueldos, tarjetas, arca, comprobantes_compra, extractos_pdf, proveedores, agente, papelera,
                    public_router, push_router
                    (lista completa: `docs/architecture/SYSTEM_MAP.md`)
   /app/services  — conciliacion.py, aprendizaje.py, excel_export.py, pdf_export.py,
@@ -116,7 +117,7 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
                    backup_service.py, backup_scheduler.py, push_service.py,
                    email_sender.py, password_reset.py, decimal_utils.py,
                    extracto_pdf/ (lector de PDF), extracto_pdf_service.py, extracto_import.py
-  /alembic/versions — 001 a 031. En el arranque Alembic solo hace `stamp head`: el esquema real lo
+  /alembic/versions — 001 a 032. En el arranque Alembic solo hace `stamp head`: el esquema real lo
                       sostienen `create_all` + los safety-nets de `app/db_safety.py`
 
 /frontend/src
@@ -124,7 +125,7 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
              ExtractosArchivo, Movimientos, Conciliaciones, Historial, Auditoria,
              Usuarios, Perfil, Login, Organizaciones, Liquidaciones, Caja,
              Pagos, Cheques, Tarjetas, Iva, Monotributo, IngresosBrutos, Sueldos, Arca,
-             Papelera, Contabilidad, Resumen, ComprobantesCompra,
+             Papelera, Contabilidad, Resumen, ComprobantesCompra, Proveedores,
              EstadoCuenta, FlujoCaja, Revision, Actividad,
              PaginaPublica (/p/:token — sin auth), RecuperarPassword, RestablecerPassword,
              Privacidad (/privacidad — sin auth), Terminos (/terminos — sin auth)
@@ -211,7 +212,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ## Estado actual y changelog
 
-**Versión actual: v3.36.** Historial completo de versiones (v3.6 a v3.36, con detalle de cada
+**Versión actual: v3.37.** Historial completo de versiones (v3.6 a v3.37, con detalle de cada
 feature/fix/PR) en **`CHANGELOG.md`** — no se carga automáticamente en cada sesión, así que si
 necesitás contexto histórico detallado de una versión puntual, leelo directamente.
 
@@ -231,7 +232,8 @@ distintos, en Cuadra y no en ARCA), importar solo lo elegido y deshacer la tanda
 en un período con la liquidación de IVA presentada · **v3.35** grilla de vencimientos por
 organización con calendario cargado mes a mes (`docs/business/VENCIMIENTOS.md`) · **v3.36** procesos
 masivos: un cálculo para todas las organizaciones y Mis Comprobantes de varias organizaciones juntos
-(`docs/business/PROCESOS_MASIVOS.md`).
+(`docs/business/PROCESOS_MASIVOS.md`) · **v3.37** ficha de proveedores propios de la organización
+(no los de los clientes), base de retenciones (`docs/business/PROVEEDORES.md`).
 
 Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,
 sin efectos) y la operadora la rechazó — se revirtió a la landing anterior completa (gradiente,
@@ -285,6 +287,12 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
   1500ms) y expone el header `X-Process-Time`. Después de unos días con datos reales, revisar
   errores recurrentes en Sentry + los `SLOW` en logs de Render para decidir el próximo foco de
   performance con datos medidos, no con auditorías estáticas.
+- **Retenciones (fase 2 en adelante, diseño acordado oct 2026)**: v3.37 dejó la ficha de
+  proveedores propios. Sigue: Ganancias RG 830 (tabla editable, acumulado mensual por proveedor,
+  pago neto + asiento a "Retenciones a depositar", certificado PDF, TXT de SICORE), después padrones
+  de IIBB (ARBA/AGIP) e IVA/SUSS solo si hace falta. Falta de la operadora/contador: un TXT de
+  SICORE de ejemplo y qué regímenes aplica cada org. Nunca retener en OP por cuenta de un cliente
+  sin confirmación del contador, y nunca depositar impuestos automáticamente.
 - **Próximos módulos del plan de liquidación de impuestos** (ver "Plan de expansión" abajo): orden a
   decidir por valor — candidato: Intake Exportador de Servicios.
 - **⏰ RECORDATORIO SEMESTRAL — actualizar escala de Monotributo**: ARCA actualiza los límites de
@@ -450,4 +458,4 @@ Registro de obra: el expediente se guarda fuera del repositorio.
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.36
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.37

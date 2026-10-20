@@ -58,8 +58,9 @@ Fuentes de verdad (código):
 - **Período con IVA presentado (v3.34)**: si la liquidación de IVA del mes de la factura ya está
   `presentada`, se avisa al leer y **no se deja confirmar en ese período** (409): hay que elegir
   uno posterior. Antes se podía cargar sin aviso y descuadraba lo ya declarado.
-- **Proveedores**: Cuadra no tiene un maestro de proveedores (en Pagos el beneficiario es texto),
-  así que no se da de alta ninguno; el pago usa la razón social leída.
+- **Proveedores (v3.37)**: al confirmar, el emisor queda en la ficha de proveedores de la
+  organización (por CUIT; si ya estaba, no se pisa) y el pago, si se registra, queda vinculado.
+  Ver `docs/business/PROVEEDORES.md`.
 - **Percepciones**: se leen y quedan guardadas en el borrador, pero **no** se suman solas a la
   liquidación de IVA (ahí siguen cargándose a mano, como antes).
 - **Notas de crédito** restan en IVA como cualquier NC (`es_nota_credito`) y nunca generan pago.
