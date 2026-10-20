@@ -1820,9 +1820,11 @@ def _medio_de_pago_sin_saldo_por_fila(movs: list[Mov], si: D | None) -> bytes:
 def test_medio_de_pago_sin_saldo_por_fila_no_es_el_signo(si, medio_comision):
     """Listado de cobros de un comercio sin saldo por fila: los débitos traen el
     "-" impreso y la columna "Medio de pago" dice con qué tarjeta se cobró
-    ("Débito" en ventas, que son créditos). Sin saldo con qué comparar, manda el
-    "-": la columna no es el signo, las ventas con débito no se dan vuelta, nada
-    queda dudoso por el medio y el medio no se pega a la descripción."""
+    ("Débito" en ventas, que son créditos). Manda el "-": la columna no es el
+    signo, las ventas con débito no se dan vuelta y el medio no se pega a la
+    descripción. Con el saldo anterior y el final, que cierran con el "-" y no con
+    la columna, nada queda dudoso. Sin ningún saldo no hay cómo saberlo: las
+    ventas que dicen "Débito" sin "-" quedan para revisar."""
     movs = [Mov(m.fecha, m.descripcion, m.monto, m.saldo, list(m.extra)) for m in MOVS_MEDIO]
     movs[2].extra[0] = medio_comision                  # la comisión: "Crédito" o "Dinero en cuenta"
 
@@ -1830,7 +1832,12 @@ def test_medio_de_pago_sin_saldo_por_fila_no_es_el_signo(si, medio_comision):
 
     assert_movs(r, movs, con_saldo=False)
     assert [m["descripcion"] for m in r["movimientos"]] == [m.descripcion for m in movs]
-    assert not any(m["dudosa"] for m in r["movimientos"])
+    if si is not None:
+        assert not any(m["dudosa"] for m in r["movimientos"])
+    else:
+        assert [m["motivos"] for m in r["movimientos"]] == [
+            [SIGNO_IMPRESO] if m.extra[0] == "Débito" and m.monto > 0 else [] for m in movs
+        ]
     assert r["cuadre"]["cierra"] is (si is not None)
 
 

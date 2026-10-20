@@ -78,7 +78,12 @@ fila por fila del saldo corrido (`saldo[i] = saldo[i−1] + monto[i]` en orden c
   En la pantalla, "El saldo no sigue" se recalcula al editar los saldos (no queda la marca de
   la lectura).
 - Una página que casi no tiene texto (una imagen o una hoja girada dentro de un PDF con texto)
-  avisa, si no cierra, que puede faltar algún movimiento de esa hoja.
+  avisa que puede faltar algún movimiento de esa hoja: si no cierra, o si cierra pero la hoja
+  está antes de la primera fila leída o después de la última y el saldo de ese lado se dedujo
+  (nada lo confirma). En ese caso la lectura propia no se da por buena y se prueba la IA. Una
+  hoja cuenta como "sin texto" comparada con las otras hojas del mismo PDF: muchos caracteres
+  que no se pueden leer (girados o sin mapa de letras) o una imagen grande que las demás no
+  tienen; un logo que se repite en todas las hojas no cuenta.
 - Si no cierra, se puede guardar igual con confirmación explícita (`confirmar_sin_cuadre`).
 - El frontend (`saldoExtracto.ts`) espeja `validar_saldos` en centavos enteros; el servidor es
   la autoridad al confirmar.
@@ -136,21 +141,34 @@ Reglas:
   confiable, un "-" impreso igual manda sobre la palabra (la fila queda para revisar con "El
   signo impreso no coincide con la columna"), y una fila sin palabra saca el signo del saldo,
   descontando los que ya se conocen. Una marca D/C al lado del importe ("1.500,00 D", también
-  a unos espacios en letra monoespaciada) da el signo de esa fila.
-- Entre lecturas automáticas que no cierran y leyeron las mismas filas (fecha e importe), gana
-  la que menos saltos tiene en su propio saldo corrido y después la que menos signos tuvo que
-  suponer, antes que la de diferencia más chica: un signo deducido contra un saldo inicial mal
-  impreso puede dar una diferencia más chica.
+  a unos espacios en letra monoespaciada) da el signo de esa fila. Si las filas no traen saldo,
+  esas marcas de una o dos letras se controlan: con saldo inicial y final se quedan solo si
+  cierran (las filas sin marca, con una única combinación de signos); sin esos saldos, la fila
+  queda para revisar con el signo supuesto. Sin saldo por fila, si la columna y el "-" impreso
+  dicen cosas distintas, gana el que cierra con el saldo inicial y final; si no se puede decidir,
+  la fila "Débito" sin "-" queda marcada como "El signo impreso no coincide con la columna".
+  Las palabras que están en la columna del importe pero a la izquierda del número van a la
+  descripción.
+- Entre lecturas automáticas que no cierran y leyeron las mismas filas (fecha, importe y saldo),
+  gana la que menos saltos tiene en su propio saldo corrido y después la que menos signos tuvo
+  que suponer, antes que la de diferencia más chica: un signo deducido contra un saldo inicial
+  mal impreso puede dar una diferencia más chica. Una lectura en la que todas las filas quedaron
+  con débito y crédito juntos pierde contra una que no, salvo que hayan leído las mismas filas.
 - Orden ascendente o descendente; si todas las filas tienen la misma fecha (los movimientos de
   un día), el orden sale de cómo se mueve el saldo fila a fila. Fechas sin año (con el período
   del PDF o el año más reciente).
 - Saldo por fila o por día, "Saldo anterior" como transporte arriba de cada hoja ("Transporte",
   "Viene de hoja 2" por palabra entera: "TRANSPORTES DEL SUR SRL" o "TRANSPORTE DE CAUDALES"
-  con fecha e importe son movimientos), subtotales,
+  con fecha e importe son movimientos; un renglón con fecha o importe, o pegado a una fila, es
+  transporte solo si lleva únicamente palabras como hoja, página, folio, acumulado, débitos,
+  créditos y sus números), subtotales ("Subtotales", "Sub totales"; un renglón con importes justo debajo de una
+  fila de dos renglones es el importe de esa fila, no un total),
   descripciones de varios renglones, filas de dos renglones con el importe abajo, cuadros de
   resumen con dos rótulos por renglón, descripciones que invaden la columna vecina.
 - No suma como movimiento: pies legales con importes, cuadros de retenciones al pie, totales
   ("Débitos del período"), saldo promedio. Si el PDF sigue con otra cuenta, lee solo la primera.
+  Con saldo por fila, los renglones del final sin saldo se descartan como pie; en orden
+  descendente, solo si todas las filas de arriba traen saldo.
 - Banco: el membrete (arriba de la página 1 y líneas repetidas en todas las hojas) gana a las
   descripciones que nombran otros bancos.
 - Renglones con fecha e importes ilegibles (columnas pegadas): alerta y la lectura no cuenta
