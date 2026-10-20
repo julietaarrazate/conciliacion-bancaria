@@ -78,7 +78,7 @@ Criterio: primero lo que **reutiliza piezas que Cuadra ya tiene** y refuerza su 
    "ver deuda + pagar con Mercado Pago + recibo automático", más pedido de documentación (Onvio).
 7. **Retenciones al pagar + export SICORE/SIRE/ARBA/SIFERE** (Xubio/Contabilium), con el
    importador de retenciones y percepciones que ya está pendiente.
-8. **Procesos masivos multi-cliente** (Onvio): correr una acción (importar ARCA, generar
+8. ✅ (v3.36: cálculos de impuestos y Mis Comprobantes de varios clientes) **Procesos masivos multi-cliente** (Onvio): correr una acción (importar ARCA, generar
    asientos, liquidar) para todas las orgs del estudio de una vez.
 
 ### Ola 3 — depende de terceros o es grande
