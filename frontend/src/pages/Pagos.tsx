@@ -46,7 +46,7 @@ interface Egreso {
 const TIPO_LABEL: Record<string, string> = {
   proveedor: 'Proveedor',
   gasto: 'Gasto operativo',
-  pago_cliente: 'Pago a cliente',
+  pago_cliente: 'OP por cuenta de cliente',
 }
 
 type Vista = 'lista' | 'nuevo'
@@ -63,7 +63,7 @@ const sharePagoPdf = async (
     const { jsPDF } = await import('jspdf')
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
-    const tipoLabel: Record<string, string> = { proveedor: 'PROVEEDOR', gasto: 'GASTO OPERATIVO', pago_cliente: 'PAGO A CLIENTE' }
+    const tipoLabel: Record<string, string> = { proveedor: 'PROVEEDOR', gasto: 'GASTO OPERATIVO', pago_cliente: 'OP POR CUENTA DE CLIENTE' }
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(13)
     pdf.text(`COMPROBANTE DE ${tipoLabel[tipo] || 'PAGO'}`, 105, 16, { align: 'center' })
@@ -152,7 +152,7 @@ const sharePagoImagen = async (
     const fotoW = PX
     const fotoH = Math.round(img.naturalHeight * PX / (img.naturalWidth || PX))
     const fmtN = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n)
-    const TIPO_LABEL_SHORT: Record<string, string> = { proveedor: 'Proveedor', gasto: 'Gasto', pago_cliente: 'Pago a cliente' }
+    const TIPO_LABEL_SHORT: Record<string, string> = { proveedor: 'Proveedor', gasto: 'Gasto', pago_cliente: 'OP por cuenta de cliente' }
     const rows = [
       ['Importe', fmtN(montoNum)],
       ['Tipo', TIPO_LABEL_SHORT[tipo] || tipo],
@@ -326,18 +326,7 @@ export const Pagos: React.FC = () => {
   // Lazy: cargar clientes solo al abrir "Nuevo pago" (no bloquea la carga inicial del historial)
   useEffect(() => {
     if (vista !== 'nuevo') return
-    const params = activeOrgId ? { org_id: activeOrgId } : {}
-    apiClient.client.get('/clientes/archivos', { params }).then(r => {
-      // r.data.clientes solo incluye clientes con planillas; usar organizaciones[0].clientes
-      // que incluye TODOS los clientes de la org (incluso los recién creados sin planillas)
-      interface OrgRaw { clientes?: { id: number; nombre: string }[] }
-      const orgs: OrgRaw[] = r.data.organizaciones || []
-      const todos = orgs.flatMap(o => o.clientes || [])
-      const lista: { id: number; nombre: string }[] = todos.length
-        ? todos.map(c => ({ id: c.id, nombre: c.nombre }))
-        : (r.data.clientes?.map((c: { id?: number; nombre: string }) => ({ id: c.id || 0, nombre: c.nombre })) || [])
-      setClientes(lista.sort((a, b) => a.nombre.localeCompare(b.nombre)))
-    }).catch(() => {})
+    apiClient.listarClientesOrg(activeOrgId).then(setClientes).catch(() => {})
   }, [activeOrgId, vista])
 
   // Categorías: hacen falta tanto en "Nuevo pago" como al editar uno desde el
@@ -610,7 +599,7 @@ export const Pagos: React.FC = () => {
                 <option value="">Todos</option>
                 <option value="proveedor">Proveedor</option>
                 <option value="gasto">Gasto operativo</option>
-                <option value="pago_cliente">Pago a cliente</option>
+                <option value="pago_cliente">OP por cuenta de cliente</option>
               </select>
             </div>
             <div>

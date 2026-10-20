@@ -28,7 +28,11 @@ function fmtFecha(d?: string | null) {
  */
 export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = ({ mov, orgId, onClose, onResuelto }) => {
   const importe = Math.abs(mov.monto)
-  const [tipo, setTipo] = useState<'gasto' | 'proveedor'>('gasto')
+  // gasto/proveedor: de la organización. pago_cliente: OP pagada por cuenta de un cliente
+  // (va a la cuenta corriente del cliente; no es gasto ni proveedor de la organización).
+  const [tipo, setTipo] = useState<'gasto' | 'proveedor' | 'pago_cliente'>('gasto')
+  const [clienteNombre, setClienteNombre] = useState('')
+  const [clientes, setClientes] = useState<{ id: number; nombre: string }[] | null>(null)
   const [beneficiario, setBeneficiario] = useState(mov.titular || '')
   const [concepto, setConcepto] = useState(mov.titular || '')
   const [categoria, setCategoria] = useState('')
@@ -74,8 +78,17 @@ export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = (
     return () => { cancelado = true }
   }, [orgId, mov.gasto_bancario])
 
+  // Los clientes se cargan solo si se elige "OP por cuenta de un cliente"
+  useEffect(() => {
+    if (tipo !== 'pago_cliente' || clientes !== null) return
+    let cancelado = false
+    apiClient.listarClientesOrg(orgId).then(c => { if (!cancelado) setClientes(c) }).catch(() => { if (!cancelado) setClientes([]) })
+    return () => { cancelado = true }
+  }, [tipo, clientes, orgId])
+
   const guardar = async () => {
     if (tipo === 'proveedor' && !beneficiario.trim()) { setError('Ingresá el proveedor'); return }
+    if (tipo === 'pago_cliente' && !clienteNombre) { setError('Elegí el cliente por cuenta de quien se pagó'); return }
     setSaving(true)
     setError('')
     try {
@@ -87,7 +100,8 @@ export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = (
         fecha,
         beneficiario: beneficiario.trim() || undefined,
         concepto: concepto.trim() || undefined,
-        categoria: categoria || undefined,
+        categoria: tipo === 'pago_cliente' ? undefined : (categoria || undefined),
+        ...(tipo === 'pago_cliente' ? { cliente_nombre: clienteNombre } : {}),
         ...(orgId ? { org_id: orgId } : {}),
       })
       onResuelto(res.egreso.id)
@@ -142,13 +156,31 @@ export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = (
           <div>
             <label htmlFor="resolver-tipo" className="label text-xs">Tipo</label>
             <select id="resolver-tipo" className="input-field text-xs" value={tipo}
-              onChange={e => setTipo(e.target.value as 'gasto' | 'proveedor')}>
-              <option value="gasto">Gasto</option>
-              <option value="proveedor">Pago a proveedor</option>
+              onChange={e => setTipo(e.target.value as 'gasto' | 'proveedor' | 'pago_cliente')}>
+              <option value="gasto">Gasto propio de la organización</option>
+              <option value="proveedor">Pago a un proveedor propio</option>
+              <option value="pago_cliente">OP por cuenta de un cliente</option>
             </select>
+            {tipo === 'pago_cliente' && (
+              <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                Se descuenta de la cuenta corriente del cliente: no es gasto de la organización.
+              </p>
+            )}
           </div>
+          {tipo === 'pago_cliente' && (
+            <div>
+              <label htmlFor="resolver-cliente" className="label text-xs">Cliente</label>
+              <select id="resolver-cliente" className="input-field text-xs" value={clienteNombre}
+                onChange={e => setClienteNombre(e.target.value)}>
+                <option value="">{clientes === null ? 'Cargando…' : 'Elegir cliente…'}</option>
+                {(clientes || []).map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+              </select>
+            </div>
+          )}
           <div>
-            <label htmlFor="resolver-beneficiario" className="label text-xs">{tipo === 'proveedor' ? 'Proveedor' : 'Beneficiario'}</label>
+            <label htmlFor="resolver-beneficiario" className="label text-xs">
+              {tipo === 'proveedor' ? 'Proveedor' : tipo === 'pago_cliente' ? 'A favor de (proveedor del cliente)' : 'Beneficiario'}
+            </label>
             <input id="resolver-beneficiario" className="input-field text-xs" value={beneficiario}
               onChange={e => setBeneficiario(e.target.value)} />
           </div>
@@ -157,14 +189,16 @@ export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = (
             <input id="resolver-concepto" className="input-field text-xs" value={concepto}
               onChange={e => setConcepto(e.target.value)} />
           </div>
-          <div>
-            <label htmlFor="resolver-categoria" className="label text-xs">Categoría</label>
-            <select id="resolver-categoria" className="input-field text-xs" value={categoria}
-              onChange={e => setCategoria(e.target.value)}>
-              <option value="">Sin categoría</option>
-              {categorias.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
-            </select>
-          </div>
+          {tipo !== 'pago_cliente' && (
+            <div>
+              <label htmlFor="resolver-categoria" className="label text-xs">Categoría</label>
+              <select id="resolver-categoria" className="input-field text-xs" value={categoria}
+                onChange={e => setCategoria(e.target.value)}>
+                <option value="">Sin categoría</option>
+                {categorias.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label htmlFor="resolver-fecha" className="label text-xs">Fecha</label>
             <input id="resolver-fecha" type="date" className="input-field text-xs" value={fecha}
