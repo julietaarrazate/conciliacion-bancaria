@@ -1,9 +1,9 @@
 # Roadmap — Sistema de Conciliación Bancaria
 
-> ⚠️ **DESACTUALIZADO** (jul 2026): varios ítems ya están hechos
-> (multi-banco con detección automática, monitoreo, backups) — no planificar
-> contra este archivo hasta reescribirlo. Estado real: [`CHANGELOG.md`](CHANGELOG.md)
-> y [`ENGINEERING_AUDIT.md`](ENGINEERING_AUDIT.md).
+> Estado verificado contra el código en **oct 2026** (v3.31): `[x]` hecho, `[ ]` pendiente;
+> los ítems a medio camino dicen *(parcial: …)*. Detalle de cada versión en
+> [`CHANGELOG.md`](CHANGELOG.md); deuda técnica en [`ENGINEERING_AUDIT.md`](ENGINEERING_AUDIT.md).
+> Lo concreto y más reciente está en "Pendiente para próximas sesiones" de `CLAUDE.md`.
 
 Plan de evolución del producto pensando en clientes piloto y venta a
 financieras, cooperativas y estudios contables.
@@ -13,42 +13,40 @@ financieras, cooperativas y estudios contables.
 ## Fase 1 — Producto listo para piloto (4-6 semanas)
 
 ### Multi-banco (crítico)
-Hoy el parser solo lee extractos Banco Macro. Sin más bancos no se
-puede vender a clientes externos.
+Hecho: 16 bancos detectados en `excel_parser.py` (v3.15) + extractos en PDF (v3.31).
 
-- [ ] Parser Banco Galicia (formato Excel propio)
-- [ ] Parser Banco BBVA
-- [ ] Parser Banco Santander
-- [ ] Parser ICBC
-- [ ] Detector automático de banco por estructura del archivo
-- [ ] Tests con extractos reales de cada banco
+- [x] Parser Banco Galicia (parser genérico por encabezados, v3.15)
+- [x] Parser Banco BBVA
+- [x] Parser Banco Santander
+- [x] Parser ICBC
+- [ ] Detector automático de banco por estructura del archivo *(parcial: detecta por nombre del banco en el encabezado; por estructura solo Mercado Pago; PDF por membrete)*
+- [ ] Tests con extractos reales de cada banco *(parcial: fixtures sintéticos; PDF reales se suman a `test_extracto_pdf_casos_dificiles.py`)*
 
 ### Onboarding self-service
-Hoy un cliente nuevo no puede arrancar solo. Se necesita configuración
-manual de organización, clientes, plan de cuentas.
+Un cliente nuevo todavía no puede arrancar solo del todo.
 
-- [ ] Wizard de bienvenida al primer login
-- [ ] Carga de plan de cuentas base + customización
+- [ ] Wizard de bienvenida al primer login *(parcial: `OnboardingChecklist` de 3 pasos en el Dashboard, v3.10.3)*
+- [ ] Carga de plan de cuentas base + customización *(parcial: el plan base se siembra al crear la org; no se puede editar)*
 - [ ] Importación masiva de clientes desde Excel
 - [ ] Tour guiado de las 5 pantallas principales
 - [ ] Datos de demo opcionales para explorar la app
 
 ### Infraestructura paga
-Render free tier se duerme y tarda 30s en despertar. Inaceptable para
-clientes que pagan.
+Render free tier se duerme y tarda 30s en despertar (hoy mitigado con
+UptimeRobot + `db_keepalive`). Inaceptable para clientes que pagan.
 
 - [ ] Migrar a Render Starter (USD 7/mes) o equivalente
 - [ ] SLA documentado (99% uptime, soporte 24h hábiles)
-- [ ] Backup diario fuera de Neon (S3 o Drive)
-- [ ] Monitor con alertas (Sentry o similar)
+- [x] Backup diario fuera de Neon (JSON gzip por email vía Resend, 03:00 ART)
+- [x] Monitor con alertas (Sentry cableado back + front, v3.11.4 — falta confirmar DSN en producción)
 - [ ] Página de status pública
 
 ### Legal y comercial
-- [ ] Términos de servicio
-- [ ] Política de privacidad
+- [x] Términos de servicio (`/terminos`)
+- [x] Política de privacidad (`/privacidad`)
 - [ ] Contrato de prestación de servicios (revisado por abogado)
 - [ ] Inscripción de la base de datos en AAIP (Ley 25.326)
-- [ ] Pricing definido (recomendado: por organización, mensual)
+- [ ] Pricing definido (recomendado: por organización, mensual) *(parcial: la landing muestra "Consultar precio", sin montos)*
 - [ ] Manual de usuario en PDF
 
 ---
@@ -74,13 +72,12 @@ Diferencia clave entre "herramienta contable" y "sistema de financiera".
 - [ ] Diferencias de cambio (resultado contable)
 
 ### Cuenta corriente formal por cliente
-Hoy hay planillas y pagos pero no se cruzan en una vista clásica de
-cta cte con saldo arrastrado.
+Ya existe la vista de cta cte (`ctb_ctas_corrientes.py`, v3.6); falta el cruce factura ↔ pago.
 
-- [ ] Vista débito / crédito / saldo por cliente
+- [x] Vista débito / crédito / saldo por cliente (v3.6)
 - [ ] Vinculación factura ↔ pago
-- [ ] Saldo arrastrado mensual
-- [ ] Aging de saldos por cliente (ya parcialmente hecho en /resumen)
+- [ ] Saldo arrastrado mensual *(parcial: saldo corrido en el detalle, pero con filtro de fecha arranca en 0)*
+- [x] Aging de saldos por cliente (`/analisis/clientes-aging`)
 
 ---
 
@@ -89,17 +86,17 @@ cta cte con saldo arrastrado.
 ### Facturación electrónica AFIP / ARCA
 Sin esto el ciclo legal queda abierto — siempre hay un paso "afuera".
 
-- [ ] Integración con WSFE (Web Service Facturación Electrónica)
-- [ ] Emisión de facturas A / B / C con CAE
+- [x] Integración con WSFE (v3.24 — construida, desactivada a propósito en producción)
+- [x] Emisión de facturas A / B / C con CAE
 - [ ] Notas de crédito / débito
-- [ ] Libro IVA Ventas
-- [ ] Libro IVA Compras
+- [ ] Libro IVA Ventas *(parcial: import de "Mis Comprobantes" emitidos, v3.26; sin export Libro IVA Digital)*
+- [ ] Libro IVA Compras *(parcial: "Mis Comprobantes" recibidos, v3.26, + facturas por mail, v3.30)*
 - [ ] Subdiarios
 
 ### Retenciones
 - [ ] Retención Ganancias (RG 830)
 - [ ] Retención IIBB (cada jurisdicción)
-- [ ] Percepciones de IVA
+- [ ] Percepciones de IVA *(parcial: carga manual en la liquidación de IVA, v3.26)*
 - [ ] Certificados emitidos / recibidos
 - [ ] Reportes SICORE / SIRCREB / SIRTAC
 
@@ -113,21 +110,21 @@ Sin esto el ciclo legal queda abierto — siempre hay un paso "afuera".
 ## Fase 4 — Hardening operacional (continuo)
 
 ### Seguridad pendiente
-- [ ] Auto-logout por inactividad (client-side timer)
-- [ ] 2FA opcional para superadmin
-- [ ] Tabla de JWT revocados (logout invalida token de inmediato)
-- [ ] Sanitización de logs (verificar que no muestren datos sensibles)
+- [ ] Auto-logout por inactividad (client-side timer) *(parcial: bloqueo con PIN a los 5 min si el usuario lo activó; no cierra sesión)*
+- [x] 2FA para superadmin/admin (código por email, v3.11; requiere `RESEND_API_KEY`)
+- [x] Tabla de JWT revocados (logout invalida token de inmediato)
+- [ ] Sanitización de logs (verificar que no muestren datos sensibles) *(parcial: Sentry sin PII; sin redactor en `logging_config.py`)*
 - [ ] Procedimiento de rotación de credenciales documentado
 
 ### Importación bancaria automática
 - [ ] API Banco Macro empresa (cuando esté disponible)
 - [ ] CBU/CVU webhook para acreditaciones instantáneas
-- [ ] Conciliación incremental en lugar de subir Excel cada vez
+- [ ] Conciliación incremental en lugar de subir Excel cada vez *(parcial: merge de UM y "agregar solo los nuevos", pero sigue requiriendo subir archivo)*
 
 ### Notificaciones
 - [ ] Email cuando una conciliación termina
-- [ ] WhatsApp Business: aviso de acreditación al cliente final
-- [ ] Recordatorio de cheques que vencen
+- [ ] WhatsApp Business: aviso de acreditación al cliente final *(parcial: compartir manual por wa.me, v3.11.1)*
+- [x] Recordatorio de cheques que vencen (web push diario 10:00 ART)
 - [ ] Resumen ejecutivo semanal por email
 
 ---
@@ -135,21 +132,21 @@ Sin esto el ciclo legal queda abierto — siempre hay un paso "afuera".
 ## Fase 5 — Mejoras de producto (oportunista)
 
 ### UI más moderna
-- [ ] Dashboard con gráficos (Recharts o similar)
-- [ ] Skeletons en lugar de spinners
-- [ ] Toast notifications uniformes
-- [ ] Animaciones de transición entre pantallas
+- [x] Dashboard con gráficos (`components/charts/`, propios)
+- [ ] Skeletons en lugar de spinners *(parcial: `Skeleton.tsx` en varias páginas; quedan spinners)*
+- [x] Toast notifications uniformes (`Toaster.tsx`)
+- [x] Animaciones de transición entre pantallas (`.page-enter`)
 - [ ] Empty states ilustrados
-- [ ] Mejor jerarquía tipográfica
+- [ ] Mejor jerarquía tipográfica *(parcial: Fraunces en la landing; app sin cambio global)*
 - [ ] Modo de alta densidad (más data por pantalla)
 
 ### Mobile
 - [ ] App nativa React Native (elimina problemas de PWA en Android)
-- [ ] Push notifications nativas
-- [ ] Biometría para login
+- [ ] Push notifications nativas *(parcial: Web Push vía PWA)*
+- [ ] Biometría para login *(parcial: WebAuthn desbloquea el PIN de la app, no el login)*
 
 ### Reportes
-- [ ] Generación de PDF imprimible (balance, sumas y saldo, libro mayor)
+- [ ] Generación de PDF imprimible (balance, sumas y saldo, libro mayor) *(los reportes existen como vista/JSON, sin PDF)*
 - [ ] Reportes programados (mensual al email)
 - [ ] Dashboard configurable por usuario (drag&drop de KPIs)
 
