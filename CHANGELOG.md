@@ -5,6 +5,27 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.32 (oct 2026) — Resolver un débito pendiente sin salir de Movimientos
+
+Idea tomada del benchmark de competidores (Xubio: crear el pago desde el movimiento pendiente y
+ver la "diferencia no justificada"). Aditivo: no toca el motor de conciliación ni los asientos.
+
+- **"＋ Resolver"** en cada débito sin explicar de Movimientos: abre un modal con importe, fecha y
+  concepto precargados (banco fijo) y registra el pago o gasto que lo explica. La fila pasa a
+  "✓ Pago #id". Un débito reconocido como gasto bancario sugiere la categoría bancaria.
+- `egresos.movimiento_banco_id` (migración 029 + safety net, `ON DELETE SET NULL`) y
+  `services/movimiento_egreso.py`: solo débitos y forma de pago banco, mismo importe al centavo,
+  un pago por movimiento, misma organización, período no cerrado. `POST /pagos` y
+  `PATCH /pagos/{id}` aceptan `movimiento_banco_id` (`null` desvincula).
+- **Resumen del extracto**: nuevo bloque `debitos` (explicados por gasto bancario o pago vinculado,
+  cantidad y total sin explicar) y "% de los egresos explicados" en la barra de Movimientos.
+- El listado de movimientos devuelve `egreso_id` y `gasto_bancario` por fila.
+- Contabilidad igual que cargar el pago a mano en Pagos (`registrar_egreso`).
+- Tests: `test_resolver_pendientes.py` (18) + `ResolverMovimientoModal.test.tsx` (5) y 2 nuevos
+  en `ResumenExtracto.test.tsx`. Ver `docs/business/BUSINESS_RULES.md` §1.9 (con diagrama).
+
+---
+
 ### v3.31 (oct 2026) — Extractos en PDF: lectura sin IA, cuadre de saldos y revisión
 
 Importa el extracto en PDF con revisión y validación de saldos, y está hecha para depender lo

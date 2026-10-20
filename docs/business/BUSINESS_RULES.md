@@ -216,6 +216,44 @@ status:
   - `explicado`: créditos (monto > 0) del extracto con cliente acreditado
     (`es_libre()` falso) sobre el total de créditos; `porcentaje` None si no hay
     créditos.
+  - `debitos` (v3.32): débitos (monto < 0) **explicados** — por un gasto bancario
+    reconocido (regla de arriba) o por un pago vinculado (§1.9) — sobre el total
+    de débitos, más `total_sin_explicar` en positivo. Un débito que es gasto
+    bancario y además tiene pago cuenta una sola vez.
+
+### 1.9. Resolver un débito pendiente con un pago vinculado — v3.32
+
+Desde Movimientos, un débito sin explicar se resuelve registrando el pago o
+gasto que lo explica ("＋ Resolver"), sin ir a Pagos. El vínculo es
+`Egreso.movimiento_banco_id` (`services/movimiento_egreso.py`):
+
+- Solo **débitos** y egresos con `forma_pago=banco`. Un crédito se sigue
+  explicando acreditándolo a un cliente (`cliente_acreditado`), que no se toca
+  para los débitos porque alimenta reportes y cuentas corrientes de clientes.
+- **Mismo importe** al centavo (Decimal): |monto del movimiento| = monto del egreso.
+- **Un pago por movimiento**; misma organización; extracto no borrado; período
+  no cerrado.
+- `POST /pagos` acepta `movimiento_banco_id`; `PATCH /pagos/{id}` lo vincula
+  (id) o desvincula (`null`). Mientras siga vinculado, editar el monto o la forma
+  de pago a algo que no coincida se rechaza (400).
+- **Contabilidad sin cambios**: el egreso genera el mismo asiento que cargado a
+  mano en Pagos (`registrar_egreso`). Borrar el movimiento deja el pago sin
+  vínculo; borrar el pago libera el movimiento.
+
+```mermaid
+sequenceDiagram
+  actor U as Usuario
+  participant M as Movimientos.tsx
+  participant P as POST /pagos
+  participant V as movimiento_egreso
+  participant C as motor_contable
+  U->>M: "＋ Resolver" en un débito
+  M->>P: tipo, monto=|débito|, banco, movimiento_banco_id
+  P->>V: validar_vinculo (débito, importe, org, período, sin otro pago)
+  V-->>P: ok / motivo
+  P->>C: registrar_egreso (igual que en Pagos)
+  P-->>M: egreso.id → la fila muestra "✓ Pago #id"
+```
 
 ## 2. Deduplicación de Últimos Movimientos (UM)
 

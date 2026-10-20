@@ -117,6 +117,7 @@ erDiagram
     PORTADOR ||--o{ CHEQUE : ""
     CLIENTE ||--o{ EGRESO : ""
     ARQUEO_DIARIO ||--o{ EGRESO : "forma_pago=efectivo"
+    MOVIMIENTO_BANCO |o--o| EGRESO : "débito explicado (movimiento_banco_id)"
     USER ||--o{ CHEQUE : ""
     USER ||--o{ EGRESO : ""
     USER ||--o{ ARQUEO_DIARIO : ""
@@ -126,7 +127,7 @@ erDiagram
 |---|---|---|
 | `Cheque` | `cheques` | `estado` ∈ {registrado, depositado, acreditado, rechazado, anulado}; `local_interior`, `comision`, `foto_comprobante`; FK opcional a `banco_cuenta_id` (PlanCuenta) |
 | `Portador` | `portadores` | Solo `nombre` + `organizacion_id` |
-| `Egreso` | `egresos` | `tipo` ∈ {proveedor, gasto, pago_cliente}; `forma_pago` ∈ {banco, efectivo}; `arqueo_id` cuando es efectivo; `denominaciones_usadas` (JSON) |
+| `Egreso` | `egresos` | `tipo` ∈ {proveedor, gasto, pago_cliente}; `forma_pago` ∈ {banco, efectivo}; `arqueo_id` cuando es efectivo; `denominaciones_usadas` (JSON); `movimiento_banco_id` (v3.32, opcional, ON DELETE SET NULL): débito del extracto que el egreso explica — ver BUSINESS_RULES §1.9 |
 | `CategoriaEgreso` | `categorias_egreso` | Catálogo editable de categorías |
 | `ArqueoDiario` | `arqueos_diarios` | Arqueo de caja; `denominaciones` (JSON); recibe los egresos en efectivo vía `back_populates` |
 

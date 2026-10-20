@@ -61,7 +61,8 @@ Criterio: primero lo que **reutiliza piezas que Cuadra ya tiene** y refuerza su 
 1. ✅ **Extracto en PDF** — resuelto en v3.31 (lector propio + IA de respaldo para escaneados +
    cuadre de saldos). Queda solo aceptar **fotos** (JPG/PNG) del extracto. Idea original (Alegra): Reutiliza el helper de Gemini del OCR de
    cheques y facturas; entrega al parser el mismo esquema que un Excel. Cubre bancos que solo dan PDF.
-2. **Resolver pendientes sin salir de la conciliación** (Xubio). Desde un movimiento sin match:
+2. ✅ **Resolver pendientes sin salir de la conciliación** (Xubio) — v3.32 para débitos (pago
+   vinculado + % de egresos explicados). Pendiente: "vincular a un pago ya cargado" en la UI (la API ya lo permite). Desde un movimiento sin match:
    "crear pago", "crear cobranza", "crear gasto/asiento" con los datos precargados.
 3. **Importador de faltantes de ARCA** (Colppy), pero **con preview y deshacer**. El import de
    Mis Comprobantes ya existe en IVA Liquidación: falta el diff "en ARCA y no en Cuadra".

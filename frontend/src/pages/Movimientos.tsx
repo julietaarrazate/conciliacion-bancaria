@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { ExtractoListItem, MovimientoFiltrado, MovimientosFiltros, ResumenExtracto as ResumenExtractoData } from '@/types'
 import { ResumenExtracto } from '@/components/ResumenExtracto'
+import { ResolverMovimientoModal } from '@/components/ResolverMovimientoModal'
 import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
@@ -80,6 +81,7 @@ const EMPTY: ColFilter = { cliente:'', cuit:'', titular:'', desde:'', hasta:'', 
 export const Movimientos: React.FC = () => {
   const [searchParams] = useSearchParams()
   const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
+  const canReconcile = useAuthStore(s => s.hasPermission('reconcile'))
   const { activeOrgId } = useOrgStore()
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [extractoId, setExtractoId] = useState<number | null>(null)
@@ -103,6 +105,7 @@ export const Movimientos: React.FC = () => {
   const umRef = useRef<HTMLInputElement>(null)
   const [modoAsiento, setModoAsiento] = useState<'agrupado' | 'individual'>('agrupado')
   const [resumen, setResumen] = useState<ResumenExtractoData | null>(null)
+  const [resolverMov, setResolverMov] = useState<MovimientoFiltrado | null>(null)
 
   // Resumen (% acreditado + gastos bancarios) del extracto completo, sin filtros.
   // Se recalcula cada vez que cambia la lista: acreditar, editar o borrar
@@ -536,7 +539,22 @@ export const Movimientos: React.FC = () => {
                       {m.saldo != null ? fmtARS(m.saldo) : '—'}
                     </td>
                     <td className="px-2 cursor-pointer group/cliente" onClick={() => openAcredModal(m)} title="Clic para acreditar o editar">
-                      {m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
+                      {m.monto < 0 && !(m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado')
+                        ? (m.egreso_id
+                            ? <span className="pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium"
+                                title="Débito explicado por un pago registrado en Pagos" onClick={e => e.stopPropagation()}>
+                                ✓ Pago #{m.egreso_id}
+                              </span>
+                            : m.gasto_bancario && !canReconcile
+                              ? <span className="text-[10px] text-gray-500 dark:text-gray-400" title={m.gasto_bancario}>Gasto bancario</span>
+                              : canReconcile
+                                ? <button type="button" onClick={e => { e.stopPropagation(); setResolverMov(m) }}
+                                    title={m.gasto_bancario ? `${m.gasto_bancario} — registrar como gasto` : 'Registrar el pago o gasto que explica este débito'}
+                                    className="text-ml-blue dark:text-blue-400 text-[10px] font-medium hover:underline">
+                                    {m.gasto_bancario ? 'Gasto bancario · ＋' : '＋ Resolver'}
+                                  </button>
+                                : <span className="text-gray-400 text-[10px]">—</span>)
+                        : m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
                         ? <span className="inline-flex items-center gap-0.5 pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium group-hover/cliente:bg-green-200 dark:group-hover/cliente:bg-green-800/60 transition-colors">
                             {m.cliente_acreditado}
                             <span className="opacity-0 group-hover/cliente:opacity-50 text-[9px]">✏</span>
@@ -595,6 +613,20 @@ export const Movimientos: React.FC = () => {
           </div>
         </div>
       </div>
+    )}
+
+    {/* Resolver un débito: registrar el pago que lo explica */}
+    {resolverMov && (
+      <ResolverMovimientoModal
+        mov={resolverMov}
+        orgId={activeOrgId}
+        onClose={() => setResolverMov(null)}
+        onResuelto={egresoId => {
+          const id = resolverMov.id
+          setMovimientos(prev => prev.map(x => x.id === id ? { ...x, egreso_id: egresoId } : x))
+          setResolverMov(null)
+        }}
+      />
     )}
 
     {/* Modal rápido de acreditación */}

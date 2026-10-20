@@ -18,6 +18,7 @@ import {
   ExtractoListItem,
   MovimientoFiltrado,
   ResumenExtracto,
+  PagoDesdeMovimientoPayload,
   MergeUMResult,
   MovimientosFiltros,
   ConciliacionItem,
@@ -587,6 +588,18 @@ class ApiClient {
   // Sin cache: tiene que reflejar al instante una acreditación recién hecha.
   async getResumenExtracto(extractoId: number): Promise<ResumenExtracto> {
     const res = await this.client.get(`/extractos/${extractoId}/resumen`)
+    return res.data
+  }
+
+  async listarCategoriasEgreso(orgId?: number | null): Promise<{ id: number; nombre: string }[]> {
+    const res = await this.client.get('/pagos/categorias', { params: orgId ? { org_id: orgId } : {} })
+    return res.data || []
+  }
+
+  /** Crea el pago/gasto que explica un débito del extracto y lo deja vinculado. */
+  async crearPagoDesdeMovimiento(payload: PagoDesdeMovimientoPayload): Promise<{ ok: boolean; egreso: { id: number } }> {
+    const res = await this.client.post('/pagos', payload)
+    this.invalidateCache('/pagos')
     return res.data
   }
 

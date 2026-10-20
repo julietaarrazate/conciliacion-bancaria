@@ -110,6 +110,27 @@ export interface GastoBancarioConcepto {
 export interface ResumenExtracto {
   gastos_bancarios: { conceptos: GastoBancarioConcepto[]; cantidad: number; total: number | string }
   explicado: { creditos: number; acreditados: number; sin_acreditar: number; porcentaje: number | null }
+  /** Débitos explicados por un gasto bancario reconocido o un pago vinculado (opcional: backend viejo). */
+  debitos?: {
+    debitos: number
+    explicados: number
+    sin_explicar: number
+    total_sin_explicar: number | string
+    porcentaje: number | null
+  }
+}
+
+/** POST /pagos para explicar un débito del extracto ("Resolver" en Movimientos). */
+export interface PagoDesdeMovimientoPayload {
+  movimiento_banco_id: number
+  tipo: 'gasto' | 'proveedor'
+  forma_pago: 'banco'
+  monto: number
+  fecha: string
+  beneficiario?: string
+  concepto?: string
+  categoria?: string
+  org_id?: number
 }
 
 export interface ConciliacionResultado {
@@ -230,6 +251,8 @@ export interface MovimientoFiltrado {
   cliente_acreditado?: string | null
   fecha_acred?: string | null
   source?: string  // 'extracto' | 'um'
+  egreso_id?: number | null       // pago que explica el débito
+  gasto_bancario?: string | null  // concepto de gasto bancario reconocido
 }
 
 export interface MergeUMResult {
