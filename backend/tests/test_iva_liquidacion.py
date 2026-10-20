@@ -92,7 +92,7 @@ def _fila_recibido(fecha, tipo, pv, num, cuit, denom, iva21=None, neto21=None,
         "Número Desde": num, "Número Hasta": num, "Cód. Autorización": 12345,
         "Tipo Doc. Emisor": "CUIT", "Nro. Doc. Emisor": cuit,
         "Denominación Emisor": denom,
-        "Tipo Doc. Receptor": "CUIT", "Nro. Doc. Receptor": 30716892871,
+        "Tipo Doc. Receptor": "CUIT", "Nro. Doc. Receptor": 30700000008,
         "Tipo Cambio": 1, "Moneda": "$",
         "IVA 21%": iva21, "Neto Grav. IVA 21%": neto21,
         "Neto Gravado Total": neto21, "Total IVA": total_iva, "Imp. Total": imp_total,
@@ -157,15 +157,15 @@ def _auth(token):
 
 def test_parser_emitidos():
     xlsx = _build_xlsx(
-        "Mis Comprobantes Emitidos - CUIT 30716892871", _H_EMITIDOS,
+        "Mis Comprobantes Emitidos - CUIT 30700000008", _H_EMITIDOS,
         [
-            _fila_emitido("31/05/2026", "1 - Factura A", 2, 182, 30716636166,
-                          "VARIETALES SRL", 17151.77, 81675.10, 17151.77, 98826.87),
+            _fila_emitido("31/05/2026", "1 - Factura A", 2, 182, 30711111111,
+                          "CLIENTE DEMO SRL", 17151.77, 81675.10, 17151.77, 98826.87),
             # NC tipo 3 (Nota de Crédito A)
-            _fila_emitido("20/05/2026", "3 - Nota de Crédito A", 2, 5, 30716636166,
-                          "VARIETALES SRL", 2100.00, 10000.00, 2100.00, 12100.00),
+            _fila_emitido("20/05/2026", "3 - Nota de Crédito A", 2, 5, 30711111111,
+                          "CLIENTE DEMO SRL", 2100.00, 10000.00, 2100.00, 12100.00),
             # monto None en Total IVA → debe normalizarse a 0
-            _fila_emitido("15/05/2026", "6 - Factura B", 3, 40, 27413298755,
+            _fila_emitido("15/05/2026", "6 - Factura B", 3, 40, 27333333339,
                           "CONSUMIDOR", None, None, None, 5000),
         ],
     )
@@ -176,8 +176,8 @@ def test_parser_emitidos():
     assert f0["tipo_desc"] == "1 - Factura A"
     assert f0["punto_venta"] == 2
     assert f0["numero"] == 182
-    assert f0["cuit_contraparte"] == "30716636166"
-    assert f0["denominacion"] == "VARIETALES SRL"
+    assert f0["cuit_contraparte"] == "30711111111"
+    assert f0["denominacion"] == "CLIENTE DEMO SRL"
     assert f0["total_iva"] == Decimal("17151.77")
     assert f0["detalle_alicuotas"]["21%"]["iva"] == 17151.77
     assert filas[1]["tipo_codigo"] == 3  # NC
@@ -187,16 +187,16 @@ def test_parser_emitidos():
 
 def test_parser_recibidos_usa_emisor():
     xlsx = _build_xlsx(
-        "Mis Comprobantes Recibidos - CUIT 30716892871", _H_RECIBIDOS,
+        "Mis Comprobantes Recibidos - CUIT 30700000008", _H_RECIBIDOS,
         [
-            _fila_recibido("06/05/2026", "1 - Factura A", 10, 999, 30690783521,
-                           "INTERBANKING SA", 4200.00, 20000.00, 4200.00, 24200.00),
+            _fila_recibido("06/05/2026", "1 - Factura A", 10, 999, 30555555551,
+                           "PROVEEDOR DEMO SA", 4200.00, 20000.00, 4200.00, 24200.00),
         ],
     )
     filas = parsear_mis_comprobantes(xlsx, "recibido")
     assert len(filas) == 1
-    assert filas[0]["cuit_contraparte"] == "30690783521"  # del EMISOR
-    assert filas[0]["denominacion"] == "INTERBANKING SA"
+    assert filas[0]["cuit_contraparte"] == "30555555551"  # del EMISOR
+    assert filas[0]["denominacion"] == "PROVEEDOR DEMO SA"
     assert filas[0]["total_iva"] == Decimal("4200.00")
 
 
@@ -219,7 +219,7 @@ def _importar(client, token, xlsx, direccion, periodo, fname="test.xlsx"):
 def test_import_dedup_y_periodo(db, client):
     token = _token(db, "admin@liq.test")
     xlsx = _build_xlsx(
-        "Mis Comprobantes Emitidos - CUIT 30716892871", _H_EMITIDOS,
+        "Mis Comprobantes Emitidos - CUIT 30700000008", _H_EMITIDOS,
         [
             _fila_emitido("10/05/2026", "1 - Factura A", 2, 100, 30111111119,
                           "CLIENTE 1", 2100, 10000, 2100, 12100),
@@ -248,7 +248,7 @@ def test_import_dedup_y_periodo(db, client):
 def test_toggle_cambia_totales(db, client):
     token = _token(db, "admin@liq.test")
     xlsx = _build_xlsx(
-        "Mis Comprobantes Emitidos - CUIT 30716892871", _H_EMITIDOS,
+        "Mis Comprobantes Emitidos - CUIT 30700000008", _H_EMITIDOS,
         [
             _fila_emitido("10/05/2026", "1 - Factura A", 2, 100, 30111111119,
                           "C1", 2100, 10000, 2100, 12100),
@@ -274,7 +274,7 @@ def test_toggle_cambia_totales(db, client):
 def test_delete_comprobante(db, client):
     token = _token(db, "admin@liq.test")
     xlsx = _build_xlsx(
-        "Mis Comprobantes Emitidos - CUIT 30716892871", _H_EMITIDOS,
+        "Mis Comprobantes Emitidos - CUIT 30700000008", _H_EMITIDOS,
         [_fila_emitido("10/05/2026", "1 - Factura A", 2, 100, 30111111119,
                        "C1", 2100, 10000, 2100, 12100)],
     )
@@ -397,7 +397,7 @@ def test_aislamiento_multi_tenant(db, client):
     """Superadmin importa comprobantes en org 3; consultando org 2 no los ve."""
     token = _token(db, "supa@liq.test")
     xlsx = _build_xlsx(
-        "Mis Comprobantes Emitidos - CUIT 30716892871", _H_EMITIDOS,
+        "Mis Comprobantes Emitidos - CUIT 30700000008", _H_EMITIDOS,
         [_fila_emitido("10/05/2026", "1 - Factura A", 2, 100, 30111111119,
                        "C1", 2100, 10000, 2100, 12100)],
     )

@@ -222,7 +222,7 @@ async def upload_planilla(
         db.add(cliente)
         db.flush()
     else:
-        # Use canonical name from DB (avoids writing "green" when DB has "Green")
+        # Use canonical name from DB (avoids writing "cliente norte" when DB has "Cliente Norte")
         cliente_nombre = cliente.nombre
 
     try:
@@ -910,7 +910,7 @@ def download_planilla_conciliada(
 
     xlsx = export_planilla_conciliada(planilla_data, movimientos_acreditados)
 
-    # Nombre: "{cliente} acreditado {d.m}.xlsx" — ej "alojando acreditado 8.5.xlsx"
+    # Nombre: "{cliente} acreditado {d.m}.xlsx" — ej "cliente norte acreditado 8.5.xlsx"
     # Fecha = la mas reciente de las acreditaciones; si no hay, fecha de hoy
     fecha_str = f"{fecha_ref.day}.{fecha_ref.month}"
     cliente_slug = (p.cliente.nombre or "cliente").strip().lower()

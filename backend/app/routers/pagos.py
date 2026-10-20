@@ -3,7 +3,7 @@ Reemplaza Órdenes de Pago + Pagos + Gastos en un solo flujo:
   - tipo: proveedor | gasto | pago_cliente
   - forma_pago: banco | efectivo (efectivo descuenta del arqueo de caja)
   - foto del comprobante + compartir por WhatsApp
-  - categorías editables por la usuaria
+  - categorías editables por el usuario
 """
 import logging
 from datetime import date

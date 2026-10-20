@@ -18,7 +18,7 @@ incorporar.
   confirmado. Holistor y Tango quedaron casi sin datos. Antes de construir algo inspirado en un
   competidor, verificar el flujo en su prueba gratis o su centro de ayuda.
 - Las brechas de Cuadra salen de los `## Pendiente de revisar` de `/docs`,
-  `.claude/memory/PROJECT_MEMORY.md` y `AUDITORIA_EKP_2026-07.md` (no de pruebas en producción).
+  `.claude/memory/PROJECT_MEMORY.md` y la auditoría EKP de julio 2026, hoy fuera del repo (no de pruebas en producción).
 
 ## Lo que Cuadra ya hace mejor (no perderlo)
 
@@ -58,7 +58,8 @@ Criterio: primero lo que **reutiliza piezas que Cuadra ya tiene** y refuerza su 
 
 ### Ola 1 — rápido, reutiliza lo que ya existe
 
-1. **Extracto en PDF o foto leído con IA** (Alegra). Reutiliza el helper de Gemini del OCR de
+1. ✅ **Extracto en PDF** — resuelto en v3.31 (lector propio + IA de respaldo para escaneados +
+   cuadre de saldos). Queda solo aceptar **fotos** (JPG/PNG) del extracto. Idea original (Alegra): Reutiliza el helper de Gemini del OCR de
    cheques y facturas; entrega al parser el mismo esquema que un Excel. Cubre bancos que solo dan PDF.
 2. **Resolver pendientes sin salir de la conciliación** (Xubio). Desde un movimiento sin match:
    "crear pago", "crear cobranza", "crear gasto/asiento" con los datos precargados.
@@ -92,7 +93,7 @@ Criterio: primero lo que **reutiliza piezas que Cuadra ya tiene** y refuerza su 
 
 ### Base de la excelencia (antes de vender, transversal)
 
-De `AUDITORIA_EKP_2026-07.md`: infraestructura sin cold start (salir del free tier), ensayo de
+De la auditoría EKP de julio 2026: infraestructura sin cold start (salir del free tier), ensayo de
 restore del backup, branch protection en `main`, E2E de los flujos críticos. Ningún competidor
 gana por estas cosas, pero un estudio abandona un sistema que tarda 30 s en abrir o pierde datos.
 

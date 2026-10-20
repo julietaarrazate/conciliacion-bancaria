@@ -11,7 +11,7 @@ FORMAS_PAGO  = ["banco", "efectivo"]
 
 
 class CategoriaEgreso(Base):
-    """Categoría editable por la usuaria (impuestos, bancarios, alquiler, etc.).
+    """Categoría editable por el usuario (impuestos, bancarios, alquiler, etc.).
     Sembrada con las categorías que existían en el modelo Gasto viejo."""
     __tablename__ = "categorias_egreso"
 

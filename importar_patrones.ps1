@@ -4,10 +4,14 @@
 # y los sube al sistema para mejorar el match automatico.
 #
 # Uso: clic derecho → "Ejecutar con PowerShell"
+#
+# Variables de entorno opcionales:
+#   API_URL   URL del backend (default http://localhost:8000)
+#   BASE_DIR  carpeta con las planillas conciliadas (si falta, se pide)
 # ─────────────────────────────────────────────────────────────────
 
-$API_URL = "https://conciliacion-api.onrender.com"
-$EMAIL   = "julietaarrazate@gmail.com"
+$API_URL = if ($env:API_URL) { $env:API_URL } else { "http://localhost:8000" }
+$EMAIL   = Read-Host "Email de acceso"
 $PWD_KEY = Read-Host "Ingresa tu contrasena para conectar al sistema"
 
 Write-Host "`n[1/4] Conectando al sistema..."
@@ -27,12 +31,14 @@ try {
 
 $headers = @{ Authorization = "Bearer $token" }
 
+$BASE_DIR = if ($env:BASE_DIR) { $env:BASE_DIR } else { Read-Host "Carpeta con las planillas conciliadas (una subcarpeta por cliente)" }
+$BASE_DIR = $BASE_DIR.TrimEnd("\")
+
 Write-Host "`n[2/4] Abriendo Excel..."
 $excel = New-Object -ComObject Excel.Application
 $excel.Visible = $false
 $excel.DisplayAlerts = $false
 
-$BASE_DIR = "$env:USERPROFILE\Desktop\Clientes\tt"
 $archivos = Get-ChildItem -Path $BASE_DIR -Filter "*.xlsx" -Recurse |
     Where-Object { $_.FullName -notmatch "\\[Vv]arios\\" }
 
@@ -43,7 +49,7 @@ $procesados = 0
 $errores = 0
 
 foreach ($archivo in $archivos) {
-    # Extraer nombre del cliente del path (carpeta inmediatamente dentro de tt)
+    # Extraer nombre del cliente del path (carpeta inmediatamente dentro de BASE_DIR)
     $rel = $archivo.FullName.Substring($BASE_DIR.Length).TrimStart("\")
     $cliente = ($rel -split "\\")[0]
 
@@ -144,6 +150,6 @@ Write-Host "`n=== COMPLETADO ==="
 Write-Host "Archivos procesados : $procesados"
 Write-Host "Errores             : $errores"
 Write-Host "Patrones subidos    : $subidos"
-Write-Host "`nEl sistema ahora reconoce los clientes historicos de Caneland."
+Write-Host "`nEl sistema ahora reconoce los clientes historicos de la organizacion."
 Write-Host "Mañana cuando concilies el extracto nuevo, el match va a ser mucho mejor."
 Read-Host "`nPresiona Enter para cerrar"

@@ -1,6 +1,6 @@
 # Sistema de diseño — Cuadra
 
-Estética **Linear-inspired**: superficie oscura profunda, acento verde de marca,
+Estética **minimalista**: superficie oscura profunda, acento verde de marca,
 tipografía Inter, bordes redondeados sutiles y micro-animaciones. Todo lo
 documentado acá proviene de los tokens reales del proyecto.
 
@@ -16,11 +16,11 @@ en [UX_RULES.md](./UX_RULES.md).
 
 ## 1. Principios
 
-- **Linear-inspired**: jerarquía por contraste suave, no por bordes pesados;
+- **Contraste suave**: jerarquía por contraste suave, no por bordes pesados;
   cards con sombra mínima en light y sin sombra en dark.
 - **Dark mode = identidad de marca**: fondo `#0B0B0F`, acento verde
   fluorescente, números en fuente monoespaciada (estética "hacker/terminal").
-  Light mode usa el azul-violeta de Linear (`#5E6AD2`) como primario.
+  Light mode usa un azul-violeta de marca (`#5E6AD2`) como primario.
 - **Mobile-first**: ver [UX_RULES.md](./UX_RULES.md) sección 3.
 
 ---
@@ -29,7 +29,7 @@ en [UX_RULES.md](./UX_RULES.md).
 
 ### Tokens de la app (`frontend/tailwind.config.js`, prefijo `ml-`)
 
-**Light mode (Linear light)**
+**Light mode**
 | Token | Hex | Uso |
 |---|---|---|
 | `ml-blue` | `#5E6AD2` | primario light (botones, links activos) |
@@ -42,7 +42,7 @@ en [UX_RULES.md](./UX_RULES.md).
 | `ml-text-soft` | `#71717A` | texto secundario |
 | `ml-yellow` / `ml-yellow-dark` | `#FFE600` / `#F5DC00` | acento legacy |
 
-**Dark mode (Linear dark)**
+**Dark mode**
 | Token | Hex | Uso |
 |---|---|---|
 | `ml-dark-bg` | `#0B0B0F` | fondo de página (= `theme_color` del manifest) |
@@ -55,7 +55,7 @@ en [UX_RULES.md](./UX_RULES.md).
 
 `ml-green` y `status-ok` son **mode-aware** vía la variable CSS `--ml-green`
 (definida en `index.css`, formato canales "R G B" para soportar opacidad):
-legible en claro y brillante "Matrix" en oscuro. Los demás tokens verde son fijos.
+legible en claro y brillante en oscuro. Los demás tokens verde son fijos.
 
 | Token | Claro | Oscuro |
 |---|---|---|
@@ -134,7 +134,7 @@ Regla: **valores numéricos/financieros van en mono con `tabular-nums`** (clase
 
 ## 5. Clases de componente (en `@layer components`, `index.css`)
 
-Estas clases encapsulan el estilo Linear y traen sus variantes `dark:`:
+Estas clases encapsulan el estilo de la app y traen sus variantes `dark:`:
 
 | Clase | Propósito |
 |---|---|

@@ -3,7 +3,7 @@
 Scheduler interno (APScheduler) que todos los dias a las 03:00 ART:
 1. Genera el JSON completo (todas las orgs)
 2. Lo gzippea
-3. Lo manda por email via Resend a la usuaria
+3. Lo manda por email via Resend al destinatario configurado
 4. Registra el resultado en auditoria y en memoria para /admin/backup/status
 
 Pensado para correr en Render free tier: UptimeRobot mantiene el servicio
@@ -437,7 +437,7 @@ def run_backup_job() -> Dict[str, Any]:
 
     db = SessionLocal()
     try:
-        # actor del log de auditoria: el primer superadmin (Julieta)
+        # actor del log de auditoria: el primer superadmin
         actor = db.query(User).filter(User.is_superadmin == True).order_by(User.id).first()
         actor_id = actor.id if actor else None
 
@@ -490,7 +490,7 @@ def run_backup_job() -> Dict[str, Any]:
 
 
 def estado_backup() -> Dict[str, Any]:
-    """Estado del scheduler para mostrar al admin (Julieta)."""
+    """Estado del scheduler para mostrar al superadmin."""
     sched = _scheduler_singleton()
     next_run = None
     if sched is not None:

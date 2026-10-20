@@ -49,4 +49,4 @@ Para usar con [`/review`](../commands/review.md). Foco en los riesgos reales del
 ## Higiene
 
 - [ ] Sin secretos en el diff.
-- [ ] Commits con autor `Julieta Arrazate <julietaarrazate@gmail.com>`.
+- [ ] Commits con la autoría autorizada (ver [`CONTRIBUTING.md`](../../CONTRIBUTING.md)).

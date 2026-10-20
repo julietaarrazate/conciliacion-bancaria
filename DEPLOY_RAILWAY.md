@@ -9,18 +9,18 @@ Railway es más simple y confiable. Free tier sin sleep.
 3. Railway detecta Python automáticamente
 4. En el proyecto: **+ New** → **Database** → **PostgreSQL** → Railway agrega DATABASE_URL solo
 5. En Settings → Variables, agregar:
-   - `SECRET_KEY` = cualquier string largo (ej: `mi-clave-super-secreta-2026`)
+   - `SECRET_KEY` = cadena aleatoria larga (generar con `openssl rand -hex 32`)
    - `ROOT_DIR` = `backend`  ← IMPORTANTE
 6. En Settings → **Root Directory** → poner `backend`
 7. Clic **Deploy** → espera ~2 min
 
-URL queda algo como: `https://conciliacion-api.up.railway.app`
+URL queda algo como: `https://<tu-servicio>.up.railway.app`
 
 ## Frontend en Vercel (ya configurado)
 
 1. https://vercel.com → tu proyecto
 2. Settings → Environment Variables:
-   - `VITE_API_URL` = URL de Railway (ej: `https://conciliacion-api.up.railway.app`)
+   - `VITE_API_URL` = URL de Railway (ej: `https://<tu-servicio>.up.railway.app`)
 3. Redeploy
 
 ## Variables Railway obligatorias

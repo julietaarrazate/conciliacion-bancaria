@@ -20,7 +20,7 @@
 
 ### Frontend
 - **React 18 + TypeScript + Vite** — SPA.
-- **TailwindCSS** — diseño (Linear-inspired, dark mode `#0B0B0F`, fuente Inter).
+- **TailwindCSS** — diseño (minimalista, dark mode `#0B0B0F`, fuente Inter).
 - **PWA instalable** — service worker en `frontend/src/public/sw.js`
   (network-first + share target + web push).
 
@@ -78,10 +78,10 @@ arriba hacia abajo:
 | Capa | Servicio | URL / Identificador |
 |---|---|---|
 | Frontend (React + PWA) | **Vercel** | https://conciliacion-bancaria-ten.vercel.app |
-| Backend (FastAPI) | **Render** (free tier) | https://conciliacion-api.onrender.com · `srv-d7pqt81j2pic73c0c6fg` |
-| Base de datos | **Neon PostgreSQL** (free tier) | ep-ancient-hall-anz4pezn… |
+| Backend (FastAPI) | **Render** (free tier) | https://conciliacion-api.onrender.com |
+| Base de datos | **Neon PostgreSQL** (free tier) | conexión vía `DATABASE_URL` |
 | Keep-alive | **UptimeRobot** | pinguea `/health` cada 5 min |
-| Código | **GitHub** (privado) | julietaarrazate/conciliacion-bancaria |
+| Código | **GitHub** | repositorio del proyecto |
 
 ```mermaid
 flowchart LR
@@ -205,8 +205,8 @@ tier. Ese proceso es **idempotente** y en cada arranque:
 7. Seed contable **por organización** (plan de cuentas, reglas, categorías de
    egreso, categorías de monotributo, jurisdicción IIBB, config de sueldos).
 8. Backfill de asientos contables para extractos/planillas existentes.
-9. Seed del superadmin (Julieta) desde `SUPERADMIN_PASSWORD` y, solo en
-   `debug=true`, el usuario demo `admin@julieta.com`.
+9. Seed del superadmin desde `SUPERADMIN_PASSWORD` y, solo en
+   `debug=true`, un usuario demo local.
 
 > El detalle de las migraciones de esquema vive en
 > [../database/DATABASE_RULES.md](../database/DATABASE_RULES.md). La regla de oro
@@ -253,7 +253,7 @@ la env var, la feature se degrada sola — no rompe**. Las flags se leen en
 
 Principio general: **opt-in y degradación silenciosa**, salvo ARCA que falla
 explícito por seguridad (no se cifran certificados sin key). Ver `CLAUDE.md`
-("Env vars opcionales en Render") y `COSTEO.md` para el detalle de costos.
+("Env vars opcionales en Render").
 
 ---
 

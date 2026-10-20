@@ -23,23 +23,23 @@ Procedimientos paso a paso para proteger los datos y recuperarse de incidentes.
 Scheduler interno (APScheduler en el backend) que todos los días a las **03:00 ART**:
 1. Genera el JSON completo de TODAS las organizaciones
 2. Lo gzippea (queda en ~10-30% del tamaño original)
-3. Lo manda por email a `julietaarrazate@gmail.com` (configurable) con el `.json.gz` adjunto
+3. Lo manda por email a la dirección configurada en `BACKUP_EMAIL_TO` con el `.json.gz` adjunto
 4. Lo registra en auditoria (`accion=BACKUP_AUTO_OK` o `BACKUP_AUTO_ERROR`)
 
 ### Setup (una sola vez, en Render)
 
 1. Crear cuenta en [resend.com](https://resend.com) (gratis, 3000 emails/mes)
 2. **API Keys** → **Create API Key** → copiar el `re_xxxxxx`
-3. En Render: **conciliacion-api** → **Environment** → **Add env var**:
+3. En Render: el servicio del backend → **Environment** → **Add env var**:
    - `RESEND_API_KEY` = el token recién copiado
 4. Save & deploy. El servicio reinicia y el scheduler arranca solo.
 
 No requiere verificar dominio: usa el remitente default `onboarding@resend.dev`
-de Resend, que sirve para mandarte a vos misma.
+de Resend, que sirve para enviar al email de la propia cuenta de Resend.
 
 ### Otras env vars opcionales
 
-- `BACKUP_EMAIL_TO` = destinatario (default: `julietaarrazate@gmail.com`)
+- `BACKUP_EMAIL_TO` = destinatario del backup (si no se setea, usa el default de `app/config.py`)
 - `BACKUP_EMAIL_FROM` = remitente (default: `onboarding@resend.dev`)
 - `BACKUP_HOUR_ART` = hora ART (default: `3`)
 - `BACKUP_MINUTE` = minuto (default: `0`)
@@ -172,7 +172,7 @@ curl -X GET "https://conciliacion-api.onrender.com/admin/organizaciones/1/backup
 
 ### Escenario: "Neon perdió mi cuenta o me suspendieron"
 → Necesitás el JSON del Procedimiento C. Crear cuenta nueva en Neon (o cualquier Postgres), correr migrations de Alembic, y escribir un script de import desde el JSON.
-**(Importante: hoy no tenemos script de import desde JSON. Si ese escenario es preocupante, avisame y lo creamos.)**
+**(Importante: hoy no hay script de import desde JSON; queda anotado como pendiente en la sección 8.)**
 
 ### Escenario: "Render desapareció"
 → Mover el repo a Fly.io / Railway / Vercel Functions. El backend es FastAPI estándar, corre en cualquier lado con Python.
@@ -187,4 +187,4 @@ Estos son riesgos que existen pero requieren más trabajo:
 - **Backup automático programado**: hoy el JSON se baja manualmente; podríamos agregar un cron que lo suba a S3/Drive automáticamente
 - **Soft delete**: cuando borrás un extracto, desaparece. Una papelera de reciclaje a 30 días sería el siguiente paso
 
-Ver issue en CLAUDE.md → roadmap.
+Ver [`ROADMAP.md`](ROADMAP.md).

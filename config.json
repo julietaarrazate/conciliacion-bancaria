@@ -1,8 +1,10 @@
 {
   "fecha_acred": "hoy",
-  "extracto_path": "~/Desktop/Extracto Macro/extracto macro abril.xlsx",
-  "inbox_path":   "~/Desktop/INBOX",
-  "clientes_path": "~/Desktop/clientes/tt",
-  "carpeta_mes": "26-4 ABR",
-  "comentario_fecha": "Opciones: 'hoy', 'ayer', o fecha fija como '2026-04-24'"
+  "extracto_path": "<ruta al extracto .xlsx>",
+  "inbox_path":   "<carpeta INBOX>",
+  "clientes_path": "<carpeta de clientes>",
+  "carpeta_mes": "",
+  "clientes": [],
+  "comentario_fecha": "Opciones: 'hoy', 'ayer', o fecha fija como '2026-04-24'",
+  "comentario_clientes": "Nombres de las subcarpetas del INBOX, una por cliente (ej. [\"cliente norte\", \"cliente sur\"])"
 }

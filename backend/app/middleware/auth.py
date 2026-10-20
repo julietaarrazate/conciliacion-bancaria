@@ -67,7 +67,7 @@ def can_switch_org(user: User, org_id: int) -> bool:
 
 
 async def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
-    """Solo superadmin (Julieta) puede acceder."""
+    """Solo el superadmin puede acceder."""
     if not current_user.is_superadmin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

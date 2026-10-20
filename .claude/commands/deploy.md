@@ -13,15 +13,15 @@ Render, DB en Neon. Detalle de infraestructura en [`CLAUDE.md`](../../CLAUDE.md)
    ```
 2. **Merge a `main`** vía PR squash desde `claude/...`. El push a `main` dispara automáticamente:
    - **Vercel** → build + deploy del frontend. Recordá: Vercel **bloquea builds con autor de commit
-     distinto** de `Julieta Arrazate <julietaarrazate@gmail.com>`.
-   - **Render** → build + deploy del backend (`srv-d7pqt81j2pic73c0c6fg`).
+     distinto** de la autoría autorizada (ver [`CONTRIBUTING.md`](../../CONTRIBUTING.md)).
+   - **Render** → build + deploy del backend.
 3. **Deploy manual de Render** (si el auto-deploy no disparó o querés forzarlo):
 
    ```bash
-   curl -X POST https://api.render.com/v1/services/srv-d7pqt81j2pic73c0c6fg/deploys \
-     -H "Authorization: Bearer <RENDER_API_KEY>"
+   curl -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+     -H "Authorization: Bearer $RENDER_API_KEY"
    ```
-   El `RENDER_API_KEY` vive en el entorno de Julieta, no en el repo.
+   `RENDER_API_KEY` y `RENDER_SERVICE_ID` viven en el entorno local, nunca en el repo.
 4. **Esperar el arranque** (Render free tier: cold start ~30s). En el boot, `main.py` sella Alembic
    (`stamp head`, no corre la cadena) y aplica los safety-nets idempotentes de `app/db_safety.py` +
    seed por org — el esquema lo construyen los safety-nets.

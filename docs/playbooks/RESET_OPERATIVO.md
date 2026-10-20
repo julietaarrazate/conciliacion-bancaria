@@ -44,8 +44,8 @@ organización, en una sola transacción. El caller decide el `commit()`.
 
 En Neon, crear un **branch** = snapshot instantáneo y restaurable de toda la base:
 
-- MCP: `create_branch(projectId, branchName="backup-pre-reset-<fecha>")`
-- o Neon Console → Branches → Create branch (desde `production`).
+- Neon Console → Branches → Create branch (desde `production`), con un nombre tipo
+  `backup-pre-reset-<fecha>`.
 
 Si algo sale mal, se restaura desde ese branch (reset-from-parent o repointing).
 

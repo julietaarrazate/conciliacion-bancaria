@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 _DOS = Decimal("0.01")
 
-MAX_ARCHIVO_BYTES = 5 * 1024 * 1024        # 5 MB por archivo (igual que LaPyme / Gemini inline)
+MAX_ARCHIVO_BYTES = 5 * 1024 * 1024        # 5 MB por archivo (límite de envío inline a la IA)
 MAX_ARCHIVOS_POR_SUBIDA = 10
 MIMES_PERMITIDOS = {
     "application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp",

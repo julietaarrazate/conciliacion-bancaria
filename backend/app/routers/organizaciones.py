@@ -207,7 +207,7 @@ def backup_completo_todas_las_orgs(
     current_user: User = Depends(require_superadmin)
 ):
     """Descarga backup JSON de TODAS las organizaciones en un solo archivo.
-    Solo para superadmin (Julieta). Útil antes de cambios grandes en el sistema."""
+    Solo para el superadmin. Útil antes de cambios grandes en el sistema."""
     import json
     orgs = db.query(Organizacion).all()
     todo = {

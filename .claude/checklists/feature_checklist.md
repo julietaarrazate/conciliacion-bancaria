@@ -63,4 +63,4 @@ Para usar con [`/feature`](../commands/feature.md). Referencia completa:
 
 - [ ] `(cd backend && ruff check . && python -m pytest -q)`
 - [ ] `(cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build)`
-- [ ] Commits con autor `Julieta Arrazate <julietaarrazate@gmail.com>`.
+- [ ] Commits con la autoría autorizada (ver [`CONTRIBUTING.md`](../../CONTRIBUTING.md)).

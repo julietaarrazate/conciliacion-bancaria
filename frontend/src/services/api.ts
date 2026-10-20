@@ -56,6 +56,11 @@ import {
   ComprobanteArcaPayload,
   ResultadoMapeoPlanilla,
   MapeoColumnas,
+  BorradorExtractoPdf,
+  BorradorExtractoPdfResumen,
+  ConfirmarExtractoPdfPayload,
+  ConfirmarExtractoPdfResult,
+  MoldeExtractoPdf,
 } from '@/types'
 import { useLockStore } from '@/store/lock'
 
@@ -67,7 +72,7 @@ function _suppressLockForDownload() {
 
 // Detecta la URL del backend automaticamente:
 // 1) VITE_API_URL (env var en build de Vercel/produccion)  → siempre tiene prioridad
-// 2) IP LAN (ej: 192.168.1.8) → solo cuando se accede desde la red local en dev
+// 2) IP LAN (ej: 192.168.x.x) → solo cuando se accede desde la red local en dev
 // 3) localhost:8000 → fallback para desarrollo local
 //
 // IMPORTANTE: en produccion Vercel, el hostname es "*.vercel.app" (dominio, no IP).
@@ -1066,6 +1071,74 @@ class ApiClient {
   async descartarBorradorComprobante(id: number, orgId?: number): Promise<BorradorComprobante> {
     const res: AxiosResponse<BorradorComprobante> = await this.client.post(`/comprobantes-compra/${id}/descartar`, null, {
       params: this._orgParams(orgId),
+    })
+    return res.data
+  }
+
+  // ── Importar extracto bancario en PDF ───────────────────────────────────────
+  // Sube el PDF y devuelve un borrador para revisar (no guarda el extracto todavía).
+  // Si el borrador viene `procesando` (lectura con IA en segundo plano), hay que
+  // consultarlo con getBorradorExtractoPdf hasta que pase a `listo` o `error`.
+  async importarExtractoPdf(
+    file: File,
+    opts: { orgId?: number | null; forzarIa?: boolean; banco?: string | null } = {},
+  ): Promise<BorradorExtractoPdf> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const params: Record<string, string | number | boolean> = { ...this._orgParams(opts.orgId ?? undefined) }
+    if (opts.forzarIa) params.forzar_ia = true
+    if (opts.banco && opts.banco.trim()) params.banco = opts.banco.trim()
+    const res: AxiosResponse<BorradorExtractoPdf> = await this.client.post('/extractos-pdf/importar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params,
+    })
+    return res.data
+  }
+
+  async getBorradorExtractoPdf(id: number, orgId?: number | null): Promise<BorradorExtractoPdf> {
+    const res: AxiosResponse<BorradorExtractoPdf> = await this.client.get(`/extractos-pdf/borradores/${id}`, {
+      params: this._orgParams(orgId ?? undefined),
+    })
+    return res.data
+  }
+
+  /** Borradores pendientes de revisar (procesando, listo o con error), los más nuevos primero. */
+  async getBorradoresExtractoPdf(orgId?: number | null, estado?: string): Promise<{ items: BorradorExtractoPdfResumen[] }> {
+    const res: AxiosResponse<{ items: BorradorExtractoPdfResumen[] }> = await this.client.get('/extractos-pdf/borradores', {
+      params: { ...this._orgParams(orgId ?? undefined), ...(estado ? { estado } : {}) },
+    })
+    return res.data
+  }
+
+  async confirmarBorradorExtractoPdf(
+    id: number, payload: ConfirmarExtractoPdfPayload, orgId?: number | null,
+  ): Promise<ConfirmarExtractoPdfResult> {
+    const res: AxiosResponse<ConfirmarExtractoPdfResult> = await this.client.post(
+      `/extractos-pdf/borradores/${id}/confirmar`, payload, { params: this._orgParams(orgId ?? undefined) },
+    )
+    // Movimientos de todos los extractos y KPIs/alertas del tablero quedaron viejos.
+    this.invalidateCache('/extractos')
+    this.invalidateCache('/analisis')
+    return res.data
+  }
+
+  async descartarBorradorExtractoPdf(id: number, orgId?: number | null): Promise<{ ok: boolean }> {
+    const res: AxiosResponse<{ ok: boolean }> = await this.client.post(
+      `/extractos-pdf/borradores/${id}/descartar`, null, { params: this._orgParams(orgId ?? undefined) },
+    )
+    return res.data
+  }
+
+  async getMoldesExtractoPdf(orgId?: number | null): Promise<{ items: MoldeExtractoPdf[] }> {
+    const res: AxiosResponse<{ items: MoldeExtractoPdf[] }> = await this.client.get('/extractos-pdf/moldes', {
+      params: this._orgParams(orgId ?? undefined),
+    })
+    return res.data
+  }
+
+  async deleteMoldeExtractoPdf(id: number, orgId?: number | null): Promise<{ ok: boolean }> {
+    const res: AxiosResponse<{ ok: boolean }> = await this.client.delete(`/extractos-pdf/moldes/${id}`, {
+      params: this._orgParams(orgId ?? undefined),
     })
     return res.data
   }

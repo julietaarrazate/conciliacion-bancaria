@@ -17,6 +17,8 @@ BORRA (transaccional / operativo):
     liquidaciones (+ detalles + cierres_periodo), liquidaciones_sueldo (+ detalles),
     comprobantes_iva + liquidaciones_iva, comprobantes_arca, liquidaciones_tarjeta,
     proyecciones_iva, proyecciones_iibb, controles_monotributo, patrones_aprendidos,
+    borradores_extracto_pdf + moldes_extracto_pdf (PDF por revisar y formatos
+    aprendidos, que son aprendizaje como patrones_aprendidos),
     y — opcionalmente — el log de auditoría.
     También limpia las tablas legacy (ordenes_de_pago, pagos, gastos) si existen.
 
@@ -42,6 +44,7 @@ from app.models.cheque import Cheque
 from app.models.contabilidad import Asiento, AsientoDetalle
 from app.models.egreso import Egreso
 from app.models.extracto import ExtractoBancario, MovimientoBanco
+from app.models.extracto_pdf import BorradorExtractoPdf, MoldeExtractoPdf
 from app.models.iibb import ProyeccionIIBB
 from app.models.iva_liquidacion import ComprobanteIva, LiquidacionIva
 from app.models.liquidacion import CierrePeriodo, Liquidacion, LiquidacionDetalle
@@ -127,6 +130,11 @@ def reset_datos_operativos(
         ("liquidaciones_sueldo", db.query(LiquidacionSueldoPeriodo).filter(
             LiquidacionSueldoPeriodo.organizacion_id.in_(orgs))),
         ("planillas", db.query(Planilla).filter(Planilla.organizacion_id.in_(orgs))),
+        # Borradores antes que extractos (extracto_id) y que moldes (molde_id).
+        ("borradores_extracto_pdf", db.query(BorradorExtractoPdf).filter(
+            BorradorExtractoPdf.organizacion_id.in_(orgs))),
+        ("moldes_extracto_pdf", db.query(MoldeExtractoPdf).filter(
+            MoldeExtractoPdf.organizacion_id.in_(orgs))),
         ("movimientos_banco", db.query(MovimientoBanco).filter(
             MovimientoBanco.extracto_id.in_(extractos_de_org))),
         ("extractos_bancarios", db.query(ExtractoBancario).filter(

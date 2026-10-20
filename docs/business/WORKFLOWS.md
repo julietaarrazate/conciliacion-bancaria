@@ -20,7 +20,7 @@ flowchart TD
   J --> K[PDF de cierre mensual]
 ```
 
-1. Julieta recibe el extracto mensual (Excel del banco) y lo sube (`/extractos/upload`).
+1. El estudio recibe el extracto mensual (Excel del banco) y lo sube (`/extractos/upload`).
 2. El contador envía "Últimos Movimientos" (UM) que se agregan sin duplicar (ver §2).
 3. Los clientes envían sus planillas de pagos; se suben y se concilian (`/planillas/upload` +
    conciliación).

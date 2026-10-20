@@ -482,7 +482,7 @@ export const Movimientos: React.FC = () => {
                   <th className="th-macro w-28 text-right">
                     <ExcelFilter label="Importe" active={!!filters.importe} align="right">
                       <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">Importe exacto</p>
-                      <input className="input-field text-xs" placeholder="ej: 128220.58" value={filters.importe} onChange={e => set('importe', e.target.value)} autoFocus />
+                      <input className="input-field text-xs" placeholder="ej: 150000.00" value={filters.importe} onChange={e => set('importe', e.target.value)} autoFocus />
                     </ExcelFilter>
                   </th>
 
@@ -493,7 +493,7 @@ export const Movimientos: React.FC = () => {
                   <th className="th-macro w-28">
                     <ExcelFilter label="Cliente" active={!!filters.cliente} align="right">
                       <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">Cliente acreditado</p>
-                      <input className="input-field text-xs" placeholder="Green, Tucu..." value={filters.cliente} onChange={e => set('cliente', e.target.value)} />
+                      <input className="input-field text-xs" placeholder="Nombre del cliente..." value={filters.cliente} onChange={e => set('cliente', e.target.value)} />
                     </ExcelFilter>
                   </th>
 

@@ -24,7 +24,7 @@ Propósito: revisar un cambio antes de mergear, con foco en los riesgos reales d
    **y** el safety-net idempotente equivalente en `app/db_safety.py` (es el que construye el esquema;
    Alembic solo se sella con `stamp head`).
 4. **Tests**: el cambio trae tests (caso feliz + aislamiento org + 403 + regresión si es bug fix).
-5. **Author del commit**: `Julieta Arrazate <julietaarrazate@gmail.com>` (Vercel bloquea otros).
+5. **Author del commit**: la autoría autorizada (ver [`CONTRIBUTING.md`](../../CONTRIBUTING.md)) (Vercel bloquea otros).
 
 ## Verificación
 

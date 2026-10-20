@@ -435,12 +435,12 @@ def _seed_extracto_monto_duplicado(db, monto=Decimal("24675")):
     db.flush()
     mov_correcto = MovimientoBanco(
         extracto_id=extracto.id, orden=1, fecha=date(2026, 8, 19), mes="agosto",
-        titular="TRANSF DIAZ, FAB 23419881279", monto=monto, saldo=monto,
+        titular="TRANSF PEREZ, JUA 20123456786", monto=monto, saldo=monto,
         source="extracto", organizacion_id=1,
     )
     mov_otro = MovimientoBanco(
         extracto_id=extracto.id, orden=2, fecha=date(2026, 8, 7), mes="agosto",
-        titular="ING TRANSF XIMENA BELLOFA-27314529583", monto=monto, saldo=monto,
+        titular="ING TRANSF LAURA GOMEZ-27222222228", monto=monto, saldo=monto,
         source="extracto", organizacion_id=1,
     )
     db.add_all([mov_correcto, mov_otro])
@@ -462,7 +462,7 @@ def _seed_planilla_fila_ambigua(db, extracto_id, cliente_nombre, monto=Decimal("
     db.add(planilla)
     db.flush()
     row = PlanillaRow(
-        planilla_id=planilla.id, monto=monto, cuit="41988127", titular="Fabio Diaz",
+        planilla_id=planilla.id, monto=monto, cuit="12345678", titular="Juan Perez",
         status="no coincide (2 mov. del mismo monto — revisar CUIT/CBU/titular)",
         organizacion_id=1,
     )
@@ -495,7 +495,7 @@ class TestCandidatosMovimiento:
 class TestAsignarMovimiento:
 
     def test_asignar_resuelve_fila_y_sincroniza_extracto_sin_crear_filas(self, client, db):
-        """El caso real SMT: elegir el movimiento correcto resuelve la fila EN
+        """El caso real de monto duplicado: elegir el movimiento correcto resuelve la fila EN
         SU LUGAR (no crea una fila nueva) y acredita en el extracto."""
         extracto, mov_correcto, mov_otro = _seed_extracto_monto_duplicado(db)
         planilla, cliente, row = _seed_planilla_fila_ambigua(db, extracto.id, "ClienteAsignar")
@@ -679,8 +679,8 @@ class TestUploadPlanilla:
 
     def test_upload_planilla_duplicada_mismo_cliente_retorna_409(self, client, db):
         """Subir el MISMO archivo dos veces para el mismo cliente → 409, no crea
-        una segunda planilla (regresión del duplicado real: Green quedó cargado
-        dos veces porque el contador reenvió el archivo)."""
+        una segunda planilla (regresión de un duplicado real: una planilla quedó
+        cargada dos veces porque se reenvió el archivo)."""
         extracto = _seed_extracto_con_movimientos(db)
         xlsx_bytes = _make_xlsx_bytes([(5000.0, "20123456789", "CLIENTE TEST SA", "REF001")])
         token = _token(db, "admin@plan.test")

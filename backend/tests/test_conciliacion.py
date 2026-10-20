@@ -39,7 +39,7 @@ def test_extraer_cuit_del_titular():
 
 
 def test_extraer_cbu_solo_22_digitos():
-    assert extraer_cbu("CBU 2850590940090418135201 EMPRESA") == "2850590940090418135201"
+    assert extraer_cbu("CBU 2850999400000000012342 EMPRESA") == "2850999400000000012342"
     assert extraer_cbu("solo 11 digitos 20123456789") == ""
     assert extraer_cbu(None) == ""
 
@@ -143,20 +143,20 @@ def test_buscar_match_monto_duplicado_con_cuit_correcto_acredita():
 
 
 def test_buscar_match_monto_duplicado_con_dni_embebido_en_cuit_del_mov_acredita():
-    """Regresión ago 2026 (caso real SMT): la planilla trae solo el DNI (8 dígitos,
+    """Regresión ago 2026 (caso real): la planilla trae solo el DNI (8 dígitos,
     no el CUIT/CUIL completo de 11). Con monto duplicado, el DNI embebido en el
     CUIT del movimiento correcto debe desempatar — el otro candidato, sin ninguna
     coincidencia de identidad, no debe competir."""
     movimientos = [
-        _mov(24675.0, titular="ING TRANSF:XIMENA NATALIA BELLOFA-27314529583", id=858,
+        _mov(24675.0, titular="ING TRANSF:LAURA BEATRIZ GOMEZ-27222222228", id=858,
              fecha=date(2026, 8, 7)),
-        _mov(24675.0, titular="TRANSF DIAZ, FAB 23419881279 VAR VARIOS VARIO", id=87,
+        _mov(24675.0, titular="TRANSF PEREZ, JUA 20123456786 VAR VARIOS VARIO", id=87,
              fecha=date(2026, 8, 19)),
     ]
     resultado, status = buscar_match(
         monto=24675.0,
-        cuit_planilla="41988127",   # DNI, no CUIT completo
-        titular_planilla="Fabio Joel Diaz",
+        cuit_planilla="12345678",   # DNI, no CUIT completo
+        titular_planilla="Juan Carlos Perez",
         referencia_planilla=None,
         fecha_planilla=date(2026, 8, 19),
         movimientos=movimientos,
@@ -195,17 +195,17 @@ def _db_cc():
     s.add(_PC(id=1, codigo="2-1-1-1", nombre="No identificado", tipo="pasivo", nivel=4, activo=True, organizacion_id=1))
     padre = _PC(id=2, codigo="2-1-2-0", nombre="Clientes", tipo="pasivo", nivel=3, activo=True, organizacion_id=1)
     s.add(padre); s.flush()
-    cuenta_cli = _PC(id=3, codigo="2-1-2-1", nombre="Green", tipo="pasivo", nivel=4, activo=True, organizacion_id=1, parent_id=2)
+    cuenta_cli = _PC(id=3, codigo="2-1-2-1", nombre="Cliente Norte", tipo="pasivo", nivel=4, activo=True, organizacion_id=1, parent_id=2)
     s.add(cuenta_cli); s.flush()
-    cli = _Cli(id=1, nombre="Green", organizacion_id=1, cuenta_contable_id=3)
+    cli = _Cli(id=1, nombre="Cliente Norte", organizacion_id=1, cuenta_contable_id=3)
     s.add(cli)
-    s.add(_Pl(id=1, cliente_id=1, usuario_id=1, organizacion_id=1, nombre_archivo="green.xlsx"))
+    s.add(_Pl(id=1, cliente_id=1, usuario_id=1, organizacion_id=1, nombre_archivo="cliente_norte.xlsx"))
     s.flush()
     yield s
     s.close()
 
 
-def _mov_um(s, id, monto, titular="GREEN SA 20111111119"):
+def _mov_um(s, id, monto, titular="CLIENTE NORTE SA 20111111119"):
     m = MovimientoBanco(id=id, extracto_id=1, monto=monto, titular=titular,
                         source="um", um_lote=1, fecha=date(2026, 5, 20))
     s.add(m); s.flush()
@@ -214,7 +214,7 @@ def _mov_um(s, id, monto, titular="GREEN SA 20111111119"):
 
 def _row_pl(s, id, monto):
     r = _PR(id=id, planilla_id=1, organizacion_id=1, monto=monto,
-            cuit="20111111119", titular="GREEN SA", status="pendiente")
+            cuit="20111111119", titular="CLIENTE NORTE SA", status="pendiente")
     s.add(r); s.flush()
     return r
 
@@ -234,7 +234,7 @@ def test_reconciliacion_asiento_agrupado_suma_total(_db_cc):
 
     # 1ª conciliación: solo está m1 → r1 ok, r2 queda pendiente
     _conciliar(s, planilla_rows=[r1, r2], movimientos=[m1],
-               cliente_nombre="Green", fecha_acred_str="hoy", org_id=1, cliente_id=1)
+               cliente_nombre="Cliente Norte", fecha_acred_str="hoy", org_id=1, cliente_id=1)
     assert r1.status == "ok"
     assert _total_asiento_planilla(s) == _Dec("1000")
 
@@ -242,7 +242,7 @@ def test_reconciliacion_asiento_agrupado_suma_total(_db_cc):
     # reflejar 1000 + 2000 = 3000, NO solo el delta (2000).
     m2 = _mov_um(s, 102, _Dec("2000"))
     _conciliar(s, planilla_rows=[r1, r2], movimientos=[m1, m2],
-               cliente_nombre="Green", fecha_acred_str="hoy", org_id=1,
+               cliente_nombre="Cliente Norte", fecha_acred_str="hoy", org_id=1,
                cliente_id=1, solo_pendientes=True)
     assert r2.status == "ok"
     assert _total_asiento_planilla(s) == _Dec("3000")
@@ -346,11 +346,11 @@ def test_diagnostico_fechas_faltantes_no_alarma():
 def test_diagnostico_no_muta_rows_ni_movimientos():
     """READ-ONLY: no cambia status de rows ni ningún campo de movimientos."""
     rows = [_row_diag(5000.0, status="pendiente"), _row_diag(3000.0, status="ok")]
-    movs = [_mov(5000.0, titular="GARCIA MARIA", cliente_acreditado="Green", id=1)]
+    movs = [_mov(5000.0, titular="GARCIA MARIA", cliente_acreditado="Cliente Norte", id=1)]
     d = diagnostico_conciliacion(rows, movs)
     assert rows[0].status == "pendiente"
     assert rows[1].status == "ok"
-    assert movs[0].cliente_acreditado == "Green"
+    assert movs[0].cliente_acreditado == "Cliente Norte"
     assert movs[0].titular == "GARCIA MARIA"
     # shape completo
     assert set(d.keys()) == {

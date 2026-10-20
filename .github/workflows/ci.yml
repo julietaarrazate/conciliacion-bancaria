@@ -4,8 +4,7 @@ name: CI
 # a main y en cada pull request. Los tests usan SQLite en memoria, así que no
 # necesitan servicios externos (no toca Neon/Render).
 #
-# Optimizado para gastar POCOS minutos de Actions (cuota 2000/mes en repos
-# privados), sin sacar ninguna verificación:
+# Optimizado para gastar POCOS minutos de Actions, sin sacar ninguna verificación:
 #   1. concurrency + cancel-in-progress: cancela corridas de commits ya superados.
 #   2. job "changes" (dorny/paths-filter, ~10s): detecta qué área cambió, y solo
 #      corre backend y/o frontend si esa área tiene cambios (un PR solo-backend NO
@@ -20,6 +19,12 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+# paths-filter lee la lista de archivos del PR por la API: hace falta el permiso
+# pull-requests (el token del workflow, por defecto, solo lee el contenido).
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   changes:

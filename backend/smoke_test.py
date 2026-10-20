@@ -5,11 +5,20 @@ Uso:
     1. En una terminal: uvicorn app.main:app --port 8000
     2. En otra:        python smoke_test.py
 
+Variables de entorno:
+    API_URL            URL del backend (default http://localhost:8000)
+    SMOKE_EMAIL        usuario de prueba (obligatoria)
+    SMOKE_PASSWORD     contraseña del usuario de prueba (obligatoria)
+    SMOKE_EXTRACTO     ruta a un extracto .xlsx (opcional; sin ella se saltea la carga)
+    SMOKE_PLANILLA_1   ruta a una planilla de cliente (opcional)
+    SMOKE_PLANILLA_2   ruta a otra planilla de cliente (opcional)
+    SMOKE_CLIENTE_1 / SMOKE_CLIENTE_2   nombre del cliente de cada planilla
+
 Hace:
     - Login admin
     - GET /me
-    - POST /extractos/upload (con extracto real si existe)
-    - POST /planillas/upload (con planilla real si existe)
+    - POST /extractos/upload (si SMOKE_EXTRACTO apunta a un archivo)
+    - POST /planillas/upload (si SMOKE_PLANILLA_n apunta a un archivo)
     - POST /planillas/{id}/conciliar
     - GET /historial/planillas
     - GET /auditoria
@@ -23,14 +32,19 @@ from pathlib import Path
 
 BASE_URL = os.getenv("API_URL", "http://localhost:8000")
 
-# Rutas a archivos reales para el smoke test (opcionales).
-# Configurables con variables de entorno; por defecto usan la carpeta del usuario.
-_DESKTOP = os.path.join(os.path.expanduser("~"), "Desktop")
-EXTRACTO_PATH = Path(os.getenv("SMOKE_EXTRACTO", os.path.join(_DESKTOP, "Extracto Macro", "extracto macro abril.xlsx")))
+SMOKE_EMAIL = os.getenv("SMOKE_EMAIL", "")
+SMOKE_PASSWORD = os.getenv("SMOKE_PASSWORD", "")
+
+# Archivos para el smoke test (opcionales), configurables con variables de entorno.
+EXTRACTO_PATH = os.getenv("SMOKE_EXTRACTO", "")
 PLANILLAS = [
-    (os.getenv("SMOKE_PLANILLA_1", os.path.join(_DESKTOP, "INBOX", "procesados", "alojando.xlsx")), "Alojando"),
-    (os.getenv("SMOKE_PLANILLA_2", os.path.join(_DESKTOP, "INBOX", "procesados", "Green 28.4.xlsx")), "Green"),
+    (os.getenv("SMOKE_PLANILLA_1", ""), os.getenv("SMOKE_CLIENTE_1", "Cliente Este")),
+    (os.getenv("SMOKE_PLANILLA_2", ""), os.getenv("SMOKE_CLIENTE_2", "Cliente Norte")),
 ]
+
+
+def _archivo_existe(path) -> bool:
+    return bool(path) and Path(path).is_file()
 
 
 def fail(msg):
@@ -81,8 +95,8 @@ def get_me(token):
 
 
 def upload_extracto(token, path):
-    if not Path(path).exists():
-        print(f"[skip] extracto no existe: {path}")
+    if not _archivo_existe(path):
+        print(f"[skip] extracto no configurado o inexistente: {path or '(SMOKE_EXTRACTO vacia)'}")
         return None
 
     with open(path, "rb") as f:
@@ -100,8 +114,8 @@ def upload_extracto(token, path):
 
 
 def upload_planilla(token, path, cliente, extracto_id):
-    if not Path(path).exists():
-        print(f"[skip] planilla {cliente} no existe")
+    if not _archivo_existe(path):
+        print(f"[skip] planilla {cliente} no configurada o inexistente")
         return None
 
     with open(path, "rb") as f:
@@ -166,9 +180,12 @@ def main():
     print(f"SMOKE TEST contra {BASE_URL}")
     print("=" * 60)
 
+    if not SMOKE_EMAIL or not SMOKE_PASSWORD:
+        fail("definí SMOKE_EMAIL y SMOKE_PASSWORD (usuario de prueba) antes de correr el smoke test")
+
     wait_for_backend()
 
-    token = login("admin@demo.com", "admin123")
+    token = login(SMOKE_EMAIL, SMOKE_PASSWORD)
     get_me(token)
 
     extracto_id = upload_extracto(token, EXTRACTO_PATH)

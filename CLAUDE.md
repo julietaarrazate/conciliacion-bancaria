@@ -9,7 +9,7 @@ Lee el CLAUDE.md del repo julietaarrazate/conciliacion-bancaria para entender el
 
 ## Autora
 
-**Julieta Arrazate** — julietaarrazate@gmail.com (superadmin del sistema)
+**Julieta Arrazate** — autora y titular del sistema
 
 ---
 
@@ -17,20 +17,17 @@ Lee el CLAUDE.md del repo julietaarrazate/conciliacion-bancaria para entender el
 
 - Frontend (React + PWA): Vercel — https://conciliacion-bancaria-ten.vercel.app
 - Backend (FastAPI): Render — https://conciliacion-api.onrender.com
-- Base de datos: Neon PostgreSQL — ep-ancient-hall-anz4pezn.c-6.us-east-1.aws.neon.tech.
-  `DATABASE_URL` es `sync: false` en `render.yaml` (Render no la autogenera — está seteada a mano
-  en el dashboard de Render, apuntando a Neon; no tocar ese valor desde acá).
-- Código: GitHub — julietaarrazate/conciliacion-bancaria (PRIVADO)
+- Base de datos: Neon PostgreSQL. `DATABASE_URL` es `sync: false` en `render.yaml` (Render no la
+  autogenera — está seteada a mano en el dashboard de Render, apuntando a Neon; no tocar ese valor
+  desde acá).
+- Código: GitHub
 - Keep-alive: UptimeRobot pinguea /health cada 5 min (mantiene despierto a Render). Neon lo
   mantiene despierto un job interno `db_keepalive` (SELECT 1 cada 4 min) — ver "Schedulers".
 
-IDs públicos: Render service `srv-d7pqt81j2pic73c0c6fg` · Vercel `prj_cVINkspVm6j3B1fxOrdU81B0ehWg`
-
-Credenciales: Superadmin `julietaarrazate@gmail.com` / SUPERADMIN_PASSWORD (env var Render)
-Demo (solo debug=true): `admin@julieta.com / admin123`
+Credenciales: la contraseña del superadmin sale de `SUPERADMIN_PASSWORD` (env var del backend).
 
 Deploy manual Render:
-  curl -X POST https://api.render.com/v1/services/srv-d7pqt81j2pic73c0c6fg/deploys \
+  curl -X POST https://api.render.com/v1/services/<RENDER_SERVICE_ID>/deploys \
     -H "Authorization: Bearer <RENDER_API_KEY>"
 
 Env vars opcionales en Render (feature flags — sin la var, la feature se degrada sola, no rompe):
@@ -39,6 +36,7 @@ Env vars opcionales en Render (feature flags — sin la var, la feature se degra
 `VITE_SENTRY_DSN` (Vercel) monitoreo errores · `GOOGLE_CLIENT_ID` (Render) /
 `VITE_GOOGLE_CLIENT_ID` (Vercel) login Google · `S3_*` (5 vars) storage fotos R2 ·
 `INBOUND_EMAIL_DOMAIN` + `RESEND_INBOUND_SECRET` recepción de facturas por mail (Comprobantes por revisar) ·
+`EXTRACTOS_PDF_IA_DAILY_LIMIT` tope diario de lecturas de extractos PDF con IA (default 100) ·
 `ARCA_ENCRYPTION_KEY` ya seteada, módulo ARCA construido pero desactivado a propósito (ver
 "Pendiente para próximas sesiones"). Stack: Python 3.11 / Node 24 (Vercel deja de buildear con Node 20 desde oct 2026), Neon free tier (puede dormir),
 Render free tier (cold start ~30s, mitigado con UptimeRobot + retry en frontend).
@@ -50,7 +48,7 @@ Render free tier (cold start ~30s, mitigado con UptimeRobot + retry en frontend)
 Backend: FastAPI + SQLAlchemy + PostgreSQL (Neon) + Python 3.11
 Frontend: React 18 + TypeScript + Vite + TailwindCSS + PWA instalable
 Auth: JWT 8h · pbkdf2_sha256 · Rate limiting (slowapi) · Headers de seguridad
-Diseño (app autenticada): Linear-inspired · Inter font · dark mode (#0B0B0F)
+Diseño (app autenticada): minimalista · Inter font · dark mode (#0B0B0F)
 Diseño (landing pública `/`): estilo marketing con efectos — gradiente en el título, glow-orb,
 mockup animado en loop, badge parpadeante, StatCounter, Calculadora, Comparativa, Testimoniales,
 Pricing, FAQ (~14 secciones) — más titulares en **Fraunces** (serif display) + acento itálico en
@@ -58,17 +56,17 @@ Cormorant Garamond; Inter sigue siendo el body font en toda la plataforma. Es un
 a propósito del resto de la app: la operadora revirtió (jul 2026) un rediseño sobrio de la landing
 porque "antes era mejor" y porque el copy técnico no lo entiende el cliente — **el copy visible de
 la landing no debe usar jerga interna** ("Decimal punta a punta", "asientos inmutables", "Ley
-25.326"); esos términos son correctos como documentación INTERNA para desarrolladores (ver
-"Fortalezas" en `docs/AUDITORIA_EKP_2026-07.md`), no como copy de cara al cliente. No volver a
-tocar la landing hacia un estilo "sobrio/profesional" sin pedido explícito de la operadora.
+25.326"); esos términos son correctos como documentación INTERNA para desarrolladores, no como
+copy de cara al cliente. No volver a tocar la landing hacia un estilo "sobrio/profesional" sin
+pedido explícito de la operadora.
 
 ---
 
 ## Flujo de negocio
 
-1. Julieta recibe extracto bancario mensual (Excel .xlsx Banco Macro)
+1. Se recibe el extracto bancario mensual (Excel .xlsx Banco Macro)
 2. El contador envía "Últimos Movimientos" (UM) diariamente → se agregan sin duplicar
-3. Los clientes envían planillas de pagos (Green, Tucu, David, Smt, Gwinn, Innova, Camparo, Alojando, Pinares, Paraguay…)
+3. Los clientes envían planillas de pagos, cada uno con su propio formato
 4. El sistema concilia: scoring por CUIT/CBU/número/titular
 5. Resultado: planilla con estado por fila + extracto actualizado
 6. Export Excel para el contador (formato Macro) + PDF de cierre mensual
@@ -88,12 +86,7 @@ es la referencia profunda. **Consultá el doc correspondiente ANTES de tocar su 
 - Diseño / tokens / componentes → `docs/ux/DESIGN_SYSTEM.md` y `docs/ux/UX_RULES.md`
 - Agregar módulo/endpoint/banco/parser/reporte/módulo-contable → `docs/playbooks/`
 - Mapa general y entidades → `docs/architecture/SYSTEM_MAP.md`, `DOMAIN_MODEL.md` · Índice: `docs/README.md`
-- Auditoría de due-diligence EKP (bandas de madurez, veredicto, roadmap por evidencia) →
-  `docs/AUDITORIA_EKP_2026-07.md` (jul 2026, re-audita `ENGINEERING_AUDIT.md` de junio)
-- Gates de Product Genesis (viabilidad de ideas nuevas evaluadas con el generador del EKP) →
-  `docs/ekp/GENESIS_COPILOTO_IMPOSITIVO.md` (condicionalmente viable, no construir sin validar
-  primero) y `docs/ekp/GENESIS_BILLETERAS.md` (NOT VIABLE como producto standalone; VIABLE
-  reencuadrado como feature de Cuadra — parser de billeteras en el motor multi-banco)
+- Auditoría de ingeniería (madurez, deuda técnica, roadmap de ingeniería) → `ENGINEERING_AUDIT.md`
 - Benchmark de competidores (oct 2026: qué incorporar de Xubio, Colppy, Contabilium, Alegra,
   LaPyme, Onvio, en 3 olas por valor/esfuerzo) → `docs/ekp/BENCHMARK_COMPETIDORES_2026-10.md`
 
@@ -111,18 +104,19 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
                    Liquidacion, CierrePeriodo, Cheque, Pago, Gasto,
                    ArqueoDiario, OrdenDePago, PlanCuenta, ReglaContable,
                    Asiento, AsientoDetalle, PasswordResetToken, PushSubscription,
-                   BuzonComprobantes, BorradorComprobante
+                   BuzonComprobantes, BorradorComprobante, BorradorExtractoPdf, MoldeExtractoPdf
   /app/routers   — auth, me, extractos, planillas, historial, auditoria, admin,
                    clientes_dir, organizaciones, liquidaciones, caja, cheques,
                    pagos, contabilidad (+ ctb_*), analisis, search, iva, monotributo,
-                   iibb, sueldos, tarjetas, arca, comprobantes_compra, agente, papelera,
+                   iibb, sueldos, tarjetas, arca, comprobantes_compra, extractos_pdf, agente, papelera,
                    public_router, push_router
                    (lista completa: `docs/architecture/SYSTEM_MAP.md`)
   /app/services  — conciliacion.py, aprendizaje.py, excel_export.py, pdf_export.py,
                    extracto_merger.py, excel_parser.py, motor_contable.py,
                    backup_service.py, backup_scheduler.py, push_service.py,
-                   email_sender.py, password_reset.py
-  /alembic/versions — 001 a 027. En el arranque Alembic solo hace `stamp head`: el esquema real lo
+                   email_sender.py, password_reset.py, decimal_utils.py,
+                   extracto_pdf/ (lector de PDF), extracto_pdf_service.py, extracto_import.py
+  /alembic/versions — 001 a 028. En el arranque Alembic solo hace `stamp head`: el esquema real lo
                       sostienen `create_all` + los safety-nets de `app/db_safety.py`
 
 /frontend/src
@@ -164,6 +158,12 @@ Bancos soportados (16, `detectar_banco` en `excel_parser.py`): Macro, BBVA, Sant
 ICBC, Nación, Provincia, Ciudad, HSBC, Mercado Pago (por headers, no por texto), Credicoop,
 Supervielle, Patagonia, Bancor, Rioja, La Pampa — más genérico como fallback.
 
+**Extractos en PDF** (v3.31): además del Excel, el extracto se puede subir en PDF. Lo lee un lector
+propio sin IA (`services/extracto_pdf/`) con formatos aprendidos por organización; Gemini solo como
+último recurso. Valida el cuadre de saldos en Decimal (`saldos.validar_saldos`), muestra una pantalla
+de revisión y, si se pisa con un extracto existente, agrega solo los nuevos con el merge de UM.
+Antes de tocarlo: `docs/business/EXTRACTOS_PDF.md` (ahí está qué entiende el lector y qué falta).
+
 **Planillas de clientes heterogéneas** (v3.27): la planilla del cliente (distinta del extracto del
 banco) pasa por un embudo de estandarización (`services/planilla_mapper.py`) que la normaliza al
 esquema canónico `{monto, cuit, titular, referencia, fecha}` antes de conciliar. 3 capas: perfil por
@@ -178,7 +178,7 @@ IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ con
 ## Multi-tenant
 
 - Organización A = `organizacion_id=1` (NUNCA modificar — solo cambios aditivos)
-- Julieta es superadmin: ve y gestiona todas las orgs
+- El superadmin ve y gestiona todas las orgs
 - Config por org (JSON): match_rules, tolerancia_monto, dias_tolerancia_fecha, requiere_cierre_periodo
 
 ---
@@ -205,7 +205,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ## Estado actual y changelog
 
-**Versión actual: v3.30.** Historial completo de versiones (v3.6 a v3.30, con detalle de cada
+**Versión actual: v3.31.** Historial completo de versiones (v3.6 a v3.31, con detalle de cada
 feature/fix/PR) en **`CHANGELOG.md`** — no se carga automáticamente en cada sesión, así que si
 necesitás contexto histórico detallado de una versión puntual, leelo directamente.
 
@@ -214,7 +214,9 @@ capa de diagnóstico de conciliación · **v3.28** archivar extractos (cierre de
 estéticos con PDF de planilla conciliada + alertas de descuadre/filas ambiguas + UX de estados
 (labels humanos) · **v3.29** carga masiva de cheques (varios cheques por foto en el OCR) ·
 **v3.30** Comprobantes por revisar: facturas de compra por mail (Resend Inbound) o subidas, leídas
-con IA y confirmadas hacia IVA y Pagos (`docs/business/COMPROBANTES_POR_REVISAR.md`).
+con IA y confirmadas hacia IVA y Pagos (`docs/business/COMPROBANTES_POR_REVISAR.md`) ·
+**v3.31** extractos en PDF: lector sin IA + formatos aprendidos, cuadre de saldos en Decimal,
+pantalla de revisión y "agregar solo los nuevos" (`docs/business/EXTRACTOS_PDF.md`).
 
 Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,
 sin efectos) y la operadora la rechazó — se revirtió a la landing anterior completa (gradiente,
@@ -227,7 +229,7 @@ Liquidaciones, Contabilidad con cuentas corrientes); 5 módulos de liquidación 
 (IVA Proyección, IVA Liquidación real con "Mis Comprobantes" de ARCA, Monotributo, Ingresos Brutos,
 Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
 ARCA (facturación electrónica WSFEv1) construido pero desactivado a propósito (ver "Pendiente para
-próximas sesiones" abajo). **~655 tests backend + ~42 tests frontend** pasando.
+próximas sesiones" abajo). **~970 tests backend + ~118 tests frontend** pasando.
 
 Profesionalización de ingeniería (jun 2026): base de documentación en `/docs` (arquitectura,
 negocio, API, BD, seguridad, UX, playbooks, ADR — cada doc con su "Pendiente de revisar"),
@@ -240,6 +242,11 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
 
 ### Pendiente para próximas sesiones
 
+- **Probar los extractos en PDF (v3.31) con PDFs reales de cada banco**: los tests usan PDFs
+  generados que imitan los formatos. Cada PDF real que no cierre o lea mal se agrega como test en
+  `backend/tests/test_extracto_pdf_casos_dificiles.py` y se corrige el lector. Ideas siguientes
+  propuestas (no construidas, en PRs aparte): recibir extractos por mail y conciliación manual de
+  un movimiento contra varias filas (subtotal verde/rojo).
 - **Activar la recepción de facturas por mail (v3.30)**: el código está mergeado; la subida manual
   con IA ya funciona sin configurar nada. Para el mail: en Resend activar Receiving (confirmar que el
   plan lo incluya), crear un webhook `email.received` a
@@ -249,7 +256,7 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
   `docs/business/COMPROBANTES_POR_REVISAR.md`.
 - **Activar Sentry (observabilidad)**: el código ya está 100% cableado (backend en
   `main.py` con 5% de performance tracing; frontend lazy, auto-captura errores globales al iniciar).
-  Solo falta que Julieta pegue los DSN: en su cuenta de Sentry crear/abrir **dos proyectos** (uno
+  Pendiente de configurar los DSN: en la cuenta de Sentry crear/abrir **dos proyectos** (uno
   Python/FastAPI = backend, uno React = frontend), cada uno da un DSN. Luego: Render → env var
   `SENTRY_DSN` = DSN del proyecto Python (Save and Deploy); Vercel → env var `VITE_SENTRY_DSN` = DSN
   del proyecto React (Redeploy). Complemento ya mergeado (PR #169): el backend loguea como WARNING
@@ -258,17 +265,17 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
   errores recurrentes en Sentry + los `SLOW` en logs de Render para decidir el próximo foco de
   performance con datos medidos, no con auditorías estáticas.
 - **Próximos módulos del plan de liquidación de impuestos** (ver "Plan de expansión" abajo): orden a
-  decidir con Julieta por valor — candidato: Intake Exportador de Servicios.
+  decidir por valor — candidato: Intake Exportador de Servicios.
 - **⏰ RECORDATORIO SEMESTRAL — actualizar escala de Monotributo**: ARCA actualiza los límites de
   facturación anual por categoría cada semestre (ajuste por IPC, en febrero y en julio/agosto).
   Los valores sembrados en `monotributo_service.py` (`_LIMITES_VIGENTES`) son la escala vigente
   desde el 1/feb/2026: si ya salió una escala posterior, están vencidos. Para actualizarlos: ir a
   arca.gob.ar/monotributo/categorias.asp (el fetch directo devuelve 403 por anti-bot — usar
-  WebSearch cruzando 2-3 medios especializados como Ámbito/iProfesional, o pedirle el dato a
-  Julieta) y actualizar la escala vía `PUT /monotributo/categorias/{id}` o re-sembrando el array.
+  WebSearch cruzando 2-3 fuentes especializadas) y actualizar la escala vía
+  `PUT /monotributo/categorias/{id}` o re-sembrando el array.
 - **Activación de ARCA en producción — diferida a pedido**: el módulo (`v3.24`) ya está mergeado y
-  `ARCA_ENCRYPTION_KEY` ya está seteada en Render, pero Julieta decidió NO activarlo todavía — lo
-  dejó listo "por si algún cliente lo solicita" más adelante. Falta, recién cuando haya un cliente
+  `ARCA_ENCRYPTION_KEY` ya está seteada en Render, pero se decidió NO activarlo todavía — queda
+  listo por si algún cliente lo solicita más adelante. Falta, recién cuando haya un cliente
   real interesado en facturar electrónicamente desde Cuadra:
   1. Sacar el certificado de **homologación** en ARCA (gratis, sirve para probar sin validez
      fiscal) y probar el flujo completo en `/arca` antes de tocar producción.
@@ -285,11 +292,10 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
 
 ## Plan de expansión: módulos de liquidación de impuestos
 
-Inspirado en un diagrama de agentes (Codex local) con dos managers: **Manager de Liquidación
-Mensual** (IVA Proyección y DDJJ, Liquidador Sueldos y F931, Ingresos Brutos y Convenio
-Multilateral) y **Manager Exportadores de Servicios** (Intake Exportador, Control Semestral
-Monotributo). Decisión de Julieta: implementarlo de verdad en Cuadra (no quedarse en el diagrama),
-mejor que Codex, como sistema robusto y escalable, e iterar módulo por módulo priorizando por valor.
+Los módulos se organizan en dos grupos: **Liquidación Mensual** (IVA Proyección y DDJJ,
+Liquidador Sueldos y F931, Ingresos Brutos y Convenio Multilateral) y **Exportadores de
+Servicios** (Intake Exportador, Control Semestral Monotributo). Se implementan en Cuadra como
+sistema robusto y escalable, módulo por módulo, priorizando por valor.
 
 **Patrón establecido**: cada módulo es opt-in/configurable por organización (no algo hardcodeado
 para una sola org), sigue la estructura de Tarjetas/Cheques (modelo + service + router con permisos
@@ -316,7 +322,7 @@ Por defecto las fotos de OPs y cheques se guardan como base64 en la DB. Para act
 
 ```
 S3_ENDPOINT     = https://<accountid>.r2.cloudflarestorage.com
-S3_BUCKET       = conciliacion-fotos
+S3_BUCKET       = <nombre-del-bucket>
 S3_ACCESS_KEY   = <de R2>
 S3_SECRET_KEY   = <de R2>
 S3_PUBLIC_URL   = https://pub-xxxx.r2.dev   (o tu dominio custom apuntado al bucket)
@@ -353,10 +359,10 @@ git commit --allow-empty --author="Julieta Arrazate <julietaarrazate@gmail.com>"
 ```
 
 **Rama de trabajo:** el harness asigna rama nueva (`claude/...`). Merge a `main` via PR squash.
-**Keys/tokens:** NUNCA en este archivo. Están en Render, Vercel y GitHub de Julieta.
+**Keys/tokens:** NUNCA en este archivo. Están en los paneles de Render, Vercel y GitHub.
 **Org A:** NUNCA modificar datos existentes — solo cambios aditivos.
 
-### Protocolo de orquestación ultracode (definido por Julieta, junio 2026)
+### Protocolo de orquestación ultracode (definido en junio 2026)
 
 **Ruteo por costo de modelo** (única fuente de esta regla; para no gastar de más):
 - **Fable** (orquestador) — solo diseño y descomposición en tareas atómicas, detección de
@@ -415,27 +421,8 @@ actualizar la documentación afectada. Verificación siempre: lo mismo que corre
 
 ---
 
-## Registro de Obra de Software (DNDA)
-
-**Estado:** expediente preparado, trámite pendiente de inicio por la autora.
-
-**Carpeta:** `REGISTRO_OBRA_SOFTWARE/` — documentación completa del expediente.
-
-**Contenido preparado:**
-- 9 PDFs legibles para el portal DNDA (en `/home/user/PDFS_DNDA/` en la máquina de trabajo)
-- `CODIGO_FUENTE.zip` (596 KB, 241 archivos) — para el link de 72hs que envía DNDA
-- Docs internos: DNDA_CHECKLIST_FINAL.md, DNDA_CAPTURAS.md, DNDA_PRIVACIDAD.md, DNDA_EXCLUSIONES.md
-
-**Pasos que quedan para la autora:**
-1. Crear `CAPTURAS.pdf` con las 27 capturas del sistema y agregarlo al portal
-2. Iniciar el trámite en tramites.argentina.gob.ar → Inscripción de Obra Publicada — Software
-3. Pagar $3.800 (trámite) + 0.2% del valor declarado → guardar comprobantes y subirlos al portal
-4. Esperar mail de `dndadigital@jus.gov.ar` con link de 72hs para subir el código
-5. Cifrar el ZIP con contraseña AES-256 (7-Zip en Windows) y subirlo por el link
-
-**Privacidad del expediente:** sin datos de terceros, sin IDs de infraestructura, sin nombres
-de empleadores. Rutas locales normalizadas a `~/Desktop`. Scripts de testing excluidos del ZIP.
+Registro de obra: el expediente se guarda fuera del repositorio.
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.30
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.31

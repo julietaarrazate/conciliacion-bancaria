@@ -43,7 +43,7 @@ def db():
              role="admin", is_active=True, organizacion_id=ORG_ID)
     session.add(u)
 
-    c = Cliente(id=1, nombre="Green", organizacion_id=ORG_ID)
+    c = Cliente(id=1, nombre="Cliente Norte", organizacion_id=ORG_ID)
     session.add(c)
     session.flush()
 
@@ -89,7 +89,7 @@ def test_backup_contiene_todas_las_tablas_criticas(db):
         "cheques", "egresos", "categorias_egreso",
         "arqueos_diarios", "liquidaciones", "cierres_periodo",
         "plan_cuentas", "reglas_contables", "asientos",
-        "patrones_aprendidos", "auditoria",
+        "patrones_aprendidos", "moldes_extracto_pdf", "auditoria",
     ]
     for tabla in tablas_esperadas:
         assert tabla in backup, f"Falta '{tabla}' en el backup"

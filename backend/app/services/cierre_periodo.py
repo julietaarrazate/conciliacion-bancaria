@@ -5,7 +5,7 @@ los registros financieros con fecha dentro del período cerrado quedan
 inmutables: no se pueden editar status, borrar, ni modificar montos.
 
 El cierre aplica solo a organizaciones con requiere_cierre_periodo=true
-en su configuración (Caneland tiene false → no le afecta).
+en su configuración (las organizaciones con false no se ven afectadas).
 """
 from datetime import date
 from typing import Optional

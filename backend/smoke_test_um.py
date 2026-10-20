@@ -3,6 +3,14 @@ Smoke test extendido: prueba el merge de UM detectando duplicados.
 
 Sube el extracto, despues sube el MISMO extracto como UM (esperando 100% duplicados),
 despues lista movimientos con filtros tipo Excel.
+
+Variables de entorno:
+    API_URL           URL del backend (default http://localhost:8000)
+    SMOKE_EMAIL       usuario de prueba (obligatoria)
+    SMOKE_PASSWORD    contraseña del usuario de prueba (obligatoria)
+    SMOKE_EXTRACTO    ruta a un extracto .xlsx (obligatoria)
+    SMOKE_PLANILLA_2  ruta a una planilla de cliente (opcional)
+    SMOKE_CLIENTE_2   nombre del cliente de esa planilla (default "Cliente Norte")
 """
 import os
 import sys
@@ -10,8 +18,11 @@ import requests
 from pathlib import Path
 
 BASE_URL = os.getenv("API_URL", "http://localhost:8000")
-_DESKTOP = os.path.join(os.path.expanduser("~"), "Desktop")
-EXTRACTO = Path(os.getenv("SMOKE_EXTRACTO", os.path.join(_DESKTOP, "Extracto Macro", "extracto macro abril.xlsx")))
+SMOKE_EMAIL = os.getenv("SMOKE_EMAIL", "")
+SMOKE_PASSWORD = os.getenv("SMOKE_PASSWORD", "")
+EXTRACTO = Path(os.getenv("SMOKE_EXTRACTO", "")) if os.getenv("SMOKE_EXTRACTO") else None
+PLANILLA = Path(os.getenv("SMOKE_PLANILLA_2", "")) if os.getenv("SMOKE_PLANILLA_2") else None
+CLIENTE = os.getenv("SMOKE_CLIENTE_2", "Cliente Norte")
 
 
 def fail(m):
@@ -28,8 +39,11 @@ def main():
     print("SMOKE TEST UM + FILTROS")
     print("=" * 60)
 
+    if not SMOKE_EMAIL or not SMOKE_PASSWORD:
+        fail("definí SMOKE_EMAIL y SMOKE_PASSWORD (usuario de prueba)")
+
     # login
-    r = requests.post(f"{BASE_URL}/auth/login", json={"email": "admin@demo.com", "password": "admin123"})
+    r = requests.post(f"{BASE_URL}/auth/login", json={"email": SMOKE_EMAIL, "password": SMOKE_PASSWORD})
     if not r.ok:
         fail(f"login: {r.text}")
     token = r.json()["access_token"]
@@ -37,8 +51,8 @@ def main():
     ok("login admin")
 
     # subir extracto
-    if not EXTRACTO.exists():
-        fail(f"no existe {EXTRACTO}")
+    if EXTRACTO is None or not EXTRACTO.is_file():
+        fail(f"definí SMOKE_EXTRACTO con la ruta a un extracto .xlsx existente (actual: {EXTRACTO})")
 
     with open(EXTRACTO, "rb") as f:
         r = requests.post(
@@ -72,20 +86,20 @@ def main():
     ok(f"UM detecto correctamente {s['duplicados']} duplicados (no agrego nada)")
 
     # subir planilla y conciliar para tener cliente_acreditado
-    planilla_path = Path(os.getenv("SMOKE_PLANILLA_2", os.path.join(_DESKTOP, "INBOX", "procesados", "Green 28.4.xlsx")))
-    if planilla_path.exists():
+    planilla_path = PLANILLA
+    if planilla_path is not None and planilla_path.is_file():
         with open(planilla_path, "rb") as f:
             r = requests.post(
                 f"{BASE_URL}/planillas/upload",
                 headers=h,
                 files={"file": (planilla_path.name, f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
-                params={"cliente_nombre": "Green", "extracto_id": extracto_id},
+                params={"cliente_nombre": CLIENTE, "extracto_id": extracto_id},
                 timeout=60
             )
         if not r.ok:
-            fail(f"upload planilla Green: {r.text[:200]}")
+            fail(f"upload planilla {CLIENTE}: {r.text[:200]}")
         pid = r.json()["id"]
-        ok(f"planilla Green subida id={pid}")
+        ok(f"planilla {CLIENTE} subida id={pid}")
 
         r = requests.post(f"{BASE_URL}/planillas/{pid}/conciliar", headers=h, params={"fecha_acred": "hoy"})
         if not r.ok:
@@ -102,10 +116,10 @@ def main():
     ok(f"sin filtros: total={r.json()['total']}")
 
     r = requests.get(f"{BASE_URL}/extractos/{extracto_id}/movimientos", headers=h,
-                     params={"cliente": "Green", "limit": 1000})
+                     params={"cliente": CLIENTE, "limit": 1000})
     if not r.ok:
         fail(f"filtro cliente: {r.text[:200]}")
-    ok(f"cliente=Green: total={r.json()['total']}")
+    ok(f"cliente={CLIENTE}: total={r.json()['total']}")
 
     r = requests.get(f"{BASE_URL}/extractos/{extracto_id}/movimientos", headers=h,
                      params={"sin_acreditar": "true", "limit": 1000})

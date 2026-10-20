@@ -181,7 +181,7 @@ Ver BUGS.md → "Fechas en zona horaria Argentina (UTC-3)".
 
 ---
 
-## 8. Las 20 migraciones (`alembic/versions/`)
+## 8. Las 28 migraciones (`alembic/versions/`)
 
 | Rev | Archivo | Qué hace |
 |-----|---------|----------|
@@ -205,6 +205,14 @@ Ver BUGS.md → "Fechas en zona horaria Argentina (UTC-3)".
 | 018 | `018_total_retencion.py` | Total de retención de Ganancias 4ta en el período de liquidación de sueldos |
 | 019 | `019_arca.py` | Módulo ARCA (ex-AFIP) — facturación electrónica WSFEv1/WSAA |
 | 020 | `020_extracto_fp_excl_borrados.py` | Redefine `uq_extracto_fp_org` para excluir extractos borrados (soft delete) |
+| 021 | `021_iva_liquidacion.py` | IVA Liquidación real: `comprobantes_iva` (staging del Excel "Mis Comprobantes" de ARCA, UNIQUE de dedup) |
+| 022 | `022_cliente_mapeo_planilla.py` | `clientes.mapeo_planilla` (JSONB): perfil aprendido del formato de planilla del cliente |
+| 023 | `023_planilla_total_declarado.py` | `planillas.total_declarado` (NUMERIC(14,2)): total que el cliente pone al pie de su planilla |
+| 024 | `024_planilla_row_fecha.py` | `planilla_rows.fecha` (DATE): fecha de pago declarada en la planilla |
+| 025 | `025_extracto_archivado.py` | `extractos_bancarios.archivado_at`: archivar extractos (cierre de período) |
+| 026 | `026_planilla_fingerprint.py` | `planillas.fingerprint` + índice único parcial (cliente, fingerprint, org) sin borradas |
+| 027 | `027_comprobantes_por_revisar.py` | `buzon_comprobantes` y `borradores_comprobante` (facturas de compra por mail / IA) |
+| 028 | `028_extractos_pdf.py` | `moldes_extracto_pdf` y `borradores_extracto_pdf` (extractos en PDF: formatos aprendidos y borradores de revisión) |
 
 ---
 

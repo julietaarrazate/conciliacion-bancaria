@@ -48,6 +48,7 @@ Todos los routers se montan en `backend/app/main.py` (`app.include_router(...)`)
 | `sueldos.py` | `/sueldos` | — |
 | `arca.py` | `/arca` | — |
 | `comprobantes_compra.py` | `/comprobantes-compra` | webhook `/webhook/resend` sin JWT (firma Svix) |
+| `extractos_pdf.py` | `/extractos-pdf` | — |
 
 > Las rutas públicas sin auth (`/p/:token`, `/privacidad`, `/terminos`) son
 > servidas por `public_router.py` (`/public`) + páginas frontend dedicadas.
@@ -62,6 +63,16 @@ Todos los routers se montan en `backend/app/main.py` (`app.include_router(...)`)
 | Services | `conciliacion.py` (motor de scoring) · `excel_parser.py` (detección de banco + parseo) · `extracto_merger.py` (merge de UM sin duplicar) · `aprendizaje.py` (IA Nivel 2) · `excel_export.py` · `pdf_export.py` |
 | Modelos | `ExtractoBancario`, `MovimientoBanco` (`extracto.py`) · `Planilla`, `PlanillaRow` (`planilla.py`) · `Cliente` (`cliente.py`) · `PatronAprendido` (`patron_aprendido.py`) |
 | Páginas | `Dashboard.tsx` · `Bulk.tsx` (carga masiva) · `ExtractosArchivo.tsx` · `Movimientos.tsx` · `Conciliaciones.tsx` · `Historial.tsx` · `Revision.tsx` |
+
+## 1b. Extractos en PDF (lectura sin IA + cuadre + revisión) — v3.31
+
+| Aspecto | Ubicación |
+|---|---|
+| Router | `extractos_pdf.py` (`/extractos-pdf`) |
+| Services | `extracto_pdf/` (lector puro: texto, tabla, fechas, bancos, `saldos.validar_saldos`, molde, ia, `lector.leer_extracto_pdf`) · `extracto_pdf_service.py` (borradores, duplicados, confirmación, aprendizaje) · `extracto_import.py` (crear extracto + asiento de UM, compartido con el upload de Excel) |
+| Modelos | `BorradorExtractoPdf`, `MoldeExtractoPdf` (`extracto_pdf.py`) |
+| Componentes | `extractos/ImportarExtractoPdfModal.tsx` · `extractos/RevisionExtractoPdf.tsx` · `extractos/filasExtracto.ts` · `utils/saldoExtracto.ts` — se abren desde `Dashboard.tsx` y `ExtractosArchivo.tsx` |
+| Reglas | [../business/EXTRACTOS_PDF.md](../business/EXTRACTOS_PDF.md) |
 
 ## 2. Clientes (directorio)
 
@@ -245,7 +256,7 @@ Todos los routers se montan en `backend/app/main.py` (`app.include_router(...)`)
 | Service | Rol |
 |---|---|
 | `tz.py` | Timezone ART (`hoy_art`, etc.) |
-| `decimal_utils.py` | Helpers de `Decimal` para montos |
+| `decimal_utils.py` | Helpers de `Decimal` para montos (`parse_importe_ar`: importes AR/US, nunca lanza) |
 | `storage.py` | Foto a R2 (S3) o base64 fallback |
 | `email_sender.py` | Envío de email centralizado (Resend) |
 | `backup_service.py` / `backup_scheduler.py` | Backup completo + schedulers |

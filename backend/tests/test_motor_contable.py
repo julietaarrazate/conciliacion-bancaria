@@ -135,7 +135,7 @@ def test_extracto_suma_montos_negativos_en_abs(db):
 def test_planilla_solo_suma_filas_ok(db):
     rows = [_row(1000, "ok"), _row(500, "pendiente"), _row(2000, "ok"), _row(300, "no está")]
     mc.registrar_planilla(db, planilla_id=1, org_id=ORG_ID, usuario_id=1,
-                          cliente_nombre="Green", nombre_archivo="x.xlsx",
+                          cliente_nombre="Cliente Norte", nombre_archivo="x.xlsx",
                           rows=rows, fecha_acred=date(2026, 5, 23))
 
     asiento = _asientos_de(db, "planilla", 1)[0]
@@ -146,10 +146,10 @@ def test_planilla_solo_suma_filas_ok(db):
 def test_planilla_re_conciliacion_actualiza_monto(db):
     """solo_pendientes=True debe ACTUALIZAR el asiento, no crear uno nuevo."""
     rows1 = [_row(1000)]
-    mc.registrar_planilla(db, 1, ORG_ID, 1, "Green", "x.xlsx", rows1, date(2026, 5, 23))
+    mc.registrar_planilla(db, 1, ORG_ID, 1, "Cliente Norte", "x.xlsx", rows1, date(2026, 5, 23))
 
     rows2 = [_row(1000), _row(500)]
-    mc.registrar_planilla(db, 1, ORG_ID, 1, "Green", "x.xlsx", rows2,
+    mc.registrar_planilla(db, 1, ORG_ID, 1, "Cliente Norte", "x.xlsx", rows2,
                           date(2026, 5, 23), solo_pendientes=True)
 
     asientos = _asientos_de(db, "planilla", 1)
@@ -159,7 +159,7 @@ def test_planilla_re_conciliacion_actualiza_monto(db):
 
 def test_planilla_comision_genera_segundo_asiento(db):
     rows = [_row(10000)]
-    mc.registrar_planilla(db, 1, ORG_ID, 1, "Green", "x.xlsx", rows,
+    mc.registrar_planilla(db, 1, ORG_ID, 1, "Cliente Norte", "x.xlsx", rows,
                           date(2026, 5, 23), comision_pct=1.5)
 
     principales = _asientos_de(db, "planilla", 1)
@@ -171,7 +171,7 @@ def test_planilla_comision_genera_segundo_asiento(db):
 
 def test_planilla_sin_filas_ok_no_crea_asiento(db):
     rows = [_row(1000, "pendiente"), _row(500, "no está")]
-    mc.registrar_planilla(db, 1, ORG_ID, 1, "Green", "x.xlsx", rows, date(2026, 5, 23))
+    mc.registrar_planilla(db, 1, ORG_ID, 1, "Cliente Norte", "x.xlsx", rows, date(2026, 5, 23))
     assert len(_asientos_de(db, "planilla", 1)) == 0
 
 
@@ -349,7 +349,7 @@ def test_org_sin_regla_no_crashea(db):
 def test_monto_negativo_no_crea_asiento_planilla(db):
     """Una planilla con suma negativa NO debe generar asiento — protege la contabilidad."""
     rows = [_row(-500, "ok")]
-    mc.registrar_planilla(db, 1, ORG_ID, 1, "Green", "x.xlsx", rows, date(2026, 5, 23))
+    mc.registrar_planilla(db, 1, ORG_ID, 1, "Cliente Norte", "x.xlsx", rows, date(2026, 5, 23))
     assert len(_asientos_de(db, "planilla", 1)) == 0
 
 
@@ -405,7 +405,7 @@ def test_reversar_sin_asientos_originales_no_hace_nada(db):
 
 def test_original_mas_reverso_neto_es_cero(db):
     """Suma de original + reverso: el efecto neto sobre cada cuenta es 0."""
-    mc.registrar_planilla(db, 1, ORG_ID, 1, "Green", "x.xlsx",
+    mc.registrar_planilla(db, 1, ORG_ID, 1, "Cliente Norte", "x.xlsx",
                           [_row(1000)], date(2026, 5, 23))
     mc.reversar_asientos(db, "planilla", 1, ORG_ID, usuario_id=1)
 
@@ -448,7 +448,7 @@ def test_reverso_referencia_al_asiento_original(db):
 
 # ─── Reclasificación agrupada por planilla (v3.13) ────────────────────────────
 
-def _cliente_con_cuenta(db, nombre="Green"):
+def _cliente_con_cuenta(db, nombre="Cliente Norte"):
     """Crea un Cliente con su cuenta contable (2-1-2-X) ya vinculada."""
     from app.models.cliente import Cliente
     padre = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-2-0", PlanCuenta.organizacion_id == ORG_ID).first()
@@ -469,7 +469,7 @@ def test_reclasificacion_planilla_un_asiento_agrupado(db):
         db, planilla_id=10, org_id=ORG_ID, usuario_id=1,
         cliente_id=cli.id, cliente_nombre=cli.nombre,
         total_monto=Decimal("3000"), fecha=date(2026, 5, 23),
-        nombre_archivo="green.xlsx",
+        nombre_archivo="cliente_norte.xlsx",
     )
     asientos = _asientos_de(db, "um_reclass_planilla", 10)
     assert len(asientos) == 1
@@ -492,7 +492,7 @@ def test_reclasificacion_planilla_con_comision_separa_neto_y_comision(db):
         db, planilla_id=20, org_id=ORG_ID, usuario_id=1,
         cliente_id=cli.id, cliente_nombre=cli.nombre,
         total_monto=Decimal("100000"), fecha=date(2026, 8, 20),
-        nombre_archivo="alojando.xlsx", comision_pct=Decimal("2"),
+        nombre_archivo="cliente_este.xlsx", comision_pct=Decimal("2"),
     )
     principales = _asientos_de(db, "um_reclass_planilla", 20)
     comisiones = _asientos_de(db, "um_reclass_planilla_comision", 20)
@@ -586,7 +586,7 @@ def test_conciliar_planilla_genera_asiento_por_origen_con_comision(db):
     sin que se pisen entre sí en la misma planilla."""
     from app.services.conciliacion import conciliar_planilla, CONFIG_DEFAULT_ORG
 
-    cli, cuenta_cli = _cliente_con_cuenta(db, nombre="Alojando")
+    cli, cuenta_cli = _cliente_con_cuenta(db, nombre="Cliente Este")
 
     mov_extracto = SimpleNamespace(
         id=101, source="extracto", monto=Decimal("98000"), titular="JUAN PEREZ",
@@ -611,7 +611,7 @@ def test_conciliar_planilla_genera_asiento_por_origen_con_comision(db):
         db=db,
         planilla_rows=[row_extracto, row_um],
         movimientos=[mov_extracto, mov_um],
-        cliente_nombre="Alojando",
+        cliente_nombre="Cliente Este",
         fecha_acred_str="2026-08-20",
         org_config=CONFIG_DEFAULT_ORG,
         org_id=ORG_ID,

@@ -30,11 +30,6 @@ from sqlalchemy import func, case
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
 
-CLIENTES_NOMBRES = [
-    "Green", "Tucu", "David", "Smt", "Gwinn",
-    "Innova", "Camparo", "Alojando", "Pinares", "Paraguay"
-]
-
 
 def get_desktop_path() -> str:
     """Ruta al Desktop según el OS"""
@@ -138,7 +133,7 @@ def guardar_planilla_en_carpeta(
             carpeta = os.path.join(get_clientes_base(), p.cliente.nombre, anio, mes_anio)
             os.makedirs(carpeta, exist_ok=True)
 
-            # Nombre coincide con el de descarga: "alojando acreditado 8.5.xlsx"
+            # Nombre coincide con el de descarga: "cliente norte acreditado 8.5.xlsx"
             ruta_final = os.path.join(carpeta, nombre_archivo)
             contador = 2
             while os.path.exists(ruta_final):
@@ -167,8 +162,30 @@ def guardar_planilla_en_carpeta(
 
 
 @router.get("/estructura")
-def get_estructura(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return {"clientes": CLIENTES_NOMBRES}
+def get_estructura(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Nombres de los clientes de la organización activa, en orden alfabético.
+
+    `org_id` solo se respeta si el usuario puede operar en esa org
+    (`can_switch_org`); si no, se usa la org del propio usuario.
+    """
+    from app.models.cliente import Cliente
+
+    if org_id and can_switch_org(current_user, org_id):
+        scope_org_id = org_id
+    else:
+        scope_org_id = current_user.organizacion_id or 1
+
+    nombres = (
+        db.query(Cliente.nombre)
+        .filter(Cliente.organizacion_id == scope_org_id)
+        .order_by(Cliente.nombre)
+        .all()
+    )
+    return {"clientes": [n for (n,) in nombres]}
 
 
 @router.get("/archivos")
@@ -297,8 +314,8 @@ def buscar_movimiento_para_acreditar(
       - monto: float (obligatorio)
       - fecha: ISO date (obligatorio) — fecha del comprobante
       - tolerancia_dias: int = 5 — ventana de busqueda
-      - referencia: str opcional — codigo de ref (ej "00194624")
-      - origen: str opcional — nombre/CUIT del que paga (ej "Walter Daniel Leguisa" o "20221499")
+      - referencia: str opcional — codigo de ref (ej "00123456")
+      - origen: str opcional — nombre/CUIT del que paga (ej "Juan Pérez" o "12345678")
 
     Devuelve lista de candidatos ordenados por score, donde el primero suele
     ser el correcto. Si hay uno solo de score alto, el frontend lo acredita
@@ -397,7 +414,7 @@ def buscar_movimiento_para_acreditar(
         ya_acreditado_a_otro = (m.cliente_acreditado and m.cliente_acreditado != cli.nombre
                                 and m.cliente_acreditado.lower() != "no identificado")
         if ya_acreditado_a_otro:
-            score -= 100  # baja al fondo pero todavia es visible para que ella decida
+            score -= 100  # baja al fondo pero todavia es visible para que el usuario decida
 
         # Si ya esta acreditado a ESTE cliente, marcar
         ya_este = m.cliente_acreditado and m.cliente_acreditado.lower() == cli.nombre.lower()

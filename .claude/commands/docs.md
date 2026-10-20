@@ -33,5 +33,4 @@ verificación es lectura.
 
 ## PR
 
-Rama `claude/...` → PR squash, commits con
-`git commit --author="Julieta Arrazate <julietaarrazate@gmail.com>"`.
+Rama `claude/...` → PR squash, commits con la autoría autorizada (ver [`CONTRIBUTING.md`](../../CONTRIBUTING.md)).

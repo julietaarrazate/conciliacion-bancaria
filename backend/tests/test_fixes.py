@@ -29,20 +29,20 @@ from app.services.extracto_merger import _match_existente, _normalizar_titular
 from datetime import date
 
 EXISTENTES = [
-    (128220.58, 99657675.21, "2026-05-18", "ing transf juan ejemplo perez"),
-    (50000.0,   99607675.21, "2026-05-17", "tef empresa abc sa"),
+    (128220.58, 1257675.21, "2026-05-18", "ing transf juan ejemplo perez"),
+    (50000.0,   1207675.21, "2026-05-17", "tef empresa abc sa"),
 ]
 
 def test_match_por_saldo_y_monto():
-    mov = {"monto": 128220.58, "saldo": 99657675.21, "fecha": date(2026, 5, 18), "titular": "ING TRANSF:JUAN EJEMPLO PEREZ-20111111112"}
+    mov = {"monto": 128220.58, "saldo": 1257675.21, "fecha": date(2026, 5, 18), "titular": "ING TRANSF:JUAN EJEMPLO PEREZ-20111111112"}
     assert _match_existente(mov, EXISTENTES) is True
 
 def test_no_match_distinto_saldo():
-    mov = {"monto": 128220.58, "saldo": 99841971.69, "fecha": date(2026, 5, 18), "titular": "TEF EMPRESA DEMO SAS"}
+    mov = {"monto": 128220.58, "saldo": 1441971.69, "fecha": date(2026, 5, 18), "titular": "TEF EMPRESA DEMO SAS"}
     assert _match_existente(mov, EXISTENTES) is False
 
 def test_no_match_distinto_monto():
-    mov = {"monto": 184296.48, "saldo": 99657675.21, "fecha": date(2026, 5, 18), "titular": "algo"}
+    mov = {"monto": 184296.48, "saldo": 1257675.21, "fecha": date(2026, 5, 18), "titular": "algo"}
     assert _match_existente(mov, EXISTENTES) is False
 
 def test_normalizar_titular_saca_cuit():
@@ -76,7 +76,7 @@ def test_duplicado_cuando_mov_ya_en_procesados():
 def test_acreditado_cuando_mov_tiene_cliente_previo():
     """Movimiento ya acreditado a alguien antes → acreditado DD/MM"""
     from datetime import date
-    mov = FakeMov(1, 50000.0, cliente_acreditado="Green", fecha_acred=date(2026, 5, 17))
+    mov = FakeMov(1, 50000.0, cliente_acreditado="Cliente Norte", fecha_acred=date(2026, 5, 17))
     procesados = set()  # no usado en esta corrida
     _, status = buscar_match(50000.0, None, None, None, None, [mov], procesados, ORG_CONFIG)
     assert "acreditado" in status
@@ -104,7 +104,7 @@ def test_es_libre_no_identificado():
     assert es_libre("no identificado") is True
 
 def test_es_libre_con_cliente():
-    assert es_libre("Green SA") is False
+    assert es_libre("Cliente Norte SA") is False
 
 
 if __name__ == "__main__":

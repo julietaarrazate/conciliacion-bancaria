@@ -1,14 +1,12 @@
 # ENGINEERING_AUDIT — Cuadra
 
 > Auditoría de ingeniería del repositorio, pensada como foto de madurez + hoja de ruta para que
-> Cuadra pueda ser mantenido por un equipo profesional y por asistentes de IA durante los próximos
-> años. Basada en el estado real del código y en las Fases 1–3 de profesionalización.
+> Cuadra pueda ser mantenido por un equipo profesional durante los próximos años. Basada en el estado real del código y en las Fases 1–3 de profesionalización.
 >
 > Fecha: junio 2026 · Versión de producto: v3.24 · Complementa a
 > [`.claude/memory/PROJECT_MEMORY.md`](.claude/memory/PROJECT_MEMORY.md) y [`docs/`](docs/README.md).
 
-> **Re-auditoría 2026-07-10 (formato EKP)**: ver
-> [`docs/AUDITORIA_EKP_2026-07.md`](docs/AUDITORIA_EKP_2026-07.md) — 558 tests
+> **Re-auditoría 2026-07-10**: 558 tests
 > verdes medidos (+97 desde esta foto), veredicto *conditionally ready* con 3
 > bloqueadores operativos (infra paga, restore ensayado, branch protection).
 
@@ -111,8 +109,8 @@ bus factor) y la **disciplina sostenida** (que estas fases instituyen).
 ## 8. Recomendaciones para escalar (próximos años)
 
 1. **Institucionalizar el ciclo de trabajo y los loops** ([`docs/playbooks/LOOPS.md`](docs/playbooks/LOOPS.md))
-   — orquestar por costo de modelo (leer con Haiku, razonar lo difícil con Opus) mantiene el costo
-   bajo control a medida que crece la superficie.
+   — escalar el rigor al riesgo de cada cambio mantiene el costo bajo control a medida que crece
+   la superficie.
 2. **Medir antes de optimizar**: la lección recurrente de esta etapa es que las auditorías estáticas
    se equivocan; decidir con Sentry + logs.
 3. **Reducir el bus factor**: la doc y los procesos ya ayudan; el siguiente paso es runbooks de

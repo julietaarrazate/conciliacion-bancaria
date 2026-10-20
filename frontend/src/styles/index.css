@@ -40,7 +40,7 @@ input, textarea, [contenteditable="true"],
 
 /* ─── Verde de marca (mode-aware) ────────────────────────
    Un solo token de verde que se adapta al fondo: legible en claro
-   (#16A34A) y brillante "Matrix" en oscuro (#4ADE80). Lo consume Tailwind
+   (#16A34A) y brillante en oscuro (#4ADE80). Lo consume Tailwind
    como `ml-green` y `status-ok` (ver tailwind.config.js). Formato canales
    "R G B" para soportar opacidad (bg-ml-green/20). */
 :root { --ml-green: 22 163 74; }   /* #16A34A — claro */
@@ -122,7 +122,7 @@ input, textarea, [contenteditable="true"],
     @apply block text-xs font-semibold text-ml-text-soft dark:text-gray-400 mb-1.5 uppercase tracking-wide;
   }
 
-  /* Badges — Linear style */
+  /* Badges */
   .badge { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-2xs font-semibold; }
   .badge-ok    { @apply badge bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900; }
   .badge-warn  { @apply badge bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900; }
@@ -130,7 +130,7 @@ input, textarea, [contenteditable="true"],
   .badge-info  { @apply badge bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-900; }
   .badge-neutral { @apply badge bg-gray-100 text-gray-600 border border-gray-200 dark:bg-ml-dark-card dark:text-gray-400 dark:border-ml-dark-border; }
 
-  /* KPI cards — Linear style */
+  /* KPI cards */
   .kpi {
     @apply bg-white rounded-xl border border-ml-gray/70 p-4 shadow-card
            dark:bg-ml-dark-surface dark:border-ml-dark-border;

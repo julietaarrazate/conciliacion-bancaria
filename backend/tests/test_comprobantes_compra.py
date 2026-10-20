@@ -39,12 +39,12 @@ from app.routers import comprobantes_compra as router_mod
 from app.services import comprobantes_compra_service as svc
 from app.services.auth import create_access_token, get_password_hash
 
-CUIT_PROV = "30690783521"   # CUIT real con dígito verificador válido
+CUIT_PROV = "30555555551"   # CUIT ficticio con dígito verificador válido
 
 RESPUESTA_IA = {
     "tipo_codigo": 1, "punto_venta": "0010", "numero": "00000999",
-    "fecha": "2026-09-15", "cuit_emisor": "30-69078352-1",
-    "razon_social": "INTERBANKING SA", "cae": "76123456789012",
+    "fecha": "2026-09-15", "cuit_emisor": "30-55555555-1",
+    "razon_social": "PROVEEDOR DEMO SA", "cae": "76123456789012",
     "alicuotas": [{"alicuota": "21%", "neto": "20.000,00", "iva": 4200}],
     "neto_no_gravado": None, "exento": None,
     "percepciones_iva": 600, "percepciones_iibb": "500.00",
@@ -126,8 +126,8 @@ def test_parse_decimal_formato_argentino(raw, esperado):
 
 def test_cuit_valido():
     assert svc.cuit_valido(CUIT_PROV)
-    assert not svc.cuit_valido("30690783522")     # dígito verificador mal
-    assert not svc.cuit_valido("3069078352")      # 10 dígitos
+    assert not svc.cuit_valido("30555555552")     # dígito verificador mal
+    assert not svc.cuit_valido("3055555555")      # 10 dígitos
     assert not svc.cuit_valido(None)
 
 
@@ -172,7 +172,7 @@ def test_validar_detecta_problemas():
     d = svc.normalizar_datos({**RESPUESTA_IA, "tipo_codigo": 11})
     assert any("comprobante C" in a for a in svc.validar_datos(d, hoy))
 
-    d = svc.normalizar_datos({**RESPUESTA_IA, "cuit_emisor": "30690783522"})
+    d = svc.normalizar_datos({**RESPUESTA_IA, "cuit_emisor": "30555555552"})
     assert any("CUIT" in a for a in svc.validar_datos(d, hoy))
 
     d = svc.normalizar_datos({"total": 100})
@@ -224,7 +224,7 @@ def test_subir_lee_con_ia_y_queda_listo(client, db):
     item = r.json()["items"][0]
     assert item["id"] == bid and item["estado"] == "listo"
     assert item["archivo"] is None                         # la bandeja no trae el archivo
-    assert item["datos"]["razon_social"] == "INTERBANKING SA"
+    assert item["datos"]["razon_social"] == "PROVEEDOR DEMO SA"
     assert item["alertas"] == []
     det = client.get(f"/comprobantes-compra/{bid}", headers=_auth(db, "admin@cc.test")).json()
     assert det["archivo"].startswith("data:application/pdf;base64,")
@@ -327,7 +327,7 @@ def test_import_mis_comprobantes_posterior_cuenta_duplicado(client, db):
     ws.append(["Mis Comprobantes Recibidos"] + [None] * (len(headers) - 1))
     ws.append(headers)
     ws.append(["15/09/2026", "1 - Factura A", 10, 999, 999, 1, "CUIT", int(CUIT_PROV),
-               "INTERBANKING SA", "CUIT", 30716892871, 1, "$", 4200, 20000, 20000, 4200, 25300])
+               "PROVEEDOR DEMO SA", "CUIT", 30700000008, 1, "$", 4200, 20000, 20000, 4200, 25300])
     buf = io.BytesIO()
     wb.save(buf)
     r = client.post("/iva/comprobantes/importar?direccion=recibido&periodo=2026-09", headers=h,
@@ -347,7 +347,7 @@ def test_confirmar_con_pago_crea_egreso(client, db):
     assert r.json()["egreso_id"] == eg.id
     assert eg.tipo == "proveedor" and eg.forma_pago == "banco"
     assert eg.monto == Decimal("25300.00") and eg.fecha == date(2026, 9, 20)
-    assert eg.beneficiario == "INTERBANKING SA"
+    assert eg.beneficiario == "PROVEEDOR DEMO SA"
     assert eg.foto_comprobante is None                 # un PDF no se muestra como foto en Pagos
 
 
@@ -418,8 +418,8 @@ def _webhook(client, payload: dict, firmar=True):
 
 def _evento(direccion, email_id="em_1", adjuntos=None, subject="Factura 0010-00000999"):
     return {"type": "email.received", "data": {
-        "email_id": email_id, "from": "facturacion@interbanking.com.ar",
-        "to": ["contaduria@cliente.com"], "cc": [], "received_for": [direccion],
+        "email_id": email_id, "from": "facturacion@proveedor-demo.test",
+        "to": ["contaduria@cliente-demo.test"], "cc": [], "received_for": [direccion],
         "subject": subject,
         "attachments": adjuntos if adjuntos is not None else [
             {"id": "att_1", "filename": "FA-0010-999.pdf", "content_type": "application/pdf"},
@@ -450,7 +450,7 @@ def test_webhook_crea_borrador_y_lo_lee(client, db, mail_config):
     db.expire_all()
     b = db.query(BorradorComprobante).one()
     assert b.organizacion_id == 1 and b.origen == "email" and b.estado == "listo"
-    assert b.remitente == "facturacion@interbanking.com.ar"
+    assert b.remitente == "facturacion@proveedor-demo.test"
     assert b.archivo.startswith("data:application/pdf;base64,")
     assert b.datos["numero"] == 999
 

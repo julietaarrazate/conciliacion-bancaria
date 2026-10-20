@@ -4,6 +4,7 @@ import { FileUpload } from '@/components/FileUpload'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { ColumnMapperModal } from '@/components/ColumnMapperModal'
 import { DiagnosticoPanel } from '@/components/DiagnosticoPanel'
+import { ImportarExtractoPdfModal } from '@/components/extractos/ImportarExtractoPdfModal'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { confirmDialog } from '@/store/confirm'
@@ -11,6 +12,7 @@ import { useAuthStore } from '@/store/auth'
 import { useThemeStore } from '@/store/theme'
 import {
   ConciliacionResultado,
+  ConfirmarExtractoPdfResult,
   DeteccionInfo,
   ExtractoListItem,
   PlanillaHistorialItem,
@@ -214,6 +216,7 @@ function leerBancosCustom(): string[] {
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate()
   const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
+  const canUpload = useAuthStore(s => s.hasPermission('upload_files'))
   const { activeOrgId, activeOrgNombre } = useOrgStore()
   const isDark = useThemeStore(s => s.theme === 'dark')
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
@@ -258,6 +261,9 @@ export const Dashboard: React.FC = () => {
   const [umCorteDetectado, setUmCorteDetectado] = useState<number | null>(null)
   const [umCorteManual, setUmCorteManual] = useState<string>('')
   const [umFile, setUmFile] = useState<File | null>(null)
+
+  // ── Extracto en PDF: se lee, se revisa en una ventana y recién ahí se guarda ──
+  const [pdfPendiente, setPdfPendiente] = useState<File | null>(null)
 
   // ── Preview / mapeo de columnas de la planilla individual ────
   const [mapeoPendiente, setMapeoPendiente] = useState<ResultadoMapeoPlanilla | null>(null)
@@ -383,7 +389,32 @@ export const Dashboard: React.FC = () => {
     }
   }
 
+  const handlePdfGuardado = async (r: ConfirmarExtractoPdfResult) => {
+    setError('')
+    setSuccess(r.mensaje || 'Extracto guardado')
+    setExtractoId(r.extracto_id)
+    try {
+      // SIEMPRE scopear por la org activa (ver handleDeleteExtracto).
+      const data = await apiClient.listExtractos(activeOrgId)
+      setExtractos(data.items)
+      setExtractoNombre(data.items.find(x => x.id === r.extracto_id)?.nombre_archivo ?? '')
+    } catch {
+      // El extracto ya quedó guardado; la lista se actualiza en la próxima carga.
+    }
+  }
+
   const handleUploadExtraco = async (file: File) => {
+    // Un PDF no se sube directo: se lee, se muestra para revisar y recién después se guarda.
+    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+      setError('')
+      setSuccess('')
+      if (!canUpload) {
+        setError('No tenés permiso para importar extractos.')
+        return
+      }
+      setPdfPendiente(file)
+      return
+    }
     setLoading(true)
     setAccionCarga('extracto')
     setError('')
@@ -742,7 +773,8 @@ export const Dashboard: React.FC = () => {
 
           <FileUpload
             onFileSelected={handleUploadExtraco}
-            label="Subir extracto (.xlsx, .xls, .csv)"
+            accept=".xlsx,.xls,.csv,.pdf,application/pdf"
+            label="Subir extracto (.xlsx, .xls, .csv o PDF)"
             loading={accionCarga === 'extracto'}
             loadingLabel="Subiendo extracto..."
           />
@@ -827,7 +859,7 @@ export const Dashboard: React.FC = () => {
                       type="text"
                       value={umCorteManual}
                       onChange={(e) => setUmCorteManual(e.target.value)}
-                      placeholder="Saldo del corte manual ej: 99657675.21"
+                      placeholder="Saldo del corte manual ej: 1250000.00"
                       className="flex-1 text-xs px-2 py-1.5 rounded border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-ml-text dark:text-gray-200 focus:outline-none focus:border-ml-blue"
                     />
                     <button
@@ -857,7 +889,7 @@ export const Dashboard: React.FC = () => {
             <input
               type="text"
               className="input-field"
-              placeholder="Green, Tucu, David, Alojando..."
+              placeholder="Nombre del cliente..."
               value={clienteNombre}
               onChange={(e) => setClienteNombre(e.target.value)}
               disabled={!extractoId}
@@ -1187,6 +1219,17 @@ export const Dashboard: React.FC = () => {
           resultado={mapeoPendiente}
           onConfirm={handleConfirmarMapeo}
           onCancel={handleCancelarMapeo}
+        />
+      )}
+
+      {pdfPendiente && (
+        <ImportarExtractoPdfModal
+          file={pdfPendiente}
+          orgId={activeOrgId}
+          bancoPorDefecto={banco}
+          onCerrar={() => setPdfPendiente(null)}
+          onGuardado={handlePdfGuardado}
+          onAbrirExtracto={(id) => { setPdfPendiente(null); navigate(`/movimientos?extracto=${id}`) }}
         />
       )}
     </div>

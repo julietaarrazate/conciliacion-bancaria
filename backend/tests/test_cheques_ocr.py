@@ -90,23 +90,23 @@ def test_monto_none_o_invalido():
 
 def test_normalize_mapea_index_y_campos():
     datos = {
-        "numero": " 91678722 ",
+        "numero": " 12345678 ",
         "banco_origen": "Banco Provincia",
-        "librador": "OSCAR DI ZILLO",
+        "librador": "JUAN PEREZ",
         "monto": "350.000,00",
         "fecha_emision": "2026-07-02",
         "fecha_deposito": None,
-        "codigo_postal": "6620",
+        "codigo_postal": "5000",
     }
     item = _normalize_ocr_cheque(datos, index=3, filename="lote.jpg")
     assert item["index"] == 3
     assert item["filename"] == "lote.jpg"
-    assert item["numero"] == "91678722"          # trim
+    assert item["numero"] == "12345678"          # trim
     assert item["banco_origen"] == "Banco Provincia"
     assert item["monto"] == 350000.0
     assert item["fecha_emision"] == "2026-07-02"
     assert item["fecha_deposito"] is None
-    assert item["codigo_postal"] == "6620"
+    assert item["codigo_postal"] == "5000"
     assert item["local_interior"] == "interior"  # CP >= 2000
     assert item["error"] is False
 

@@ -70,7 +70,7 @@ re-aplica en cada arranque (idempotente). Cuentas clave que el motor referencia 
 | `1-1-2-4/5/6` | IVA Crédito Fiscal / Percepciones IIBB / Retenciones | activo | tarjetas |
 | `2-1-1-1` | No identificado | pasivo | UM import / reclasificación |
 | `2-1-2-0` | Cliente (nodo padre) | pasivo | padre de las cuentas corrientes de cliente |
-| `2-1-2-X` | Green / Tucu / Alojando / … | pasivo | cuenta corriente por cliente |
+| `2-1-2-X` | una cuenta por cliente (ej. Cliente Norte) | pasivo | cuenta corriente por cliente |
 | `2-1-3-1` | Cheques depositados | pasivo | cheques |
 | `2-1-4-0 / 2-1-5-0 / 2-1-6-0` | Sueldos a pagar / Cargas sociales / Retención Ganancias | pasivo | sueldos |
 | `2-2-1-0` | IVA Débito Fiscal | pasivo | ARCA |
@@ -92,7 +92,7 @@ Cada cliente tiene **1:1** una cuenta contable bajo el nodo padre `2-1-2-0`. La 
 está centralizada en `_get_o_crear_cuenta_cliente()`:
 
 1. Si el cliente ya tiene `cuenta_contable_id` → la reutiliza.
-2. Si existe una cuenta bajo `2-1-2-0` con el **mismo nombre** (caso seed: Green/Tucu/Alojando)
+2. Si existe una cuenta bajo `2-1-2-0` con el **mismo nombre** (caso seed: cuentas de cliente precargadas)
    → la adopta y vincula.
 3. Si no existe ninguna → crea `2-1-2-{n}` (n = max+1, o el primer hueco libre si
    `reusar_huecos=True`) y la vincula.

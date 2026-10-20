@@ -25,6 +25,7 @@ from app.models.extracto import ExtractoBancario
 from app.models.planilla import Planilla
 from app.models.auditoria import AuditoriaLog
 from app.models.patron_aprendido import PatronAprendido
+from app.models.extracto_pdf import MoldeExtractoPdf
 from app.models.liquidacion import Liquidacion, CierrePeriodo
 from app.models.cheque import Cheque
 from app.models.egreso import Egreso, CategoriaEgreso
@@ -141,6 +142,11 @@ def export_org_backup(db: Session, org_id: int) -> Dict[str, Any]:
     backup["patrones_aprendidos"] = [
         _row_to_dict(p) for p in db.query(PatronAprendido).filter(PatronAprendido.organizacion_id == org_id).all()
     ]
+    # Formatos de extracto PDF aprendidos (los borradores sin confirmar no se
+    # respaldan: son transitorios y el PDF original no se guarda).
+    backup["moldes_extracto_pdf"] = [
+        _row_to_dict(m) for m in db.query(MoldeExtractoPdf).filter(MoldeExtractoPdf.organizacion_id == org_id).all()
+    ]
 
     # Auditoría — limitar a último año para no inflar el backup
     auditoria = (
@@ -172,6 +178,7 @@ def export_org_backup(db: Session, org_id: int) -> Dict[str, Any]:
         "reglas_contables":      len(backup["reglas_contables"]),
         "asientos":              len(backup["asientos"]),
         "patrones_aprendidos":   len(backup["patrones_aprendidos"]),
+        "moldes_extracto_pdf":   len(backup["moldes_extracto_pdf"]),
         "auditoria_logs":        len(backup["auditoria"]),
     }
 

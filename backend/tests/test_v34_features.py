@@ -255,7 +255,7 @@ class TestExportFallback:
         from app.models.extracto import ExtractoBancario, MovimientoBanco
         _make_org(db)
         _make_user(db)
-        _make_cliente(db, nombre="Green SA")
+        _make_cliente(db, nombre="Cliente Norte SA")
 
         extracto = ExtractoBancario(
             id=1, nombre_archivo="ext.xlsx",
@@ -268,7 +268,7 @@ class TestExportFallback:
             id=1, extracto_id=1,
             orden=1, fecha=date(2026, 5, 1),
             monto=Decimal("5000.00"),
-            cliente_acreditado="Green SA",
+            cliente_acreditado="Cliente Norte SA",
             organizacion_id=1,
         )
         db.add(mov)
@@ -279,7 +279,7 @@ class TestExportFallback:
             db.query(MovimientoBanco)
             .filter(
                 MovimientoBanco.extracto_id == 1,
-                MovimientoBanco.cliente_acreditado == "Green SA",
+                MovimientoBanco.cliente_acreditado == "Cliente Norte SA",
             )
             .all()
         )
@@ -310,7 +310,7 @@ class TestExportFallback:
                 id=i, extracto_id=1,
                 orden=orden, fecha=date(2026, 5, 1),
                 monto=Decimal("3000.00"),
-                cliente_acreditado="Tucu SRL",
+                cliente_acreditado="Cliente Sur SRL",
                 organizacion_id=1,
             )
             db.add(mov)
@@ -320,7 +320,7 @@ class TestExportFallback:
             db.query(MovimientoBanco)
             .filter(
                 MovimientoBanco.extracto_id == 1,
-                MovimientoBanco.cliente_acreditado == "Tucu SRL",
+                MovimientoBanco.cliente_acreditado == "Cliente Sur SRL",
             )
             .order_by(MovimientoBanco.orden)
             .all()
