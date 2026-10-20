@@ -1,5 +1,5 @@
 """Procesos masivos: un cálculo para varias organizaciones y Mis Comprobantes de
-varios clientes juntos (ver services/procesos_masivos.py)."""
+varias organizaciones juntos (ver services/procesos_masivos.py)."""
 import re
 from typing import List, Optional
 
@@ -49,7 +49,7 @@ def calcular(
     return {"accion": body.accion, "periodo": body.periodo, "resultados": resultados}
 
 
-# ── Mis Comprobantes de varios clientes ──────────────────────────────────────
+# ── Mis Comprobantes de varias organizaciones ──────────────────────────────────────
 
 def _validar_mc(direccion: str, periodo: str, files: List[UploadFile]) -> None:
     if direccion not in ("emitido", "recibido"):

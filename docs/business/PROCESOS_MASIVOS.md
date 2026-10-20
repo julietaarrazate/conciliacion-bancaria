@@ -1,6 +1,10 @@
 # Procesos masivos (v3.36)
 
 Lo que hoy se hace organización por organización, para todas las que ve el usuario de una vez.
+**Organización = empresa que usa Cuadra** (sus impuestos son los que se calculan); los clientes de
+la organización (los que mandan planillas de pago) son otra cosa y no entran acá. Sirve a quien
+maneja varias organizaciones: el superadmin o un contador con `allowed_org_ids`. El menú solo se
+muestra a ellos (`utils/orgs.manejaVariasOrgs`); con una sola organización la página lo explica.
 Idea tomada del benchmark (Onvio: procesos automáticos multi-empresa). Código:
 `services/procesos_masivos.py`, `routers/procesos_masivos.py`, `pages/ProcesosMasivos.tsx`.
 Organizaciones alcanzadas: `services/acceso_orgs.orgs_accesibles` (superadmin: todas las
@@ -28,7 +32,7 @@ retenciones y percepciones que no recibe (hoy se cargan a mano), así que el pro
 pasa las que ya tenía la liquidación. Los saldos anteriores se heredan del mes previo si existe
 su liquidación; si no existe, se conservan los cargados (si no, quedarían en 0).
 
-## 2. Mis Comprobantes de varios clientes
+## 2. Mis Comprobantes de varias organizaciones
 
 - `POST /procesos-masivos/mis-comprobantes/comparar?direccion=&periodo=` (archivos, hasta 50):
   cada Excel se asigna a su org por el **CUIT del título** ("Mis Comprobantes Recibidos - CUIT

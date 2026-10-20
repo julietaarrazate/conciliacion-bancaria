@@ -147,7 +147,7 @@ def correr(db: Session, accion: str, periodo: str, org_ids: Iterable[int],
     return resultados
 
 
-# ── Mis Comprobantes de varios clientes ──────────────────────────────────────
+# ── Mis Comprobantes de varias organizaciones ──────────────────────────────────────
 
 _RE_CUIT = re.compile(r"\b(\d{2})-?(\d{8})-?(\d)\b")
 

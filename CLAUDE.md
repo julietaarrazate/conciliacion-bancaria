@@ -177,6 +177,11 @@ IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ con
 
 ## Multi-tenant
 
+- **Organización ≠ cliente.** Organización = empresa que usa Cuadra (ej. Caneland): sus impuestos
+  (IVA, IIBB, Monotributo, Sueldos) y vencimientos son de la organización. Clientes = los clientes
+  de esa organización (Tucu, Green, Griselda…), que le pagan y mandan planillas para conciliar;
+  Cuadra no les calcula impuestos. Quien maneja varias organizaciones: el superadmin y contadores
+  con `allowed_org_ids` (`utils/orgs.manejaVariasOrgs` en el frontend).
 - Organización A = `organizacion_id=1` (NUNCA modificar — solo cambios aditivos)
 - El superadmin ve y gestiona todas las orgs
 - Config por org (JSON): match_rules, tolerancia_monto, dias_tolerancia_fecha, requiere_cierre_periodo
@@ -225,7 +230,7 @@ distintos, en Cuadra y no en ARCA), importar solo lo elegido y deshacer la tanda
 **v3.34** Comprobantes por revisar: alerta si la factura está a nombre de otro CUIT y no se confirma
 en un período con la liquidación de IVA presentada · **v3.35** grilla de vencimientos por
 organización con calendario cargado mes a mes (`docs/business/VENCIMIENTOS.md`) · **v3.36** procesos
-masivos: un cálculo para todas las organizaciones y Mis Comprobantes de varios clientes juntos
+masivos: un cálculo para todas las organizaciones y Mis Comprobantes de varias organizaciones juntos
 (`docs/business/PROCESOS_MASIVOS.md`).
 
 Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,

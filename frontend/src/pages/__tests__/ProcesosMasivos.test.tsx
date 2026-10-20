@@ -7,9 +7,14 @@ const api = vi.hoisted(() => ({
   importarMisComprobantesVarios: vi.fn(),
   deshacerImportacionIva: vi.fn(),
 }))
-const auth = vi.hoisted(() => ({ permisos: true }))
+const auth = vi.hoisted(() => ({ permisos: true, variasOrgs: true }))
 vi.mock('@/services/api', () => ({ apiClient: api }))
-vi.mock('@/store/auth', () => ({ useAuthStore: () => ({ hasPermission: () => auth.permisos }) }))
+vi.mock('@/store/auth', () => ({
+  useAuthStore: () => ({
+    hasPermission: () => auth.permisos,
+    user: { is_superadmin: false, allowed_org_ids: auth.variasOrgs ? [2] : [] },
+  }),
+}))
 vi.mock('@/store/confirm', () => ({ confirmDialog: () => Promise.resolve(true) }))
 
 import { ProcesosMasivos } from '../ProcesosMasivos'
@@ -23,6 +28,7 @@ const fila = (archivo: string, extra: object) => ({
 describe('ProcesosMasivos', () => {
   beforeEach(() => {
     auth.permisos = true
+    auth.variasOrgs = true
     Object.values(api).forEach(f => f.mockReset())
     api.calcularMasivo.mockResolvedValue({
       accion: 'iva_liquidacion', periodo: '2026-09', resultados: [
@@ -69,7 +75,7 @@ describe('ProcesosMasivos', () => {
     await waitFor(() => expect(api.calcularMasivo).toHaveBeenCalledWith('monotributo_control', '2026-S2'))
   })
 
-  it('compara Mis Comprobantes de varios clientes, importa y deshace', async () => {
+  it('compara Mis Comprobantes de varias organizaciones, importa y deshace', async () => {
     render(<ProcesosMasivos />)
     const archivos = [new File(['a'], 'org1.xlsx'), new File(['b'], 'ajena.xlsx')]
     fireEvent.change(screen.getByLabelText(/Excels de Mis Comprobantes/i), { target: { files: archivos } })
@@ -79,11 +85,24 @@ describe('ProcesosMasivos', () => {
     expect(within(org1).getByText('2')).toBeInTheDocument()
     expect(screen.getByText(/No hay una organización con el CUIT/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /importar faltantes de 1 cliente/i }))
+    fireEvent.click(screen.getByRole('button', { name: /importar faltantes de 1 organización/i }))
     await waitFor(() => expect(api.importarMisComprobantesVarios).toHaveBeenCalled())
     const fila1 = (await screen.findByText(/2 importados/)).closest('tr')!
     fireEvent.click(within(fila1).getByRole('button', { name: /deshacer/i }))
     await waitFor(() => expect(api.deshacerImportacionIva).toHaveBeenCalledWith('abc', 1))
+  })
+
+  it('con una sola organización explica que no aplica', () => {
+    auth.variasOrgs = false
+    render(<ProcesosMasivos />)
+    expect(screen.queryByRole('button', { name: /calcular para todas/i })).not.toBeInTheDocument()
+    expect(screen.getByText(/más de una organización/i)).toBeInTheDocument()
+  })
+
+  it('no habla de clientes: son organizaciones', () => {
+    render(<ProcesosMasivos />)
+    expect(screen.queryByText(/clientes/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/Mis Comprobantes de varias organizaciones/i)).toBeInTheDocument()
   })
 
   it('sin permiso no muestra las acciones', () => {

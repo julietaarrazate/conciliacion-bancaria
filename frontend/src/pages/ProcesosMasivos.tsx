@@ -3,6 +3,7 @@ import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
 import { confirmDialog } from '@/store/confirm'
 import { hoyIso } from '@/utils/fecha'
+import { manejaVariasOrgs } from '@/utils/orgs'
 import type {
   AccionMasiva, ComparacionMisComprobantesArchivo, ImportacionMisComprobantesArchivo, ResultadoMasivo,
 } from '@/types'
@@ -183,10 +184,10 @@ const MisComprobantesVarios: React.FC = () => {
 
   return (
     <section className={card}>
-      <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Mis Comprobantes de varios clientes</h2>
+      <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Mis Comprobantes de varias organizaciones</h2>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-        Subí los Excels de Mis Comprobantes (descargados de la web de ARCA) de todos tus clientes juntos. Cada uno va a su
-        organización por el CUIT del título. Primero ves qué falta; nada se carga hasta que importás.
+        Subí juntos los Excels de Mis Comprobantes (descargados de la web de ARCA) de cada organización que manejás. Cada
+        uno va a su organización por el CUIT del título. Primero ves qué falta; nada se carga hasta que importás.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
         <div>
@@ -246,7 +247,7 @@ const MisComprobantesVarios: React.FC = () => {
           </p>
           {conFaltantes.length > 0 && (
             <button className={`${btnPrimary} mt-3`} onClick={importar} disabled={ocupado}>
-              Importar faltantes de {conFaltantes.length} {conFaltantes.length === 1 ? 'cliente' : 'clientes'}
+              Importar faltantes de {conFaltantes.length} {conFaltantes.length === 1 ? 'organización' : 'organizaciones'}
             </button>
           )}
         </>
@@ -282,16 +283,18 @@ const MisComprobantesVarios: React.FC = () => {
 
 /** Procesos que corren en todas las organizaciones del estudio de una vez. */
 export const ProcesosMasivos: React.FC = () => {
-  const { hasPermission } = useAuthStore()
+  const { hasPermission, user } = useAuthStore()
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <h1 className="text-xl md:text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-1">Procesos masivos</h1>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        Lo que hoy hacés organización por organización, para todas las que ves de una vez.
+        Para quien maneja varias organizaciones (empresas que usan Cuadra): lo que hoy se hace de a una, para todas de una vez.
       </p>
-      {hasPermission('manage_finance')
-        ? <><CalcularParaTodas /><MisComprobantesVarios /></>
-        : <p className="text-sm text-gray-500 dark:text-gray-400">No tenés permiso para correr procesos masivos.</p>}
+      {!manejaVariasOrgs(user)
+        ? <p className="text-sm text-gray-500 dark:text-gray-400">Esta pantalla es para quien maneja más de una organización. Con una sola, usá IVA, Ingresos Brutos, Monotributo o Sueldos directamente.</p>
+        : hasPermission('manage_finance')
+          ? <><CalcularParaTodas /><MisComprobantesVarios /></>
+          : <p className="text-sm text-gray-500 dark:text-gray-400">No tenés permiso para correr procesos masivos.</p>}
     </div>
   )
 }

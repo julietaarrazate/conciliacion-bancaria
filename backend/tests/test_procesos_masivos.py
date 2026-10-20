@@ -1,6 +1,6 @@
 # ruff: noqa: F811  (db y client son fixtures importadas de test_iva_liquidacion)
 """Procesos masivos (benchmark Ola 2, punto 8): correr un cálculo para todas
-las organizaciones accesibles y subir "Mis Comprobantes" de varios clientes
+las organizaciones accesibles y subir "Mis Comprobantes" de varias organizaciones
 juntos (cada Excel va a su org por el CUIT del título).
 
 Reglas:
@@ -165,7 +165,7 @@ def test_endpoint_sin_permiso_403(db, client):
     assert r.status_code == 403
 
 
-# ── Mis Comprobantes de varios clientes ──────────────────────────────────────
+# ── Mis Comprobantes de varias organizaciones ──────────────────────────────────────
 
 def _xlsx(cuit_titulo, filas):
     return _build_xlsx(f"Mis Comprobantes Recibidos - CUIT {cuit_titulo}", _H_RECIBIDOS, filas)
