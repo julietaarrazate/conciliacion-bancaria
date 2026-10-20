@@ -94,6 +94,8 @@ es la referencia profunda. **Consultá el doc correspondiente ANTES de tocar su 
   `docs/ekp/GENESIS_COPILOTO_IMPOSITIVO.md` (condicionalmente viable, no construir sin validar
   primero) y `docs/ekp/GENESIS_BILLETERAS.md` (NOT VIABLE como producto standalone; VIABLE
   reencuadrado como feature de Cuadra — parser de billeteras en el motor multi-banco)
+- Benchmark de competidores (oct 2026: qué incorporar de Xubio, Colppy, Contabilium, Alegra,
+  LaPyme, Onvio, en 3 olas por valor/esfuerzo) → `docs/ekp/BENCHMARK_COMPETIDORES_2026-10.md`
 
 Cada doc tiene una sección `## Pendiente de revisar` con discrepancias código↔doc detectadas.
 Si cambiás el código de un área, actualizá su doc (la doc describe el código tal como está).
