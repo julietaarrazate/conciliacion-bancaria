@@ -10,6 +10,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -203,7 +204,14 @@ def crear_egreso(
         usuario_id=current_user.id,
     )
     db.add(egreso)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Dos "Resolver" simultáneos del mismo movimiento: el índice único frena el segundo
+        db.rollback()
+        if movimiento is not None:
+            raise HTTPException(400, "El movimiento ya está explicado por otro pago")
+        raise
     db.refresh(egreso)
 
     registrar_log(db, current_user.id, "egresos", egreso.id, "INSERT", {

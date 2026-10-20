@@ -449,5 +449,6 @@ SAFETY_NET_DDL = [
     "CREATE INDEX IF NOT EXISTS ix_borrador_extracto_pdf_org_sha ON borradores_extracto_pdf (organizacion_id, contenido_sha256)",
     # migración 029 — egreso que explica un débito del extracto (resolver pendientes)
     "ALTER TABLE egresos ADD COLUMN IF NOT EXISTS movimiento_banco_id INTEGER REFERENCES movimientos_banco(id) ON DELETE SET NULL",
-    "CREATE INDEX IF NOT EXISTS ix_egresos_movimiento_banco_id ON egresos (movimiento_banco_id)",
+    # único: un movimiento se explica con un solo pago (NULL se repite sin problema)
+    "CREATE UNIQUE INDEX IF NOT EXISTS ix_egresos_movimiento_banco_id ON egresos (movimiento_banco_id)",
 ]

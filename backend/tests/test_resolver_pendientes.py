@@ -234,3 +234,16 @@ def test_resumen_sin_ids_mantiene_compatibilidad():
     assert r["debitos"]["explicados"] == 1
     assert r["debitos"]["porcentaje"] == 50.0
     assert r["gastos_bancarios"]["total"] == Decimal("10.00")
+
+
+def test_indice_unico_frena_dos_pagos_al_mismo_movimiento(db):
+    """Si dos pedidos pasan la validación a la vez, la base rechaza el segundo."""
+    from sqlalchemy.exc import IntegrityError
+    _, (mov,) = _extracto(db)
+    for i in (1, 2):
+        db.add(Egreso(id=100 + i, organizacion_id=1, tipo="gasto", forma_pago="banco",
+                      monto=Decimal("1500"), fecha=date(2026, 10, 1), movimiento_banco_id=mov.id))
+        if i == 1:
+            db.commit()
+    with pytest.raises(IntegrityError):
+        db.commit()

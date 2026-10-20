@@ -26,7 +26,8 @@ def upgrade() -> None:
         "REFERENCES movimientos_banco(id) ON DELETE SET NULL"
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_egresos_movimiento_banco_id ON egresos (movimiento_banco_id)"
+        # único: un movimiento se explica con un solo pago (NULL se repite sin problema)
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_egresos_movimiento_banco_id ON egresos (movimiento_banco_id)"
     )
 
 
