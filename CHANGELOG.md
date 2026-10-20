@@ -16,7 +16,8 @@ Primera fase de retenciones (Ola 2 del benchmark, punto 7). Ver `docs/business/P
 - **Pagos y "＋ Resolver"**: el campo Proveedor sugiere los de la ficha y, si coincide, vincula el
   pago (`Egreso.proveedor_id`). Las OP por cuenta de un cliente no usan la ficha (400 si se intenta).
 - Migración 032 (`proveedores` + `egresos.proveedor_id`) con su safety net.
-- Tests: 12 backend (`test_proveedores.py`), 6 de la página y 3 nuevos del modal Resolver.
+- El backup diario incluye la tabla `proveedores`.
+- Tests: 12 backend (`test_proveedores.py`) + backup, 6 de la página y 3 nuevos del modal Resolver.
 
 ---
 
