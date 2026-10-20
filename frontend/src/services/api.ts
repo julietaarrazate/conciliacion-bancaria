@@ -19,6 +19,7 @@ import {
   MovimientoFiltrado,
   ResumenExtracto,
   PagoDesdeMovimientoPayload,
+  PagoCandidato,
   MergeUMResult,
   MovimientosFiltros,
   ConciliacionItem,
@@ -594,6 +595,21 @@ class ApiClient {
   async listarCategoriasEgreso(orgId?: number | null): Promise<{ id: number; nombre: string }[]> {
     const res = await this.client.get('/pagos/categorias', { params: orgId ? { org_id: orgId } : {} })
     return res.data || []
+  }
+
+  /** Pagos ya cargados (mismo importe, banco, sin vincular, fecha cercana) que podrían explicar el débito. */
+  async pagosCandidatosMovimiento(movimientoId: number, orgId?: number | null): Promise<PagoCandidato[]> {
+    const res = await this.client.get(`/pagos/candidatos-movimiento/${movimientoId}`, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data || []
+  }
+
+  /** Vincula un pago ya cargado al débito que explica (no toca su asiento). */
+  async vincularPagoAMovimiento(egresoId: number, movimientoId: number): Promise<{ ok: boolean; egreso: { id: number } }> {
+    const res = await this.client.post(`/pagos/${egresoId}/vincular-movimiento`, { movimiento_banco_id: movimientoId })
+    this.invalidateCache('/pagos')
+    return res.data
   }
 
   /** Crea el pago/gasto que explica un débito del extracto y lo deja vinculado. */

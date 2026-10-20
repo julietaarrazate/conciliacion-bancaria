@@ -5,11 +5,15 @@ import { MovimientoFiltrado } from '@/types'
 
 const listarCategoriasEgreso = vi.fn()
 const crearPagoDesdeMovimiento = vi.fn()
+const pagosCandidatosMovimiento = vi.fn()
+const vincularPagoAMovimiento = vi.fn()
 
 vi.mock('@/services/api', () => ({
   apiClient: {
     listarCategoriasEgreso: (...a: unknown[]) => listarCategoriasEgreso(...a),
     crearPagoDesdeMovimiento: (...a: unknown[]) => crearPagoDesdeMovimiento(...a),
+    pagosCandidatosMovimiento: (...a: unknown[]) => pagosCandidatosMovimiento(...a),
+    vincularPagoAMovimiento: (...a: unknown[]) => vincularPagoAMovimiento(...a),
   },
 }))
 
@@ -21,6 +25,8 @@ describe('ResolverMovimientoModal', () => {
   beforeEach(() => {
     listarCategoriasEgreso.mockReset().mockResolvedValue([{ id: 1, nombre: 'Bancarios' }, { id: 2, nombre: 'Alquiler' }])
     crearPagoDesdeMovimiento.mockReset().mockResolvedValue({ ok: true, egreso: { id: 42 } })
+    pagosCandidatosMovimiento.mockReset().mockResolvedValue([])
+    vincularPagoAMovimiento.mockReset().mockResolvedValue({ ok: true, egreso: { id: 31 } })
   })
 
   it('precarga los datos del movimiento con el importe en positivo y fijo', async () => {
@@ -63,5 +69,26 @@ describe('ResolverMovimientoModal', () => {
     render(<ResolverMovimientoModal mov={debito} onClose={() => {}} onResuelto={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /registrar pago/i }))
     expect(await screen.findByText(/ya está explicado por el pago #9/)).toBeInTheDocument()
+  })
+
+  it('ofrece vincular un pago ya cargado por el mismo importe en vez de crear otro', async () => {
+    pagosCandidatosMovimiento.mockResolvedValue([
+      { id: 31, fecha: '2026-09-29', beneficiario: 'Proveedor SA', concepto: 'Factura 0001-123', monto: 1500.5, dias_diferencia: 2 },
+    ])
+    const onResuelto = vi.fn()
+    render(<ResolverMovimientoModal mov={debito} orgId={5} onClose={() => {}} onResuelto={onResuelto} />)
+    expect(await screen.findByText(/ya cargado/i)).toBeInTheDocument()
+    expect(screen.getByText('Proveedor SA')).toBeInTheDocument()
+    expect(pagosCandidatosMovimiento).toHaveBeenCalledWith(7, 5)
+    fireEvent.click(screen.getByRole('button', { name: /vincular/i }))
+    await waitFor(() => expect(onResuelto).toHaveBeenCalledWith(31))
+    expect(vincularPagoAMovimiento).toHaveBeenCalledWith(31, 7)
+    expect(crearPagoDesdeMovimiento).not.toHaveBeenCalled()
+  })
+
+  it('sin pagos parecidos no muestra la sección de vincular', async () => {
+    render(<ResolverMovimientoModal mov={debito} onClose={() => {}} onResuelto={() => {}} />)
+    await waitFor(() => expect(pagosCandidatosMovimiento).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: /vincular/i })).not.toBeInTheDocument()
   })
 })

@@ -236,6 +236,12 @@ gasto que lo explica ("＋ Resolver"), sin ir a Pagos. El vínculo es
 - `POST /pagos` acepta `movimiento_banco_id`; `PATCH /pagos/{id}` lo vincula
   (id) o desvincula (`null`). Mientras siga vinculado, editar el monto o la forma
   de pago a algo que no coincida se rechaza (400).
+- **Pago ya cargado**: si el pago se registró antes en Pagos, no hay que crear
+  otro (duplicaría el gasto y el asiento). `GET /pagos/candidatos-movimiento/{id}`
+  sugiere los pagos de la org con el mismo importe, banco, sin vincular y fecha a
+  ±10 días (`DIAS_CANDIDATOS`), el más cercano primero; el modal los muestra
+  arriba. `POST /pagos/{id}/vincular-movimiento` guarda solo el vínculo, **sin
+  reversar ni rehacer el asiento** (el PATCH sí los rehace).
 - **Contabilidad sin cambios**: el egreso genera el mismo asiento que cargado a
   mano en Pagos (`registrar_egreso`). Borrar el movimiento deja el pago sin
   vínculo; borrar el pago libera el movimiento.
@@ -244,14 +250,22 @@ gasto que lo explica ("＋ Resolver"), sin ir a Pagos. El vínculo es
 sequenceDiagram
   actor U as Usuario
   participant M as Movimientos.tsx
-  participant P as POST /pagos
+  participant P as routers/pagos.py
   participant V as movimiento_egreso
   participant C as motor_contable
   U->>M: "＋ Resolver" en un débito
-  M->>P: tipo, monto=|débito|, banco, movimiento_banco_id
-  P->>V: validar_vinculo (débito, importe, org, período, sin otro pago)
-  V-->>P: ok / motivo
-  P->>C: registrar_egreso (igual que en Pagos)
+  M->>P: GET /pagos/candidatos-movimiento/{id}
+  P-->>M: pagos ya cargados (mismo importe, banco, fecha ±10 días)
+  alt el pago ya estaba cargado
+    U->>M: "Vincular"
+    M->>P: POST /pagos/{id}/vincular-movimiento (sin tocar asientos)
+    P->>V: validar_vinculo
+  else pago nuevo
+    M->>P: POST /pagos (monto=|débito|, banco, movimiento_banco_id)
+    P->>V: validar_vinculo (débito, importe, org, período, sin otro pago)
+    V-->>P: ok / motivo
+    P->>C: registrar_egreso (igual que en Pagos)
+  end
   P-->>M: egreso.id → la fila muestra "✓ Pago #id"
 ```
 

@@ -15,8 +15,9 @@ Pagos (`motor_contable.registrar_egreso`). No usa `cliente_acreditado`, que es
 el vínculo con clientes (créditos) y alimenta reportes y cuentas corrientes.
 """
 
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -48,20 +49,11 @@ def validar_vinculo(
     Lanza VinculoInvalido con el motivo si no.
     """
     try:
-        mov_id = int(movimiento_id)
+        int(movimiento_id)
     except (TypeError, ValueError):
         raise VinculoInvalido("movimiento_banco_id inválido")
 
-    mov = (
-        db.query(MovimientoBanco)
-        .join(ExtractoBancario, ExtractoBancario.id == MovimientoBanco.extracto_id)
-        .filter(
-            MovimientoBanco.id == mov_id,
-            ExtractoBancario.organizacion_id == org_id,
-            ExtractoBancario.deleted_at.is_(None),
-        )
-        .first()
-    )
+    mov = buscar_movimiento(db, movimiento_id, org_id)
     if not mov:
         raise VinculoInvalido("Movimiento del extracto no encontrado")
 
@@ -89,6 +81,59 @@ def validar_vinculo(
         raise VinculoInvalido(f"El movimiento ya está explicado por el pago #{otro_id}")
 
     return mov
+
+
+# Ventana de fechas para sugerir un pago ya cargado: el pago se registra el día
+# que se hace y el banco lo debita (o el extracto lo muestra) unos días después.
+DIAS_CANDIDATOS = 10
+
+
+def buscar_movimiento(db: Session, movimiento_id, org_id: int) -> Optional[MovimientoBanco]:
+    """Movimiento de la org en un extracto no borrado, o None."""
+    try:
+        mov_id = int(movimiento_id)
+    except (TypeError, ValueError):
+        return None
+    return (
+        db.query(MovimientoBanco)
+        .join(ExtractoBancario, ExtractoBancario.id == MovimientoBanco.extracto_id)
+        .filter(
+            MovimientoBanco.id == mov_id,
+            ExtractoBancario.organizacion_id == org_id,
+            ExtractoBancario.deleted_at.is_(None),
+        )
+        .first()
+    )
+
+
+def candidatos_para_movimiento(
+    db: Session, mov: MovimientoBanco, org_id: int, dias: int = DIAS_CANDIDATOS,
+) -> List[Egreso]:
+    """Pagos ya cargados que podrían explicar el débito `mov`.
+
+    Mismo importe, forma de pago banco, sin vincular, de la org y con fecha a
+    ±`dias` del movimiento. Ordenados por cercanía de fecha. Vacío si `mov` no es
+    un débito.
+    """
+    try:
+        importe = -_centavos(mov.monto)
+    except VinculoInvalido:
+        return []
+    if importe <= 0:
+        return []
+    q = db.query(Egreso).filter(
+        Egreso.organizacion_id == org_id,
+        Egreso.forma_pago == "banco",
+        Egreso.movimiento_banco_id.is_(None),
+        Egreso.monto == importe,
+    )
+    if mov.fecha:
+        q = q.filter(Egreso.fecha >= mov.fecha - timedelta(days=dias),
+                     Egreso.fecha <= mov.fecha + timedelta(days=dias))
+    egresos = q.all()
+    if mov.fecha:
+        egresos.sort(key=lambda e: (abs((e.fecha - mov.fecha).days) if e.fecha else dias + 1, e.id))
+    return egresos
 
 
 def egresos_por_movimiento(db: Session, movimiento_ids: Iterable[int]) -> Dict[int, int]:

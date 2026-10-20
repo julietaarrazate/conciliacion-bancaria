@@ -19,9 +19,12 @@ ver la "diferencia no justificada"). Aditivo: no toca el motor de conciliación 
   `PATCH /pagos/{id}` aceptan `movimiento_banco_id` (`null` desvincula).
 - **Resumen del extracto**: nuevo bloque `debitos` (explicados por gasto bancario o pago vinculado,
   cantidad y total sin explicar) y "% de los egresos explicados" en la barra de Movimientos.
+- **Pago ya cargado**: el modal sugiere primero los pagos con el mismo importe, banco, sin vincular
+  y fecha a ±10 días (`GET /pagos/candidatos-movimiento/{id}`) y los vincula con
+  `POST /pagos/{id}/vincular-movimiento`, que no toca el asiento. Evita registrar el pago dos veces.
 - El listado de movimientos devuelve `egreso_id` y `gasto_bancario` por fila.
 - Contabilidad igual que cargar el pago a mano en Pagos (`registrar_egreso`).
-- Tests: `test_resolver_pendientes.py` (19) + `ResolverMovimientoModal.test.tsx` (5) y 2 nuevos
+- Tests: `test_resolver_pendientes.py` (26) + `ResolverMovimientoModal.test.tsx` (7) y 2 nuevos
   en `ResumenExtracto.test.tsx`. Ver `docs/business/BUSINESS_RULES.md` §1.9 (con diagrama).
 
 ---

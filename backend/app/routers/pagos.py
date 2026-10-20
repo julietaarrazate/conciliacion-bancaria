@@ -22,7 +22,9 @@ from app.models.cliente import Cliente
 from app.models.egreso import Egreso, CategoriaEgreso, TIPOS_EGRESO, FORMAS_PAGO
 from app.models.caja import ArqueoDiario, denominaciones_vacias
 from app.services.auditoria import registrar_log
-from app.services.movimiento_egreso import VinculoInvalido, validar_vinculo
+from app.services.movimiento_egreso import (
+    VinculoInvalido, buscar_movimiento, candidatos_para_movimiento, validar_vinculo,
+)
 from app.services.storage import upload_comprobante
 from app.services.tz import hoy_art
 
@@ -239,6 +241,60 @@ def crear_egreso(
         contabilidad_ok = False
 
     return {"ok": True, "egreso": _egreso_dict(egreso), "contabilidad_ok": contabilidad_ok}
+
+
+@router.get("/candidatos-movimiento/{movimiento_id}")
+def candidatos_movimiento(
+    movimiento_id: int,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("reconcile")),
+):
+    """Pagos ya cargados que podrían explicar un débito del extracto (mismo
+    importe, banco, sin vincular, fecha cercana). Para vincularlos en vez de
+    crear uno nuevo y duplicar el pago."""
+    oid = _org_id(current_user, org_id)
+    mov = buscar_movimiento(db, movimiento_id, oid)
+    if not mov:
+        raise HTTPException(404, "Movimiento no encontrado")
+    out = []
+    for e in candidatos_para_movimiento(db, mov, oid):
+        d = _egreso_dict(e)
+        d["dias_diferencia"] = abs((e.fecha - mov.fecha).days) if (e.fecha and mov.fecha) else None
+        out.append(d)
+    return out
+
+
+@router.post("/{egreso_id}/vincular-movimiento")
+def vincular_movimiento(
+    egreso_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("reconcile")),
+):
+    """Vincula un pago ya cargado al débito del extracto que lo explica.
+    Solo guarda el vínculo: no reversa ni rehace el asiento (a diferencia del PATCH)."""
+    q = db.query(Egreso).filter(Egreso.id == egreso_id)
+    if not current_user.is_superadmin:
+        q = q.filter(Egreso.organizacion_id == (current_user.organizacion_id or 1))
+    e = q.first()
+    if not e:
+        raise HTTPException(404, "Egreso no encontrado")
+    if payload.get("movimiento_banco_id") is None:
+        raise HTTPException(400, "Falta movimiento_banco_id")
+    try:
+        mov = validar_vinculo(db, payload["movimiento_banco_id"], e.organizacion_id,
+                              e.monto, e.forma_pago, egreso_id=e.id)
+    except VinculoInvalido as ex:
+        raise HTTPException(400, str(ex))
+    e.movimiento_banco_id = mov.id
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(400, "El movimiento ya está explicado por otro pago")
+    registrar_log(db, current_user.id, "egresos", e.id, "UPDATE", {"movimiento_banco_id": mov.id})
+    return {"ok": True, "egreso": _egreso_dict(e)}
 
 
 @router.get("/{egreso_id}/comprobante")

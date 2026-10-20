@@ -247,3 +247,86 @@ def test_indice_unico_frena_dos_pagos_al_mismo_movimiento(db):
             db.commit()
     with pytest.raises(IntegrityError):
         db.commit()
+
+
+# ── Vincular un pago ya cargado ──────────────────────────────────────────────
+
+def _egreso_cargado(db, egreso_id, monto="1500", fecha=date(2026, 10, 3), forma_pago="banco",
+                    org_id=1, movimiento_banco_id=None):
+    e = Egreso(id=egreso_id, organizacion_id=org_id, tipo="proveedor", forma_pago=forma_pago,
+               monto=Decimal(monto), fecha=fecha, beneficiario="Proveedor SA",
+               movimiento_banco_id=movimiento_banco_id)
+    db.add(e)
+    db.commit()
+    return e
+
+
+class TestPagosCandidatos:
+
+    def test_solo_mismo_importe_banco_sin_vincular_y_fecha_cercana(self, db):
+        from app.services.movimiento_egreso import candidatos_para_movimiento
+        _, (mov, otro) = _extracto(db, movimientos=((-1500, "TRANSF"), (-1500, "TRANSF 2")))
+        _egreso_cargado(db, 1, fecha=date(2026, 10, 3))                      # sí (2 días)
+        _egreso_cargado(db, 2, fecha=date(2026, 9, 28))                      # sí (3 días)
+        _egreso_cargado(db, 3, monto="1499")                                 # otro importe
+        _egreso_cargado(db, 4, forma_pago="efectivo")                        # efectivo
+        _egreso_cargado(db, 5, fecha=date(2026, 11, 30))                     # muy lejos
+        _egreso_cargado(db, 6, org_id=2)                                     # otra org
+        _egreso_cargado(db, 7, movimiento_banco_id=otro.id)                  # ya vinculado
+        ids = [e.id for e in candidatos_para_movimiento(db, mov, 1)]
+        assert ids == [1, 2]  # el más cercano en fecha primero
+
+    def test_endpoint_candidatos(self, db):
+        from app.routers.pagos import candidatos_movimiento
+        _, (mov,) = _extracto(db)
+        _egreso_cargado(db, 1)
+        res = candidatos_movimiento(movimiento_id=mov.id, org_id=None, db=db, current_user=_user())
+        assert [c["id"] for c in res] == [1]
+        assert res[0]["dias_diferencia"] == 2
+
+    def test_endpoint_candidatos_otra_org_404(self, db):
+        from app.routers.pagos import candidatos_movimiento
+        _, (mov,) = _extracto(db, org_id=2)
+        with pytest.raises(HTTPException) as ex:
+            candidatos_movimiento(movimiento_id=mov.id, org_id=None, db=db, current_user=_user())
+        assert ex.value.status_code == 404
+
+
+class TestVincularMovimiento:
+
+    def test_vincula_sin_tocar_asientos(self, db):
+        from app.models.contabilidad import Asiento
+        from app.routers.pagos import vincular_movimiento
+        _, (mov,) = _extracto(db)
+        _egreso_cargado(db, 1)
+        antes = db.query(Asiento).count()
+        res = vincular_movimiento(egreso_id=1, payload={"movimiento_banco_id": mov.id},
+                                  db=db, current_user=_user())
+        assert res["egreso"]["movimiento_banco_id"] == mov.id
+        assert db.query(Asiento).count() == antes
+
+    def test_importe_distinto_rechaza(self, db):
+        from app.routers.pagos import vincular_movimiento
+        _, (mov,) = _extracto(db)
+        _egreso_cargado(db, 1, monto="900")
+        with pytest.raises(HTTPException) as ex:
+            vincular_movimiento(egreso_id=1, payload={"movimiento_banco_id": mov.id},
+                                db=db, current_user=_user())
+        assert ex.value.status_code == 400
+        assert db.get(Egreso, 1).movimiento_banco_id is None
+
+    def test_pago_de_otra_org_404(self, db):
+        from app.routers.pagos import vincular_movimiento
+        _, (mov,) = _extracto(db)
+        _egreso_cargado(db, 1, org_id=2)
+        with pytest.raises(HTTPException) as ex:
+            vincular_movimiento(egreso_id=1, payload={"movimiento_banco_id": mov.id},
+                                db=db, current_user=_user())
+        assert ex.value.status_code == 404
+
+    def test_sin_movimiento_400(self, db):
+        from app.routers.pagos import vincular_movimiento
+        _egreso_cargado(db, 1)
+        with pytest.raises(HTTPException) as ex:
+            vincular_movimiento(egreso_id=1, payload={}, db=db, current_user=_user())
+        assert ex.value.status_code == 400

@@ -120,6 +120,17 @@ export interface ResumenExtracto {
   }
 }
 
+/** Pago ya cargado que podría explicar un débito (GET /pagos/candidatos-movimiento/{id}). */
+export interface PagoCandidato {
+  id: number
+  fecha?: string | null
+  beneficiario?: string | null
+  concepto?: string | null
+  cliente_nombre?: string | null
+  monto: number | string
+  dias_diferencia?: number | null
+}
+
 /** POST /pagos para explicar un débito del extracto ("Resolver" en Movimientos). */
 export interface PagoDesdeMovimientoPayload {
   movimiento_banco_id: number

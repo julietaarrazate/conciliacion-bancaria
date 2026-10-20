@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
-import { MovimientoFiltrado } from '@/types'
+import { MovimientoFiltrado, PagoCandidato } from '@/types'
 import { localIsoDate } from '@/utils/fecha'
 
 interface ResolverMovimientoModalProps {
@@ -10,14 +10,21 @@ interface ResolverMovimientoModalProps {
   onResuelto: (egresoId: number) => void
 }
 
-function fmtARS(n: number) {
+function fmtARS(n: number | string) {
+  n = Number(n)
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n)
+}
+function fmtFecha(d?: string | null) {
+  if (!d) return '—'
+  return new Date(d + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
 /**
- * "Resolver" un débito del extracto sin salir de Movimientos: registra el pago o
- * gasto que lo explica (forma de pago banco, mismo importe) y lo deja vinculado
- * al movimiento. Se contabiliza igual que un pago cargado en Pagos.
+ * "Resolver" un débito del extracto sin salir de Movimientos. Si ya hay pagos
+ * cargados por el mismo importe (banco, sin vincular, fecha cercana) los ofrece
+ * primero para vincularlos — así no se duplica el pago ni su asiento. Si no,
+ * registra el pago o gasto que lo explica (banco, mismo importe) ya vinculado.
+ * Se contabiliza igual que un pago cargado en Pagos.
  */
 export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = ({ mov, orgId, onClose, onResuelto }) => {
   const importe = Math.abs(mov.monto)
@@ -29,6 +36,28 @@ export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = (
   const [categorias, setCategorias] = useState<{ id: number; nombre: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [candidatos, setCandidatos] = useState<PagoCandidato[]>([])
+
+  useEffect(() => {
+    let cancelado = false
+    apiClient.pagosCandidatosMovimiento(mov.id, orgId)
+      .then(c => { if (!cancelado) setCandidatos(c) })
+      .catch(() => {})
+    return () => { cancelado = true }
+  }, [mov.id, orgId])
+
+  const vincular = async (egresoId: number) => {
+    setSaving(true)
+    setError('')
+    try {
+      const res = await apiClient.vincularPagoAMovimiento(egresoId, mov.id)
+      onResuelto(res.egreso.id)
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || 'Error al vincular el pago')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   useEffect(() => {
     let cancelado = false
@@ -81,6 +110,34 @@ export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = (
           <p className="truncate dark:text-gray-200" title={mov.titular || ''}>{mov.titular || '—'}</p>
           <p className="font-mono font-semibold dark:text-white">{fmtARS(importe)} <span className="font-sans font-normal text-gray-400">· por banco</span></p>
         </div>
+        {candidatos.length > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3">
+            <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 mb-2">
+              {candidatos.length === 1 ? 'Hay un pago ya cargado' : `Hay ${candidatos.length} pagos ya cargados`} por el mismo importe.
+              Si es este, vinculalo para no registrarlo dos veces.
+            </p>
+            <ul className="space-y-1.5">
+              {candidatos.map(c => (
+                <li key={c.id} className="flex items-center gap-2 text-xs">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate dark:text-gray-200">{c.beneficiario || c.cliente_nombre || 'Sin beneficiario'}</p>
+                    <p className="truncate text-[10px] text-gray-500 dark:text-gray-400">
+                      #{c.id} · {fmtFecha(c.fecha)}{c.concepto ? ` · ${c.concepto}` : ''}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => vincular(c.id)} disabled={saving}
+                    aria-label={`Vincular pago #${c.id}`}
+                    className="px-2.5 py-1 text-[11px] bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50">
+                    Vincular
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {candidatos.length > 0 && (
+          <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-2">O registrá uno nuevo:</p>
+        )}
         <div className="space-y-3">
           <div>
             <label htmlFor="resolver-tipo" className="label text-xs">Tipo</label>
