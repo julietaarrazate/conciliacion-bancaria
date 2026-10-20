@@ -454,4 +454,25 @@ SAFETY_NET_DDL = [
     # migración 030 — tanda de importación de Mis Comprobantes (deshacer)
     "ALTER TABLE comprobantes_iva ADD COLUMN IF NOT EXISTS lote_importacion VARCHAR(36)",
     "CREATE INDEX IF NOT EXISTS ix_comprobantes_iva_lote_importacion ON comprobantes_iva (lote_importacion)",
+    # migración 031 — grilla de vencimientos: calendario general + marcas manuales por org
+    "CREATE TABLE IF NOT EXISTS calendario_vencimientos ("
+    "id SERIAL PRIMARY KEY, "
+    "impuesto VARCHAR(20) NOT NULL, "
+    "periodo VARCHAR(7) NOT NULL, "
+    "terminacion_desde INTEGER NOT NULL, "
+    "terminacion_hasta INTEGER NOT NULL, "
+    "fecha DATE NOT NULL, "
+    "fuente VARCHAR(255), "
+    "cargado_por INTEGER REFERENCES users(id) ON DELETE SET NULL, "
+    "updated_at TIMESTAMP DEFAULT NOW(), "
+    "CONSTRAINT uq_calendario_venc_bloque UNIQUE (impuesto, periodo, terminacion_desde))",
+    "CREATE TABLE IF NOT EXISTS vencimientos_marcados ("
+    "id SERIAL PRIMARY KEY, "
+    "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+    "impuesto VARCHAR(20) NOT NULL, "
+    "periodo VARCHAR(7) NOT NULL, "
+    "marcado_por INTEGER REFERENCES users(id) ON DELETE SET NULL, "
+    "marcado_at TIMESTAMP DEFAULT NOW(), "
+    "CONSTRAINT uq_vencimiento_marcado UNIQUE (organizacion_id, impuesto, periodo))",
+    "CREATE INDEX IF NOT EXISTS ix_vencimientos_marcados_org ON vencimientos_marcados (organizacion_id)",
 ]
