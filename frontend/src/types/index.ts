@@ -423,7 +423,42 @@ export interface ImportarComprobantesIvaResult {
   importados: number
   duplicados: number
   fuera_de_periodo: number
+  no_elegidos?: number
   periodo: string
+  /** Tanda de importación: se puede deshacer con DELETE /iva/comprobantes/lote/{lote}. */
+  lote?: string | null
+}
+
+/** Fila del Excel "Mis Comprobantes" de ARCA comparada con Cuadra. */
+export interface FilaMisComprobantes {
+  clave: string
+  fecha: string
+  tipo_codigo: number
+  tipo_desc: string | null
+  punto_venta: number | null
+  numero: number | null
+  cuit_contraparte: string | null
+  denominacion: string | null
+  neto_gravado_total: number
+  total_iva: number
+  imp_total: number
+  es_nota_credito: boolean
+  // solo en ya_cargados
+  comprobante_id?: number
+  importe_distinto?: boolean
+  total_iva_cuadra?: number
+  imp_total_cuadra?: number
+}
+
+/** POST /iva/comprobantes/comparar — no importa nada. */
+export interface CompararComprobantesIvaResult {
+  periodo: string
+  direccion: 'emitido' | 'recibido'
+  faltantes: FilaMisComprobantes[]
+  iva_faltante: number
+  ya_cargados: FilaMisComprobantes[]
+  solo_en_cuadra: ComprobanteIva[]
+  fuera_de_periodo: number
 }
 
 // ── Comprobantes por revisar (facturas de compra por mail + IA) ──────────────

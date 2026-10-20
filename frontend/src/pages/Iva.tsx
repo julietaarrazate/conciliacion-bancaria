@@ -4,6 +4,7 @@ import { confirmDialog } from '@/store/confirm'
 import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
 import { FileUpload } from '@/components/FileUpload'
+import { CompararArcaModal } from '@/components/CompararArcaModal'
 import type {
   IvaConfigCuenta,
   IvaProyeccionPreview,
@@ -11,6 +12,7 @@ import type {
   ComprobanteIva,
   LiquidacionIva,
   LiquidacionIvaCalculoPayload,
+  ImportarComprobantesIvaResult,
 } from '@/types'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -141,7 +143,10 @@ export const Iva: React.FC = () => {
     debito_incluido: 0, credito_incluido: 0,
   })
   const [comprobantesLoading, setComprobantesLoading] = useState(false)
-  const [importando, setImportando] = useState<'emitido' | 'recibido' | null>(null)
+  // Excel de Mis Comprobantes en comparación (antes de importar) y última tanda importada (deshacer)
+  const [comparando, setComparando] = useState<{ file: File; direccion: 'emitido' | 'recibido' } | null>(null)
+  const [ultimoLote, setUltimoLote] = useState<string | null>(null)
+  const [deshaciendo, setDeshaciendo] = useState(false)
   const [togglingId, setTogglingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
@@ -162,21 +167,38 @@ export const Iva: React.FC = () => {
 
   useEffect(() => { if (tab === 'comprobantes') cargarComprobantes() }, [tab, cargarComprobantes])
 
-  const importarComprobantes = async (direccion: 'emitido' | 'recibido', file: File) => {
-    setImportando(direccion)
+  // Subir el Excel abre la comparación con lo cargado; la importación se hace desde ahí.
+  const importarComprobantes = (direccion: 'emitido' | 'recibido', file: File) => {
     setMsg(null)
+    setUltimoLote(null)
+    setComparando({ file, direccion })
+  }
+
+  const alImportar = async (res: ImportarComprobantesIvaResult) => {
+    const direccion = comparando?.direccion
+    setComparando(null)
+    setUltimoLote(res.lote || null)
+    setMsg({
+      type: 'ok',
+      text: `${direccion === 'emitido' ? 'Ventas' : 'Compras'}: ${res.importados} importados${res.duplicados ? ` · ${res.duplicados} ya estaban` : ''}.`,
+    })
+    await cargarComprobantes()
+  }
+
+  const deshacerImportacion = async () => {
+    if (!ultimoLote) return
+    if (!await confirmDialog({ title: 'Deshacer importación', message: '¿Borrar los comprobantes que se acaban de importar?', confirmLabel: 'Deshacer', danger: true })) return
+    setDeshaciendo(true)
     try {
-      const res = await apiClient.importarComprobantesIva(file, direccion, periodoComp, activeOrgId || undefined)
-      setMsg({
-        type: 'ok',
-        text: `${direccion === 'emitido' ? 'Ventas' : 'Compras'}: ${res.importados} importados · ${res.duplicados} duplicados · ${res.fuera_de_periodo} fuera del período.`,
-      })
+      const r = await apiClient.deshacerImportacionIva(ultimoLote, activeOrgId || undefined)
+      setUltimoLote(null)
+      setMsg({ type: 'ok', text: `Importación deshecha: ${r.borrados} comprobantes borrados.` })
       await cargarComprobantes()
     } catch (e: any) {
       const detail = e?.response?.data?.detail
-      setMsg({ type: 'error', text: typeof detail === 'string' ? detail : 'No se pudo importar el archivo.' })
+      setMsg({ type: 'error', text: typeof detail === 'string' ? detail : 'No se pudo deshacer la importación.' })
     } finally {
-      setImportando(null)
+      setDeshaciendo(false)
     }
   }
 
@@ -434,7 +456,24 @@ export const Iva: React.FC = () => {
             : 'bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-300'
         }`}>
           {msg.text}
+          {ultimoLote && msg.type === 'ok' && (
+            <button onClick={deshacerImportacion} disabled={deshaciendo}
+              className="ml-2 underline font-medium disabled:opacity-50">
+              Deshacer
+            </button>
+          )}
         </div>
+      )}
+
+      {comparando && (
+        <CompararArcaModal
+          file={comparando.file}
+          direccion={comparando.direccion}
+          periodo={periodoComp}
+          orgId={activeOrgId || undefined}
+          onClose={() => setComparando(null)}
+          onImportado={alImportar}
+        />
       )}
 
       {/* ── Tab Proyección ── */}
@@ -578,7 +617,7 @@ export const Iva: React.FC = () => {
               <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 p-4">
                 <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">📤 Ventas (emitidos)</div>
                 <FileUpload
-                  label={importando === 'emitido' ? 'Importando…' : 'Subir Excel de Mis Comprobantes (ventas)'}
+                  label="Subir Excel de Mis Comprobantes (ventas) — se compara antes de importar"
                   accept=".xlsx,.xls"
                   onFileSelected={file => importarComprobantes('emitido', file)}
                 />
@@ -586,7 +625,7 @@ export const Iva: React.FC = () => {
               <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 p-4">
                 <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">📥 Compras (recibidos)</div>
                 <FileUpload
-                  label={importando === 'recibido' ? 'Importando…' : 'Subir Excel de Mis Comprobantes (compras)'}
+                  label="Subir Excel de Mis Comprobantes (compras) — se compara antes de importar"
                   accept=".xlsx,.xls"
                   onFileSelected={file => importarComprobantes('recibido', file)}
                 />

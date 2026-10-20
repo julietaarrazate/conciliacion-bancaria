@@ -64,8 +64,8 @@ Criterio: primero lo que **reutiliza piezas que Cuadra ya tiene** y refuerza su 
 2. ✅ **Resolver pendientes sin salir de la conciliación** (Xubio) — v3.32 para débitos (pago
    vinculado + % de egresos explicados). Incluye vincular un pago ya cargado. Desde un movimiento sin match:
    "crear pago", "crear cobranza", "crear gasto/asiento" con los datos precargados.
-3. **Importador de faltantes de ARCA** (Colppy), pero **con preview y deshacer**. El import de
-   Mis Comprobantes ya existe en IVA Liquidación: falta el diff "en ARCA y no en Cuadra".
+3. ✅ **Importador de faltantes de ARCA** (Colppy) — v3.33: comparar antes de importar, elegir y
+   deshacer; además marca importes distintos y lo que está en Cuadra y no en ARCA.
 4. **Controles de Contabilium en Comprobantes por revisar**: CUIT receptor = CUIT de la org,
    antigüedad máxima, alta automática del proveedor. Y activar la recepción por mail (pendiente
    de configuración, ver CLAUDE.md).

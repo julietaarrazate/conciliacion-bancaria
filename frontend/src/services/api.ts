@@ -20,6 +20,7 @@ import {
   ResumenExtracto,
   PagoDesdeMovimientoPayload,
   PagoCandidato,
+  CompararComprobantesIvaResult,
   MergeUMResult,
   MovimientosFiltros,
   ConciliacionItem,
@@ -963,11 +964,37 @@ class ApiClient {
   }
 
   // ── IVA — Comprobantes ARCA y Liquidación real ──────────────────────────────
-  async importarComprobantesIva(
+  /** Compara el Excel de Mis Comprobantes con lo cargado, sin importar nada. */
+  async compararComprobantesIva(
     file: File, direccion: 'emitido' | 'recibido', periodo: string, orgId?: number,
+  ): Promise<CompararComprobantesIvaResult> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const params: Record<string, string | number> = { direccion, periodo }
+    if (orgId) params.org_id = orgId
+    const res: AxiosResponse<CompararComprobantesIvaResult> = await this.client.post(
+      '/iva/comprobantes/comparar', formData, {
+        params,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      },
+    )
+    return res.data
+  }
+
+  /** Deshace una importación de Mis Comprobantes (borra esa tanda). */
+  async deshacerImportacionIva(lote: string, orgId?: number): Promise<{ ok: boolean; borrados: number }> {
+    const res = await this.client.delete(`/iva/comprobantes/lote/${lote}`, {
+      params: orgId ? { org_id: orgId } : {},
+    })
+    return res.data
+  }
+
+  async importarComprobantesIva(
+    file: File, direccion: 'emitido' | 'recibido', periodo: string, orgId?: number, claves?: string[],
   ): Promise<ImportarComprobantesIvaResult> {
     const formData = new FormData()
     formData.append('file', file)
+    if (claves) formData.append('claves', JSON.stringify(claves))
     const params: Record<string, string | number> = { direccion, periodo }
     if (orgId) params.org_id = orgId
     const res: AxiosResponse<ImportarComprobantesIvaResult> = await this.client.post(

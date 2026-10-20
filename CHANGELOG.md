@@ -5,6 +5,25 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.33 (oct 2026) — Comparar "Mis Comprobantes" de ARCA antes de importar + deshacer
+
+Idea tomada del benchmark (Colppy: "importador de faltantes"), con revisión previa y **deshacer**
+(Colppy no lo permite). No se conecta a ARCA: usa el Excel que se baja de la web, como antes.
+
+- Subir el Excel en IVA → Comprobantes abre **Comparar con ARCA**: faltan en Cuadra (con el IVA
+  que suman, tildadas para importar), ya cargadas con importe distinto, en Cuadra y no en ARCA
+  (crédito fiscal en riesgo) y de otro período.
+- `POST /iva/comprobantes/comparar` (read-only, `services/comparar_mis_comprobantes.py`) e
+  importación de solo las elegidas (`claves` en `POST /iva/comprobantes/importar`; sin `claves`
+  funciona igual que antes).
+- **Deshacer**: cada importación queda en un lote (`comprobantes_iva.lote_importacion`, migración
+  030 + safety net); `DELETE /iva/comprobantes/lote/{lote}` lo borra salvo que la liquidación del
+  período esté presentada (409).
+- Tests: `test_iva_comparar_arca.py` (9) + `CompararArcaModal.test.tsx` (4), escritos antes del
+  código. Ver `docs/business/BUSINESS_RULES.md` §5.5.
+
+---
+
 ### v3.32 (oct 2026) — Resolver un débito pendiente sin salir de Movimientos
 
 Idea tomada del benchmark de competidores (Xubio: crear el pago desde el movimiento pendiente y

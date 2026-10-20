@@ -512,6 +512,29 @@ sellan el estado y registran la fecha (`iva_service.py:222-243`,
 `iibb_service.py:239-262`, `monotributo_service.py:263-286`); exigen que el
 snapshot ya exista (se calcula primero).
 
+### 5.5. Comparar "Mis Comprobantes" de ARCA antes de importar — v3.33
+
+Antes de importar el Excel de "Mis Comprobantes" (el que se descarga de la web
+de ARCA; **no hay conexión con ARCA**), la pantalla de IVA lo compara con lo
+cargado (`services/comparar_mis_comprobantes.py`, read-only):
+
+- **Identidad** del comprobante: la del unique `uq_comprobante_iva_dedup` —
+  (org, dirección, tipo, punto de venta, número, CUIT de la contraparte); el CUIT
+  se compara solo por dígitos. `clave_comprobante()` = "tipo-pv-número-cuit".
+- `POST /iva/comprobantes/comparar` devuelve:
+  - `faltantes`: del período y no cargados, con su `clave`; `iva_faltante` suma
+    su IVA (las notas de crédito restan).
+  - `ya_cargados`: con `importe_distinto` si el IVA o el total no coinciden con
+    lo cargado.
+  - `solo_en_cuadra`: comprobantes del período que el Excel no trae (en compras:
+    crédito fiscal en riesgo si el proveedor no lo informó).
+  - `fuera_de_periodo`: cantidad; no se comparan.
+- `POST /iva/comprobantes/importar` acepta `claves` (form, JSON) para importar
+  solo las elegidas; sin `claves` importa todo como antes. Cada importación tiene
+  un `lote` (uuid en `comprobantes_iva.lote_importacion`).
+- `DELETE /iva/comprobantes/lote/{lote}` deshace la tanda (solo la org propia).
+  **409** si la liquidación de IVA de alguno de sus períodos está `presentada`.
+
 ---
 
 ## 6. Cierre de período (inmutabilidad financiera)
