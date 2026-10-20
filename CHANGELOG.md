@@ -5,6 +5,24 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.34 (oct 2026) — Comprobantes por revisar: factura a nombre de la empresa y período cerrado
+
+Controles tomados del benchmark (Contabilium), adaptados a Cuadra:
+
+- La IA lee también el **CUIT del comprador**; si no es el de la organización, alerta "La factura
+  está a nombre de otro CUIT". El CUIT de la empresa se carga en la misma pantalla
+  (`CuitOrganizacionCard`, `GET/PUT /comprobantes-compra/cuit-organizacion`, guardado en
+  `configuracion["cuit"]`, con el de ARCA como respaldo). Sin migración.
+- **Período con IVA presentado**: alerta al leer y 409 al confirmar en ese período (se elige uno
+  posterior). Reemplaza a la regla "más de 60 días" de Contabilium, que en IVA no dice si el
+  crédito todavía se puede tomar.
+- No se crean proveedores: Cuadra no tiene maestro de proveedores (queda como idea aparte).
+- Los campos del editor quedaron con la etiqueta asociada al input (accesibilidad).
+- Tests: `test_comprobantes_compra_controles.py` (12) + `CuitOrganizacionCard.test.tsx` (4) + 1 en
+  `ComprobantesCompra.test.tsx`, escritos antes del código.
+
+---
+
 ### v3.33 (oct 2026) — Comparar "Mis Comprobantes" de ARCA antes de importar + deshacer
 
 Idea tomada del benchmark (Colppy: "importador de faltantes"), con revisión previa y **deshacer**

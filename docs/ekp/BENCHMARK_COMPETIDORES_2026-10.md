@@ -66,7 +66,7 @@ Criterio: primero lo que **reutiliza piezas que Cuadra ya tiene** y refuerza su 
    "crear pago", "crear cobranza", "crear gasto/asiento" con los datos precargados.
 3. ✅ **Importador de faltantes de ARCA** (Colppy) — v3.33: comparar antes de importar, elegir y
    deshacer; además marca importes distintos y lo que está en Cuadra y no en ARCA.
-4. **Controles de Contabilium en Comprobantes por revisar**: CUIT receptor = CUIT de la org,
+4. ✅ (v3.34: CUIT receptor + período con IVA presentado; sin maestro de proveedores, no se crean) **Controles de Contabilium en Comprobantes por revisar**: CUIT receptor = CUIT de la org,
    antigüedad máxima, alta automática del proveedor. Y activar la recepción por mail (pendiente
    de configuración, ver CLAUDE.md).
 

@@ -472,6 +472,8 @@ export interface DatosComprobanteCompra {
   fecha: string | null
   cuit_emisor: string | null
   razon_social: string | null
+  /** CUIT a nombre de quién está la factura (se controla contra el de la organización). */
+  cuit_receptor?: string | null
   cae: string | null
   // { "21%": { neto: "1000.00", iva: "210.00" } } — montos como string (Decimal en backend)
   alicuotas: Record<string, { neto: string; iva: string }>

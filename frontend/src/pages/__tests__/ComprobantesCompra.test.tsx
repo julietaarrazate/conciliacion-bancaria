@@ -32,6 +32,8 @@ const api = vi.hoisted(() => ({
   getBuzonComprobantes: vi.fn(),
   getBorradorComprobante: vi.fn(),
   confirmarBorradorComprobante: vi.fn(),
+  getCuitOrganizacion: vi.fn(),
+  setCuitOrganizacion: vi.fn(),
 }))
 
 vi.mock('@/services/api', () => ({ apiClient: api }))
@@ -47,6 +49,7 @@ describe('ComprobantesCompra', () => {
       configurado: true, activo: true, direccion: 'facturas-abc123def456ghij@x.resend.app',
     })
     api.getBorradorComprobante.mockResolvedValue(borrador)
+    api.getCuitOrganizacion.mockResolvedValue({ cuit: '30700000008' })
     api.confirmarBorradorComprobante.mockResolvedValue({
       ok: true, comprobante_iva_id: 1, periodo: '2026-09', egreso_id: null, contabilidad_ok: null, borrador,
     })
@@ -71,5 +74,15 @@ describe('ComprobantesCompra', () => {
     expect(payload.registrar_pago).toBe(false)
     expect(payload.datos.total).toBe(25300)
     expect(payload.datos.alicuotas).toEqual([{ alicuota: '21%', neto: 20000, iva: 4200 }])
+  })
+
+  it('muestra y envía el CUIT del comprador leído por la IA', async () => {
+    api.getBorradorComprobante.mockResolvedValue({ ...borrador, datos: { ...borrador.datos!, cuit_receptor: '30700000008' } })
+    render(<ComprobantesCompra />)
+    fireEvent.click(await screen.findByText('PROVEEDOR DEMO SA'))
+    expect(await screen.findByLabelText('CUIT comprador')).toHaveValue('30700000008')
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+    await waitFor(() => expect(api.confirmarBorradorComprobante).toHaveBeenCalled())
+    expect(api.confirmarBorradorComprobante.mock.lastCall![1].datos.cuit_receptor).toBe('30700000008')
   })
 })

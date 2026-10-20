@@ -1068,6 +1068,17 @@ class ApiClient {
     return orgId ? { org_id: orgId } : {}
   }
 
+  /** CUIT de la organización contra el que se controla a nombre de quién está cada factura. */
+  async getCuitOrganizacion(orgId?: number): Promise<{ cuit: string | null }> {
+    const res = await this.client.get('/comprobantes-compra/cuit-organizacion', { params: this._orgParams(orgId) })
+    return res.data
+  }
+
+  async setCuitOrganizacion(cuit: string, orgId?: number): Promise<{ cuit: string }> {
+    const res = await this.client.put('/comprobantes-compra/cuit-organizacion', { cuit }, { params: this._orgParams(orgId) })
+    return res.data
+  }
+
   async getBuzonComprobantes(orgId?: number): Promise<BuzonComprobantes> {
     const res: AxiosResponse<BuzonComprobantes> = await this.client.get('/comprobantes-compra/buzon', {
       params: this._orgParams(orgId),

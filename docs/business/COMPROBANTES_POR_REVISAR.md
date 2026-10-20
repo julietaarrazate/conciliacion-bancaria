@@ -49,6 +49,17 @@ Fuentes de verdad (código):
   no gravado + exento + percepciones + otros ≠ total (tolerancia $0,10); IVA de una alícuota
   que no coincide con neto × tasa; comprobante C con IVA; comprobante A sin IVA; fecha futura o
   de más de un año.
+- **A nombre de la organización (v3.34)**: la IA lee también el CUIT del comprador
+  (`cuit_receptor`). Si no coincide con el CUIT de la organización aparece la alerta "La factura
+  está a nombre de otro CUIT". El CUIT de la org se carga en la misma pantalla
+  (`GET/PUT /comprobantes-compra/cuit-organizacion`, editar requiere `admin_accounting`) y se
+  guarda en `Organizacion.configuracion["cuit"]`; si no hay, se usa el de la configuración de
+  ARCA. Sin CUIT cargado el control no corre.
+- **Período con IVA presentado (v3.34)**: si la liquidación de IVA del mes de la factura ya está
+  `presentada`, se avisa al leer y **no se deja confirmar en ese período** (409): hay que elegir
+  uno posterior. Antes se podía cargar sin aviso y descuadraba lo ya declarado.
+- **Proveedores**: Cuadra no tiene un maestro de proveedores (en Pagos el beneficiario es texto),
+  así que no se da de alta ninguno; el pago usa la razón social leída.
 - **Percepciones**: se leen y quedan guardadas en el borrador, pero **no** se suman solas a la
   liquidación de IVA (ahí siguen cargándose a mano, como antes).
 - **Notas de crédito** restan en IVA como cualquier NC (`es_nota_credito`) y nunca generan pago.

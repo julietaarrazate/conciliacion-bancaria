@@ -205,7 +205,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ## Estado actual y changelog
 
-**Versión actual: v3.33.** Historial completo de versiones (v3.6 a v3.33, con detalle de cada
+**Versión actual: v3.34.** Historial completo de versiones (v3.6 a v3.34, con detalle de cada
 feature/fix/PR) en **`CHANGELOG.md`** — no se carga automáticamente en cada sesión, así que si
 necesitás contexto histórico detallado de una versión puntual, leelo directamente.
 
@@ -220,7 +220,9 @@ pantalla de revisión y "agregar solo los nuevos" (`docs/business/EXTRACTOS_PDF.
 **v3.32** resolver un débito pendiente desde Movimientos con un pago vinculado + % de egresos
 explicados en el resumen del extracto (`docs/business/BUSINESS_RULES.md` §1.9) ·
 **v3.33** comparar "Mis Comprobantes" de ARCA con lo cargado antes de importar (faltantes, importes
-distintos, en Cuadra y no en ARCA), importar solo lo elegido y deshacer la tanda (§5.5).
+distintos, en Cuadra y no en ARCA), importar solo lo elegido y deshacer la tanda (§5.5) ·
+**v3.34** Comprobantes por revisar: alerta si la factura está a nombre de otro CUIT y no se confirma
+en un período con la liquidación de IVA presentada.
 
 Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,
 sin efectos) y la operadora la rechazó — se revirtió a la landing anterior completa (gradiente,
@@ -429,4 +431,4 @@ Registro de obra: el expediente se guarda fuera del repositorio.
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.33
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.34

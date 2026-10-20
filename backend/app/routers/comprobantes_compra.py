@@ -162,6 +162,39 @@ def activar_buzon(
 
 # ── Subida manual ──────────────────────────────────────────────────
 
+# ── CUIT de la organización (control "la factura es nuestra") ─────
+
+class CuitOrganizacionIn(BaseModel):
+    cuit: str
+
+
+@router.get("/cuit-organizacion")
+def get_cuit_organizacion(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("view_accounting")),
+):
+    """CUIT contra el que se controla a nombre de quién está cada factura."""
+    return {"cuit": svc.cuit_organizacion(db, _org_id(current_user, org_id))}
+
+
+@router.put("/cuit-organizacion")
+def put_cuit_organizacion(
+    body: CuitOrganizacionIn,
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin_accounting")),
+):
+    oid = _org_id(current_user, org_id)
+    try:
+        cuit = svc.guardar_cuit_organizacion(db, oid, body.cuit)
+    except svc.ComprobanteCompraError as ex:
+        raise _http(ex)
+    registrar_log(db, current_user.id, "organizaciones", oid, "CUIT", {"cuit": cuit})
+    db.commit()
+    return {"cuit": cuit}
+
+
 @router.post("/subir")
 async def subir_comprobantes(
     background: BackgroundTasks,

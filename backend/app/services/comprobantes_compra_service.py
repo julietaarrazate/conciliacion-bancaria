@@ -31,9 +31,11 @@ from typing import Any, Callable, Optional
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.arca import ArcaConfig
 from app.models.comprobante_compra import BorradorComprobante, BuzonComprobantes
 from app.models.egreso import Egreso
-from app.models.iva_liquidacion import ComprobanteIva
+from app.models.iva_liquidacion import ComprobanteIva, LiquidacionIva
+from app.models.organizacion import Organizacion
 from app.services.iva_liquidacion_service import es_nota_credito
 from app.services.tz import hoy_art
 
@@ -109,6 +111,8 @@ PROMPT_FACTURA = (
     '"fecha": "YYYY-MM-DD" (fecha de emisión) o null, '
     '"cuit_emisor": CUIT del EMISOR/proveedor, 11 dígitos sin guiones, o null, '
     '"razon_social": razón social del emisor o null, '
+    '"cuit_receptor": CUIT del RECEPTOR/comprador (a nombre de quién está la factura), '
+    '11 dígitos sin guiones, o null, '
     '"cae": número de CAE o null, '
     '"alicuotas": [{"alicuota": "21%"|"10.5%"|"27%"|"5%"|"2.5%"|"0%", '
     '"neto": neto gravado a esa alícuota, "iva": IVA de esa alícuota}] (lista vacía si no discrimina IVA), '
@@ -265,6 +269,7 @@ def normalizar_datos(crudo: Optional[dict]) -> dict:
         "cuit_emisor": normalizar_cuit(crudo.get("cuit_emisor")),
         "razon_social": (str(crudo.get("razon_social")).strip()[:255] or None)
         if crudo.get("razon_social") else None,
+        "cuit_receptor": normalizar_cuit(crudo.get("cuit_receptor")),
         "cae": normalizar_cuit(crudo.get("cae")),
         "alicuotas": alicuotas,
     }
@@ -346,10 +351,51 @@ def ya_cargado_en_iva(db: Session, org_id: int, datos: dict) -> Optional[Comprob
     ).first()
 
 
+def cuit_organizacion(db: Session, org_id: int) -> Optional[str]:
+    """CUIT de la organización: `configuracion["cuit"]`, o el de la configuración
+    de ARCA si no hay otro. None si no está cargado (el control no corre)."""
+    org = db.get(Organizacion, org_id)
+    cuit = normalizar_cuit((org.configuracion or {}).get("cuit")) if org else None
+    if cuit:
+        return cuit
+    arca = db.query(ArcaConfig.cuit).filter(ArcaConfig.organizacion_id == org_id).scalar()
+    return normalizar_cuit(arca)
+
+
+def guardar_cuit_organizacion(db: Session, org_id: int, cuit_raw: Any) -> str:
+    cuit = normalizar_cuit(cuit_raw)
+    if not cuit_valido(cuit):
+        raise ComprobanteCompraError("El CUIT no es válido (revisá los dígitos).", 422)
+    org = db.get(Organizacion, org_id)
+    if not org:
+        raise ComprobanteCompraError("Organización no encontrada.", 404)
+    # dict nuevo: SQLAlchemy no detecta cambios dentro de un JSON mutado in-place
+    org.configuracion = {**(org.configuracion or {}), "cuit": cuit}
+    return cuit
+
+
+def periodo_iva_presentado(db: Session, org_id: int, periodo: Optional[str]) -> bool:
+    if not periodo:
+        return False
+    return db.query(LiquidacionIva.id).filter(
+        LiquidacionIva.organizacion_id == org_id,
+        LiquidacionIva.periodo == periodo,
+        LiquidacionIva.estado == "presentada",
+    ).first() is not None
+
+
 def alertas_completas(db: Session, org_id: int, datos: dict) -> list[str]:
     alertas = validar_datos(datos)
     if ya_cargado_en_iva(db, org_id, datos):
         alertas.append("Este comprobante ya está cargado en IVA.")
+    cuit_org = cuit_organizacion(db, org_id)
+    receptor = datos.get("cuit_receptor")
+    if cuit_org and receptor and receptor != cuit_org:
+        alertas.append(f"La factura está a nombre de otro CUIT ({receptor}), no de esta organización "
+                       f"({cuit_org}): no sirve como crédito fiscal propio.")
+    if datos.get("fecha") and periodo_iva_presentado(db, org_id, periodo_de(datos["fecha"])):
+        alertas.append(f"La liquidación de IVA de {periodo_de(datos['fecha'])} ya está presentada: "
+                       "al confirmar elegí un período posterior.")
     return alertas
 
 
@@ -581,12 +627,17 @@ def confirmar_borrador(
     if periodo is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", periodo):
         raise ComprobanteCompraError("El período debe tener formato AAAA-MM.", 422)
 
+    periodo_final = periodo or periodo_de(datos["fecha"])
+    if periodo_iva_presentado(db, borrador.organizacion_id, periodo_final):
+        raise ComprobanteCompraError(
+            f"La liquidación de IVA de {periodo_final} ya está presentada: elegí un período posterior.", 409)
+
     t = totales(datos)
     tipo = datos["tipo_codigo"]
     comp = ComprobanteIva(
         organizacion_id=borrador.organizacion_id,
         direccion="recibido",
-        periodo=periodo or periodo_de(datos["fecha"]),
+        periodo=periodo_final,
         fecha=date.fromisoformat(datos["fecha"]),
         tipo_codigo=tipo,
         tipo_desc=f"{tipo} - {TIPOS_COMPROBANTE.get(tipo, 'Comprobante')}",
