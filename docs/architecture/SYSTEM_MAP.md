@@ -48,6 +48,7 @@ Todos los routers se montan en `backend/app/main.py` (`app.include_router(...)`)
 | `sueldos.py` | `/sueldos` | — |
 | `arca.py` | `/arca` | — |
 | `comprobantes_compra.py` | `/comprobantes-compra` | webhook `/webhook/resend` sin JWT (firma Svix) |
+| `vencimientos.py` | `/vencimientos` | grilla por org, calendario general (carga solo superadmin), marcas manuales — ver `docs/business/VENCIMIENTOS.md` |
 | `extractos_pdf.py` | `/extractos-pdf` | — |
 
 > Las rutas públicas sin auth (`/p/:token`, `/privacidad`, `/terminos`) son

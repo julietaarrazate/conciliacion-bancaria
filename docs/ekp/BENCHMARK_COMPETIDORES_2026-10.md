@@ -72,7 +72,7 @@ Criterio: primero lo que **reutiliza piezas que Cuadra ya tiene** y refuerza su 
 
 ### Ola 2 — lo que hace que un estudio elija Cuadra
 
-5. **Grilla de vencimientos por cliente** (Onvio/Aconpy) sobre los módulos de impuestos que ya
+5. ✅ (v3.35: calendario cargado mes a mes, estados por módulo o manual, aviso diario) **Grilla de vencimientos por cliente** (Onvio/Aconpy) sobre los módulos de impuestos que ya
    existen (IVA, IIBB, Monotributo, F931), con avisos push y el panel de monotributo por cliente.
 6. **Portal del cliente con pago** (Colppy): evolucionar el link público de estado de cuenta a
    "ver deuda + pagar con Mercado Pago + recibo automático", más pedido de documentación (Onvio).
