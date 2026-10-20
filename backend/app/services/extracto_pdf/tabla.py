@@ -387,11 +387,15 @@ def _columnas_de_signo(celdas: list[Celda], datos: list[tuple[Linea, int]]) -> N
     de columna: "TRANSFERENCIA RECIBIDA CREDITO" es una descripción que se pasa
     por debajo del título vecino, no la columna del signo; y "1.000,00 C" es la
     marca de ese importe, no otra columna. Sin título de signo, una celda cuenta
-    solo si dice la palabra entera y nada más ("Débito automático" no)."""
+    solo si dice la palabra entera y nada más ("Débito automático" no); un código
+    de dos letras (DB/CR) cuenta si la columna no tiene otra cosa (un canal tiene
+    también RV, AJ, ATM)."""
     if not datos:
         return
     marcas = {id(c): 0 for c in celdas}
     palabras = {id(c): 0 for c in celdas}
+    codigos = {id(c): 0 for c in celdas}
+    otros = {id(c): 0 for c in celdas}
     importes = {id(c): 0 for c in celdas}
     for ln, nf in datos:
         margen = max(ln.size, 1.0)
@@ -410,6 +414,7 @@ def _columnas_de_signo(celdas: list[Celda], datos: list[tuple[Linea, int]]) -> N
                 importes[id(c)] += 1
                 continue
             if signo_de_texto(t.texto) is None:
+                otros[id(c)] += 1
                 continue
             anterior = toks[k - 1] if k > nf else None
             siguiente = toks[k + 1] if k + 1 < len(toks) else None
@@ -418,8 +423,9 @@ def _columnas_de_signo(celdas: list[Celda], datos: list[tuple[Linea, int]]) -> N
             if siguiente is not None and siguiente.importe is None and siguiente.x0 - t.x1 <= 0.8 * margen:
                 continue                            # "Débito automático": parte de un texto
             marcas[id(c)] += 1
-            if len(texto_normalizado(t.texto)) >= 3:
-                palabras[id(c)] += 1
+            letras = len(texto_normalizado(t.texto))
+            palabras[id(c)] += letras >= 3
+            codigos[id(c)] += letras >= 2
     n = len(datos)
     movimiento = [c for c in celdas if c.campo in CAMPOS_MOVIMIENTO]
     for c in celdas:
@@ -429,7 +435,9 @@ def _columnas_de_signo(celdas: list[Celda], datos: list[tuple[Linea, int]]) -> N
             and (marcas[id(c)] >= 2 or marcas[id(c)] == n) and marcas[id(c)] >= 0.5 * n
         ):
             c.campo = "signo"
-        elif c.campo == "otro" and otra and not importes[id(c)] and palabras[id(c)] >= max(2, 0.8 * n):
+        elif c.campo == "otro" and otra and not importes[id(c)] and (
+            palabras[id(c)] >= max(2, 0.8 * n) or (not otros[id(c)] and codigos[id(c)] >= max(2, 0.8 * n))
+        ):
             c.campo = "signo"
         elif c.campo == "signo" and not marcas[id(c)] and importes[id(c)] >= max(1, 0.5 * n):
             c.campo = "importe"
@@ -856,6 +864,11 @@ def leer_con_layout(doc: Documento, layout: dict, ctx: ContextoFechas, repetidas
             previo: Optional[tuple[Token, str]] = None
             basura_numerica = False
             marca_signo: Optional[int] = None
+            x_marca = next((
+                t.x0 for t in toks
+                if t.importe is None and bandas.campo(t.cx, dx) == "signo"
+                and signo_de_texto(t.texto, haber=True) is not None
+            ), None)
             for t in toks:
                 campo = bandas.campo(t.cx, dx)
                 if campo is None:
@@ -870,14 +883,18 @@ def leer_con_layout(doc: Documento, layout: dict, ctx: ContextoFechas, repetidas
                 ):
                     campo = "descripcion"           # descripción larga que se pasa de su columna
                 if campo == "signo" and t.importe is None and signo_de_texto(t.texto, haber=True) is None:
-                    campo = "otro"                  # en la columna del signo solo cuentan D/C (o D/H)
+                    # En la columna del signo solo cuentan D/C (o D/H). Lo que cae antes de
+                    # la marca (el CUIT de la descripción) o trae dígitos (una referencia)
+                    # es de la descripción; el resto ("Reversa", "Dinero en cuenta"), no.
+                    antes = x_marca is not None and t.x1 <= x_marca
+                    campo = "descripcion" if antes or any(ch.isdigit() for ch in t.texto) else "otro"
                 if campo in CAMPOS_IMPORTE and t.importe is None:
                     if (
                         campo == "importe" and marca_signo is None
                         and previo is not None and previo[0].importe is not None
-                        and t.x0 - previo[0].x1 <= 0.8 * max(t.size, 1.0)
+                        and t.x0 - previo[0].x1 <= 1.5 * max(t.size, 1.0)
                     ):
-                        marca_signo = signo_de_texto(t.texto)    # "1.234,56 D": pegada al importe
+                        marca_signo = signo_de_texto(t.texto)    # "1.234,56 D": al lado del importe
                     basura_numerica = basura_numerica or any(ch.isdigit() for ch in t.texto)
                     continue                        # "$", "D", "C", basura en columnas numéricas
                 if campo in CAMPOS_TEXTO and t.importe is not None and campo == "fecha":
@@ -1034,7 +1051,7 @@ def leer_con_layout(doc: Documento, layout: dict, ctx: ContextoFechas, repetidas
                 interrumpido = True
                 pendiente = None
 
-    orden = detectar_orden([f.fecha for f in filas])
+    orden = detectar_orden([f.fecha for f in filas], preferido="") or _orden_por_saldo(filas)
     # Al final de una tabla ascendente con saldos, la última fila siempre trae el
     # saldo (por fila o por día): importes sin fecha ni saldo después de ella son
     # de un cuadro al pie (retenciones, totales), no movimientos.
@@ -1184,6 +1201,24 @@ def detectar_orden(
     return preferido
 
 
+def _orden_por_saldo(filas: list[_Fila]) -> str:
+    """Con todas las fechas iguales (un PDF de un solo día): el sentido en que cada
+    saldo se aleja del de la fila vecina justo el importe de la fila (sin mirar el
+    signo). Dos importes iguales seguidos cuentan para los dos lados."""
+    asc = desc = 0
+    for a, b in zip(filas, filas[1:]):
+        if a.saldo is None or b.saldo is None:
+            continue
+        dif = abs(b.saldo - a.saldo)
+        asc += abs(dif - _valor_absoluto(b)) <= TOL
+        desc += abs(dif - _valor_absoluto(a)) <= TOL
+    return "desc" if desc > asc else "asc"
+
+
+def _valor_absoluto(f: _Fila) -> Decimal:
+    return _abs(f.importe) or _abs(f.credito) or _abs(f.debito) or CERO
+
+
 def _resolver_signos(
     filas: list[_Fila], campos: set[str], orden: str, saldo_inicial: Optional[Decimal]
 ) -> tuple[str, list[Optional[Decimal]]]:
@@ -1232,14 +1267,19 @@ def _resolver_signos(
 
 def _marcas_confiables(filas: list[_Fila], orden: str) -> bool:
     """Las palabras "Débito"/"Crédito" (o D/C) se usan como signo solo si no
-    contradicen lo que el PDF dice por otro lado: el "-" impreso (una sola fila
-    distinta puede ser un ajuste) y el saldo corrido entre dos filas con saldo,
-    cuando ese saldo da un único signo posible. Una "D/C" del saldo (deudor o
-    acreedor), el medio de pago ("Débito" de la tarjeta) o un código de canal
-    no siguen el saldo: con ellas el signo sale como si no estuvieran."""
-    if sum(1 for f in filas if f.importe is not None and f.importe_negativo and f.signo == 1) >= 2:
-        return False
+    contradicen lo que el PDF dice por otro lado. Una "D/C" del saldo (deudor o
+    acreedor), el medio de pago ("Débito" de la tarjeta) o un código de canal no
+    son el signo: con ellas el signo sale como si no estuvieran.
+
+    Manda el saldo corrido entre dos filas con saldo: si los signos de las palabras
+    no llegan al saldo y el saldo da un único signo posible, no son el signo. Si
+    llegan con algún "Débito" sin "-" impreso, la columna dice algo que el importe
+    no: es el signo, y un "-" impreso en contra es un ajuste de esa fila (un
+    reverso). Si no, manda el "-" impreso: no son el signo si dos filas o más tienen
+    "-" y "Crédito" (la "C" de un saldo acreedor), o si los débitos se imprimen con
+    "-" y dos filas o más sin "-" dicen "Débito" (el medio de pago)."""
     idx = range(len(filas)) if orden != "desc" else range(len(filas) - 1, -1, -1)
+    debito_comprobado = False
     previo: Optional[Decimal] = None
     grupo: list[_Fila] = []
     for i in idx:
@@ -1257,11 +1297,19 @@ def _marcas_confiables(filas: list[_Fila], orden: str) -> bool:
         ):
             valores = [_abs(g.importe) or CERO for g in grupo]
             total = sum((s * v for s, v in zip(dados, valores)), CERO)
-            if abs(previo + total - f.saldo) > TOL and _signos_unicos(valores, f.saldo - previo) is not None:
+            if abs(previo + total - f.saldo) <= TOL:
+                debito_comprobado |= any(g.signo == -1 and not g.importe_negativo for g in grupo)
+            elif _signos_unicos(valores, f.saldo - previo) is not None:
                 return False
         previo = f.saldo
         grupo = []
-    return True
+    if debito_comprobado:
+        return True
+    con_importe = [f for f in filas if f.importe is not None]
+    if sum(1 for f in con_importe if f.importe_negativo and f.signo == 1) >= 2:
+        return False
+    debitos_con_menos = any(f.importe_negativo and f.signo == -1 for f in con_importe)
+    return not (debitos_con_menos and sum(1 for f in con_importe if not f.importe_negativo and f.signo == -1) >= 2)
 
 
 MAX_FILAS_SIN_SALDO = 24

@@ -119,23 +119,31 @@ Reglas:
   signo en otra columna: la columna da el signo (campo `signo` del layout). Se reconoce por el
   título ("Débito/Crédito" junto a "Monto", también partido en dos renglones, "D/C" o "D/H") o
   por el contenido: debajo de un título de importe solo marcas y ningún importe, o debajo de un
-  título desconocido ("Tipo") las palabras enteras (de 3 letras o más) en casi todas las filas.
+  título desconocido ("Tipo") las palabras enteras (de 3 letras o más) en casi todas las filas,
+  o solo códigos DB/CR si la columna no dice otra cosa (un canal también dice RV, AJ).
   Una marca pegada a la descripción ("COMPRA TARJETA DE DEBITO", "Débito automático") o al
   importe ("1.000,00 C") no arma una columna. Sin títulos reconocibles no se busca: la última
   palabra de muchas descripciones es "debito" o "credito". En esa columna, lo que no es una
-  marca no se suma a la descripción.
-- La columna de signo se descarta y los signos salen del saldo si no es confiable: dos filas o
-  más con un "-" impreso que la contradice, o un tramo entre dos saldos impresos donde los
-  signos de la columna no llegan al saldo y el saldo da una única combinación de signos. Con
-  la columna confiable, un "-" impreso igual manda sobre la palabra (la fila queda para revisar
-  con "El signo impreso no coincide con la columna"), y una fila sin palabra saca el signo del
-  saldo, descontando los que ya se conocen. Una marca D/C pegada al importe ("1.500,00 D")
-  también da el signo de esa fila.
+  marca no se suma a la descripción, salvo lo que está antes de la marca o trae dígitos (el
+  CUIT de la contraparte alineado aparte).
+- La columna de signo se descarta y los signos salen del saldo (o del "-" impreso) si no es
+  confiable. Manda el saldo corrido: si en un tramo entre dos saldos impresos los signos de la
+  columna no llegan al saldo y el saldo da una única combinación de signos, se descarta; si
+  llegan con algún "Débito" sin "-" impreso, se queda (los reversos impresos "-$ X Crédito"
+  son ajustes de esa fila). Sin eso manda el "-" impreso: se descarta con dos filas o más con
+  "-" y "Crédito" (la "C" de un saldo acreedor) o, si los débitos se imprimen con "-", con dos
+  filas o más sin "-" que dicen "Débito" (el medio de pago de una venta). Con la columna
+  confiable, un "-" impreso igual manda sobre la palabra (la fila queda para revisar con "El
+  signo impreso no coincide con la columna"), y una fila sin palabra saca el signo del saldo,
+  descontando los que ya se conocen. Una marca D/C al lado del importe ("1.500,00 D", también
+  a unos espacios en letra monoespaciada) da el signo de esa fila.
 - Entre lecturas automáticas que no cierran y leyeron las mismas filas (fecha e importe), gana
   la que menos saltos tiene en su propio saldo corrido y después la que menos signos tuvo que
   suponer, antes que la de diferencia más chica: un signo deducido contra un saldo inicial mal
   impreso puede dar una diferencia más chica.
-- Orden ascendente o descendente; fechas sin año (con el período del PDF o el año más reciente).
+- Orden ascendente o descendente; si todas las filas tienen la misma fecha (los movimientos de
+  un día), el orden sale de cómo se mueve el saldo fila a fila. Fechas sin año (con el período
+  del PDF o el año más reciente).
 - Saldo por fila o por día, "Saldo anterior" como transporte arriba de cada hoja ("Transporte",
   "Viene de hoja 2" por palabra entera: "TRANSPORTES DEL SUR SRL" o "TRANSPORTE DE CAUDALES"
   con fecha e importe son movimientos), subtotales,

@@ -33,8 +33,11 @@ es igual al del Excel.
   upload de Excel, sin cambio de comportamiento).
 - Probado con un PDF real (resumen de movimientos de home banking): columna
   Débito/Crédito que da el signo de un importe sin signo, y aviso claro cuando el saldo inicial o
-  final del cuadro de arriba no coincide con el de los movimientos.
-- Tests: 202 backend (`test_extracto_pdf_lector.py`, `test_extracto_pdf_casos_dificiles.py`,
+  final del cuadro de arriba no coincide con el de los movimientos. Revisado además contra
+  formatos parecidos de otros bancos: columna D/H, marcas al lado del importe, columnas de
+  medio de pago o de canal que no son el signo, reversos con "-", resúmenes de un solo día,
+  hojas sin texto y movimientos que empiezan con "Transporte".
+- Tests: 277 backend (`test_extracto_pdf_lector.py`, `test_extracto_pdf_casos_dificiles.py`,
   `test_extractos_pdf_api.py`, `test_extracto_import.py`) + 65 frontend.
 - Ver `docs/business/EXTRACTOS_PDF.md`. Pendiente: probar con PDFs reales del resto de los bancos.
 
