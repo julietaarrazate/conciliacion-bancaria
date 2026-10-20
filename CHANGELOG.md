@@ -42,7 +42,7 @@ es igual al del Excel.
   o dos letras se controlan contra el saldo; entre la columna de signo y el "-" impreso decide el
   saldo inicial y final; renglones de transporte y subtotales más estrictos; el pie sin saldo se
   descarta también en orden descendente.
-- Tests: 277 backend (`test_extracto_pdf_lector.py`, `test_extracto_pdf_casos_dificiles.py`,
+- Tests: 338 backend (`test_extracto_pdf_lector.py`, `test_extracto_pdf_casos_dificiles.py`,
   `test_extractos_pdf_api.py`, `test_extracto_import.py`) + 65 frontend.
 - Ver `docs/business/EXTRACTOS_PDF.md`. Pendiente: probar con PDFs reales del resto de los bancos.
 
