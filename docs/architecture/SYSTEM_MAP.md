@@ -34,6 +34,7 @@ Todos los routers se montan en `backend/app/main.py` (`app.include_router(...)`)
 | `contabilidad.py` | `/contabilidad` | + `ctb_plan`, `ctb_libro`, `ctb_clientes`, `ctb_ctas_corrientes` (+ `ctb_common` helpers) |
 | `cheques.py` | `/cheques` | + `cheques_reportes`, `cheques_crud`, `cheques_acreditacion` (+ `cheques_common`) |
 | `pagos.py` | `/pagos` | — |
+| `proveedores.py` | `/proveedores` | ficha de proveedores propios de la org (no los de los clientes) — ver `docs/business/PROVEEDORES.md` |
 | `papelera.py` | `/admin/papelera` | — |
 | `backup_admin.py` | `/admin/backup` | — |
 | `analisis.py` | `/analisis` | — |
@@ -48,6 +49,8 @@ Todos los routers se montan en `backend/app/main.py` (`app.include_router(...)`)
 | `sueldos.py` | `/sueldos` | — |
 | `arca.py` | `/arca` | — |
 | `comprobantes_compra.py` | `/comprobantes-compra` | webhook `/webhook/resend` sin JWT (firma Svix) |
+| `procesos_masivos.py` | `/procesos-masivos` | un cálculo para varias orgs + Mis Comprobantes de varias organizaciones — ver `docs/business/PROCESOS_MASIVOS.md` |
+| `vencimientos.py` | `/vencimientos` | grilla por org, calendario general (carga solo superadmin), marcas manuales — ver `docs/business/VENCIMIENTOS.md` |
 | `extractos_pdf.py` | `/extractos-pdf` | — |
 
 > Las rutas públicas sin auth (`/p/:token`, `/privacidad`, `/terminos`) son

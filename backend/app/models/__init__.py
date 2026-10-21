@@ -18,6 +18,8 @@ from .password_reset import PasswordResetToken
 from .arca import ArcaConfig, ComprobanteArca
 from .comprobante_compra import BuzonComprobantes, BorradorComprobante
 from .extracto_pdf import BorradorExtractoPdf, MoldeExtractoPdf
+from .vencimientos import CalendarioVencimiento, VencimientoMarcado
+from .proveedor import Proveedor
 
 __all__ = [
     "Organizacion", "User", "Cliente",
@@ -36,4 +38,6 @@ __all__ = [
     "ArcaConfig", "ComprobanteArca",
     "BuzonComprobantes", "BorradorComprobante",
     "BorradorExtractoPdf", "MoldeExtractoPdf",
+    "CalendarioVencimiento", "VencimientoMarcado",
+    "Proveedor",
 ]

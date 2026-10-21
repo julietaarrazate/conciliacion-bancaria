@@ -5,6 +5,77 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### v3.37 (oct 2026) — Ficha de proveedores propios
+
+Primera fase de retenciones. Ver `docs/business/PROVEEDORES.md`.
+
+- **Proveedores** (`/proveedores`): a quién le compra la organización, con facturado (facturas
+  recibidas en IVA, NC restan), pagado y saldo. Alta manual, edición, baja lógica.
+- **Traer de las facturas**: da de alta los emisores de las facturas recibidas que falten, sin pisar
+  lo editado. Comprobantes por revisar también da de alta al emisor al confirmar y vincula el pago.
+- **Pagos y "＋ Resolver"**: el campo Proveedor sugiere los de la ficha y, si coincide, vincula el
+  pago (`Egreso.proveedor_id`). Las OP por cuenta de un cliente no usan la ficha (400 si se intenta).
+- Migración 032 (`proveedores` + `egresos.proveedor_id`) con su safety net.
+- El backup diario incluye la tabla `proveedores`.
+- Tests: 12 backend (`test_proveedores.py`) + backup, 6 de la página y 3 nuevos del modal Resolver.
+
+---
+
+### Fix (oct 2026) — "Resolver" no separaba las OP por cuenta de un cliente
+
+En Movimientos, "＋ Resolver" (v3.32) solo ofrecía Gasto o Pago a proveedor: un débito que era una
+OP pagada **por cuenta de un cliente** (la organización le paga a un proveedor del cliente) solo
+se podía cargar como gasto propio, mezclando la plata del cliente con los gastos de la organización.
+
+- "＋ Resolver" ahora ofrece **OP por cuenta de un cliente** (cliente + "a favor de"), igual que
+  Pagos: va a la cuenta corriente del cliente (`pago_cliente`), sin categoría de gasto.
+- Pagos: "Pago a cliente" pasa a llamarse **"OP por cuenta de cliente"** (se confundía con devolverle
+  plata al cliente). Sin cambios de datos.
+- `apiClient.listarClientesOrg` reemplaza el armado de la lista de clientes que hacía Pagos a mano
+  (lo usan Pagos y el modal).
+- Tests: el backend ya lo soportaba (test nuevo en `test_resolver_pendientes.py` que verifica el
+  asiento contra la cuenta del cliente); 3 tests nuevos del modal.
+
+---
+
+### v3.36 (oct 2026) — Procesos masivos
+
+Un mismo cálculo para varias organizaciones a la vez. Ver `docs/business/PROCESOS_MASIVOS.md`.
+
+- **Calcular para todas**: liquidación y proyección de IVA, proyección de IIBB, control de
+  Monotributo y liquidación de sueldos para cada organización accesible con el módulo activo.
+  Resultado por org: calculado / ya presentado (no se toca) / omitido / error, sin que un error
+  corte al resto. La liquidación de IVA conserva las retenciones y percepciones cargadas a mano.
+- **Mis Comprobantes de varias organizaciones**: se suben todos los Excels juntos, cada uno va a su org
+  por el CUIT del título; primero se compara y después se importan las faltantes, con un lote por
+  org que se puede deshacer.
+- Solo para quien maneja varias organizaciones (superadmin o contador con organizaciones extra): el
+  menú se oculta al resto (`utils/orgs.manejaVariasOrgs`, compartido con el selector de organización).
+  Organización = empresa que usa Cuadra; sus clientes (los de las planillas) no entran acá.
+- Refactors sin cambio de comportamiento: `importar_filas` (compartido con la importación de IVA) y
+  `services/acceso_orgs.py` (compartido con Vencimientos).
+- Tests primero: `test_procesos_masivos.py` (13) + `ProcesosMasivos.test.tsx` (6) + `orgs.test.ts` (3).
+
+---
+
+### v3.35 (oct 2026) — Grilla de vencimientos por organización
+
+Ver `docs/business/VENCIMIENTOS.md`.
+
+- Página **Vencimientos**: qué vence en el mes para cada organización que ve el usuario (IVA,
+  Monotributo, IIBB Convenio Multilateral, F.931), con fecha según la terminación del CUIT y estado
+  presentado / vencido / vence pronto / pendiente. Lo presentado en IVA, IIBB y Sueldos aparece solo;
+  el resto se marca a mano.
+- **Calendario cargado mes a mes** por el superadmin desde la web de ARCA (no hay calendario anual
+  oficial y cambia por RG): `calendario_vencimientos` + `vencimientos_marcados` (migración 031 +
+  safety net). Monotributo: día 20 o hábil siguiente si no está cargado. Sin fecha → "falta el
+  calendario", nunca una fecha inventada. Semilla con las fechas confirmadas de octubre 2026.
+- Qué le toca a cada org: módulos activos o `configuracion["obligaciones"]`.
+- El aviso diario de las 10:00 suma los vencimientos en 3 días sin presentar.
+- Tests primero: `test_vencimientos.py` (20) + `Vencimientos.test.tsx` (5).
+
+---
+
 ### v3.34 (oct 2026) — Comprobantes por revisar: factura a nombre de la empresa y período cerrado
 
 Controles nuevos al cargar facturas de compra:

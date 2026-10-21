@@ -21,6 +21,16 @@ import {
   PagoDesdeMovimientoPayload,
   PagoCandidato,
   CompararComprobantesIvaResult,
+  GrillaVencimientos,
+  Proveedor,
+  ProveedorInput,
+  AccionMasiva,
+  ResultadoMasivo,
+  ComparacionMisComprobantesArchivo,
+  ImportacionMisComprobantesArchivo,
+  ImpuestoVencimiento,
+  BloqueCalendario,
+  CalendarioVencimientoFila,
   MergeUMResult,
   MovimientosFiltros,
   ConciliacionItem,
@@ -593,6 +603,18 @@ class ApiClient {
     return res.data
   }
 
+  /** Todos los clientes de la organización (incluso sin planillas), ordenados por nombre. */
+  async listarClientesOrg(orgId?: number | null): Promise<{ id: number; nombre: string }[]> {
+    const res = await this.client.get('/clientes/archivos', { params: orgId ? { org_id: orgId } : {} })
+    // r.data.clientes solo incluye clientes con planillas; organizaciones[].clientes trae todos
+    const orgs: { clientes?: { id: number; nombre: string }[] }[] = res.data.organizaciones || []
+    const todos = orgs.flatMap(o => o.clientes || [])
+    const lista: { id: number; nombre: string }[] = todos.length
+      ? todos.map(c => ({ id: c.id, nombre: c.nombre }))
+      : (res.data.clientes?.map((c: { id?: number; nombre: string }) => ({ id: c.id || 0, nombre: c.nombre })) || [])
+    return lista.sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }
+
   async listarCategoriasEgreso(orgId?: number | null): Promise<{ id: number; nombre: string }[]> {
     const res = await this.client.get('/pagos/categorias', { params: orgId ? { org_id: orgId } : {} })
     return res.data || []
@@ -1066,6 +1088,97 @@ class ApiClient {
   // ── Comprobantes por revisar (facturas de compra por mail + IA) ─────────────
   private _orgParams(orgId?: number): Record<string, number> {
     return orgId ? { org_id: orgId } : {}
+  }
+
+  // ── Procesos masivos ───────────────────────────────────────────────────────
+  async calcularMasivo(accion: AccionMasiva, periodo: string): Promise<{ resultados: ResultadoMasivo[] }> {
+    const res = await this.client.post('/procesos-masivos/calcular', { accion, periodo })
+    return res.data
+  }
+
+  private _formArchivos(files: File[]): FormData {
+    const formData = new FormData()
+    files.forEach(f => formData.append('files', f))
+    return formData
+  }
+
+  /** Asigna cada Excel de Mis Comprobantes a su org por el CUIT del título y compara. No importa. */
+  async compararMisComprobantesVarios(files: File[], direccion: 'emitido' | 'recibido', periodo: string):
+    Promise<{ archivos: ComparacionMisComprobantesArchivo[] }> {
+    const res = await this.client.post('/procesos-masivos/mis-comprobantes/comparar', this._formArchivos(files), {
+      params: { direccion, periodo }, headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return res.data
+  }
+
+  async importarMisComprobantesVarios(files: File[], direccion: 'emitido' | 'recibido', periodo: string):
+    Promise<{ archivos: ImportacionMisComprobantesArchivo[] }> {
+    const res = await this.client.post('/procesos-masivos/mis-comprobantes/importar', this._formArchivos(files), {
+      params: { direccion, periodo }, headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    this.invalidateCache('/iva')
+    return res.data
+  }
+
+  // ── Proveedores propios de la organización ────────────────────────────────
+  async listarProveedores(orgId?: number | null, opts: { q?: string; incluirInactivos?: boolean } = {}): Promise<Proveedor[]> {
+    const res = await this.client.get('/proveedores', { params: {
+      ...(orgId ? { org_id: orgId } : {}),
+      ...(opts.q ? { q: opts.q } : {}),
+      ...(opts.incluirInactivos ? { incluir_inactivos: true } : {}),
+    } })
+    return res.data
+  }
+
+  async crearProveedor(datos: ProveedorInput, orgId?: number): Promise<Proveedor> {
+    const res = await this.client.post('/proveedores', { ...datos, ...(orgId ? { org_id: orgId } : {}) })
+    return res.data
+  }
+
+  async actualizarProveedor(id: number, datos: ProveedorInput & { activo?: boolean }): Promise<Proveedor> {
+    const res = await this.client.patch(`/proveedores/${id}`, datos)
+    return res.data
+  }
+
+  /** Baja lógica: deja de listarse, sus pagos y facturas quedan. */
+  async bajaProveedor(id: number): Promise<{ ok: boolean }> {
+    const res = await this.client.delete(`/proveedores/${id}`)
+    return res.data
+  }
+
+  /** Da de alta los emisores de las facturas recibidas que no estén en la ficha. */
+  async sincronizarProveedores(orgId?: number): Promise<{ creados: number }> {
+    const res = await this.client.post('/proveedores/sincronizar', null, { params: this._orgParams(orgId) })
+    return res.data
+  }
+
+  // ── Vencimientos ───────────────────────────────────────────────────────────
+  async getGrillaVencimientos(mes: string): Promise<GrillaVencimientos> {
+    const res = await this.client.get('/vencimientos/grilla', { params: { mes } })
+    return res.data
+  }
+
+  async marcarVencimiento(organizacionId: number, impuesto: ImpuestoVencimiento, periodo: string): Promise<{ ok: boolean }> {
+    const res = await this.client.post('/vencimientos/marcar', { organizacion_id: organizacionId, impuesto, periodo })
+    return res.data
+  }
+
+  async desmarcarVencimiento(organizacionId: number, impuesto: ImpuestoVencimiento, periodo: string): Promise<{ ok: boolean }> {
+    const res = await this.client.delete('/vencimientos/marcar', { data: { organizacion_id: organizacionId, impuesto, periodo } })
+    return res.data
+  }
+
+  async getCalendarioVencimientos(periodo: string): Promise<CalendarioVencimientoFila[]> {
+    const res = await this.client.get('/vencimientos/calendario', { params: { periodo } })
+    return res.data
+  }
+
+  /** Carga o reemplaza las fechas de un impuesto y período (solo superadmin; vale para todas las orgs). */
+  async guardarCalendarioVencimientos(body: {
+    impuesto: ImpuestoVencimiento; periodo: string; fuente?: string; fechas: BloqueCalendario[]
+  }): Promise<CalendarioVencimientoFila[]> {
+    const res = await this.client.put('/vencimientos/calendario', body)
+    return res.data
   }
 
   /** CUIT de la organización contra el que se controla a nombre de quién está cada factura. */

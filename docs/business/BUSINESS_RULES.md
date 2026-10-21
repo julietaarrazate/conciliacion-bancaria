@@ -227,6 +227,10 @@ Desde Movimientos, un débito sin explicar se resuelve registrando el pago o
 gasto que lo explica ("＋ Resolver"), sin ir a Pagos. El vínculo es
 `Egreso.movimiento_banco_id` (`services/movimiento_egreso.py`):
 
+- Tres tipos, como en Pagos: **gasto propio** y **pago a un proveedor propio** (van a Gastos de
+  la organización) u **OP por cuenta de un cliente** (`pago_cliente`: la organización paga a un
+  proveedor del cliente y se debita la **cuenta corriente del cliente**; no es gasto ni proveedor
+  de la organización). Organización ≠ cliente: ver CLAUDE.md → Multi-tenant.
 - Solo **débitos** y egresos con `forma_pago=banco`. Un crédito se sigue
   explicando acreditándolo a un cliente (`cliente_acreditado`), que no se toca
   para los débitos porque alimenta reportes y cuentas corrientes de clientes.
@@ -476,8 +480,9 @@ Archivo: `backend/app/services/monotributo_service.py`.
   (`evaluar_categoria`, `monotributo_service.py:118-152`).
 - Requiere `MonotributoConfig.activo = True`, si no lanza error
   (`monotributo_service.py:186-190`).
-- Escala sembrada `_LIMITES_VIGENTES` (categorías A-K, vigente desde 1/feb/2026)
-  — **editable, no hardcodeada en lógica** (`monotributo_service.py:305-319`).
+- Escala sembrada `_LIMITES_VIGENTES` (categorías A-K, vigente desde 1/ago/2026)
+  — **editable, no hardcodeada en lógica** (`monotributo_service.py:304-316`). El seed solo
+  corre para orgs sin categorías: las ya sembradas conservan sus valores y se editan a mano.
   Recordatorio de actualización semestral en
   [`../../CLAUDE.md`](../../CLAUDE.md).
 

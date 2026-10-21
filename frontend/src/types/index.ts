@@ -134,7 +134,11 @@ export interface PagoCandidato {
 /** POST /pagos para explicar un débito del extracto ("Resolver" en Movimientos). */
 export interface PagoDesdeMovimientoPayload {
   movimiento_banco_id: number
-  tipo: 'gasto' | 'proveedor'
+  /** gasto/proveedor: de la organización. pago_cliente: OP pagada por cuenta de un cliente (va a su cuenta corriente). */
+  tipo: 'gasto' | 'proveedor' | 'pago_cliente'
+  cliente_nombre?: string
+  /** Solo en tipo=proveedor: proveedor de la ficha de la organización. */
+  proveedor_id?: number
   forma_pago: 'banco'
   monto: number
   fecha: string
@@ -932,3 +936,100 @@ export interface MoldeExtractoPdf {
   creado_at: string | null
   ultimo_uso_at: string | null
 }
+
+// ── Vencimientos (grilla por organización) ───────────────────────────────────
+export type ImpuestoVencimiento = 'iva' | 'monotributo' | 'iibb_cm' | 'f931'
+
+export interface CeldaVencimiento {
+  impuesto: ImpuestoVencimiento
+  nombre: string
+  /** Período fiscal que vence (IVA/IIBB/F931: el mes anterior; Monotributo: el mismo mes). */
+  periodo: string
+  fecha: string | null
+  motivo: 'sin_cuit' | 'sin_calendario' | null
+  estado: 'presentado' | 'vencido' | 'proximo' | 'pendiente'
+  presentado_por: 'modulo' | 'manual' | null
+}
+
+export interface FilaVencimientos {
+  organizacion_id: number
+  nombre: string
+  cuit: string | null
+  obligaciones: CeldaVencimiento[]
+}
+
+export interface GrillaVencimientos {
+  mes: string
+  hoy: string
+  impuestos: Record<ImpuestoVencimiento, string>
+  filas: FilaVencimientos[]
+}
+
+export interface BloqueCalendario {
+  terminacion_desde: number
+  terminacion_hasta: number
+  fecha: string
+}
+
+export interface CalendarioVencimientoFila extends BloqueCalendario {
+  impuesto: ImpuestoVencimiento
+  periodo: string
+  fuente: string | null
+}
+
+// ── Procesos masivos ──────────────────────────────────────────────────────────
+export type AccionMasiva = 'iva_liquidacion' | 'iva_proyeccion' | 'iibb_proyeccion' | 'monotributo_control' | 'sueldos_liquidacion'
+
+export interface ResultadoMasivo {
+  organizacion_id: number
+  nombre: string
+  resultado: 'calculado' | 'ya_presentado' | 'omitido' | 'error'
+  detalle: string | null
+  resumen: Record<string, number | string | boolean | null> | null
+}
+
+export interface ComparacionMisComprobantesArchivo {
+  archivo: string
+  cuit: string | null
+  organizacion_id: number | null
+  nombre: string | null
+  error: string | null
+  faltantes: number
+  iva_faltante: number
+  ya_cargados: number
+  importes_distintos: number
+  solo_en_cuadra: number
+  fuera_de_periodo: number
+}
+
+export interface ImportacionMisComprobantesArchivo {
+  archivo: string
+  cuit: string | null
+  organizacion_id: number | null
+  nombre: string | null
+  error: string | null
+  importados: number
+  duplicados: number
+  lote: string | null
+}
+
+// ── Proveedores propios de la organización ───────────────────────────────────
+export type CondicionIva = 'responsable_inscripto' | 'monotributo' | 'exento' | 'no_alcanzado'
+
+export interface Proveedor {
+  id: number
+  organizacion_id: number
+  cuit: string | null
+  razon_social: string
+  condicion_iva: CondicionIva | null
+  email: string | null
+  cbu: string | null
+  notas: string | null
+  origen: 'manual' | 'comprobantes'
+  activo: boolean
+  total_facturado: number
+  total_pagado: number
+  saldo: number
+}
+
+export type ProveedorInput = Partial<Pick<Proveedor, 'cuit' | 'razon_social' | 'condicion_iva' | 'email' | 'cbu' | 'notas'>>

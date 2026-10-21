@@ -49,6 +49,7 @@ Registro vivo. Cada doc de `/docs` tiene además su propia sección `## Pendient
 | D-7 | Cobertura de frontend acotada (utilidades + smoke de componentes; sin E2E) | Bajo-Medio | **Parcial**: vitest + Testing Library (jsdom) con smoke tests de componentes (`CuadraLogo`, `Skeleton`, `DonutChart`) + tests de utilidades (`monto`, `fecha`). Falta E2E de flujos críticos (Playwright) |
 | D-9 | **Comprobantes por revisar y la lectura con IA de extractos PDF procesan en `BackgroundTasks`** del proceso web: un reinicio de Render a mitad de una lectura deja el borrador en `procesando`. La cuota diaria de IA de extractos PDF (`EXTRACTOS_PDF_IA_DAILY_LIMIT`) también vive en memoria (ver D-4) | Bajo | Aceptado (se vuelve a subir); mejora futura: job que reintente `procesando` viejos |
 | D-10 | **Lector de extractos PDF probado solo con PDFs generados** (v3.31). Casos conocidos sin resolver: listados monoespaciados con columnas a menos de un espacio (la fecha no se reconoce, fila "Sin fecha"); columnas de importes superpuestas (no cierra → IA). "Agregar solo los nuevos" usa el merge de UM, que compara (saldo, importe) sin fecha | Medio | Abierto: probar con PDFs reales de cada banco y sumar cada falla como test en `test_extracto_pdf_casos_dificiles.py`. Detalle en `docs/business/EXTRACTOS_PDF.md` |
+| D-11 | **Vínculo pago ↔ proveedor por nombre** (v3.37): en Pagos/Resolver el `proveedor_id` sale de que el nombre escrito coincida con la razón social de la ficha; los pagos viejos o con otro nombre quedan sin vínculo y no suman al "pagado" del proveedor | Bajo | Aceptado (el saldo es orientativo); antes de calcular retenciones por acumulado mensual, ofrecer vincular los pagos a proveedor sin `proveedor_id` |
 | D-8 | **Cadena Alembic desincronizada del esquema real** (jul 2026): `env.py` importaba clases inexistentes → `upgrade`/`stamp` fallaban → Alembic no corría en prod (el esquema lo sostienen `create_all` + safety-nets). `001` es stamp baseline (no construye desde cero); 007–009 referencian tablas ya dropeadas | Medio | **env.py corregido** (importa módulos, no clases). Camino real verificado sobre PG (sella 020, 44 tablas). **Resuelto (decisión jul 2026)**: `_run_alembic` ahora **solo hace `stamp head`** (no `upgrade`) → Alembic refleja la realidad sin correr la cadena derivada; `create_all`+safety-nets son la fuente de verdad. Re-baseline = mejora futura opcional |
 
 > Áreas históricamente frágiles (ver [`BUGS.md`](../../BUGS.md)): fechas UTC-3, Decimal vs float,
@@ -62,10 +63,12 @@ línea: conciliación bancaria multi-banco, cheques, pagos/gastos (con OCR), caj
 contabilidad de partida doble, 5 módulos de impuestos (IVA Proyección, IVA Liquidación, Monotributo, IIBB, Sueldos/F931), ARCA
 (facturación electrónica, construido y desactivado a propósito), asistente IA (Gemini), Comprobantes por
 revisar (facturas de compra por mail/subida leídas con IA → IVA y Pagos, v3.30), extractos en PDF
-(lector sin IA + formatos aprendidos, cuadre de saldos y revisión, v3.31).
+(lector sin IA + formatos aprendidos, cuadre de saldos y revisión, v3.31), ficha de proveedores
+propios de la org (v3.37, base de retenciones).
 
 ## 5. Módulos / trabajo futuro
 
+- **Retenciones** (fase 2+): Ganancias RG 830 + SICORE sobre la ficha de proveedores (v3.37).
 - **Intake Exportador de Servicios** — último módulo pendiente del plan de impuestos.
 - **Activar R2** (storage de fotos) e **IA Nivel 3** (predicción con datos reales).
 - **Activación de ARCA** cuando haya un cliente real (homologación → producción).

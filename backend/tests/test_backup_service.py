@@ -86,7 +86,7 @@ def test_backup_contiene_todas_las_tablas_criticas(db):
     backup = export_org_backup(db, ORG_ID)
     tablas_esperadas = [
         "usuarios", "clientes", "extractos", "planillas",
-        "cheques", "egresos", "categorias_egreso",
+        "cheques", "egresos", "categorias_egreso", "proveedores",
         "arqueos_diarios", "liquidaciones", "cierres_periodo",
         "plan_cuentas", "reglas_contables", "asientos",
         "patrones_aprendidos", "moldes_extracto_pdf", "auditoria",

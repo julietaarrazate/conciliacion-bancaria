@@ -28,6 +28,9 @@ from app.routers import backup_admin
 from app.routers import analisis
 from app.routers import search as search_router
 from app.routers import public_router
+from app.routers import vencimientos
+from app.routers import procesos_masivos
+from app.routers import proveedores
 from app.routers import push_router
 from app.routers import agente
 from app.routers import tarjetas
@@ -369,6 +372,13 @@ def _init_db():
             except Exception as ex_org:
                 db.rollback()
                 logger.warning("Error seed contabilidad org %s: %s", oid, ex_org)
+        # Calendario de vencimientos: fechas confirmadas (general, no por org)
+        try:
+            from app.services.vencimientos import sembrar_calendario_inicial
+            sembrar_calendario_inicial(db)
+        except Exception as ex_cal:
+            db.rollback()
+            logger.warning("Error seed calendario de vencimientos: %s", ex_cal)
         db.close()
     except Exception as ex:
         logger.warning("Error seed contabilidad: %s", ex)
@@ -719,6 +729,9 @@ app.include_router(google_auth.router)
 app.include_router(arca.router)
 app.include_router(comprobantes_compra.router)
 app.include_router(extractos_pdf.router)
+app.include_router(vencimientos.router)
+app.include_router(procesos_masivos.router)
+app.include_router(proveedores.router)
 
 
 @app.get("/")

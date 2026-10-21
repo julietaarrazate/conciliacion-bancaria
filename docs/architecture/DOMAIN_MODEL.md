@@ -18,7 +18,7 @@ destructivamente, solo cambios aditivos (regla en `CLAUDE.md`).
 
 - Entidades **con** `organizacion_id`: User, Cliente, ExtractoBancario,
   MovimientoBanco, Planilla, PlanillaRow, Cheque, Portador, Egreso,
-  CategoriaEgreso, ArqueoDiario, PlanCuenta, ReglaContable, Asiento,
+  CategoriaEgreso, Proveedor, ArqueoDiario, PlanCuenta, ReglaContable, Asiento,
   Liquidacion, CierrePeriodo, LiquidacionTarjeta, PatronAprendido, y todos los
   modelos de impuestos/ARCA/sueldos de configuración y proyección.
 - Entidades de **detalle** (hijas, sin `organizacion_id` propio — heredan el de
@@ -127,7 +127,8 @@ erDiagram
 |---|---|---|
 | `Cheque` | `cheques` | `estado` ∈ {registrado, depositado, acreditado, rechazado, anulado}; `local_interior`, `comision`, `foto_comprobante`; FK opcional a `banco_cuenta_id` (PlanCuenta) |
 | `Portador` | `portadores` | Solo `nombre` + `organizacion_id` |
-| `Egreso` | `egresos` | `tipo` ∈ {proveedor, gasto, pago_cliente}; `forma_pago` ∈ {banco, efectivo}; `arqueo_id` cuando es efectivo; `denominaciones_usadas` (JSON); `movimiento_banco_id` (v3.32, opcional, ON DELETE SET NULL): débito del extracto que el egreso explica — ver BUSINESS_RULES §1.9 |
+| `Egreso` | `egresos` | `tipo` ∈ {proveedor, gasto, pago_cliente}; `forma_pago` ∈ {banco, efectivo}; `arqueo_id` cuando es efectivo; `denominaciones_usadas` (JSON); `movimiento_banco_id` (v3.32, opcional, ON DELETE SET NULL): débito del extracto que el egreso explica — ver BUSINESS_RULES §1.9; `proveedor_id` (v3.37, opcional, solo `tipo=proveedor`) |
+| `Proveedor` | `proveedores` | Proveedor PROPIO de la org (a quien le compra); único por (`organizacion_id`, `cuit`); `origen` ∈ {manual, comprobantes}; baja lógica con `activo` — ver `docs/business/PROVEEDORES.md` |
 | `CategoriaEgreso` | `categorias_egreso` | Catálogo editable de categorías |
 | `ArqueoDiario` | `arqueos_diarios` | Arqueo de caja; `denominaciones` (JSON); recibe los egresos en efectivo vía `back_populates` |
 

@@ -102,11 +102,12 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
                    Liquidacion, CierrePeriodo, Cheque, Pago, Gasto,
                    ArqueoDiario, OrdenDePago, PlanCuenta, ReglaContable,
                    Asiento, AsientoDetalle, PasswordResetToken, PushSubscription,
-                   BuzonComprobantes, BorradorComprobante, BorradorExtractoPdf, MoldeExtractoPdf
+                   BuzonComprobantes, BorradorComprobante, BorradorExtractoPdf, MoldeExtractoPdf,
+                   Proveedor
   /app/routers   — auth, me, extractos, planillas, historial, auditoria, admin,
                    clientes_dir, organizaciones, liquidaciones, caja, cheques,
                    pagos, contabilidad (+ ctb_*), analisis, search, iva, monotributo,
-                   iibb, sueldos, tarjetas, arca, comprobantes_compra, extractos_pdf, agente, papelera,
+                   iibb, sueldos, tarjetas, arca, comprobantes_compra, extractos_pdf, proveedores, agente, papelera,
                    public_router, push_router
                    (lista completa: `docs/architecture/SYSTEM_MAP.md`)
   /app/services  — conciliacion.py, aprendizaje.py, excel_export.py, pdf_export.py,
@@ -114,7 +115,7 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
                    backup_service.py, backup_scheduler.py, push_service.py,
                    email_sender.py, password_reset.py, decimal_utils.py,
                    extracto_pdf/ (lector de PDF), extracto_pdf_service.py, extracto_import.py
-  /alembic/versions — 001 a 030. En el arranque Alembic solo hace `stamp head`: el esquema real lo
+  /alembic/versions — 001 a 032. En el arranque Alembic solo hace `stamp head`: el esquema real lo
                       sostienen `create_all` + los safety-nets de `app/db_safety.py`
 
 /frontend/src
@@ -122,7 +123,7 @@ Si cambiás el código de un área, actualizá su doc (la doc describe el códig
              ExtractosArchivo, Movimientos, Conciliaciones, Historial, Auditoria,
              Usuarios, Perfil, Login, Organizaciones, Liquidaciones, Caja,
              Pagos, Cheques, Tarjetas, Iva, Monotributo, IngresosBrutos, Sueldos, Arca,
-             Papelera, Contabilidad, Resumen, ComprobantesCompra,
+             Papelera, Contabilidad, Resumen, ComprobantesCompra, Proveedores,
              EstadoCuenta, FlujoCaja, Revision, Actividad,
              PaginaPublica (/p/:token — sin auth), RecuperarPassword, RestablecerPassword,
              Privacidad (/privacidad — sin auth), Terminos (/terminos — sin auth)
@@ -175,6 +176,11 @@ IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ con
 
 ## Multi-tenant
 
+- **Organización ≠ cliente.** Organización = empresa que usa Cuadra (ej. Caneland): sus impuestos
+  (IVA, IIBB, Monotributo, Sueldos) y vencimientos son de la organización. Clientes = los clientes
+  de esa organización (Tucu, Green, Griselda…), que le pagan y mandan planillas para conciliar;
+  Cuadra no les calcula impuestos. Quien maneja varias organizaciones: el superadmin y contadores
+  con `allowed_org_ids` (`utils/orgs.manejaVariasOrgs` en el frontend).
 - Organización A = `organizacion_id=1` (NUNCA modificar — solo cambios aditivos)
 - El superadmin ve y gestiona todas las orgs
 - Config por org (JSON): match_rules, tolerancia_monto, dias_tolerancia_fecha, requiere_cierre_periodo
@@ -189,7 +195,8 @@ IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ con
 - **03:00 ART** — backup completo JSON gzipeado por email (Resend). Activo si `RESEND_API_KEY` está seteada.
 - **03:30 ART** — purga de tokens revocados / login approvals / códigos 2FA vencidos. Siempre activo.
 - **09:00 ART** — alerta si el uso de R2 supera ~8 GB. Activa si `S3_*` está configurado.
-- **10:00 ART** — push alertas: cheques que vencen en ≤3 días + movimientos sin conciliar >7 días. Activo si `VAPID_PRIVATE_KEY` y `VAPID_PUBLIC_KEY` están seteadas.
+- **10:00 ART** — push alertas: cheques que vencen en ≤3 días + movimientos sin conciliar >7 días
+  + vencimientos impositivos en ≤3 días sin presentar. Activo si `VAPID_PRIVATE_KEY` y `VAPID_PUBLIC_KEY` están seteadas.
 
 ---
 
@@ -203,7 +210,7 @@ Test: botón "Enviar push de prueba" en la misma card de admin.
 
 ## Estado actual y changelog
 
-**Versión actual: v3.34.** Historial completo de versiones (v3.6 a v3.34, con detalle de cada
+**Versión actual: v3.37.** Historial completo de versiones (v3.6 a v3.37, con detalle de cada
 feature/fix/PR) en **`CHANGELOG.md`** — no se carga automáticamente en cada sesión, así que si
 necesitás contexto histórico detallado de una versión puntual, leelo directamente.
 
@@ -220,7 +227,11 @@ explicados en el resumen del extracto (`docs/business/BUSINESS_RULES.md` §1.9) 
 **v3.33** comparar "Mis Comprobantes" de ARCA con lo cargado antes de importar (faltantes, importes
 distintos, en Cuadra y no en ARCA), importar solo lo elegido y deshacer la tanda (§5.5) ·
 **v3.34** Comprobantes por revisar: alerta si la factura está a nombre de otro CUIT y no se confirma
-en un período con la liquidación de IVA presentada.
+en un período con la liquidación de IVA presentada · **v3.35** grilla de vencimientos por
+organización con calendario cargado mes a mes (`docs/business/VENCIMIENTOS.md`) · **v3.36** procesos
+masivos: un cálculo para todas las organizaciones y Mis Comprobantes de varias organizaciones juntos
+(`docs/business/PROCESOS_MASIVOS.md`) · **v3.37** ficha de proveedores propios de la organización
+(no los de los clientes), base de retenciones (`docs/business/PROVEEDORES.md`).
 
 Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,
 sin efectos) y la operadora la rechazó — se revirtió a la landing anterior completa (gradiente,
@@ -233,7 +244,7 @@ Liquidaciones, Contabilidad con cuentas corrientes); 5 módulos de liquidación 
 (IVA Proyección, IVA Liquidación real con "Mis Comprobantes" de ARCA, Monotributo, Ingresos Brutos,
 Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
 ARCA (facturación electrónica WSFEv1) construido pero desactivado a propósito (ver "Pendiente para
-próximas sesiones" abajo). **~970 tests backend + ~118 tests frontend** pasando.
+próximas sesiones" abajo). **~1065 tests backend + ~118 tests frontend** pasando.
 
 Profesionalización de ingeniería (jun 2026): base de documentación en `/docs` (arquitectura,
 negocio, API, BD, seguridad, UX, playbooks, ADR — cada doc con su "Pendiente de revisar"),
@@ -245,6 +256,12 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
 ---
 
 ### Pendiente para próximas sesiones
+
+- **📅 TODOS LOS MESES — cargar el calendario de vencimientos (v3.35)**: en `/vencimientos` →
+  "Cargar calendario" (superadmin), copiar de argentina.gob.ar/arca/vencimientos las fechas del
+  mes por terminación de CUIT para IVA, F.931 y Convenio Multilateral (y Monotributo si hay
+  feriado o prórroga). Sin eso la grilla muestra "falta el calendario". Cada org necesita su CUIT
+  cargado (Comprobantes por revisar → "CUIT de la empresa").
 
 - **Probar los extractos en PDF (v3.31) con PDFs reales de cada banco**: los tests usan PDFs
   generados que imitan los formatos. Cada PDF real que no cierre o lea mal se agrega como test en
@@ -260,20 +277,30 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
   `docs/business/COMPROBANTES_POR_REVISAR.md`.
 - **Activar Sentry (observabilidad)**: el código ya está 100% cableado (backend en
   `main.py` con 5% de performance tracing; frontend lazy, auto-captura errores globales al iniciar).
-  Pendiente de configurar los DSN: en la cuenta de Sentry crear/abrir **dos proyectos** (uno
-  Python/FastAPI = backend, uno React = frontend), cada uno da un DSN. Luego: Render → env var
+  Los dos proyectos ya existen en la org de Sentry `cuadra-yq` (`python` = backend,
+  `conciliacion-frontend` = frontend), pero a oct 2026 no registran ningún evento en 90 días:
+  confirmar que los DSN estén cargados. Render → env var
   `SENTRY_DSN` = DSN del proyecto Python (Save and Deploy); Vercel → env var `VITE_SENTRY_DSN` = DSN
   del proyecto React (Redeploy). Complemento ya mergeado (PR #169): el backend loguea como WARNING
   `SLOW <método> <path> → <status> en <ms>` las requests que superan `SLOW_REQUEST_MS` (default
   1500ms) y expone el header `X-Process-Time`. Después de unos días con datos reales, revisar
   errores recurrentes en Sentry + los `SLOW` en logs de Render para decidir el próximo foco de
   performance con datos medidos, no con auditorías estáticas.
+- **Retenciones (fase 2 en adelante, diseño acordado oct 2026)**: v3.37 dejó la ficha de
+  proveedores propios. Sigue: Ganancias RG 830 (tabla editable, acumulado mensual por proveedor,
+  pago neto + asiento a "Retenciones a depositar", certificado PDF, TXT de SICORE), después padrones
+  de IIBB (ARBA/AGIP) e IVA/SUSS solo si hace falta. Falta de la operadora/contador: un TXT de
+  SICORE de ejemplo y qué regímenes aplica cada org. Nunca retener en OP por cuenta de un cliente
+  sin confirmación del contador, y nunca depositar impuestos automáticamente.
 - **Próximos módulos del plan de liquidación de impuestos** (ver "Plan de expansión" abajo): orden a
   decidir por valor — candidato: Intake Exportador de Servicios.
 - **⏰ RECORDATORIO SEMESTRAL — actualizar escala de Monotributo**: ARCA actualiza los límites de
   facturación anual por categoría cada semestre (ajuste por IPC, en febrero y en julio/agosto).
   Los valores sembrados en `monotributo_service.py` (`_LIMITES_VIGENTES`) son la escala vigente
-  desde el 1/feb/2026: si ya salió una escala posterior, están vencidos. Para actualizarlos: ir a
+  desde el 1/ago/2026 (actualizada oct 2026, hasta ene 2027): si ya salió una escala posterior
+  (feb 2027), están vencidos. El seed solo aplica a organizaciones sin categorías cargadas: las
+  orgs que ya tenían la escala sembrada conservan sus valores y se actualizan desde la UI
+  (`PUT /monotributo/categorias/{id}`). Para actualizarlos: ir a
   arca.gob.ar/monotributo/categorias.asp (el fetch directo devuelve 403 por anti-bot — usar
   WebSearch cruzando 2-3 fuentes especializadas) y actualizar la escala vía
   `PUT /monotributo/categorias/{id}` o re-sembrando el array.
@@ -346,7 +373,8 @@ Setup R2:
 
 1. **Activar R2 en producción** — código ya está listo, solo crear bucket y pegar env vars en Render
 2. **IA Nivel 3** — predicción automática (requiere 3-6 meses de datos reales)
-3. Ver "Pendiente para próximas sesiones" arriba para lo más reciente y concreto.
+3. Ver "Pendiente para próximas sesiones" arriba para lo más reciente y concreto, y `ROADMAP.md`
+   (estado por ítem verificado contra el código en oct 2026).
 
 ---
 
@@ -416,6 +444,10 @@ Los flujos detallados (entrada/salida/docs afectada por tipo de trabajo) están 
 **`docs/playbooks/LOOPS.md`** (Feature/Bug/Refactor/Documentation/Security/Database/AI/Release/
 Architecture/Product), operacionalizados en `.claude/commands/`.
 
+**Primero se arregla, después se implementa** (pedido de la operadora, oct 2026): si al trabajar
+se encuentra una falla, se corrige (con su test) antes de seguir con lo nuevo, y lo nuevo se
+construye recién cuando el diseño está confirmado.
+
 **Reglas de calidad permanentes** (innegociables en todo cambio):
 no duplicar lógica · no romper compatibilidad · mantener el aislamiento multi-tenant ·
 mantener la auditoría · mantener la trazabilidad contable (partida doble) · mantener/crear tests ·
@@ -429,4 +461,4 @@ Registro de obra: el expediente se guarda fuera del repositorio.
 
 ---
 
-Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.34
+Proyecto iniciado Mayo 2026 · Autora: Julieta Arrazate · Versión actual: v3.37

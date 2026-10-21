@@ -23,6 +23,9 @@ estado actual del sistema basándose exclusivamente en el código.
 ### Negocio (`business/`)
 - [PRODUCT_BIBLE.md](./business/PRODUCT_BIBLE.md) — qué es Cuadra, para quién, módulos
 - [BUSINESS_RULES.md](./business/BUSINESS_RULES.md) — reglas (scoring de conciliación, dedup, impuestos)
+- [PROCESOS_MASIVOS.md](./business/PROCESOS_MASIVOS.md) — calcular para todas las organizaciones y Mis Comprobantes de varias organizaciones
+- [PROVEEDORES.md](./business/PROVEEDORES.md) — ficha de proveedores propios de la organización (base de retenciones)
+- [VENCIMIENTOS.md](./business/VENCIMIENTOS.md) — grilla de vencimientos por organización (calendario mensual, estados, avisos)
 - [COMPROBANTES_POR_REVISAR.md](./business/COMPROBANTES_POR_REVISAR.md) — facturas de compra por mail + lectura con IA → IVA/Pagos
 - [EXTRACTOS_PDF.md](./business/EXTRACTOS_PDF.md) — extractos bancarios en PDF: lector sin IA, cuadre de saldos, revisión y duplicados
 - [WORKFLOWS.md](./business/WORKFLOWS.md) — flujos de usuario end-to-end

@@ -22,6 +22,7 @@ from app.models.cliente import Cliente
 from app.models.egreso import Egreso, CategoriaEgreso, TIPOS_EGRESO, FORMAS_PAGO
 from app.models.caja import ArqueoDiario, denominaciones_vacias
 from app.services.auditoria import registrar_log
+from app.services.proveedores import ProveedorInvalido, validar_para_egreso
 from app.services.movimiento_egreso import (
     VinculoInvalido, buscar_movimiento, candidatos_para_movimiento, validar_vinculo,
 )
@@ -52,6 +53,8 @@ def _egreso_dict(e: Egreso, con_foto: bool = False) -> dict:
         "beneficiario":     e.beneficiario,
         "cliente_id":       e.cliente_id,
         "cliente_nombre":   e.cliente.nombre if e.cliente else None,
+        "proveedor_id":     e.proveedor_id,
+        "proveedor_nombre": e.proveedor.razon_social if e.proveedor else None,
         "concepto":         e.concepto,
         "referencia":       e.referencia,
         "compartido_whatsapp": e.compartido_whatsapp,
@@ -153,6 +156,14 @@ def crear_egreso(
     if tipo == "pago_cliente" and not cliente:
         raise HTTPException(400, "Un pago a cliente requiere cliente_id o cliente_nombre")
 
+    # Proveedor propio de la ficha (nunca en una OP por cuenta de un cliente)
+    try:
+        proveedor = validar_para_egreso(db, oid, tipo, payload.get("proveedor_id"))
+    except ProveedorInvalido as ex:
+        raise HTTPException(400, str(ex))
+    if proveedor and not beneficiario:
+        beneficiario = proveedor.razon_social
+
     # Resolver un pendiente del extracto: el egreso explica ese débito
     movimiento = None
     if payload.get("movimiento_banco_id") is not None:
@@ -196,6 +207,7 @@ def crear_egreso(
         fecha=fecha,
         beneficiario=beneficiario,
         cliente_id=cliente.id if cliente else None,
+        proveedor_id=proveedor.id if proveedor else None,
         concepto=concepto,
         referencia=referencia,
         foto_comprobante=foto,
@@ -367,6 +379,13 @@ def editar_egreso(
         e.referencia = (payload["referencia"] or "").strip() or None
     if "categoria" in payload:
         e.categoria = (payload["categoria"] or "").strip() or None
+    if "proveedor_id" in payload:
+        try:
+            prov = validar_para_egreso(db, e.organizacion_id, e.tipo, payload["proveedor_id"])
+        except ProveedorInvalido as ex:
+            db.rollback()
+            raise HTTPException(400, str(ex))
+        e.proveedor_id = prov.id if prov else None
     if "foto_base64" in payload:
         nueva_foto = payload.get("foto_base64")
         e.foto_comprobante = upload_comprobante(nueva_foto, prefix=f"egreso/{e.organizacion_id}") if nueva_foto else None

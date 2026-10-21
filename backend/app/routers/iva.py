@@ -20,11 +20,9 @@ from decimal import Decimal
 from typing import Optional
 
 import json
-import uuid
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -41,7 +39,7 @@ from app.services.iva_service import (
     IvaServiceError,
 )
 from app.services.mis_comprobantes_parser import parsear_mis_comprobantes
-from app.services.comparar_mis_comprobantes import clave_de_fila, comparar
+from app.services.comparar_mis_comprobantes import comparar, importar_filas
 from app.services.iva_liquidacion_service import (
     calcular_liquidacion,
     marcar_presentada as marcar_liquidacion_presentada,
@@ -429,62 +427,12 @@ async def importar_comprobantes(
             elegidas = set(json.loads(claves))
         except (ValueError, TypeError):
             raise HTTPException(422, "claves debe ser una lista JSON")
-    lote = str(uuid.uuid4())
 
-    importados = 0
-    duplicados = 0
-    fuera_de_periodo = 0
-    no_elegidos = 0
-    for row in filas:
-        fecha = row["fecha"]
-        fila_periodo = f"{fecha.year:04d}-{fecha.month:02d}"
-        if fila_periodo != periodo:
-            fuera_de_periodo += 1
-            continue
-        if elegidas is not None and clave_de_fila(row) not in elegidas:
-            no_elegidos += 1
-            continue
-
-        comp = ComprobanteIva(
-            organizacion_id=oid,
-            direccion=direccion,
-            periodo=periodo,
-            fecha=fecha,
-            tipo_codigo=row["tipo_codigo"],
-            tipo_desc=row["tipo_desc"],
-            punto_venta=row["punto_venta"],
-            numero=row["numero"],
-            cuit_contraparte=row["cuit_contraparte"],
-            denominacion=row["denominacion"],
-            neto_gravado_total=row["neto_gravado_total"],
-            total_iva=row["total_iva"],
-            imp_total=row["imp_total"],
-            detalle_alicuotas=row["detalle_alicuotas"],
-            archivo_origen=file.filename,
-            lote_importacion=lote,
-        )
-        db.add(comp)
-        try:
-            db.commit()
-            importados += 1
-        except IntegrityError:
-            db.rollback()
-            duplicados += 1
-
+    res = importar_filas(db, oid, direccion, periodo, filas, file.filename, elegidas)
     registrar_log(db, current_user.id, "comprobantes_iva", 0, "IMPORTAR",
-                  {"direccion": direccion, "periodo": periodo,
-                   "importados": importados, "duplicados": duplicados,
-                   "fuera_de_periodo": fuera_de_periodo, "no_elegidos": no_elegidos,
-                   "lote": lote})
+                  {"direccion": direccion, **res})
     db.commit()
-    return {
-        "importados": importados,
-        "duplicados": duplicados,
-        "fuera_de_periodo": fuera_de_periodo,
-        "no_elegidos": no_elegidos,
-        "periodo": periodo,
-        "lote": lote if importados else None,
-    }
+    return res
 
 
 @router.delete("/comprobantes/lote/{lote}")

@@ -287,9 +287,9 @@ def marcar_revisado(
 
 # ── Seed de categorías default ─────────────────────────────────────
 
-# Escala vigente de ARCA desde 1/feb/2026 (actualización semestral por IPC
-# acumulado del 2° semestre 2025, ~14,29%), válida hasta la próxima
-# actualización de julio/agosto 2026. El límite de ingresos anuales por
+# Escala vigente de ARCA desde 1/ago/2026 (actualización semestral por IPC
+# acumulado del 1° semestre 2026, ~16,8%), válida hasta la próxima
+# actualización de enero/febrero 2027. El límite de ingresos anuales por
 # categoría es el MISMO para servicios y venta de bienes (lo que difiere
 # entre actividades es la cuota mensual a pagar, no la escala de ingresos —
 # este módulo no calcula esa cuota, solo controla el límite de facturación).
@@ -298,21 +298,21 @@ def marcar_revisado(
 # ⚠️ Estos valores vencen con la próxima actualización semestral (RG ARCA).
 # Verificar y, si cambiaron, corregir vía PUT /monotributo/categorias/{id}
 # o re-sembrar — son completamente editables, no están hardcodeados en lógica.
-# Fuente: arca.gob.ar/monotributo/categorias.asp (consultado jun/2026).
+# Fuente: arca.gob.ar/monotributo/categorias.asp (consultado oct/2026).
 #
 # (categoria, limite_anual_vigente)
 _LIMITES_VIGENTES = [
-    ("A", "10277988.13"),
-    ("B", "15058447.71"),
-    ("C", "21113696.52"),
-    ("D", "26212853.42"),
-    ("E", "30833964.37"),
-    ("F", "38642048.36"),
-    ("G", "46211109.37"),
-    ("H", "70113407.33"),
-    ("I", "78479211.62"),
-    ("J", "89872640.30"),
-    ("K", "108357084.05"),
+    ("A", "12009410.45"),
+    ("B", "17595182.74"),
+    ("C", "24670494.31"),
+    ("D", "30628651.43"),
+    ("E", "36028231.33"),
+    ("F", "45151659.41"),
+    ("G", "53995798.87"),
+    ("H", "81924660.37"),
+    ("I", "91699761.90"),
+    ("J", "105012519.20"),
+    ("K", "126610838.75"),
 ]
 _CATS_SERVICIOS = [c for c in _LIMITES_VIGENTES if c[0] <= "H"]
 _CATS_BIENES = _LIMITES_VIGENTES
