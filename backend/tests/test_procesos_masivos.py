@@ -1,5 +1,5 @@
 # ruff: noqa: F811  (db y client son fixtures importadas de test_iva_liquidacion)
-"""Procesos masivos (benchmark Ola 2, punto 8): correr un cálculo para todas
+"""Procesos masivos: correr un cálculo para todas
 las organizaciones accesibles y subir "Mis Comprobantes" de varias organizaciones
 juntos (cada Excel va a su org por el CUIT del título).
 

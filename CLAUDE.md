@@ -87,8 +87,6 @@ es la referencia profunda. **Consultá el doc correspondiente ANTES de tocar su 
 - Agregar módulo/endpoint/banco/parser/reporte/módulo-contable → `docs/playbooks/`
 - Mapa general y entidades → `docs/architecture/SYSTEM_MAP.md`, `DOMAIN_MODEL.md` · Índice: `docs/README.md`
 - Auditoría de ingeniería (madurez, deuda técnica, roadmap de ingeniería) → `ENGINEERING_AUDIT.md`
-- Benchmark de competidores (oct 2026: qué incorporar de Xubio, Colppy, Contabilium, Alegra,
-  LaPyme, Onvio, en 3 olas por valor/esfuerzo) → `docs/ekp/BENCHMARK_COMPETIDORES_2026-10.md`
 
 Cada doc tiene una sección `## Pendiente de revisar` con discrepancias código↔doc detectadas.
 Si cambiás el código de un área, actualizá su doc (la doc describe el código tal como está).

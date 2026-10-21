@@ -1,7 +1,6 @@
 # Vencimientos — grilla por organización (v3.35)
 
-Qué vence en el mes para cada organización que ve el usuario, con su estado. Idea tomada del
-benchmark (Onvio: grilla de vencimientos; Aconpy: calendario por cliente). Código:
+Qué vence en el mes para cada organización que ve el usuario, con su estado. Código:
 `services/vencimientos.py`, `routers/vencimientos.py`, `pages/Vencimientos.tsx`.
 
 ## 1. De dónde sale cada dato

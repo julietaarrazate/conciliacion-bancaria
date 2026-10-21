@@ -5,7 +5,7 @@ Lo que hoy se hace organización por organización, para todas las que ve el usu
 la organización (los que mandan planillas de pago) son otra cosa y no entran acá. Sirve a quien
 maneja varias organizaciones: el superadmin o un contador con `allowed_org_ids`. El menú solo se
 muestra a ellos (`utils/orgs.manejaVariasOrgs`); con una sola organización la página lo explica.
-Idea tomada del benchmark (Onvio: procesos automáticos multi-empresa). Código:
+Código:
 `services/procesos_masivos.py`, `routers/procesos_masivos.py`, `pages/ProcesosMasivos.tsx`.
 Organizaciones alcanzadas: `services/acceso_orgs.orgs_accesibles` (superadmin: todas las
 activas; resto: la propia + `allowed_org_ids`) — la misma regla que Vencimientos.

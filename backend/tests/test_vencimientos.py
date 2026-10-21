@@ -1,4 +1,4 @@
-"""Grilla de vencimientos por organización (benchmark Ola 2, punto 5).
+"""Grilla de vencimientos por organización.
 
 - Calendario general (no por org) cargado mes a mes desde la web de ARCA:
   impuesto + período + bloque de terminación de CUIT → fecha.

@@ -1,6 +1,6 @@
 # ruff: noqa: F811  (db y client son fixtures importadas de test_iva_liquidacion)
 """Comparar "Mis Comprobantes" de ARCA con lo cargado en Cuadra, importar solo
-lo elegido y deshacer una tanda (benchmark Ola 1, punto 3).
+lo elegido y deshacer una tanda.
 
 No se conecta a ARCA: usa el Excel que se descarga de la web, igual que la
 importación existente. Reutiliza los helpers y fixtures de test_iva_liquidacion.
