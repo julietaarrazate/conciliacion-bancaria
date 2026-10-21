@@ -481,8 +481,10 @@ Archivo: `backend/app/services/monotributo_service.py`.
 - Requiere `MonotributoConfig.activo = True`, si no lanza error
   (`monotributo_service.py:186-190`).
 - Escala sembrada `_LIMITES_VIGENTES` (categorías A-K, vigente desde 1/ago/2026)
-  — **editable, no hardcodeada en lógica** (`monotributo_service.py:304-316`). El seed solo
-  corre para orgs sin categorías: las ya sembradas conservan sus valores y se editan a mano.
+  — **editable, no hardcodeada en lógica**. El seed solo corre para orgs sin categorías; para las
+  existentes, `actualizar_escala_sembrada` (en cada arranque) pasa a la escala vigente las filas
+  que siguen con un valor exacto de `_ESCALAS_ANTERIORES`. Las editadas a mano se respetan y cada
+  cambio se audita (`UPDATE_ESCALA_AUTO`, a nombre del primer superadmin).
   Recordatorio de actualización semestral en
   [`../../CLAUDE.md`](../../CLAUDE.md).
 

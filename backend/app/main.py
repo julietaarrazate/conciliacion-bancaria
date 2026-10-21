@@ -351,7 +351,9 @@ def _init_db():
         from app.database import SessionLocal as SL
         from app.models.organizacion import Organizacion
         from app.services.seed_contable import seed_contabilidad_org, seed_categorias_egreso_org
-        from app.services.monotributo_service import seed_monotributo_categorias
+        from app.services.monotributo_service import (
+            seed_monotributo_categorias, actualizar_escala_sembrada,
+        )
         from app.services.iibb_service import seed_iibb_jurisdiccion
         from app.services.sueldos_service import seed_config_sueldos
 
@@ -365,6 +367,8 @@ def _init_db():
                 seed_categorias_egreso_org(db, oid)
                 # Categorías Monotributo (placeholder, editables) si la org no tiene ninguna
                 seed_monotributo_categorias(db, oid)
+                # Escala vigente en las categorías que siguen con una escala sembrada vieja
+                actualizar_escala_sembrada(db, oid)
                 # Jurisdicción IIBB ilustrativa (editable) si la org no tiene ninguna
                 seed_iibb_jurisdiccion(db, oid)
                 # ConfigSueldos apagada (alícuotas de referencia editables) si la org no tiene ninguna

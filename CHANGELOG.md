@@ -5,6 +5,16 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Fix (oct 2026) — Monotributo: escala de agosto 2026 también en las organizaciones existentes
+
+- La escala vigente desde 1/ago/2026 (PR #244) solo se sembraba en orgs nuevas. Ahora, en cada
+  arranque, `actualizar_escala_sembrada` (`monotributo_service.py`) pasa a la escala vigente las
+  categorías que siguen con el valor exacto de una escala sembrada anterior (`_ESCALAS_ANTERIORES`).
+  Las editadas a mano no se tocan; cada cambio queda en auditoría (`UPDATE_ESCALA_AUTO`).
+  Idempotente. Tests en `test_monotributo.py`.
+
+---
+
 ### v3.37 (oct 2026) — Ficha de proveedores propios
 
 Primera fase de retenciones. Ver `docs/business/PROVEEDORES.md`.

@@ -298,9 +298,10 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
   facturación anual por categoría cada semestre (ajuste por IPC, en febrero y en julio/agosto).
   Los valores sembrados en `monotributo_service.py` (`_LIMITES_VIGENTES`) son la escala vigente
   desde el 1/ago/2026 (actualizada oct 2026, hasta ene 2027): si ya salió una escala posterior
-  (feb 2027), están vencidos. El seed solo aplica a organizaciones sin categorías cargadas: las
-  orgs que ya tenían la escala sembrada conservan sus valores y se actualizan desde la UI
-  (`PUT /monotributo/categorias/{id}`). Para actualizarlos: ir a
+  (feb 2027), están vencidos. Al cambiar `_LIMITES_VIGENTES`, mover la escala reemplazada a
+  `_ESCALAS_ANTERIORES`: en cada arranque `actualizar_escala_sembrada` pasa a la vigente las
+  categorías de las orgs existentes que siguen con un valor exacto de una escala anterior (las
+  editadas a mano no se tocan; cada cambio queda en auditoría como `UPDATE_ESCALA_AUTO`). Para actualizarlos: ir a
   arca.gob.ar/monotributo/categorias.asp (el fetch directo devuelve 403 por anti-bot — usar
   WebSearch cruzando 2-3 fuentes especializadas) y actualizar la escala vía
   `PUT /monotributo/categorias/{id}` o re-sembrando el array.
