@@ -246,7 +246,7 @@ Liquidaciones, Contabilidad con cuentas corrientes); 5 módulos de liquidación 
 (IVA Proyección, IVA Liquidación real con "Mis Comprobantes" de ARCA, Monotributo, Ingresos Brutos,
 Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
 ARCA (facturación electrónica WSFEv1) construido pero desactivado a propósito (ver "Pendiente para
-próximas sesiones" abajo). **~970 tests backend + ~118 tests frontend** pasando.
+próximas sesiones" abajo). **~1065 tests backend + ~118 tests frontend** pasando.
 
 Profesionalización de ingeniería (jun 2026): base de documentación en `/docs` (arquitectura,
 negocio, API, BD, seguridad, UX, playbooks, ADR — cada doc con su "Pendiente de revisar"),
@@ -279,8 +279,9 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
   `docs/business/COMPROBANTES_POR_REVISAR.md`.
 - **Activar Sentry (observabilidad)**: el código ya está 100% cableado (backend en
   `main.py` con 5% de performance tracing; frontend lazy, auto-captura errores globales al iniciar).
-  Pendiente de configurar los DSN: en la cuenta de Sentry crear/abrir **dos proyectos** (uno
-  Python/FastAPI = backend, uno React = frontend), cada uno da un DSN. Luego: Render → env var
+  Los dos proyectos ya existen en la org de Sentry `cuadra-yq` (`python` = backend,
+  `conciliacion-frontend` = frontend), pero a oct 2026 no registran ningún evento en 90 días:
+  confirmar que los DSN estén cargados. Render → env var
   `SENTRY_DSN` = DSN del proyecto Python (Save and Deploy); Vercel → env var `VITE_SENTRY_DSN` = DSN
   del proyecto React (Redeploy). Complemento ya mergeado (PR #169): el backend loguea como WARNING
   `SLOW <método> <path> → <status> en <ms>` las requests que superan `SLOW_REQUEST_MS` (default
@@ -298,7 +299,10 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
 - **⏰ RECORDATORIO SEMESTRAL — actualizar escala de Monotributo**: ARCA actualiza los límites de
   facturación anual por categoría cada semestre (ajuste por IPC, en febrero y en julio/agosto).
   Los valores sembrados en `monotributo_service.py` (`_LIMITES_VIGENTES`) son la escala vigente
-  desde el 1/feb/2026: si ya salió una escala posterior, están vencidos. Para actualizarlos: ir a
+  desde el 1/ago/2026 (actualizada oct 2026, hasta ene 2027): si ya salió una escala posterior
+  (feb 2027), están vencidos. El seed solo aplica a organizaciones sin categorías cargadas: las
+  orgs que ya tenían la escala sembrada conservan sus valores y se actualizan desde la UI
+  (`PUT /monotributo/categorias/{id}`). Para actualizarlos: ir a
   arca.gob.ar/monotributo/categorias.asp (el fetch directo devuelve 403 por anti-bot — usar
   WebSearch cruzando 2-3 fuentes especializadas) y actualizar la escala vía
   `PUT /monotributo/categorias/{id}` o re-sembrando el array.
@@ -371,7 +375,8 @@ Setup R2:
 
 1. **Activar R2 en producción** — código ya está listo, solo crear bucket y pegar env vars en Render
 2. **IA Nivel 3** — predicción automática (requiere 3-6 meses de datos reales)
-3. Ver "Pendiente para próximas sesiones" arriba para lo más reciente y concreto.
+3. Ver "Pendiente para próximas sesiones" arriba para lo más reciente y concreto, y `ROADMAP.md`
+   (estado por ítem verificado contra el código en oct 2026).
 
 ---
 
