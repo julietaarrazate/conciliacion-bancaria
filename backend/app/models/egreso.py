@@ -45,6 +45,9 @@ class Egreso(Base):
 
     beneficiario    = Column(String, nullable=True)                       # proveedor / destinatario
     cliente_id      = Column(Integer, ForeignKey("clientes.id"), nullable=True, index=True)
+    # Proveedor propio de la org (solo tipo=proveedor; nunca en una OP por cuenta de un cliente)
+    proveedor_id    = Column(Integer, ForeignKey("proveedores.id", ondelete="SET NULL"),
+                             nullable=True, index=True)
     concepto        = Column(String, nullable=True)
     referencia      = Column(String, nullable=True)
 
@@ -68,5 +71,6 @@ class Egreso(Base):
 
     organizacion    = relationship("Organizacion", foreign_keys=[organizacion_id])
     cliente         = relationship("Cliente",      foreign_keys=[cliente_id])
+    proveedor       = relationship("Proveedor",    foreign_keys=[proveedor_id])
     arqueo          = relationship("ArqueoDiario",  foreign_keys=[arqueo_id], back_populates="egresos")
     usuario         = relationship("User",          foreign_keys=[usuario_id])

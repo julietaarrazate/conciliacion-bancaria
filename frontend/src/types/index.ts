@@ -137,6 +137,8 @@ export interface PagoDesdeMovimientoPayload {
   /** gasto/proveedor: de la organización. pago_cliente: OP pagada por cuenta de un cliente (va a su cuenta corriente). */
   tipo: 'gasto' | 'proveedor' | 'pago_cliente'
   cliente_nombre?: string
+  /** Solo en tipo=proveedor: proveedor de la ficha de la organización. */
+  proveedor_id?: number
   forma_pago: 'banco'
   monto: number
   fecha: string
@@ -1010,3 +1012,24 @@ export interface ImportacionMisComprobantesArchivo {
   duplicados: number
   lote: string | null
 }
+
+// ── Proveedores propios de la organización ───────────────────────────────────
+export type CondicionIva = 'responsable_inscripto' | 'monotributo' | 'exento' | 'no_alcanzado'
+
+export interface Proveedor {
+  id: number
+  organizacion_id: number
+  cuit: string | null
+  razon_social: string
+  condicion_iva: CondicionIva | null
+  email: string | null
+  cbu: string | null
+  notas: string | null
+  origen: 'manual' | 'comprobantes'
+  activo: boolean
+  total_facturado: number
+  total_pagado: number
+  saldo: number
+}
+
+export type ProveedorInput = Partial<Pick<Proveedor, 'cuit' | 'razon_social' | 'condicion_iva' | 'email' | 'cbu' | 'notas'>>

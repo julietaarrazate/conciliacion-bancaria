@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { MovimientoFiltrado, PagoCandidato } from '@/types'
 import { localIsoDate } from '@/utils/fecha'
+import { CampoProveedor } from './CampoProveedor'
 
 interface ResolverMovimientoModalProps {
   mov: MovimientoFiltrado
@@ -34,6 +35,7 @@ export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = (
   const [clienteNombre, setClienteNombre] = useState('')
   const [clientes, setClientes] = useState<{ id: number; nombre: string }[] | null>(null)
   const [beneficiario, setBeneficiario] = useState(mov.titular || '')
+  const [proveedorId, setProveedorId] = useState<number | null>(null)
   const [concepto, setConcepto] = useState(mov.titular || '')
   const [categoria, setCategoria] = useState('')
   const [fecha, setFecha] = useState(mov.fecha || localIsoDate())
@@ -102,6 +104,7 @@ export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = (
         concepto: concepto.trim() || undefined,
         categoria: tipo === 'pago_cliente' ? undefined : (categoria || undefined),
         ...(tipo === 'pago_cliente' ? { cliente_nombre: clienteNombre } : {}),
+        ...(tipo === 'proveedor' && proveedorId ? { proveedor_id: proveedorId } : {}),
         ...(orgId ? { org_id: orgId } : {}),
       })
       onResuelto(res.egreso.id)
@@ -181,8 +184,13 @@ export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = (
             <label htmlFor="resolver-beneficiario" className="label text-xs">
               {tipo === 'proveedor' ? 'Proveedor' : tipo === 'pago_cliente' ? 'A favor de (proveedor del cliente)' : 'Beneficiario'}
             </label>
-            <input id="resolver-beneficiario" className="input-field text-xs" value={beneficiario}
-              onChange={e => setBeneficiario(e.target.value)} />
+            {tipo === 'proveedor' ? (
+              <CampoProveedor id="resolver-beneficiario" className="input-field text-xs" value={beneficiario}
+                orgId={orgId} onChange={setBeneficiario} onProveedorChange={setProveedorId} />
+            ) : (
+              <input id="resolver-beneficiario" className="input-field text-xs" value={beneficiario}
+                onChange={e => setBeneficiario(e.target.value)} />
+            )}
           </div>
           <div>
             <label htmlFor="resolver-concepto" className="label text-xs">Concepto</label>

@@ -76,7 +76,7 @@ Criterio: primero lo que **reutiliza piezas que Cuadra ya tiene** y refuerza su 
    existen (IVA, IIBB, Monotributo, F931), con avisos push y el panel de monotributo por cliente.
 6. **Portal del cliente con pago** (Colppy): evolucionar el link público de estado de cuenta a
    "ver deuda + pagar con Mercado Pago + recibo automático", más pedido de documentación (Onvio).
-7. **Retenciones al pagar + export SICORE/SIRE/ARBA/SIFERE** (Xubio/Contabilium), con el
+7. (en curso — v3.37: ficha de proveedores propios, base para retener) **Retenciones al pagar + export SICORE/SIRE/ARBA/SIFERE** (Xubio/Contabilium), con el
    importador de retenciones y percepciones que ya está pendiente.
 8. ✅ (v3.36: cálculos de impuestos y Mis Comprobantes de varias organizaciones) **Procesos masivos multi-cliente** (Onvio): correr una acción (importar ARCA, generar
    asientos, liquidar) para todas las orgs del estudio de una vez.

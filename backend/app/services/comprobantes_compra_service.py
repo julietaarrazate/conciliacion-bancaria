@@ -659,6 +659,11 @@ def confirmar_borrador(
         db.rollback()
         raise ComprobanteCompraError("Este comprobante ya está cargado en IVA.", 409)
 
+    # La factura es una compra de la org: su emisor queda en la ficha de proveedores
+    from app.services.proveedores import obtener_o_crear_por_cuit
+    proveedor = obtener_o_crear_por_cuit(db, borrador.organizacion_id, datos["cuit_emisor"],
+                                         datos.get("razon_social"))
+
     borrador.datos = datos
     borrador.alertas = validar_datos(datos)
     borrador.comprobante_iva_id = comp.id
@@ -677,6 +682,7 @@ def confirmar_borrador(
             organizacion_id=borrador.organizacion_id,
             tipo="proveedor",
             forma_pago="banco",
+            proveedor_id=proveedor.id,
             monto=t["total"],
             fecha=fecha_pago or hoy_art(),
             beneficiario=datos.get("razon_social"),

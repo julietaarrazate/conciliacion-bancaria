@@ -29,6 +29,7 @@ from app.models.extracto_pdf import MoldeExtractoPdf
 from app.models.liquidacion import Liquidacion, CierrePeriodo
 from app.models.cheque import Cheque
 from app.models.egreso import Egreso, CategoriaEgreso
+from app.models.proveedor import Proveedor
 from app.models.caja import ArqueoDiario
 from app.models.contabilidad import PlanCuenta, ReglaContable, Asiento
 
@@ -103,6 +104,9 @@ def export_org_backup(db: Session, org_id: int) -> Dict[str, Any]:
     backup["categorias_egreso"] = [
         _row_to_dict(c) for c in db.query(CategoriaEgreso).filter(CategoriaEgreso.organizacion_id == org_id).all()
     ]
+    backup["proveedores"] = [
+        _row_to_dict(p) for p in db.query(Proveedor).filter(Proveedor.organizacion_id == org_id).all()
+    ]
 
     # Caja: arqueos + egresos en efectivo anidados
     arqueos: List[Dict[str, Any]] = []
@@ -170,6 +174,7 @@ def export_org_backup(db: Session, org_id: int) -> Dict[str, Any]:
         "cheques":               len(backup["cheques"]),
         "egresos":               len(backup["egresos"]),
         "categorias_egreso":     len(backup["categorias_egreso"]),
+        "proveedores":           len(backup["proveedores"]),
         "arqueos_diarios":       len(backup["arqueos_diarios"]),
         "egresos_efectivo_total": sum(len(a["egresos_efectivo"]) for a in backup["arqueos_diarios"]),
         "liquidaciones":         len(backup["liquidaciones"]),

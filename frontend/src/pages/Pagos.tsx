@@ -7,6 +7,7 @@ import { confirmDialog } from '@/store/confirm'
 import { useLockStore } from '@/store/lock'
 import { localIsoDate } from '@/utils/fecha'
 import { parseMonto } from '@/utils/monto'
+import { CampoProveedor } from '@/components/CampoProveedor'
 
 // Evita que el share sheet nativo dispare el bloqueo PIN (el share sheet
 // hace perder foco; puede tardar hasta ~15s si el usuario tarda en elegir la app).
@@ -290,6 +291,7 @@ export const Pagos: React.FC = () => {
     referencia: '',
     fecha: localIsoDate(),
   })
+  const [proveedorId, setProveedorId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [resultado, setResultado] = useState<EgresoResultado | null>(null)
   const [msg, setMsg] = useState('')
@@ -437,6 +439,7 @@ export const Pagos: React.FC = () => {
         fecha: form.fecha,
         beneficiario: form.beneficiario || undefined,
         cliente_nombre: form.cliente_nombre || undefined,
+        ...(form.tipo === 'proveedor' && proveedorId ? { proveedor_id: proveedorId } : {}),
         categoria: form.categoria || undefined,
         concepto: form.concepto || undefined,
         referencia: form.referencia || undefined,
@@ -743,10 +746,16 @@ export const Pagos: React.FC = () => {
               </div>
             ) : (
               <div>
-                <label className="label">{form.tipo === 'proveedor' ? 'Proveedor' : 'Beneficiario'}</label>
-                <input className="input-field" placeholder="Nombre"
-                  value={form.beneficiario}
-                  onChange={e => setForm(p => ({ ...p, beneficiario: e.target.value }))} />
+                <label htmlFor="pago-beneficiario" className="label">{form.tipo === 'proveedor' ? 'Proveedor' : 'Beneficiario'}</label>
+                {form.tipo === 'proveedor' ? (
+                  <CampoProveedor id="pago-beneficiario" placeholder="Nombre" value={form.beneficiario}
+                    orgId={activeOrgId} onProveedorChange={setProveedorId}
+                    onChange={v => setForm(p => ({ ...p, beneficiario: v }))} />
+                ) : (
+                  <input id="pago-beneficiario" className="input-field" placeholder="Nombre"
+                    value={form.beneficiario}
+                    onChange={e => setForm(p => ({ ...p, beneficiario: e.target.value }))} />
+                )}
               </div>
             )}
 
