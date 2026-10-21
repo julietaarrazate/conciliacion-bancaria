@@ -30,8 +30,12 @@ from app.services.monotributo_service import (
     guardar_o_actualizar_control,
     marcar_revisado,
     seed_monotributo_categorias,
+    actualizar_escala_sembrada,
     MonotributoServiceError,
+    _ESCALAS_ANTERIORES,
+    _LIMITES_VIGENTES,
 )
+from app.models.auditoria import AuditoriaLog
 from app.models.organizacion import Organizacion
 from app.models.user import User
 from app.models.contabilidad import PlanCuenta, Asiento, AsientoDetalle
@@ -171,6 +175,47 @@ def test_seed_categorias(db):
     ).count()
     assert serv == 8
     assert bienes == 11
+
+
+def _cat(db, categoria, tipo):
+    return db.query(CategoriaMonotributo).filter(
+        CategoriaMonotributo.organizacion_id == 1,
+        CategoriaMonotributo.categoria == categoria,
+        CategoriaMonotributo.tipo_actividad == tipo,
+    ).one()
+
+
+def test_actualizar_escala_sembrada_pasa_la_escala_vieja_a_la_vigente(db):
+    """Org con la escala de feb/2026 sin tocar → todo pasa a la vigente,
+    con auditoría; una fila editada a mano se respeta; idempotente."""
+    vieja = _ESCALAS_ANTERIORES[0]
+    for c in db.query(CategoriaMonotributo).filter(CategoriaMonotributo.organizacion_id == 1):
+        c.limite_anual = Decimal(vieja[c.categoria])
+    editada = _cat(db, "C", "servicios")
+    editada.limite_anual = Decimal("22000000.00")  # editada a mano
+    db.add(User(
+        email="super@mono.test", full_name="Super",
+        hashed_password=get_password_hash("pw123"),
+        organizacion_id=1, is_active=True, role="admin", is_superadmin=True,
+    ))
+    db.commit()
+
+    n = actualizar_escala_sembrada(db, 1)
+
+    assert n == 18  # 19 filas menos la editada
+    vigente = dict(_LIMITES_VIGENTES)
+    assert _cat(db, "A", "servicios").limite_anual == Decimal(vigente["A"])
+    assert _cat(db, "K", "bienes").limite_anual == Decimal(vigente["K"])
+    assert _cat(db, "C", "servicios").limite_anual == Decimal("22000000.00")
+    assert _cat(db, "C", "bienes").limite_anual == Decimal(vigente["C"])
+    logs = db.query(AuditoriaLog).filter(AuditoriaLog.accion == "UPDATE_ESCALA_AUTO").all()
+    assert len(logs) == 18
+    assert actualizar_escala_sembrada(db, 1) == 0
+
+
+def test_actualizar_escala_sembrada_no_toca_la_escala_vigente(db):
+    """Recién sembrada con la vigente → no hay nada que actualizar."""
+    assert actualizar_escala_sembrada(db, 1) == 0
 
 
 # ── Ingresos 12m ───────────────────────────────────────────────────

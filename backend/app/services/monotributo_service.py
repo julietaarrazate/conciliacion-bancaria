@@ -314,6 +314,20 @@ _LIMITES_VIGENTES = [
     ("J", "105012519.20"),
     ("K", "126610838.75"),
 ]
+# Escalas sembradas antes de la vigente. `actualizar_escala_sembrada` pasa a la
+# escala vigente las filas que siguen EXACTAMENTE con alguno de estos valores
+# (o sea, que nadie editó a mano). Al cargar una escala nueva en
+# `_LIMITES_VIGENTES`, agregar acá la que se reemplaza.
+_ESCALAS_ANTERIORES = [
+    # Vigente desde 1/feb/2026 (sembrada hasta oct/2026).
+    {
+        "A": "10277988.13", "B": "15058447.71", "C": "21113696.52",
+        "D": "26212853.42", "E": "30833964.37", "F": "38642048.36",
+        "G": "46211109.37", "H": "70113407.33", "I": "78479211.62",
+        "J": "89872640.30", "K": "108357084.05",
+    },
+]
+
 _CATS_SERVICIOS = [c for c in _LIMITES_VIGENTES if c[0] <= "H"]
 _CATS_BIENES = _LIMITES_VIGENTES
 
@@ -345,3 +359,50 @@ def seed_monotributo_categorias(db: Session, organizacion_id: int) -> int:
     db.commit()
     logger.info("Categorías Monotributo sembradas para org %s (%d)", organizacion_id, creadas)
     return creadas
+
+
+def actualizar_escala_sembrada(db: Session, organizacion_id: int) -> int:
+    """Pasa a la escala vigente las categorías de la org que siguen con el valor
+    exacto de una escala sembrada anterior (`_ESCALAS_ANTERIORES`). Las que se
+    editaron a mano no se tocan. Idempotente: una vez actualizadas ya no
+    coinciden con ninguna escala anterior.
+
+    Cada cambio queda en auditoría a nombre del primer superadmin (acción
+    `UPDATE_ESCALA_AUTO`). Devuelve cuántas filas actualizó."""
+    from app.models.user import User
+    from app.services.auditoria import registrar_log
+
+    vigente = {cat: Decimal(lim) for cat, lim in _LIMITES_VIGENTES}
+    anteriores = [{cat: Decimal(lim) for cat, lim in e.items()} for e in _ESCALAS_ANTERIORES]
+
+    filas = (
+        db.query(CategoriaMonotributo)
+        .filter(CategoriaMonotributo.organizacion_id == organizacion_id)
+        .all()
+    )
+    actor = (
+        db.query(User).filter(User.is_superadmin == True)  # noqa: E712
+        .order_by(User.id).first()
+    )
+    actualizadas = 0
+    for c in filas:
+        nuevo = vigente.get(c.categoria)
+        actual = _D(c.limite_anual)
+        if nuevo is None or actual == nuevo:
+            continue
+        if not any(e.get(c.categoria) == actual for e in anteriores):
+            continue  # editada a mano: se respeta
+        c.limite_anual = nuevo
+        if actor:
+            registrar_log(db, actor.id, "monotributo_categoria", c.id, "UPDATE_ESCALA_AUTO", {
+                "categoria": c.categoria,
+                "tipo_actividad": c.tipo_actividad,
+                "limite_anterior": str(actual),
+                "limite_anual": str(nuevo),
+            }, autocommit=False)
+        actualizadas += 1
+    if actualizadas:
+        db.commit()
+        logger.info("Escala Monotributo actualizada para org %s (%d categorías)",
+                    organizacion_id, actualizadas)
+    return actualizadas
