@@ -32,8 +32,9 @@ Vercel redeploya automáticamente en cada `git push` a `main`. Si el push no cam
 `frontend/`, el build se saltea (`ignoreCommand` en `frontend/vercel.json`) y queda publicado el
 deploy anterior, que ya es el mismo front. Pasa igual en las ramas de los PR.
 
-Después de cambiar una variable de entorno, hay que usar **Redeploy** a mano: un push que no toca
-`frontend/` no la toma.
+Después de cambiar una variable de entorno, hay que usar **Redeploy** a mano (un push que no toca
+`frontend/` no la toma). El redeploy del mismo commit siempre arma el front: el `ignoreCommand`
+solo saltea el build cuando hay un deploy anterior de OTRO commit y no cambió nada en `frontend/`.
 
 ### Si cambia la URL del backend:
 Vercel → tu proyecto → **Settings** → **Environment Variables** → editar `VITE_API_URL` → **Redeploy**

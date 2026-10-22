@@ -5,6 +5,19 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Fix (oct 2026) — Sentry en el frontend + Redeploy de Vercel
+
+- **Sentry del frontend nunca podía enviar errores**: la Content-Security-Policy de
+  `frontend/vercel.json` solo permitía conectarse a la API, así que el navegador bloqueaba los envíos
+  a `*.ingest.sentry.io`. Se agregan `https://*.ingest.sentry.io` y `https://*.ingest.us.sentry.io`
+  a `connect-src`.
+- **Redeploy de Vercel se cancelaba solo**: el `ignoreCommand` (#240) comparaba el commit con sí
+  mismo en un redeploy, no veía cambios y salteaba el build, así que un cambio de variable de
+  entorno nunca se aplicaba. Ahora solo saltea si hay un deploy anterior de otro commit y no cambió
+  nada en `frontend/`; ante la duda, arma.
+
+---
+
 ### Fix (oct 2026) — Monotributo: escala de agosto 2026 también en las organizaciones existentes
 
 - La escala vigente desde 1/ago/2026 (PR #244) solo se sembraba en orgs nuevas. Ahora, en cada
