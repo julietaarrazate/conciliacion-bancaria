@@ -1,16 +1,14 @@
 import React, { useEffect, useState, lazy, Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
-import { apiClient } from '@/services/api'
 import { Login } from '@/pages/Login'
-import { RecuperarPassword } from '@/pages/RecuperarPassword'
-import { RestablecerPassword } from '@/pages/RestablecerPassword'
-import { Layout } from '@/components/Layout'
 import { useThemeStore } from '@/store/theme'
 import '@/styles/index.css'
 
 // Lazy-loaded routes: cada pagina baja sola al navegar, no en el bundle inicial.
-// Login y password reset quedan eager para que el primer paint sea instantaneo.
+// Login queda eager para que el primer paint de /login sea instantaneo.
+// El Layout (sidebar, buscador ⌘K, asistente IA, lock screen) también es lazy:
+// la landing y el login no lo necesitan.
 function lazyPage<M extends Record<string, React.ComponentType<Record<string, unknown>>>>(
   loader: () => Promise<M>,
   name: keyof M,
@@ -18,6 +16,11 @@ function lazyPage<M extends Record<string, React.ComponentType<Record<string, un
   return lazy(() => loader().then((m) => ({ default: m[name] }))) as React.LazyExoticComponent<M[typeof name]>
 }
 
+// El loader del Layout se reusa para precargarlo apenas sabemos que hay sesión.
+const cargarLayout      = () => import('@/components/Layout')
+const Layout            = lazyPage(cargarLayout,                              'Layout')
+const RecuperarPassword = lazyPage(() => import('@/pages/RecuperarPassword'), 'RecuperarPassword')
+const RestablecerPassword = lazyPage(() => import('@/pages/RestablecerPassword'), 'RestablecerPassword')
 const Resumen           = lazyPage(() => import('@/pages/Resumen'),           'Resumen')
 const EstadoCuenta      = lazyPage(() => import('@/pages/EstadoCuenta'),      'EstadoCuenta')
 const Dashboard         = lazyPage(() => import('@/pages/Dashboard'),         'Dashboard')
@@ -91,7 +94,11 @@ export function App() {
 
   // Keep-alive: ping cada 14 min para que Render no duerma
   useEffect(() => {
-    const ping = () => apiClient.client.get('/health').catch(() => {})
+    // import() dinámico: el cliente HTTP (axios + services/api) no viaja en el
+    // bundle inicial de la landing; se baja recién cuando hace falta.
+    const ping = () => import('@/services/api')
+      .then(({ apiClient }) => apiClient.client.get('/health'))
+      .catch(() => {})
     const id = setInterval(ping, 14 * 60 * 1000)
     return () => clearInterval(id)
   }, [])
@@ -99,6 +106,17 @@ export function App() {
   useEffect(() => {
     const loadUser = async () => {
       if (token) {
+        // Con sesión, el Layout se va a necesitar seguro: precargarlo en
+        // paralelo con /auth/me en vez de esperar a que termine.
+        cargarLayout().catch(() => {})
+        let apiClient: typeof import('@/services/api').apiClient
+        try {
+          ({ apiClient } = await import('@/services/api'))
+        } catch {
+          // Chunk inaccesible (deploy nuevo / sin red): no trabar la app en "Cargando..."
+          setLoading(false)
+          return
+        }
         try {
           const user = await apiClient.getCurrentUser()
           setUser(user)
