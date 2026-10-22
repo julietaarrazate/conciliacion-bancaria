@@ -1,7 +1,7 @@
 import logging
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, selectinload
 from typing import Optional
 from datetime import date
 
