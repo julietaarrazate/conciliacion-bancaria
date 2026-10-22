@@ -20,12 +20,17 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 // ── Utilidades ────────────────────────────────────────────────
+// Formatters creados una vez: construir un Intl.*Format (o usar toLocale*String
+// con opciones, que lo construye por dentro) en cada celda es lo más caro de
+// dibujar 200 filas.
+const ARS_FMT = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 })
+const FECHA_FMT = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 function fmtARS(n: number) {
-  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
+  return ARS_FMT.format(n)
 }
 function fmtDate(d?: string | null) {
   if (!d) return '—'
-  try { return new Date(d + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) }
+  try { return FECHA_FMT.format(new Date(d + 'T00:00:00')) }
   catch { return d }
 }
 
