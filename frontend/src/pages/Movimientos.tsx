@@ -107,9 +107,19 @@ export const Movimientos: React.FC = () => {
   const [resumen, setResumen] = useState<ResumenExtractoData | null>(null)
   const [resolverMov, setResolverMov] = useState<MovimientoFiltrado | null>(null)
 
+  // Contador de cambios hechos desde esta pantalla (acreditar, editar, borrar,
+  // resolver, agregar/borrar UM): dispara el recálculo del resumen.
+  const [cambios, setCambios] = useState(0)
+  const mutarMovimientos = (fn: (prev: MovimientoFiltrado[]) => MovimientoFiltrado[]) => {
+    setMovimientos(fn)
+    setCambios(c => c + 1)
+  }
+
   // Resumen (% acreditado + gastos bancarios) del extracto completo, sin filtros.
-  // Se recalcula cada vez que cambia la lista: acreditar, editar o borrar
-  // un movimiento lo mueve.
+  // Se recalcula al cambiar de extracto y después de cada cambio (acreditar,
+  // editar o borrar un movimiento lo mueve). No depende de la lista filtrada:
+  // filtrar no cambia el resumen y antes lo pedía dos veces al entrar y otra
+  // vez en cada cambio de filtro.
   useEffect(() => {
     if (!extractoId) { setResumen(null); return }
     let cancelado = false
@@ -117,7 +127,7 @@ export const Movimientos: React.FC = () => {
       .then(r => { if (!cancelado) setResumen(r) })
       .catch(() => { if (!cancelado) setResumen(null) })
     return () => { cancelado = true }
-  }, [extractoId, movimientos])
+  }, [extractoId, cambios])
 
   useEffect(() => {
     apiClient.listExtractos(activeOrgId).then(data => {
@@ -170,7 +180,7 @@ export const Movimientos: React.FC = () => {
       const monto = parseFloat(modalValues.monto.replace(/\./g, '').replace(',', '.'))
       const payload = { titular: modalValues.titular, monto, fecha: modalValues.fecha || null }
       await apiClient.updateMovimiento(extractoId, editModal.id, payload)
-      setMovimientos(prev => prev.map(x => x.id === editModal.id ? { ...x, ...payload } : x))
+      mutarMovimientos(prev => prev.map(x => x.id === editModal.id ? { ...x, ...payload } : x))
       setEditModal(null)
     } catch (err: any) {
       setModalError(err.response?.data?.detail || 'Error al guardar')
@@ -196,7 +206,7 @@ export const Movimientos: React.FC = () => {
         cliente_acreditado: acredModal.cliente || null,
         fecha_acred: acredModal.fecha || null,
       })
-      setMovimientos(prev => prev.map(x => x.id === acredModal.mov.id
+      mutarMovimientos(prev => prev.map(x => x.id === acredModal.mov.id
         ? { ...x, cliente_acreditado: acredModal.cliente || null, fecha_acred: acredModal.fecha || null }
         : x))
       setAcredModal(null)
@@ -215,7 +225,7 @@ export const Movimientos: React.FC = () => {
         cliente_acreditado: null,
         fecha_acred: null,
       })
-      setMovimientos(prev => prev.map(x => x.id === acredModal.mov.id
+      mutarMovimientos(prev => prev.map(x => x.id === acredModal.mov.id
         ? { ...x, cliente_acreditado: null, fecha_acred: null }
         : x))
       setAcredModal(null)
@@ -230,7 +240,7 @@ export const Movimientos: React.FC = () => {
     if (!await confirmDialog({ title: 'Borrar movimiento', message: `¿Borrar "${m.titular || m.orden}"? Esta acción no se puede deshacer.`, confirmLabel: 'Borrar', danger: true })) return
     try {
       await apiClient.deleteMovimiento(extractoId, m.id)
-      setMovimientos(prev => prev.filter(x => x.id !== m.id))
+      mutarMovimientos(prev => prev.filter(x => x.id !== m.id))
     } catch { /* silencioso */ }
   }
 
@@ -267,6 +277,7 @@ export const Movimientos: React.FC = () => {
       const data = await apiClient.listExtractos(activeOrgId)
       setExtractos(data.items)
       load()
+      setCambios(c => c + 1)
     } catch (err: any) {
       setUmMsg(`✗ ${err.response?.data?.detail || 'Error al agregar UM'}`)
     } finally {
@@ -364,6 +375,7 @@ export const Movimientos: React.FC = () => {
                 const r = await apiClient.deleteUM(extractoId!)
                 setUmMsg(`✓ ${r.eliminados} movimientos UM eliminados`)
                 load()
+                setCambios(c => c + 1)
               } catch (err: any) {
                 const detail = err.response?.data?.detail
                 if (detail?.code === 'sin_lotes') {
@@ -372,6 +384,7 @@ export const Movimientos: React.FC = () => {
                   const r2 = await apiClient.deleteUM(extractoId!, true)
                   setUmMsg(`✓ ${r2.eliminados} movimientos UM eliminados`)
                   load()
+                  setCambios(c => c + 1)
                 } else {
                   setUmMsg(`✗ ${detail || err.message}`)
                 }
@@ -623,7 +636,7 @@ export const Movimientos: React.FC = () => {
         onClose={() => setResolverMov(null)}
         onResuelto={egresoId => {
           const id = resolverMov.id
-          setMovimientos(prev => prev.map(x => x.id === id ? { ...x, egreso_id: egresoId } : x))
+          mutarMovimientos(prev => prev.map(x => x.id === id ? { ...x, egreso_id: egresoId } : x))
           setResolverMov(null)
         }}
       />
