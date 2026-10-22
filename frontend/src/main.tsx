@@ -9,7 +9,7 @@ import { App } from './App'
 let sentryCapture: ((err: unknown) => void) | null = null
 
 if (import.meta.env.VITE_SENTRY_DSN) {
-  import('@sentry/react')
+  import('@/services/sentry')
     .then((Sentry) => {
       Sentry.init({
         dsn: import.meta.env.VITE_SENTRY_DSN,
