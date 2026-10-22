@@ -8,6 +8,7 @@ En produccion (Render) simplemente devuelve el archivo para descargar.
 
 import logging
 import os
+import re
 
 logger = logging.getLogger(__name__)
 import platform
@@ -42,6 +43,13 @@ def get_clientes_base() -> str:
     return os.path.join(get_desktop_path(), "clientes")
 
 
+def _nombre_carpeta_seguro(nombre: Optional[str]) -> str:
+    """Nombre de cliente apto para usar como carpeta: sin separadores de ruta ni '..'."""
+    limpio = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", (nombre or "").strip())
+    limpio = limpio.replace("..", "_").strip(" .")
+    return limpio or "cliente"
+
+
 def is_local() -> bool:
     """True si estamos corriendo en la PC local (no en Render/cloud)"""
     return not os.getenv("RENDER") and not os.getenv("RAILWAY_ENVIRONMENT")
@@ -51,13 +59,16 @@ def is_local() -> bool:
 def guardar_planilla_en_carpeta(
     planilla_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Guarda el archivo conciliado en Desktop/clientes/{Cliente}/{Mes Año}/
     y también lo devuelve para descargar.
     """
-    p = db.query(Planilla).filter(Planilla.id == planilla_id).first()
+    q = db.query(Planilla).filter(Planilla.id == planilla_id)
+    if not current_user.is_superadmin:
+        q = q.filter(Planilla.organizacion_id == (current_user.organizacion_id or 1))
+    p = q.first()
     if not p:
         raise HTTPException(404, "Planilla no encontrada")
 
@@ -130,7 +141,10 @@ def guardar_planilla_en_carpeta(
             mes_anio = f"{MESES[fecha_hoy.month - 1]} {fecha_hoy.year}"
 
             anio = str(fecha_hoy.year)
-            carpeta = os.path.join(get_clientes_base(), p.cliente.nombre, anio, mes_anio)
+            base = get_clientes_base()
+            carpeta = os.path.join(base, _nombre_carpeta_seguro(p.cliente.nombre), anio, mes_anio)
+            if not os.path.realpath(carpeta).startswith(os.path.realpath(base) + os.sep):
+                raise ValueError("Nombre de cliente inválido para carpeta")
             os.makedirs(carpeta, exist_ok=True)
 
             # Nombre coincide con el de descarga: "cliente norte acreditado 8.5.xlsx"
@@ -461,7 +475,10 @@ def acreditar_movimiento_a_cliente(
     from app.models.cliente import Cliente
     from app.services.auditoria import registrar_log
 
-    mov = db.query(MovimientoBanco).filter(MovimientoBanco.id == mov_id).first()
+    q_mov = db.query(MovimientoBanco).filter(MovimientoBanco.id == mov_id)
+    if not current_user.is_superadmin:
+        q_mov = q_mov.filter(MovimientoBanco.organizacion_id == (current_user.organizacion_id or 1))
+    mov = q_mov.first()
     if not mov:
         raise HTTPException(404, "Movimiento no encontrado")
 
@@ -470,7 +487,7 @@ def acreditar_movimiento_a_cliente(
     if not current_user.is_superadmin:
         q = q.filter(Cliente.organizacion_id == current_user.organizacion_id)
     cli = q.first()
-    if not cli:
+    if not cli or cli.organizacion_id != mov.organizacion_id:
         raise HTTPException(404, "Cliente no encontrado")
 
     fecha_s = payload.get("fecha_acred")

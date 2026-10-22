@@ -342,6 +342,16 @@ def editar_cheque(
     if c.estado not in ("registrado", "pendiente"):
         raise HTTPException(400, "Solo se pueden editar cheques en estado registrado")
 
+    org_cheque = c.organizacion_id or oid
+    if body.cliente_id is not None and not db.query(Cliente).filter(
+        Cliente.id == body.cliente_id, Cliente.organizacion_id == org_cheque,
+    ).first():
+        raise HTTPException(404, "Cliente no encontrado")
+    if body.portador_id is not None and not db.query(Portador).filter(
+        Portador.id == body.portador_id, Portador.organizacion_id == org_cheque,
+    ).first():
+        raise HTTPException(404, "Portador no encontrado")
+
     cambios = {}
     for field in ("cliente_id", "portador_id", "numero", "banco_origen", "librador",
                   "monto", "comision", "codigo_postal", "fecha_emision", "fecha_deposito", "notas"):
@@ -486,10 +496,9 @@ async def importar_excel(
     if COL['monto'] is None:
         raise HTTPException(400, "Columna 'monto' requerida no encontrada")
 
-    clientes_cache: dict[str, int] = {
-        c.nombre.lower(): c.id
-        for c in db.query(Cliente).filter(Cliente.organizacion_id == oid).all()
-    }
+    clientes_org = db.query(Cliente).filter(Cliente.organizacion_id == oid).all()
+    clientes_cache: dict[str, int] = {c.nombre.lower(): c.id for c in clientes_org}
+    ids_org = {c.id for c in clientes_org}
 
     importados, errores = 0, []
     for i, row in enumerate(rows[1:], start=2):
@@ -505,6 +514,8 @@ async def importar_excel(
             if COL['cliente'] is not None and row[COL['cliente']]:
                 cv = str(row[COL['cliente']]).strip()
                 cliente_id = int(cv) if cv.isdigit() else clientes_cache.get(cv.lower())
+                if cliente_id is not None and cliente_id not in ids_org:
+                    cliente_id = None  # id de otra organización: se ignora
 
             comision = Decimal("0")
             if COL['comision'] is not None and row[COL['comision']]:
