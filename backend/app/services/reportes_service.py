@@ -859,26 +859,35 @@ def calcular_flujo_caja(db: Session, organizacion_id: int, meses: int) -> dict:
     Neto      = ingresos - egresos.
     """
     periodos = _meses_atras(meses)
+    rango_desde = rango_mes(*periodos[0])[0]
+    rango_hasta = rango_mes(*periodos[-1])[1]
+
+    def _por_mes(fecha_col, monto_col, org_col) -> dict[tuple[int, int], Decimal]:
+        """Suma por mes en 1 query agrupada por día (antes: 1 SUM por mes y tabla)."""
+        acc: dict[tuple[int, int], Decimal] = {}
+        filas = (
+            db.query(fecha_col, func.sum(monto_col))
+            .filter(org_col == organizacion_id, fecha_col >= rango_desde, fecha_col <= rango_hasta)
+            .group_by(fecha_col)
+            .all()
+        )
+        for f, total in filas:
+            if f is None or total is None:
+                continue
+            d = str(f)[:10]
+            clave = (int(d[:4]), int(d[5:7]))
+            acc[clave] = acc.get(clave, Decimal("0")) + Decimal(str(total))
+        return acc
+
+    ingresos_mes = _por_mes(MovimientoBanco.fecha, MovimientoBanco.monto, MovimientoBanco.organizacion_id)
+    # Egresos del mes: todos los pagos/gastos del módulo unificado
+    egresos_mes = _por_mes(Egreso.fecha, Egreso.monto, Egreso.organizacion_id)
+
     resultado = []
     for a, m in periodos:
-        desde, hasta = rango_mes(a, m)
-        ingresos_q = db.query(
-            func.coalesce(func.sum(MovimientoBanco.monto), 0.0)
-        ).filter(
-            MovimientoBanco.organizacion_id == organizacion_id,
-            MovimientoBanco.fecha >= desde,
-            MovimientoBanco.fecha <= hasta,
-        ).scalar() or 0.0
-        # Egresos del mes: todos los pagos/gastos del módulo unificado
-        egresos_q = db.query(
-            func.coalesce(func.sum(Egreso.monto), 0.0)
-        ).filter(
-            Egreso.organizacion_id == organizacion_id,
-            Egreso.fecha >= desde,
-            Egreso.fecha <= hasta,
-        ).scalar() or 0.0
-        ingresos = ingresos_q or 0
-        egresos = egresos_q or 0
+        # Mes sin datos (o que suma 0) → 0, igual que el `scalar() or 0.0` / `or 0` anterior.
+        ingresos = ingresos_mes.get((a, m)) or 0
+        egresos = egresos_mes.get((a, m)) or 0
         resultado.append({
             "label": f"{m:02d}/{str(a)[-2:]}",
             "anio": a,
