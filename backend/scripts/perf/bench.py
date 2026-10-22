@@ -157,6 +157,28 @@ def endpoints(Session, ids) -> list[str]:
     ]
 
 
+_VOLATILES = {"created_at", "updated_at", "fecha_creacion", "timestamp", "generado_at", "generado_en"}
+
+
+def huella(r) -> str:
+    """Hash del body sin campos de reloj (created_at…), para verificar que una
+    optimización no cambió el resultado: misma huella antes y después."""
+    import hashlib
+
+    def limpiar(o):
+        if isinstance(o, dict):
+            return {k: limpiar(v) for k, v in o.items() if k not in _VOLATILES}
+        if isinstance(o, list):
+            return [limpiar(v) for v in o]
+        return o
+
+    try:
+        body = json.dumps(limpiar(r.json()), sort_keys=True)
+    except Exception:
+        body = r.text
+    return hashlib.sha256(body.encode()).hexdigest()[:12]
+
+
 def limpiar_caches():
     """Vacía los caches en memoria de los routers para medir el costo real (cache frío)."""
     from app.routers import analisis, ctb_ctas_corrientes, ctb_libro
@@ -183,7 +205,7 @@ def correr(escala: dict, solo: str | None = None, sql_de: str | None = None, rep
                 tiempos.append((time.perf_counter() - t0) * 1000)
         n = counter.count
         filas.append({"path": path, "status": r.status_code, "sql": n, "ms": round(min(tiempos), 1),
-                      "kb": round(len(r.content) / 1024, 1)})
+                      "kb": round(len(r.content) / 1024, 1), "huella": huella(r)})
         if sql_de and path.startswith(sql_de):
             for st in counter.statements:
                 print("   ", " ".join(st.split())[:220])
@@ -197,6 +219,7 @@ def main(argv=None):
     ap.add_argument("--json")
     ap.add_argument("--solo")
     ap.add_argument("--sql")
+    ap.add_argument("--comparar", help="JSON de una corrida anterior (--json) para la tabla antes/después")
     args = ap.parse_args(argv)
     escala = ESCALA_CHICA if args.chica else ESCALA_COMPLETA
     t0 = time.perf_counter()
@@ -205,6 +228,16 @@ def main(argv=None):
     print(f"{'endpoint':60} {'st':>4} {'sql':>6} {'ms':>8} {'kb':>8}")
     for f in filas:
         print(f"{f['path'][:60]:60} {f['status']:>4} {f['sql']:>6} {f['ms']:>8} {f['kb']:>8}")
+    if args.comparar:
+        with open(args.comparar) as fh:
+            prev = {f["path"]: f for f in json.load(fh)}
+        print("\n# antes → después (sql, ms) · huella distinta = resultado cambió")
+        for f in filas:
+            b = prev.get(f["path"])
+            if not b:
+                continue
+            marca = "" if b.get("huella") == f["huella"] else "  << RESULTADO DISTINTO"
+            print(f"{f['path'][:52]:52} {b['sql']:>4} → {f['sql']:<4} {b['ms']:>7} → {f['ms']:<7}{marca}")
     if args.json:
         with open(args.json, "w") as fh:
             json.dump(filas, fh, indent=1)

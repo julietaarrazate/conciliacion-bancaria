@@ -28,7 +28,7 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -81,7 +81,11 @@ def list_cheques(
     if hasta:
         q = q.filter(Cheque.fecha_deposito <= hasta)
     total = q.count()
-    items = q.order_by(Cheque.created_at.desc()).offset(skip).limit(limit).all()
+    # cliente/portador en el mismo SELECT (antes: 1 query lazy por cheque → N+1).
+    items = (
+        q.options(joinedload(Cheque.cliente), joinedload(Cheque.portador))
+        .order_by(Cheque.created_at.desc()).offset(skip).limit(limit).all()
+    )
     return {"total": total, "items": [_cheque_dict(c) for c in items]}
 
 
