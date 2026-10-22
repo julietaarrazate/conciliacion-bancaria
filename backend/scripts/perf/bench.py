@@ -149,6 +149,7 @@ def endpoints(Session, ids) -> list[str]:
         "/contabilidad/reglas",
         "/contabilidad/asientos/1",
         "/cheques/deposito",
+        "/cheques/deposito?fecha=2026-07-06",
         "/proveedores",
         "/comprobantes-compra",
         "/auditoria/patrones",
