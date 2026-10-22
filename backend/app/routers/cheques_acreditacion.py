@@ -48,12 +48,17 @@ def acreditar(
         raise HTTPException(400, f"Cheque ya está {c.estado}")
 
     # Verificar que el banco elegido existe
-    banco_cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == body.banco_cuenta_id).first()
+    banco_cuenta = db.query(PlanCuenta).filter(
+        PlanCuenta.id == body.banco_cuenta_id,
+        PlanCuenta.organizacion_id == (c.organizacion_id or oid),
+    ).first()
     if not banco_cuenta:
         raise HTTPException(404, "Cuenta de banco no encontrada")
 
     # Verificar que el cliente tiene cuenta contable
-    cli = db.query(Cliente).filter(Cliente.id == c.cliente_id).first() if c.cliente_id else None
+    cli = db.query(Cliente).filter(
+        Cliente.id == c.cliente_id, Cliente.organizacion_id == (c.organizacion_id or oid),
+    ).first() if c.cliente_id else None
     if not cli or not cli.cuenta_contable_id:
         raise HTTPException(400, "El cliente no tiene cuenta contable configurada")
 
@@ -91,7 +96,9 @@ def acreditar_masivo(
     """Acredita uno o varios cheques de una sola vez (flujo Por depósito)."""
     oid = _org_id(current_user, org_id)
 
-    banco_cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == body.banco_cuenta_id).first()
+    banco_cuenta = db.query(PlanCuenta).filter(
+        PlanCuenta.id == body.banco_cuenta_id, PlanCuenta.organizacion_id == oid,
+    ).first()
     if not banco_cuenta:
         raise HTTPException(404, "Cuenta de banco no encontrada")
 
@@ -105,7 +112,9 @@ def acreditar_masivo(
         if c.estado not in ("registrado", "depositado", "pendiente"):
             resultados.append({"id": cheque_id, "ok": False, "error": f"Estado {c.estado}"})
             continue
-        cli = db.query(Cliente).filter(Cliente.id == c.cliente_id).first() if c.cliente_id else None
+        cli = db.query(Cliente).filter(
+            Cliente.id == c.cliente_id, Cliente.organizacion_id == oid,
+        ).first() if c.cliente_id else None
         if not cli or not cli.cuenta_contable_id:
             resultados.append({"id": cheque_id, "ok": False,
                                "error": "Cliente sin cuenta contable"})

@@ -144,7 +144,9 @@ def crear_egreso(
     cliente_nombre_libre = (payload.get("cliente_nombre") or "").strip()
     if cliente_id:
         try:
-            cliente = db.query(Cliente).filter(Cliente.id == int(cliente_id)).first()
+            cliente = db.query(Cliente).filter(
+                Cliente.id == int(cliente_id), Cliente.organizacion_id == oid,
+            ).first()
         except Exception:
             pass
     if not cliente and cliente_nombre_libre:
