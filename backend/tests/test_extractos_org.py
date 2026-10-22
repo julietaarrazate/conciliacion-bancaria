@@ -347,3 +347,44 @@ class TestArchivadoExtracto:
         t1 = _token(db, "contador@org.test")
         r = client.patch(f"/extractos/{eid}/archivar", headers=_auth(t1))
         assert r.status_code == 404
+
+
+class TestListadoExtractosConteo:
+
+    def test_total_movimientos_por_extracto_con_count_agrupado(self, client, db):
+        """El listado informa cuántos movimientos tiene cada extracto (COUNT
+        agrupado en una sola query, sin cargar los movimientos como objetos)."""
+        from datetime import date
+        from decimal import Decimal
+        from sqlalchemy import event
+
+        sa = db.query(User).filter(User.email == "super@org.test").first()
+        e1 = ExtractoBancario(nombre_archivo="a.xlsx", creado_por=sa.id, organizacion_id=2)
+        e2 = ExtractoBancario(nombre_archivo="b.xlsx", creado_por=sa.id, organizacion_id=2)
+        e3 = ExtractoBancario(nombre_archivo="vacio.xlsx", creado_por=sa.id, organizacion_id=2)
+        db.add_all([e1, e2, e3])
+        db.flush()
+        for i in range(3):
+            db.add(MovimientoBanco(extracto_id=e1.id, orden=i + 1, fecha=date(2026, 6, 1),
+                                   titular="X", monto=Decimal("10.00"), organizacion_id=2))
+        db.add(MovimientoBanco(extracto_id=e2.id, orden=1, fecha=date(2026, 6, 1),
+                               titular="Y", monto=Decimal("5.00"), organizacion_id=2))
+        db.commit()
+
+        token = _token(db, "super@org.test")
+        sqls = []
+
+        def _log(conn, cursor, statement, *a):
+            sqls.append(statement)
+
+        engine = db.get_bind()
+        event.listen(engine, "before_cursor_execute", _log)
+        try:
+            r = client.get("/extractos?org_id=2", headers=_auth(token))
+        finally:
+            event.remove(engine, "before_cursor_execute", _log)
+        assert r.status_code == 200, r.text
+        conteo = {e["nombre_archivo"]: e["total_movimientos"] for e in r.json()["items"]}
+        assert conteo == {"a.xlsx": 3, "b.xlsx": 1, "vacio.xlsx": 0}
+        # Ninguna query trae las filas de movimientos (antes: una carga completa por extracto).
+        assert not any("movimientos_banco.titular" in s for s in sqls)

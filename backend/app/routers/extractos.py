@@ -75,8 +75,16 @@ def list_extractos(skip: int = 0, limit: int = 50,
         q = q.filter(ExtractoBancario.organizacion_id == (current_user.organizacion_id or 1))
     total = q.count()
     rows = q.order_by(desc(ExtractoBancario.fecha_creacion)).offset(skip).limit(limit).all()
+    # Cantidad de movimientos con un COUNT agrupado: len(e.movimientos) cargaba
+    # todos los movimientos de cada extracto como objetos ORM solo para contarlos.
+    conteos = dict(
+        db.query(MovimientoBanco.extracto_id, func.count(MovimientoBanco.id))
+        .filter(MovimientoBanco.extracto_id.in_([e.id for e in rows]))
+        .group_by(MovimientoBanco.extracto_id)
+        .all()
+    ) if rows else {}
     items = [{"id": e.id, "nombre_archivo": e.nombre_archivo,
-              "fecha_creacion": e.fecha_creacion, "total_movimientos": len(e.movimientos),
+              "fecha_creacion": e.fecha_creacion, "total_movimientos": conteos.get(e.id, 0),
               "banco": e.banco or "Banco Macro",
               "archivado": e.archivado_at is not None} for e in rows]
     return {"total": total, "items": items}
