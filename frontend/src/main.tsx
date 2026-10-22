@@ -1,6 +1,5 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { GoogleOAuthProvider } from '@react-oauth/google'
 import { App } from './App'
 
 // Sentry se carga en un chunk aparte y en segundo plano (después del primer
@@ -65,14 +64,15 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
+// Login con Google: Login.tsx redirige directo al flujo auth-code de Google
+// (sin librería). No envolvemos la app en GoogleOAuthProvider porque ese
+// provider descarga el script de Google Identity (~100KB) en TODAS las rutas
+// — landing incluida — sin que nada lo use.
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <GoogleOAuthProvider clientId={googleClientId}>
-        <App />
-      </GoogleOAuthProvider>
+      <App />
     </ErrorBoundary>
   </React.StrictMode>,
 )
