@@ -106,7 +106,9 @@ def _local_interior(codigo_postal: Optional[str]) -> Optional[str]:
         return None
 
 
-def _cheque_dict(c: Cheque) -> dict:
+def _cheque_dict(c: Cheque, tiene_foto: Optional[bool] = None) -> dict:
+    """`tiene_foto` precalculado en SQL (listados) evita cargar la foto base64 de cada
+    cheque solo para saber si existe; si no viene, se deriva de la columna."""
     librador = c.librador or c.titular  # fallback para registros anteriores
     return {
         "id":                  c.id,
@@ -131,7 +133,7 @@ def _cheque_dict(c: Cheque) -> dict:
         "fisico":              c.fisico,
         "fecha_devolucion":    c.fecha_devolucion,
         "notas":               c.notas,
-        "tiene_foto":          bool(c.foto_comprobante),
+        "tiene_foto":          bool(c.foto_comprobante) if tiene_foto is None else bool(tiene_foto),
         "banco_cuenta_id":     c.banco_cuenta_id,
         "created_at":          c.created_at,
     }

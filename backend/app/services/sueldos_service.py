@@ -118,17 +118,23 @@ def seed_config_sueldos(db: Session, organizacion_id: int) -> int:
     return 1
 
 
-def _basico_empleado(db: Session, empleado: Empleado) -> Decimal:
+def _basico_empleado(db: Session, empleado: Empleado, categorias: "dict | None" = None) -> Decimal:
     """Sueldo básico del empleado: su override si lo tiene, sino el de su
-    categoría de convenio, sino 0."""
+    categoría de convenio, sino 0.
+
+    `categorias` ({id: CategoriaConvenio}) es un precargado opcional para no hacer
+    1 SELECT por empleado al liquidar todo el período."""
     if empleado.sueldo_basico is not None and _D(empleado.sueldo_basico) > 0:
         return _D(empleado.sueldo_basico)
     if empleado.categoria_id:
-        cat = (
-            db.query(CategoriaConvenio)
-            .filter(CategoriaConvenio.id == empleado.categoria_id)
-            .first()
-        )
+        if categorias is not None:
+            cat = categorias.get(empleado.categoria_id)
+        else:
+            cat = (
+                db.query(CategoriaConvenio)
+                .filter(CategoriaConvenio.id == empleado.categoria_id)
+                .first()
+            )
         if cat is not None:
             return _D(cat.sueldo_basico)
     return Decimal("0")
@@ -277,8 +283,13 @@ def calcular_liquidacion_periodo(
     total_neto = Decimal("0")
     total_retencion_ganancias = Decimal("0")
 
+    cat_ids = {e.categoria_id for e in empleados if e.categoria_id}
+    categorias = {
+        c.id: c for c in db.query(CategoriaConvenio).filter(CategoriaConvenio.id.in_(cat_ids)).all()
+    } if cat_ids else {}
+
     for emp in empleados:
-        basico = _basico_empleado(db, emp).quantize(_DOS)
+        basico = _basico_empleado(db, emp, categorias).quantize(_DOS)
         # SAC proporcional: provisión mensual = básico / 12 (ver doc del módulo).
         sac = (basico / _DOCE).quantize(_DOS)
         bruto = (basico + sac).quantize(_DOS)

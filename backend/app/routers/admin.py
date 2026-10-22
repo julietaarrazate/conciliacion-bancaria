@@ -157,17 +157,3 @@ def delete_user(
 
     return {"ok": True, "mensaje": f"Usuario {email} eliminado"}
 
-
-class SentryTestError(RuntimeError):
-    """Error intencional para verificar que Sentry recibe los errores del backend."""
-
-
-@router.post("/sentry-test")
-def sentry_test(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_superadmin),
-):
-    """Lanza un error a propósito para probar Sentry. Solo superadmin.
-    Responde 500; el error tiene que aparecer en el proyecto de Sentry del backend."""
-    registrar_log(db, current_user.id, "sistema", 0, "SENTRY_TEST", {})
-    raise SentryTestError("Prueba de Sentry (backend) — error intencional, ignorar")

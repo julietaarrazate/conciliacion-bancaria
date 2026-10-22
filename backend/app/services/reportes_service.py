@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer, joinedload
 
 from app.models.cheque import Cheque
 from app.models.cliente import Cliente
@@ -234,6 +235,8 @@ def _cheques_proximos_vencimiento(db: Session, org_id: int, dias: int = 30) -> l
     limite = hoy + timedelta(days=dias)
     cheques = (
         db.query(Cheque)
+        # cliente en el mismo SELECT (antes: 1 lazy por cheque) y sin la foto base64.
+        .options(joinedload(Cheque.cliente), defer(Cheque.foto_comprobante))
         .filter(
             Cheque.organizacion_id == org_id,
             Cheque.estado.in_(CHEQUE_EN_CARTERA),
@@ -683,6 +686,7 @@ def calcular_estado_cuenta_cliente(
     # Cheques del cliente en el periodo
     cheques = (
         db.query(Cheque)
+        .options(defer(Cheque.foto_comprobante))  # no se usa: evita traer el base64
         .filter(
             Cheque.cliente_id == cliente_id,
             Cheque.fecha_emision >= d,
@@ -799,12 +803,45 @@ def calcular_evolucion(db: Session, organizacion_id: int, meses: int) -> dict:
     Cada entrada: {label, anio, mes, conciliado, pendiente, tasa_pct}
     """
     periodos = _meses_atras(meses)
+    # Una sola query agrupada por (día de carga, status) para todo el rango, en vez de
+    # 3 sumas por mes (18 queries para 6 meses). Mismo criterio que _suma_planilla_rows
+    # sin fecha_acred: planillas no borradas de la org, por fecha_carga.
+    rango_desde = rango_mes(*periodos[0])[0]
+    rango_hasta = rango_mes(*periodos[-1])[1]
+    dia = func.date(Planilla.fecha_carga)
+    agregados = (
+        db.query(dia.label("dia"), PlanillaRow.status, func.sum(PlanillaRow.monto).label("total"))
+        .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
+        .filter(
+            Planilla.organizacion_id == organizacion_id,
+            Planilla.deleted_at.is_(None),
+            dia >= rango_desde,
+            dia <= rango_hasta,
+        )
+        .group_by(dia, PlanillaRow.status)
+        .all()
+    )
+    por_mes: dict[tuple[int, int], dict] = {}
+    for r in agregados:
+        if r.dia is None or r.total is None:
+            continue
+        d = str(r.dia)[:10]  # SQLite devuelve 'YYYY-MM-DD'; Postgres un date
+        clave = (int(d[:4]), int(d[5:7]))
+        acc = por_mes.setdefault(clave, {"conc": Decimal("0"), "pend": Decimal("0"), "todo": Decimal("0")})
+        monto = Decimal(str(r.total))
+        acc["todo"] += monto
+        if r.status in STATUS_OK:
+            acc["conc"] += monto
+        if r.status in STATUS_PENDIENTE:
+            acc["pend"] += monto
+
     resultado = []
     for a, m in periodos:
-        desde, hasta = rango_mes(a, m)
-        conc = _suma_planilla_rows(db, organizacion_id, desde, hasta, STATUS_OK)
-        pend = _suma_planilla_rows(db, organizacion_id, desde, hasta, STATUS_PENDIENTE)
-        todo = _suma_planilla_rows(db, organizacion_id, desde, hasta, None)
+        acc = por_mes.get((a, m))
+        # Sin filas en el mes: 0 (como el `row.total or 0` de _suma_planilla_rows).
+        conc = {"total": acc["conc"] if acc and acc["conc"] else 0}
+        pend = {"total": acc["pend"] if acc and acc["pend"] else 0}
+        todo = {"total": acc["todo"] if acc and acc["todo"] else 0}
         tasa = round(conc["total"] / todo["total"] * 100, 1) if todo["total"] > 0 else 0.0
         resultado.append({
             "label": f"{m:02d}/{str(a)[-2:]}",
@@ -825,26 +862,35 @@ def calcular_flujo_caja(db: Session, organizacion_id: int, meses: int) -> dict:
     Neto      = ingresos - egresos.
     """
     periodos = _meses_atras(meses)
+    rango_desde = rango_mes(*periodos[0])[0]
+    rango_hasta = rango_mes(*periodos[-1])[1]
+
+    def _por_mes(fecha_col, monto_col, org_col) -> dict[tuple[int, int], Decimal]:
+        """Suma por mes en 1 query agrupada por día (antes: 1 SUM por mes y tabla)."""
+        acc: dict[tuple[int, int], Decimal] = {}
+        filas = (
+            db.query(fecha_col, func.sum(monto_col))
+            .filter(org_col == organizacion_id, fecha_col >= rango_desde, fecha_col <= rango_hasta)
+            .group_by(fecha_col)
+            .all()
+        )
+        for f, total in filas:
+            if f is None or total is None:
+                continue
+            d = str(f)[:10]
+            clave = (int(d[:4]), int(d[5:7]))
+            acc[clave] = acc.get(clave, Decimal("0")) + Decimal(str(total))
+        return acc
+
+    ingresos_mes = _por_mes(MovimientoBanco.fecha, MovimientoBanco.monto, MovimientoBanco.organizacion_id)
+    # Egresos del mes: todos los pagos/gastos del módulo unificado
+    egresos_mes = _por_mes(Egreso.fecha, Egreso.monto, Egreso.organizacion_id)
+
     resultado = []
     for a, m in periodos:
-        desde, hasta = rango_mes(a, m)
-        ingresos_q = db.query(
-            func.coalesce(func.sum(MovimientoBanco.monto), 0.0)
-        ).filter(
-            MovimientoBanco.organizacion_id == organizacion_id,
-            MovimientoBanco.fecha >= desde,
-            MovimientoBanco.fecha <= hasta,
-        ).scalar() or 0.0
-        # Egresos del mes: todos los pagos/gastos del módulo unificado
-        egresos_q = db.query(
-            func.coalesce(func.sum(Egreso.monto), 0.0)
-        ).filter(
-            Egreso.organizacion_id == organizacion_id,
-            Egreso.fecha >= desde,
-            Egreso.fecha <= hasta,
-        ).scalar() or 0.0
-        ingresos = ingresos_q or 0
-        egresos = egresos_q or 0
+        # Mes sin datos (o que suma 0) → 0, igual que el `scalar() or 0.0` / `or 0` anterior.
+        ingresos = ingresos_mes.get((a, m)) or 0
+        egresos = egresos_mes.get((a, m)) or 0
         resultado.append({
             "label": f"{m:02d}/{str(a)[-2:]}",
             "anio": a,

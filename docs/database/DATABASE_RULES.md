@@ -119,6 +119,14 @@ la columna de orden/join más frecuente.
   `asiento_detalle (cuenta_id)`, `asiento_detalle (cuenta_id,asiento_id)`. Sin estos,
   `asientos.organizacion_id` (en TODOS los filtros contables) haría full scan.
 - **011** — índice sobre `asientos.numero_asiento` (numeración correlativa + orden).
+- **033** — FKs sin índice usadas en filtros/joins: `planilla_rows (orden_movimiento_acreditado)`
+  (editar/borrar movimiento, papelera, detalle de planilla filtrado; en PG también el chequeo de
+  FK al borrar movimientos) y `egresos (arqueo_id)` (egresos de cada arqueo). Medido con
+  `backend/scripts/perf/indices.py`: SCAN → SEARCH por índice.
+
+Antes de agregar un índice, medirlo: `cd backend && python3 -m scripts.perf.indices` (efecto del
+índice con volumen de producción) y `python3 -m scripts.perf.bench` (statements SQL + ms por
+endpoint, con `--comparar` contra una corrida anterior). Sin mejora medida, no se agrega.
 
 Todos los `CREATE INDEX` del safety net usan `IF NOT EXISTS` → seguros de re-ejecutar.
 

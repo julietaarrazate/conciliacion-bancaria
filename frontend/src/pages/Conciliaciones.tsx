@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { parseMonto } from '@/utils/monto'
+import { fmtARS, fmtFechaCorta as fmtDate } from '@/utils/formato'
 
 interface ConciliacionItem {
   id: number
@@ -22,16 +23,6 @@ function useDebounce<T>(value: T, delay: number): T {
     return () => clearTimeout(id)
   }, [value, delay])
   return d
-}
-
-function fmtARS(n: number | null | undefined) {
-  if (n == null) return '—'
-  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
-}
-function fmtDate(d?: string | null) {
-  if (!d) return '—'
-  try { return new Date(d + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) }
-  catch { return d }
 }
 
 export const Conciliaciones: React.FC = () => {

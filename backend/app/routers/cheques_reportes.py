@@ -9,7 +9,8 @@ from typing import Optional
 import io
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_
+from sqlalchemy.orm import Session, defer, joinedload
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
@@ -252,13 +253,17 @@ def resumen_deposito(
         )
         return {"fechas": [str(f[0]) for f in fechas]}
 
-    cheques = (
-        db.query(Cheque)
+    # cliente/portador en el mismo SELECT y sin traer la foto base64 (solo si existe).
+    tiene_foto = and_(Cheque.foto_comprobante.isnot(None), Cheque.foto_comprobante != "")
+    filas = (
+        db.query(Cheque, tiene_foto)
+        .options(joinedload(Cheque.cliente), joinedload(Cheque.portador), defer(Cheque.foto_comprobante))
         .filter(Cheque.organizacion_id == oid, Cheque.fecha_deposito == fecha)
         .order_by(Cheque.cliente_id, Cheque.id)
         .all()
     )
-    items = [_cheque_dict(c) for c in cheques]
+    cheques = [c for c, _ in filas]
+    items = [_cheque_dict(c, tf) for c, tf in filas]
 
     por_cliente: dict[str, float] = {}
     por_tipo: dict[str, float] = {}

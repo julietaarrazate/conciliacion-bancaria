@@ -397,3 +397,49 @@ class TestListarCheques:
         assert r.status_code == 200
         for item in r.json()["items"]:
             assert item["estado"] == "registrado"
+
+    def test_listado_sin_n_mas_1_y_sin_traer_la_foto(self, client, db):
+        """El listado resuelve cliente/portador en queries agrupadas (no 2 por
+        cheque) y no lee la foto base64: tiene_foto sale de una comparación en SQL."""
+        from decimal import Decimal
+        from sqlalchemy import event
+        from app.models.portador import Portador
+
+        # un cliente distinto por cheque: con carga lazy serían 8 queries de clientes
+        clis = [_crear_cliente_con_cuenta(db, f"ClienteListado{i}") for i in range(8)]
+        port = Portador(organizacion_id=1, nombre="Portador Uno")
+        db.add(port)
+        db.flush()
+        for i in range(8):
+            foto = "data:image/jpeg;base64,AAAA" if i < 3 else ("" if i == 3 else None)
+            db.add(Cheque(organizacion_id=1, cliente_id=clis[i].id, portador_id=port.id if i % 2 else None,
+                          numero=f"9{i}", monto=Decimal("1000.00"), comision=Decimal("0"),
+                          estado="registrado", foto_comprobante=foto))
+        db.commit()
+        db.expire_all()  # que el listado no encuentre los clientes ya cargados en la sesión
+
+        token = _token(db, "admin@cheques.test")
+        sqls = []
+
+        def _log(conn, cursor, statement, *a):
+            sqls.append(statement)
+
+        engine = db.get_bind()
+        event.listen(engine, "before_cursor_execute", _log)
+        try:
+            r = client.get("/cheques?limit=50", headers=_auth(token))
+        finally:
+            event.remove(engine, "before_cursor_execute", _log)
+        assert r.status_code == 200, r.text
+        items = [i for i in r.json()["items"] if i["numero"].startswith("9")]
+        assert len(items) == 8
+        por_num = {i["numero"]: i for i in items}
+        assert [por_num[f"9{i}"]["tiene_foto"] for i in range(8)] == [True, True, True] + [False] * 5
+        assert [por_num[f"9{i}"]["cliente_nombre"] for i in range(8)] == [f"ClienteListado{i}" for i in range(8)]
+        assert por_num["91"]["portador_nombre"] == "Portador Uno"
+        assert por_num["90"]["portador_nombre"] is None
+        # auth + count + listado + clientes + portadores: no crece con la cantidad de cheques
+        assert len(sqls) <= 7, f"{len(sqls)} queries"
+        # (el count() envuelve el select en una subquery; el motor descarta esa columna)
+        listados = [s for s in sqls if "FROM cheques" in s and not s.lstrip().upper().startswith("SELECT COUNT")]
+        assert listados and not any("AS cheques_foto_comprobante" in s for s in listados)

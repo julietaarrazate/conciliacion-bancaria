@@ -195,6 +195,34 @@ Reglas:
 - En endpoints existentes que devuelven `{"total", "items"}`, mantené esa forma; no inventes
   otra envoltura.
 
+### Listados livianos (performance)
+
+Cada query es un viaje de red a Neon, así que en un listado la cantidad de queries no puede
+crecer con la cantidad de filas:
+- **Sin N+1**: si el dict de cada fila lee una relación (`c.cliente.nombre`, `e.proveedor...`),
+  cargarla con `selectinload(...)` en la query del listado (ver `list_cheques` en `cheques.py`
+  y `listar_egresos` en `pagos.py`).
+- **No traer la foto** (`foto_comprobante`: sin R2 es un base64 de cientos de KB por fila) para
+  calcular `tiene_foto`: `defer(Modelo.foto_comprobante)` + `add_columns(and_(col.isnot(None), col != ""))`
+  y pasar el valor ya calculado al armador del dict.
+- **Conteos con `COUNT ... GROUP BY`**, no `len(obj.relacion)` (carga todas las filas como
+  objetos ORM; ver `list_extractos`).
+
+### Cache de GETs en el frontend (`services/api.ts`)
+
+Algunos GETs se cachean en memoria con `_cached(clave, ttl, fetcher)` (reportes de `/analisis`
+5 min; movimientos, lista de extractos y alertas 30s; `/clientes/archivos` 60s). Reglas:
+- La clave incluye los params, **incluido `org_id`** (`_cacheKey(url, params)`): nunca cachear
+  sin la org en la clave.
+- Dos pedidos simultáneos de la misma clave comparten la request en vuelo.
+- **Toda escritura exitosa** (POST/PUT/PATCH/DELETE por `apiClient.client`) vacía el cache
+  entero (interceptor de respuesta), y `setToken`/`clearToken` también (otro usuario).
+  No hace falta invalidar a mano después de una mutación.
+- Una respuesta que llega después de una invalidación no se guarda.
+- No se agregó `ETag`/`Cache-Control` a las respuestas autenticadas (evaluado en oct 2026): para
+  revalidar, el cache HTTP del navegador tendría que guardar datos financieros en disco. Si se
+  reconsidera, decidirlo explícitamente con la operadora.
+
 ---
 
 ## 5. Manejo de errores: `HTTPException`, sin `except` genérico que enmascare

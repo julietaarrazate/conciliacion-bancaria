@@ -150,6 +150,13 @@ class ApiClient {
   client: AxiosInstance   // público para endpoints puntuales
   private token: string | null = null
   private _cache = new Map<string, CacheEntry>()
+  // Requests cacheables en vuelo, por clave: si dos componentes piden lo mismo a la
+  // vez (ej. Layout y Dashboard piden /analisis/alertas al montar), comparten la
+  // misma promesa en vez de disparar dos requests.
+  private _inflight = new Map<string, Promise<unknown>>()
+  // Se incrementa en cada invalidación: una respuesta que llega después de
+  // invalidar no se guarda en el cache (podría ser anterior a la mutación).
+  private _cacheGen = 0
 
   private _cacheKey(url: string, params?: Record<string, unknown>): string {
     return params ? `${url}?${JSON.stringify(params)}` : url
@@ -175,16 +182,28 @@ class ApiClient {
 
   // Invalida entradas cuya clave empieza con prefix. Sin prefix, limpia todo.
   invalidateCache(prefix?: string): void {
-    if (!prefix) { this._cache.clear(); return }
+    this._cacheGen++
+    if (!prefix) { this._cache.clear(); this._inflight.clear(); return }
     for (const k of this._cache.keys()) if (k.startsWith(prefix)) this._cache.delete(k)
+    for (const k of this._inflight.keys()) if (k.startsWith(prefix)) this._inflight.delete(k)
   }
 
   private async _cached<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
     const hit = this._getCached(key, ttlMs)
     if (hit !== null) return hit as T
-    const data = await fetcher()
-    this._setCached(key, data)
-    return data
+    const pending = this._inflight.get(key)
+    if (pending) return pending as Promise<T>
+    const gen = this._cacheGen
+    const p = fetcher()
+      .then((data) => {
+        if (gen === this._cacheGen) this._setCached(key, data)
+        return data
+      })
+      .finally(() => {
+        if (this._inflight.get(key) === p) this._inflight.delete(key)
+      })
+    this._inflight.set(key, p)
+    return p
   }
 
   constructor() {
@@ -219,7 +238,16 @@ class ApiClient {
     })
 
     this.client.interceptors.response.use(
-      (res) => res,
+      (res) => {
+        // Cualquier escritura exitosa (POST/PUT/PATCH/DELETE) deja potencialmente
+        // viejo lo cacheado (reportes, movimientos, alertas, clientes): se limpia
+        // todo el cache de GETs. Antes cada mutación tenía que acordarse de
+        // invalidar su prefijo y varias no lo hacían (ej. agregar UM y después
+        // recargar Movimientos devolvía la lista cacheada sin los nuevos).
+        const method = (res.config?.method || 'get').toLowerCase()
+        if (method !== 'get' && method !== 'head' && method !== 'options') this.invalidateCache()
+        return res
+      },
       async (err) => {
         if (err.response?.status === 401 && this.token) {
           this.clearToken()
@@ -254,11 +282,14 @@ class ApiClient {
   }
 
   setToken(token: string) {
+    // Otro token = posiblemente otro usuario/permisos: el cache no se comparte.
+    if (token !== this.token) this.invalidateCache()
     this.token = token
     sessionStorage.setItem('token', token)
   }
 
   clearToken() {
+    this.invalidateCache()
     this.token = null
     sessionStorage.removeItem('token')
   }
@@ -565,9 +596,15 @@ class ApiClient {
   }
 
   // Extractos: listar y filtrar movimientos, append UM
+  // Cacheado 30s (como los movimientos): Dashboard y Movimientos lo piden en cada
+  // visita y Movimientos no puede pedir la lista de movimientos hasta tenerlo.
+  // Subir/borrar/archivar extractos o agregar UM son escrituras → limpian el cache.
   async listExtractos(orgId?: number | null): Promise<{ total: number; items: ExtractoListItem[] }> {
-    const res = await this.client.get('/extractos', { params: orgId ? { org_id: orgId } : {} })
-    return res.data
+    const params = orgId ? { org_id: orgId } : {}
+    return this._cached(this._cacheKey('/extractos', params), 30_000, async () => {
+      const res = await this.client.get('/extractos', { params })
+      return res.data
+    })
   }
 
   async archivarExtracto(id: number): Promise<{ ok: boolean; archivado: boolean; mensaje: string }> {
