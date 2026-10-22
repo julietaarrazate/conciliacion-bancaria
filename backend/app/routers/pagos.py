@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -98,7 +98,11 @@ def listar_egresos(
     if hasta:
         q = q.filter(Egreso.fecha <= hasta)
     total = q.count()
-    items = q.order_by(Egreso.fecha.desc(), Egreso.id.desc()).offset(skip).limit(limit).all()
+    # cliente/proveedor en el mismo SELECT (antes: 1 query lazy por egreso → N+1).
+    items = (
+        q.options(joinedload(Egreso.cliente), joinedload(Egreso.proveedor))
+        .order_by(Egreso.fecha.desc(), Egreso.id.desc()).offset(skip).limit(limit).all()
+    )
     return {"total": total, "items": [_egreso_dict(e) for e in items]}
 
 
