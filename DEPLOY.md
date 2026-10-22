@@ -1,57 +1,20 @@
 # Deploy a producción
 
-Arquitectura recomendada:
-- **Backend + PostgreSQL → Railway** (más confiable que Render free tier, sin sleeping)
-- **Frontend → Vercel** (ya configurado, deploy automático)
+Arquitectura en producción:
+- **Backend → Render** (`render.yaml`)
+- **Base de datos → Neon PostgreSQL** (`DATABASE_URL` cargada a mano en Render)
+- **Frontend → Vercel** (deploy automático)
 
 ---
 
-## 🚂 Backend en Railway (RECOMENDADO)
-
-### Paso 1: Crear cuenta
-- https://railway.app → **Login with GitHub** → autorizar acceso al repo
-
-### Paso 2: Crear proyecto
-1. **New Project** → **Deploy from GitHub repo** → seleccionar `conciliacion-bancaria`
-2. Railway detecta el Dockerfile automáticamente
-
-### Paso 3: Agregar PostgreSQL
-1. En el proyecto → **+ New** → **Database** → **PostgreSQL**
-2. Railway agrega `DATABASE_URL` automáticamente al servicio
-
-### Paso 4: Configurar variables de entorno
-En el servicio web → **Variables** → agregar:
-
-| Variable | Valor |
-|---|---|
-| `SECRET_KEY` | Cadena aleatoria larga (generar con `openssl rand -hex 32`) |
-| `ALGORITHM` | `HS256` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `480` |
-| `ROOT_DIRECTORY` | `backend` ← IMPORTANTE |
-
-### Paso 5: Settings → Source
-- **Root Directory**: `backend`
-- Redeploy
-
-### Paso 6: Obtener la URL
-La URL queda como: `https://<tu-servicio>.up.railway.app`
-
-### Paso 7: Verificar
-```
-https://TU-URL.up.railway.app/health          → {"status":"healthy"}
-https://TU-URL.up.railway.app/docs            → Swagger UI
-```
-
----
-
-## 🔴 Backend en Render (alternativa)
+## 🔴 Backend en Render
 
 1. https://dashboard.render.com → **New** → **Blueprint**
 2. Seleccionar repo `conciliacion-bancaria` → detecta `render.yaml`
 3. Clic **Apply** → esperar ~10 min
 4. URL: `https://<tu-servicio>.onrender.com`
 
-⚠️ **Free tier duerme tras 15 min de inactividad** (primera request tarda 60 seg)
+⚠️ **Free tier duerme tras 15 min de inactividad** (mitigado con UptimeRobot, ver CLAUDE.md)
 
 ---
 
@@ -61,7 +24,7 @@ https://TU-URL.up.railway.app/docs            → Swagger UI
 1. https://vercel.com → **Add New** → **Project** → import `conciliacion-bancaria`
 2. **Root Directory**: `frontend`
 3. **Environment Variables**:
-   - `VITE_API_URL` = URL del backend (Railway o Render, sin `/` al final)
+   - `VITE_API_URL` = URL del backend en Render (sin `/` al final)
 4. Deploy
 
 ### Re-deploy (cuando hay cambios):
@@ -90,9 +53,9 @@ Vercel → tu proyecto → **Settings** → **Environment Variables** → editar
 
 ## 🔒 Variables de entorno (resumen)
 
-### Backend (Railway o Render)
+### Backend (Render)
 ```
-DATABASE_URL    = auto (del addon PostgreSQL)
+DATABASE_URL    = connection string de Neon (cargada a mano)
 SECRET_KEY      = string aleatorio largo (>32 chars)
 ALGORITHM       = HS256
 ACCESS_TOKEN_EXPIRE_MINUTES = 480
@@ -100,7 +63,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 480
 
 ### Frontend (Vercel)
 ```
-VITE_API_URL = https://TU-BACKEND.up.railway.app
+VITE_API_URL = https://TU-BACKEND.onrender.com
 ```
 
 ---

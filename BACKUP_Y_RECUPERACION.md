@@ -175,7 +175,7 @@ curl -X GET "https://conciliacion-api.onrender.com/admin/organizaciones/1/backup
 **(Importante: hoy no hay script de import desde JSON; queda anotado como pendiente en la sección 8.)**
 
 ### Escenario: "Render desapareció"
-→ Mover el repo a Fly.io / Railway / Vercel Functions. El backend es FastAPI estándar, corre en cualquier lado con Python.
+→ Mover el backend a otro proveedor que corra Python (Docker con `backend/Dockerfile`). El backend es FastAPI estándar, corre en cualquier lado con Python.
 
 ---
 
