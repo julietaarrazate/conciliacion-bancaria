@@ -56,7 +56,7 @@ class Egreso(Base):
     compartido_whatsapp = Column(Boolean, default=False)
 
     # Vínculo con la caja física (solo si forma_pago == efectivo)
-    arqueo_id             = Column(Integer, ForeignKey("arqueos_diarios.id"), nullable=True)
+    arqueo_id             = Column(Integer, ForeignKey("arqueos_diarios.id"), nullable=True, index=True)
     denominaciones_usadas = Column(JSON, nullable=True)   # {"20000": 2, "10000": 1}
 
     notas           = Column(Text, nullable=True)

@@ -474,3 +474,31 @@ class TestResetYRebuild:
         assert len(_asientos("reclass_planilla_extracto_comision")) == 0
         assert len(_asientos("um_reclass_planilla")) == 1
         assert len(_asientos("um_reclass_planilla_comision")) == 0
+
+
+# ── Tests: libro mayor ────────────────────────────────────────────────────────
+
+class TestLibroMayor:
+
+    def test_libro_mayor_con_movimientos_suma_en_decimal(self, client, db):
+        """Regresión: el saldo acumulado arrancaba en float (0.0) y debe/haber son
+        Numeric → Decimal, así que cualquier cuenta con movimientos daba 500
+        (TypeError float + Decimal). Debe devolver 200 y saldos correctos."""
+        token = _token(db, "admin@ctb.test")
+        debe_id, haber_id = _cuentas_hoja(db)
+        for monto in (1000.10, 250.25):
+            r = client.post(
+                "/contabilidad/asiento-manual",
+                json={"cuenta_debe_id": debe_id, "cuenta_haber_id": haber_id,
+                      "monto": monto, "fecha": "2026-06-10", "descripcion": "mayor"},
+                headers=_auth(token),
+            )
+            assert r.status_code == 200, r.text
+
+        r = client.get(f"/contabilidad/libro-mayor?cuenta_id={debe_id}", headers=_auth(token))
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert len(data["movimientos"]) == 2
+        assert data["movimientos"][-1]["saldo"] == pytest.approx(1250.35)
+        assert data["total_debe"] == pytest.approx(1250.35)
+        assert data["saldo_final"] == pytest.approx(1250.35)

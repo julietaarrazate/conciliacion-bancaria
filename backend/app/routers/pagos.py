@@ -11,7 +11,8 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy import and_
+from sqlalchemy.orm import Session, defer, joinedload
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -41,7 +42,9 @@ def _org_id(user: User, org_id_param: Optional[int] = None) -> int:
     return user.organizacion_id or 1
 
 
-def _egreso_dict(e: Egreso, con_foto: bool = False) -> dict:
+def _egreso_dict(e: Egreso, con_foto: bool = False, tiene_foto: Optional[bool] = None) -> dict:
+    """`tiene_foto` precalculado en SQL (listado) evita cargar la foto base64 de cada
+    egreso solo para saber si existe; si no viene, se deriva de la columna."""
     return {
         "id":               e.id,
         "organizacion_id":  e.organizacion_id,
@@ -59,7 +62,7 @@ def _egreso_dict(e: Egreso, con_foto: bool = False) -> dict:
         "referencia":       e.referencia,
         "compartido_whatsapp": e.compartido_whatsapp,
         "denominaciones_usadas": e.denominaciones_usadas,
-        "tiene_foto":       bool(e.foto_comprobante),
+        "tiene_foto":       bool(e.foto_comprobante) if tiene_foto is None else bool(tiene_foto),
         "foto_base64":      e.foto_comprobante if con_foto else None,
         "notas":            e.notas,
         "movimiento_banco_id": e.movimiento_banco_id,
@@ -98,8 +101,15 @@ def listar_egresos(
     if hasta:
         q = q.filter(Egreso.fecha <= hasta)
     total = q.count()
-    items = q.order_by(Egreso.fecha.desc(), Egreso.id.desc()).offset(skip).limit(limit).all()
-    return {"total": total, "items": [_egreso_dict(e) for e in items]}
+    # cliente/proveedor en el mismo SELECT (antes: 1 query lazy por egreso → N+1).
+    # La foto (base64 de cientos de KB sin R2) no se trae: solo si existe, en SQL.
+    tiene_foto = and_(Egreso.foto_comprobante.isnot(None), Egreso.foto_comprobante != "")
+    items = (
+        q.with_entities(Egreso, tiene_foto)
+        .options(joinedload(Egreso.cliente), joinedload(Egreso.proveedor), defer(Egreso.foto_comprobante))
+        .order_by(Egreso.fecha.desc(), Egreso.id.desc()).offset(skip).limit(limit).all()
+    )
+    return {"total": total, "items": [_egreso_dict(e, tiene_foto=tf) for e, tf in items]}
 
 
 @router.post("")
