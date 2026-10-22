@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from jose import jwt as jose_jwt, JWTError
+import jwt
 
 from app.database import get_db
 from app.models.revoked_token import RevokedToken
@@ -316,12 +316,12 @@ def logout(
     if not credentials:
         return {"ok": True}
     try:
-        payload = jose_jwt.decode(
+        payload = jwt.decode(
             credentials.credentials, settings.secret_key,
             algorithms=[settings.algorithm],
             options={"verify_exp": False},
         )
-    except JWTError:
+    except jwt.PyJWTError:
         return {"ok": True}
 
     jti = payload.get("jti")

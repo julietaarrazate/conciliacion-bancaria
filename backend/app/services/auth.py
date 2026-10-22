@@ -4,7 +4,7 @@ import hashlib
 import os
 import hmac
 import uuid
-from jose import JWTError, jwt
+import jwt
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.schemas.user import UserRegister
@@ -66,7 +66,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def verify_token(token: str) -> Optional[dict]:
     try:
         return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-    except JWTError:
+    except jwt.PyJWTError:
         return None
 
 

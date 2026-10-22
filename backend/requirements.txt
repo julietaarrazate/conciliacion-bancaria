@@ -6,8 +6,8 @@ uvicorn[standard]==0.53.0
 sqlalchemy==2.0.54
 psycopg2-binary==2.9.13          # PostgreSQL (Neon)
 
-# Autenticacion JWT
-python-jose[cryptography]==3.5.0
+# Autenticacion JWT (PyJWT; reemplaza a python-jose, sin mantenimiento y con CVEs sin fix)
+pyjwt==2.15.1
 
 # Validacion y settings
 pydantic==2.13.5
