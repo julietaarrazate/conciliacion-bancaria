@@ -596,9 +596,15 @@ class ApiClient {
   }
 
   // Extractos: listar y filtrar movimientos, append UM
+  // Cacheado 30s (como los movimientos): Dashboard y Movimientos lo piden en cada
+  // visita y Movimientos no puede pedir la lista de movimientos hasta tenerlo.
+  // Subir/borrar/archivar extractos o agregar UM son escrituras → limpian el cache.
   async listExtractos(orgId?: number | null): Promise<{ total: number; items: ExtractoListItem[] }> {
-    const res = await this.client.get('/extractos', { params: orgId ? { org_id: orgId } : {} })
-    return res.data
+    const params = orgId ? { org_id: orgId } : {}
+    return this._cached(this._cacheKey('/extractos', params), 30_000, async () => {
+      const res = await this.client.get('/extractos', { params })
+      return res.data
+    })
   }
 
   async archivarExtracto(id: number): Promise<{ ok: boolean; archivado: boolean; mensaje: string }> {

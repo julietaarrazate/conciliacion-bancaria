@@ -47,6 +47,18 @@ describe('ApiClient cache', () => {
     expect(a2).toBe(a)
   })
 
+  it('listExtractos se cachea por organización y se vuelve a pedir tras subir/archivar', async () => {
+    await apiClient.listExtractos(1)
+    await apiClient.listExtractos(1)
+    await apiClient.listExtractos(2)
+    expect(gets('/extractos')).toBe(2)
+    const enOrg2 = llamadas.filter(l => l.url === '/extractos').map(l => l.params?.org_id)
+    expect(enOrg2).toEqual([1, 2])
+    await apiClient.archivarExtracto(3)
+    await apiClient.listExtractos(1)
+    expect(gets('/extractos')).toBe(3)
+  })
+
   it('una escritura exitosa invalida lo cacheado (ej. agregar UM y recargar movimientos)', async () => {
     await apiClient.getMovimientos(1, { limit: 0 })
     await apiClient.getMovimientos(1, { limit: 0 })
