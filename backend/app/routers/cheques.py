@@ -28,7 +28,8 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_
+from sqlalchemy.orm import Session, defer, joinedload
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -82,11 +83,14 @@ def list_cheques(
         q = q.filter(Cheque.fecha_deposito <= hasta)
     total = q.count()
     # cliente/portador en el mismo SELECT (antes: 1 query lazy por cheque → N+1).
+    # La foto (base64 de cientos de KB sin R2) no se trae: solo si existe, en SQL.
+    tiene_foto = and_(Cheque.foto_comprobante.isnot(None), Cheque.foto_comprobante != "")
     items = (
-        q.options(joinedload(Cheque.cliente), joinedload(Cheque.portador))
+        q.with_entities(Cheque, tiene_foto)
+        .options(joinedload(Cheque.cliente), joinedload(Cheque.portador), defer(Cheque.foto_comprobante))
         .order_by(Cheque.created_at.desc()).offset(skip).limit(limit).all()
     )
-    return {"total": total, "items": [_cheque_dict(c) for c in items]}
+    return {"total": total, "items": [_cheque_dict(c, tf) for c, tf in items]}
 
 
 @router.post("")
