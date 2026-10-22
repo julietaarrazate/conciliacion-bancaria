@@ -370,30 +370,6 @@ export const Perfil: React.FC = () => {
         </div>
       )}
 
-      {/* TEMPORAL: prueba de Sentry — sólo superadmin. Se saca después de verificar. */}
-      {user?.is_superadmin && (
-        <div className="card mt-4 border-violet-200 dark:border-violet-900/40">
-          <h2 className="text-base font-semibold dark:text-white mb-1">🧪 Probar Sentry (temporal)</h2>
-          <p className="text-xs text-ml-text-soft dark:text-zinc-500 mb-3">
-            Genera un error de prueba en el backend y otro en el frontend para verificar que llegan a Sentry.
-          </p>
-          <button
-            onClick={async () => {
-              try {
-                await apiClient.client.post('/admin/sentry-test')
-              } catch {
-                // El 500 es esperado: el backend lanza el error a propósito.
-              }
-              setTimeout(() => { throw new Error('Prueba de Sentry (frontend) — error intencional, ignorar') })
-              toast.success('Errores de prueba enviados (backend y frontend)')
-            }}
-            className="btn-secondary text-xs"
-          >
-            Probar Sentry
-          </button>
-        </div>
-      )}
-
       {/* Setup VAPID — sólo superadmin */}
       {user?.is_superadmin && (
         <div className="card mt-4 border-violet-200 dark:border-violet-900/40">
