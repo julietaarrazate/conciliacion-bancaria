@@ -28,7 +28,8 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session
+from sqlalchemy import and_
+from sqlalchemy.orm import Session, defer, selectinload
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -81,8 +82,18 @@ def list_cheques(
     if hasta:
         q = q.filter(Cheque.fecha_deposito <= hasta)
     total = q.count()
-    items = q.order_by(Cheque.created_at.desc()).offset(skip).limit(limit).all()
-    return {"total": total, "items": [_cheque_dict(c) for c in items]}
+    # El listado solo necesita saber SI hay foto: sin R2 la foto es un base64 de
+    # cientos de KB por cheque, así que no se trae (defer) y se resuelve con una
+    # comparación en SQL. Cliente y portador van en 2 queries (selectinload) en vez
+    # de 2 por cheque.
+    tiene_foto = and_(Cheque.foto_comprobante.isnot(None), Cheque.foto_comprobante != "")
+    filas = (
+        q.options(defer(Cheque.foto_comprobante),
+                  selectinload(Cheque.cliente), selectinload(Cheque.portador))
+        .add_columns(tiene_foto)
+        .order_by(Cheque.created_at.desc()).offset(skip).limit(limit).all()
+    )
+    return {"total": total, "items": [_cheque_dict(c, tiene_foto=bool(f)) for c, f in filas]}
 
 
 @router.post("")
