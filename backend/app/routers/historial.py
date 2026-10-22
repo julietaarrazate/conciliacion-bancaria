@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload, joinedload
-from sqlalchemy import desc
+from sqlalchemy import and_, case, desc, func
 from typing import Optional
 from datetime import datetime
 import io
@@ -9,7 +9,7 @@ import io
 from app.database import get_db
 from app.models.user import User
 from app.models.planilla import Planilla
-from app.models.extracto import ExtractoBancario
+from app.models.extracto import ExtractoBancario, MovimientoBanco
 from app.models.cliente import Cliente
 from app.schemas.historial import (
     HistorialPlanillasResponse,
@@ -189,26 +189,44 @@ def list_extractos(
 
     total = q.count()
     extractos = (
-        q.options(
-            selectinload(ExtractoBancario.movimientos),
-            joinedload(ExtractoBancario.creado_por_user),
-        )
+        q.options(joinedload(ExtractoBancario.creado_por_user))
         .order_by(desc(ExtractoBancario.fecha_creacion))
         .offset(skip)
         .limit(limit)
         .all()
     )
 
+    # Totales por extracto en SQL (antes: selectinload de TODOS los movimientos para
+    # contarlos en Python). "Acreditado" = cliente_acreditado no nulo ni vacío, igual
+    # que el `if m.cliente_acreditado` anterior.
+    conteos = {}
+    if extractos:
+        acreditado = and_(MovimientoBanco.cliente_acreditado.isnot(None),
+                          MovimientoBanco.cliente_acreditado != "")
+        conteos = {
+            ext_id: (int(total or 0), int(acred or 0))
+            for ext_id, total, acred in (
+                db.query(
+                    MovimientoBanco.extracto_id,
+                    func.count(MovimientoBanco.id),
+                    func.sum(case((acreditado, 1), else_=0)),
+                )
+                .filter(MovimientoBanco.extracto_id.in_([e.id for e in extractos]))
+                .group_by(MovimientoBanco.extracto_id)
+                .all()
+            )
+        }
+
     items = []
     for e in extractos:
-        acred = sum(1 for m in e.movimientos if m.cliente_acreditado)
+        total_movs, acred = conteos.get(e.id, (0, 0))
         items.append(
             ExtractoHistorialItem(
                 id=e.id,
                 nombre_archivo=e.nombre_archivo,
                 fecha_creacion=e.fecha_creacion,
                 usuario_nombre=(e.creado_por_user.full_name if e.creado_por_user else "—"),
-                total_movimientos=len(e.movimientos),
+                total_movimientos=total_movs,
                 acreditados=acred,
                 banco=e.banco or "Banco Macro",
                 archivado=e.archivado_at is not None,
