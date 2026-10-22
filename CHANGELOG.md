@@ -5,6 +5,25 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Seguridad (oct 2026) — Dependencias: PyJWT en lugar de python-jose, Python en Render y parches
+
+Sin bump de versión (no cambia funcionalidad).
+
+- **JWT con PyJWT 2.15.1**: `python-jose` 3.5.0 tenía una vulnerabilidad sin versión corregida
+  (PYSEC-2026-4298) y arrastraba `ecdsa` (PYSEC-2026-1325, también sin corrección). Se reemplaza en
+  `services/auth.py`, `routers/auth.py` (logout), `routers/clientes_dir.py` (link compartido) y
+  `routers/public_router.py`. Mismo HS256 y misma `SECRET_KEY`: las sesiones abiertas y los links
+  ya compartidos siguen funcionando (`tests/test_jwt_compat.py`, 8 tests con tokens emitidos por
+  python-jose; también rechaza firma alterada, clave distinta y `alg: none`).
+- **Python en Render**: Render no lee `backend/runtime.txt`; ahora la versión la fija
+  `.python-version` (`3.11`, en la raíz y en `backend/`). Ver `DEPLOY.md`.
+- **Backend**: parches/menores de fastapi, uvicorn, sqlalchemy (2.0.x), pydantic, pydantic-settings,
+  python-dotenv, alembic, reportlab y boto3. `pip-audit`: 0 vulnerabilidades.
+- **Frontend**: `npm audit fix` sin `--force` (dompurify crítico, follow-redirects alto). Queda
+  `react-router-dom` 6 (moderado), que pide pasar a react-router 7: PR aparte (deuda D-12).
+
+---
+
 ### Fix (oct 2026) — Sentry en el frontend + Redeploy de Vercel
 
 - **Sentry del frontend nunca podía enviar errores**: la Content-Security-Policy de
