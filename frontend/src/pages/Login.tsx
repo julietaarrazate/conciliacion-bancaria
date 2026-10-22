@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
 import { useLockStore } from '@/store/lock'
 import { CuadraLogo } from '@/components/CuadraLogo'
+
+// El cliente HTTP (axios + services/api) se carga con import() dinámico: así
+// /login y la landing pintan con el bundle inicial chico, y el cliente se baja
+// en paralelo apenas se monta el login (ver el prefetch más abajo).
+type ApiClient = typeof import('@/services/api').apiClient
+const cargarApi = (): Promise<ApiClient> => import('@/services/api').then((m) => m.apiClient)
 
 export const Login: React.FC = () => {
   const navigate = useNavigate()
@@ -26,6 +31,12 @@ export const Login: React.FC = () => {
   const [twofaCode, setTwofaCode] = useState('')
   const [twofaLoading, setTwofaLoading] = useState(false)
 
+  // Precarga el cliente HTTP en segundo plano: cuando el usuario envíe el
+  // formulario ya va a estar listo.
+  useEffect(() => {
+    cargarApi().catch(() => {})
+  }, [])
+
   // Maneja el redirect de Google OAuth: Google vuelve a /login con ?code=...
   // Funciona igual en desktop y mobile (sin popups).
   useEffect(() => {
@@ -34,7 +45,12 @@ export const Login: React.FC = () => {
     if (!code) return
     window.history.replaceState(null, '', window.location.pathname)
     setLoading(true)
-    apiClient.client.post('/auth/google', { code, redirect_uri: `${window.location.origin}/login` })
+    let apiClient: ApiClient
+    cargarApi()
+      .then((api) => {
+        apiClient = api
+        return api.client.post('/auth/google', { code, redirect_uri: `${window.location.origin}/login` })
+      })
       .then((res) => {
         const data = res.data as { access_token: string; user: import('@/types').User }
         apiClient.setToken(data.access_token)
@@ -56,6 +72,7 @@ export const Login: React.FC = () => {
     let cancelled = false
     const tick = async () => {
       try {
+        const apiClient = await cargarApi()
         const st = await apiClient.getLoginApprovalStatus(pending.id, pending.secret)
         if (cancelled) return
         if (st.status === 'approved' && st.access_token && st.user) {
@@ -92,6 +109,7 @@ export const Login: React.FC = () => {
     setError('')
     setTwofaLoading(true)
     try {
+      const apiClient = await cargarApi()
       const res = await apiClient.client.post('/auth/verify-2fa', {
         email: twofa!.email,
         code: twofaCode.trim(),
@@ -113,6 +131,14 @@ export const Login: React.FC = () => {
     e.preventDefault()
     setError('')
     setLoading(true)
+    let apiClient: ApiClient
+    try {
+      apiClient = await cargarApi()
+    } catch {
+      setError('No se pudo cargar la aplicación. Recargá la página.')
+      setLoading(false)
+      return
+    }
     try {
       const response = await apiClient.login(formData.email, formData.password)
       if ('requires_2fa' in response) {
