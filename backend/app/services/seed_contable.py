@@ -103,10 +103,8 @@ def seed_contabilidad_org(db: Session, org_id: int) -> dict:
     - Crea las reglas que falten (por evento).
     Devuelve un resumen {cuentas_creadas, reglas_creadas, total_cuentas, total_reglas}.
     """
-    code_to_id = {
-        c.codigo: c.id
-        for c in db.query(PlanCuenta).filter(PlanCuenta.organizacion_id == org_id).all()
-    }
+    cuentas_existentes = db.query(PlanCuenta).filter(PlanCuenta.organizacion_id == org_id).all()
+    code_to_id = {c.codigo: c.id for c in cuentas_existentes}
 
     # ── Cuentas base + patch (PLAN primero por la jerarquía, luego PLAN_PATCH) ──
     cuentas_creadas = 0
@@ -127,10 +125,8 @@ def seed_contabilidad_org(db: Session, org_id: int) -> dict:
         db.commit()
 
     # ── Reglas que falten (por evento) ──
-    eventos_existentes = {
-        r.evento
-        for r in db.query(ReglaContable).filter(ReglaContable.organizacion_id == org_id).all()
-    }
+    reglas_existentes = db.query(ReglaContable).filter(ReglaContable.organizacion_id == org_id).all()
+    eventos_existentes = {r.evento for r in reglas_existentes}
     reglas_creadas = 0
     for evento, descripcion, debe_codigo, haber_codigo in REGLAS:
         if evento in eventos_existentes:
@@ -149,8 +145,9 @@ def seed_contabilidad_org(db: Session, org_id: int) -> dict:
     if reglas_creadas:
         db.commit()
 
-    total_cuentas = db.query(PlanCuenta).filter(PlanCuenta.organizacion_id == org_id).count()
-    total_reglas  = db.query(ReglaContable).filter(ReglaContable.organizacion_id == org_id).count()
+    # Totales = filas que ya había + las creadas (antes: 2 COUNT extra por org en cada boot).
+    total_cuentas = len(cuentas_existentes) + cuentas_creadas
+    total_reglas  = len(reglas_existentes) + reglas_creadas
     if cuentas_creadas or reglas_creadas:
         logger.info("Seed contable org %s: +%d cuentas, +%d reglas (total %d/%d)",
                     org_id, cuentas_creadas, reglas_creadas, total_cuentas, total_reglas)

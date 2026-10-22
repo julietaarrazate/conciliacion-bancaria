@@ -380,10 +380,10 @@ def actualizar_escala_sembrada(db: Session, organizacion_id: int) -> int:
         .filter(CategoriaMonotributo.organizacion_id == organizacion_id)
         .all()
     )
-    actor = (
-        db.query(User).filter(User.is_superadmin == True)  # noqa: E712
-        .order_by(User.id).first()
-    )
+    # El actor (superadmin) se busca recién cuando hay algo para actualizar: esto
+    # corre en cada arranque por cada org y casi nunca cambia nada.
+    actor = None
+    actor_buscado = False
     actualizadas = 0
     for c in filas:
         nuevo = vigente.get(c.categoria)
@@ -393,6 +393,12 @@ def actualizar_escala_sembrada(db: Session, organizacion_id: int) -> int:
         if not any(e.get(c.categoria) == actual for e in anteriores):
             continue  # editada a mano: se respeta
         c.limite_anual = nuevo
+        if not actor_buscado:
+            actor = (
+                db.query(User).filter(User.is_superadmin == True)  # noqa: E712
+                .order_by(User.id).first()
+            )
+            actor_buscado = True
         if actor:
             registrar_log(db, actor.id, "monotributo_categoria", c.id, "UPDATE_ESCALA_AUTO", {
                 "categoria": c.categoria,
