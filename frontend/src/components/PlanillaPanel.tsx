@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
 import { statusLabel, motivoMatchLabel } from '@/utils/status'
+import { fmtARS, fmtFechaCorta as fmtDate } from '@/utils/formato'
 
 interface Row {
   id: number
@@ -64,16 +65,7 @@ const statusStyle = (s: string) => {
   return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
 }
 
-const fmtDate = (d?: string | null) => {
-  if (!d) return '—'
-  try {
-    const dt = new Date(d.includes('T') ? d : d + 'T00:00:00')
-    return dt.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-  } catch { return d }
-}
-
-const fmtARS = (n: number) =>
-  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
+// Importes y fechas: formatters compartidos (creados una sola vez) en utils/formato.
 
 interface Props {
   planillaId: number | null
