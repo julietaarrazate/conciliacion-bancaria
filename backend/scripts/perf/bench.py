@@ -188,7 +188,7 @@ def limpiar_caches():
     ctb_libro._reportes_cache.clear()
 
 
-def correr(escala: dict, solo: str | None = None, sql_de: str | None = None, repeticiones: int = 3):
+def correr(escala: dict, solo: str | None = None, sql_de: str | None = None, repeticiones: int = 5):
     engine, Session, client, ids = armar_entorno(escala)
     counter = StatementCounter(engine)
     headers = token_para(ids["principal"]["admin"])

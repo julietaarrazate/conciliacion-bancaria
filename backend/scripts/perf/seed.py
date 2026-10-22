@@ -37,6 +37,7 @@ from app.services.motor_contable import (
     registrar_cheque,
     registrar_egreso,
 )
+from app.services.tz import hoy_art
 from app.services.seed_contable import seed_categorias_egreso_org, seed_contabilidad_org
 
 # Escala "realista" pedida para el harness de performance.
@@ -178,6 +179,9 @@ def _seed_org(db, org_id: int, nombre: str, esc: dict, rng: random.Random) -> di
             estado=estados[i % len(estados)], usuario_id=admin.id,
             foto_comprobante=foto if i % 3 == 0 else None,
         )
+        if i % 10 == 1:  # en cartera y por vencer en la semana (dashboard / alertas)
+            ch.estado = "registrado"
+            ch.fecha_deposito = hoy_art() + timedelta(days=i % 7)
         db.add(ch)
         cheques.append(ch)
     db.commit()

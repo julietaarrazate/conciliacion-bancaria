@@ -20,7 +20,7 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer, joinedload
 
 from app.models.cheque import Cheque
 from app.models.cliente import Cliente
@@ -235,6 +235,8 @@ def _cheques_proximos_vencimiento(db: Session, org_id: int, dias: int = 30) -> l
     limite = hoy + timedelta(days=dias)
     cheques = (
         db.query(Cheque)
+        # cliente en el mismo SELECT (antes: 1 lazy por cheque) y sin la foto base64.
+        .options(joinedload(Cheque.cliente), defer(Cheque.foto_comprobante))
         .filter(
             Cheque.organizacion_id == org_id,
             Cheque.estado.in_(CHEQUE_EN_CARTERA),
@@ -684,6 +686,7 @@ def calcular_estado_cuenta_cliente(
     # Cheques del cliente en el periodo
     cheques = (
         db.query(Cheque)
+        .options(defer(Cheque.foto_comprobante))  # no se usa: evita traer el base64
         .filter(
             Cheque.cliente_id == cliente_id,
             Cheque.fecha_emision >= d,
