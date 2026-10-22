@@ -112,8 +112,7 @@ flowchart LR
 ```
 
 > Notas de free tier (ver `CLAUDE.md`): Render tiene cold start ~30 s (mitigado
-> con UptimeRobot + retry en el frontend) y Neon puede "dormir". Existe además
-> documentación de despliegue alternativo en Railway (`DEPLOY_RAILWAY.md`).
+> con UptimeRobot + retry en el frontend) y Neon puede "dormir".
 
 ---
 
