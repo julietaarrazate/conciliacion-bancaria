@@ -493,4 +493,8 @@ SAFETY_NET_DDL = [
     "CREATE INDEX IF NOT EXISTS ix_proveedores_organizacion_id ON proveedores (organizacion_id)",
     "ALTER TABLE egresos ADD COLUMN IF NOT EXISTS proveedor_id INTEGER REFERENCES proveedores(id) ON DELETE SET NULL",
     "CREATE INDEX IF NOT EXISTS ix_egresos_proveedor_id ON egresos (proveedor_id)",
+    # migración 033 — índices de performance (FK sin índice usadas en filtros/joins)
+    "CREATE INDEX IF NOT EXISTS ix_planilla_rows_orden_movimiento_acreditado "
+    "ON planilla_rows (orden_movimiento_acreditado)",
+    "CREATE INDEX IF NOT EXISTS ix_egresos_arqueo_id ON egresos (arqueo_id)",
 ]

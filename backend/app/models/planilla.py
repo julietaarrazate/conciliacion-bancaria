@@ -61,7 +61,7 @@ class PlanillaRow(Base):
     fecha_acred = Column(Date, nullable=True)
     monto_acreditado = Column(Numeric(12, 2), nullable=True)
     comentario_revision = Column(Text, nullable=True)
-    orden_movimiento_acreditado = Column(Integer, ForeignKey("movimientos_banco.id"), nullable=True)
+    orden_movimiento_acreditado = Column(Integer, ForeignKey("movimientos_banco.id"), nullable=True, index=True)
 
     # Relationships
     planilla = relationship("Planilla", back_populates="rows")
