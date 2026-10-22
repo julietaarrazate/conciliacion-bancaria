@@ -407,3 +407,49 @@ class TestEliminarEgreso:
         assert any("egreso_id" in p or "{" in p for p in paths_delete), (
             f"Ruta DELETE encontrada pero sin path variable: {paths_delete}"
         )
+
+
+# ── Tests GET /pagos (listado) ────────────────────────────────────────────────
+
+class TestListarEgresos:
+
+    def test_listado_sin_n_mas_1_y_sin_traer_la_foto(self, db):
+        """El listado resuelve cliente en una query agrupada (no una por egreso) y
+        no lee la foto base64: tiene_foto sale de una comparación en SQL."""
+        from sqlalchemy import event
+        from app.models.cliente import Cliente
+        from app.routers.pagos import listar_egresos
+
+        clis = [Cliente(nombre=f"Cli{i}", organizacion_id=1) for i in range(6)]
+        db.add_all(clis)
+        db.flush()
+        for i in range(6):
+            foto = "data:image/jpeg;base64,AAAA" if i < 2 else ("" if i == 2 else None)
+            db.add(Egreso(organizacion_id=1, tipo="pago_cliente", forma_pago="banco",
+                          monto=Decimal("100.00"), fecha=date(2026, 6, 1 + i),
+                          cliente_id=clis[i].id, foto_comprobante=foto))
+        db.commit()
+        db.expire_all()
+
+        sqls = []
+
+        def _log(conn, cursor, statement, *a):
+            sqls.append(statement)
+
+        engine = db.get_bind()
+        event.listen(engine, "before_cursor_execute", _log)
+        try:
+            r = listar_egresos(tipo=None, forma_pago=None, cliente_id=None, categoria=None,
+                               desde=None, hasta=None, skip=0, limit=100, org_id=None,
+                               db=db, current_user=_mock_user())
+        finally:
+            event.remove(engine, "before_cursor_execute", _log)
+
+        por_cliente = {i["cliente_nombre"]: i for i in r["items"]}
+        assert sorted(por_cliente) == [f"Cli{i}" for i in range(6)]
+        assert [por_cliente[f"Cli{i}"]["tiene_foto"] for i in range(6)] == [True, True, False, False, False, False]
+        assert all(i["foto_base64"] is None for i in r["items"])
+        # count + listado + clientes + proveedores: no crece con la cantidad de egresos
+        assert len(sqls) <= 4, f"{len(sqls)} queries"
+        listados = [s for s in sqls if "FROM egresos" in s and not s.lstrip().upper().startswith("SELECT COUNT")]
+        assert listados and not any("AS egresos_foto_comprobante" in s for s in listados)

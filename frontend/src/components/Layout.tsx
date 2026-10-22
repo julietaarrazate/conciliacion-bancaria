@@ -184,7 +184,11 @@ export const Layout: React.FC = () => {
     }
   )
 
-  const SidebarContent = ({ onNav }: { onNav?: () => void }) => (
+  // Se invoca como función (no como <SidebarContent />): definida dentro del
+  // render, como componente tendría una identidad nueva en cada render de Layout
+  // (que se re-renderiza en cada cambio de ruta) y React desmontaría y volvería a
+  // montar todo el sidebar (~35 NavLinks + íconos) en cada navegación.
+  const renderSidebarContent = (onNav?: () => void) => (
     <div className="flex flex-col h-full">
       {/* Nav items */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
@@ -345,7 +349,7 @@ export const Layout: React.FC = () => {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto">
-              <SidebarContent onNav={() => setDrawerOpen(false)} />
+              {renderSidebarContent(() => setDrawerOpen(false))}
             </div>
           </div>
         </>
@@ -379,7 +383,7 @@ export const Layout: React.FC = () => {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto">
-          <SidebarContent />
+          {renderSidebarContent()}
         </div>
       </aside>
 

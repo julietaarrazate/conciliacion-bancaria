@@ -9,6 +9,7 @@ import { useOrgStore } from '@/store/org'
 import { useAuthStore } from '@/store/auth'
 import { localIsoDate } from '@/utils/fecha'
 import { parseMonto } from '@/utils/monto'
+import { fmtARS, fmtFechaCorta as fmtDate } from '@/utils/formato'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -20,14 +21,7 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 // ── Utilidades ────────────────────────────────────────────────
-function fmtARS(n: number) {
-  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
-}
-function fmtDate(d?: string | null) {
-  if (!d) return '—'
-  try { return new Date(d + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) }
-  catch { return d }
-}
+// Importes y fechas: formatters compartidos (creados una sola vez) en utils/formato.
 
 // ── Componente de filtro desplegable tipo Excel ───────────────
 interface ExcelFilterProps {
@@ -63,6 +57,70 @@ const ExcelFilter: React.FC<ExcelFilterProps> = ({ label, active, children, alig
     </div>
   )
 }
+
+// ── Fila de la tabla (memo) ───────────────────────────────────
+// Memoizada: tipear en un filtro o abrir un modal re-renderiza la página, pero
+// las 200 filas visibles solo se vuelven a dibujar si cambia su movimiento.
+interface MovimientoRowProps {
+  m: MovimientoFiltrado
+  canReconcile: boolean
+  canDelete: boolean
+  onAcreditar: (m: MovimientoFiltrado) => void
+  onResolver: (m: MovimientoFiltrado) => void
+  onEditar: (m: MovimientoFiltrado) => void
+  onBorrar: (m: MovimientoFiltrado) => void
+}
+const MovimientoRow = React.memo(function MovimientoRow({ m, canReconcile, canDelete, onAcreditar, onResolver, onEditar, onBorrar }: MovimientoRowProps) {
+  return (
+    <tr
+      className={`transition-colors row-15 ${m.source === 'um' ? 'row-um' : 'hover:bg-gray-50 dark:hover:bg-slate-700/40'}`}>
+      <td className="px-2 text-center text-gray-400 dark:text-gray-500 font-mono">{m.orden ?? '—'}</td>
+      <td className="px-2 whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
+      <td className="px-2 text-gray-500 dark:text-gray-400">{
+        m.fecha ? new Date(m.fecha + 'T00:00:00').getMonth() + 1 : (m.mes || '—')
+      }</td>
+      <td className="px-2 max-w-[220px]">
+        <p className="truncate dark:text-gray-200" title={m.titular || ''}>{m.titular || '—'}</p>
+      </td>
+      <td className="px-2 text-right font-mono font-semibold dark:text-white">{fmtARS(m.monto)}</td>
+      <td className="px-2 text-right font-mono text-gray-400 dark:text-gray-500">
+        {m.saldo != null ? fmtARS(m.saldo) : '—'}
+      </td>
+      <td className="px-2 cursor-pointer group/cliente" onClick={() => onAcreditar(m)} title="Clic para acreditar o editar">
+        {m.monto < 0 && !(m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado')
+          ? (m.egreso_id
+              ? <span className="pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium"
+                  title="Débito explicado por un pago registrado en Pagos" onClick={e => e.stopPropagation()}>
+                  ✓ Pago #{m.egreso_id}
+                </span>
+              : m.gasto_bancario && !canReconcile
+                ? <span className="text-[10px] text-gray-500 dark:text-gray-400" title={m.gasto_bancario}>Gasto bancario</span>
+                : canReconcile
+                  ? <button type="button" onClick={e => { e.stopPropagation(); onResolver(m) }}
+                      title={m.gasto_bancario ? `${m.gasto_bancario} — registrar como gasto` : 'Registrar el pago o gasto que explica este débito'}
+                      className="text-ml-blue dark:text-blue-400 text-[10px] font-medium hover:underline">
+                      {m.gasto_bancario ? 'Gasto bancario · ＋' : '＋ Resolver'}
+                    </button>
+                  : <span className="text-gray-400 text-[10px]">—</span>)
+          : m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
+          ? <span className="inline-flex items-center gap-0.5 pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium group-hover/cliente:bg-green-200 dark:group-hover/cliente:bg-green-800/60 transition-colors">
+              {m.cliente_acreditado}
+              <span className="opacity-0 group-hover/cliente:opacity-50 text-[9px]">✏</span>
+            </span>
+          : <span className="text-ml-blue dark:text-blue-400 text-[10px] font-medium group-hover/cliente:underline">＋ Acreditar</span>}
+      </td>
+      <td className="px-2 whitespace-nowrap text-gray-500 dark:text-gray-400 cursor-pointer hover:text-ml-blue dark:hover:text-blue-400 transition-colors" onClick={() => onAcreditar(m)} title="Clic para editar acreditación">
+        {fmtDate(m.fecha_acred)}
+      </td>
+      <td className="px-1 text-center">
+        <div className="flex gap-1 justify-center">
+          <button onClick={() => onEditar(m)} title="Editar datos (titular, importe, fecha)" className="text-gray-400 hover:text-ml-blue dark:hover:text-blue-400 transition-colors">✏️</button>
+          {canDelete && <button onClick={() => onBorrar(m)} title="Borrar movimiento" className="text-gray-400 hover:text-red-500 transition-colors">🗑</button>}
+        </div>
+      </td>
+    </tr>
+  )
+})
 
 // ── Estado filtros ────────────────────────────────────────────
 interface ColFilter {
@@ -107,9 +165,19 @@ export const Movimientos: React.FC = () => {
   const [resumen, setResumen] = useState<ResumenExtractoData | null>(null)
   const [resolverMov, setResolverMov] = useState<MovimientoFiltrado | null>(null)
 
+  // Contador de cambios hechos desde esta pantalla (acreditar, editar, borrar,
+  // resolver, agregar/borrar UM): dispara el recálculo del resumen.
+  const [cambios, setCambios] = useState(0)
+  const mutarMovimientos = useCallback((fn: (prev: MovimientoFiltrado[]) => MovimientoFiltrado[]) => {
+    setMovimientos(fn)
+    setCambios(c => c + 1)
+  }, [])
+
   // Resumen (% acreditado + gastos bancarios) del extracto completo, sin filtros.
-  // Se recalcula cada vez que cambia la lista: acreditar, editar o borrar
-  // un movimiento lo mueve.
+  // Se recalcula al cambiar de extracto y después de cada cambio (acreditar,
+  // editar o borrar un movimiento lo mueve). No depende de la lista filtrada:
+  // filtrar no cambia el resumen y antes lo pedía dos veces al entrar y otra
+  // vez en cada cambio de filtro.
   useEffect(() => {
     if (!extractoId) { setResumen(null); return }
     let cancelado = false
@@ -117,7 +185,7 @@ export const Movimientos: React.FC = () => {
       .then(r => { if (!cancelado) setResumen(r) })
       .catch(() => { if (!cancelado) setResumen(null) })
     return () => { cancelado = true }
-  }, [extractoId, movimientos])
+  }, [extractoId, cambios])
 
   useEffect(() => {
     apiClient.listExtractos(activeOrgId).then(data => {
@@ -152,7 +220,9 @@ export const Movimientos: React.FC = () => {
     return m
   }, [movimientos, debouncedFilters.importe, tab])
 
-  const openModal = (m: MovimientoFiltrado) => {
+  // Handlers de fila estables (useCallback) para que MovimientoRow (memo) no se
+  // re-renderice al tipear en un filtro o abrir un modal.
+  const openModal = useCallback((m: MovimientoFiltrado) => {
     setModalError('')
     setEditModal(m)
     setModalValues({
@@ -160,7 +230,7 @@ export const Movimientos: React.FC = () => {
       monto: String(m.monto),
       fecha: m.fecha || '',
     })
-  }
+  }, [])
 
   const saveModal = async () => {
     if (!extractoId || !editModal) return
@@ -170,7 +240,7 @@ export const Movimientos: React.FC = () => {
       const monto = parseFloat(modalValues.monto.replace(/\./g, '').replace(',', '.'))
       const payload = { titular: modalValues.titular, monto, fecha: modalValues.fecha || null }
       await apiClient.updateMovimiento(extractoId, editModal.id, payload)
-      setMovimientos(prev => prev.map(x => x.id === editModal.id ? { ...x, ...payload } : x))
+      mutarMovimientos(prev => prev.map(x => x.id === editModal.id ? { ...x, ...payload } : x))
       setEditModal(null)
     } catch (err: any) {
       setModalError(err.response?.data?.detail || 'Error al guardar')
@@ -178,14 +248,14 @@ export const Movimientos: React.FC = () => {
     setModalSaving(false)
   }
 
-  const openAcredModal = (m: MovimientoFiltrado) => {
+  const openAcredModal = useCallback((m: MovimientoFiltrado) => {
     setAcredError('')
     setAcredModal({
       mov: m,
       cliente: m.cliente_acreditado || '',
       fecha: m.fecha_acred || localIsoDate(),
     })
-  }
+  }, [])
 
   const saveAcred = async () => {
     if (!extractoId || !acredModal) return
@@ -196,7 +266,7 @@ export const Movimientos: React.FC = () => {
         cliente_acreditado: acredModal.cliente || null,
         fecha_acred: acredModal.fecha || null,
       })
-      setMovimientos(prev => prev.map(x => x.id === acredModal.mov.id
+      mutarMovimientos(prev => prev.map(x => x.id === acredModal.mov.id
         ? { ...x, cliente_acreditado: acredModal.cliente || null, fecha_acred: acredModal.fecha || null }
         : x))
       setAcredModal(null)
@@ -215,7 +285,7 @@ export const Movimientos: React.FC = () => {
         cliente_acreditado: null,
         fecha_acred: null,
       })
-      setMovimientos(prev => prev.map(x => x.id === acredModal.mov.id
+      mutarMovimientos(prev => prev.map(x => x.id === acredModal.mov.id
         ? { ...x, cliente_acreditado: null, fecha_acred: null }
         : x))
       setAcredModal(null)
@@ -225,14 +295,14 @@ export const Movimientos: React.FC = () => {
     setAcredSaving(false)
   }
 
-  const handleDeleteMovimiento = async (m: MovimientoFiltrado) => {
+  const handleDeleteMovimiento = useCallback(async (m: MovimientoFiltrado) => {
     if (!extractoId) return
     if (!await confirmDialog({ title: 'Borrar movimiento', message: `¿Borrar "${m.titular || m.orden}"? Esta acción no se puede deshacer.`, confirmLabel: 'Borrar', danger: true })) return
     try {
       await apiClient.deleteMovimiento(extractoId, m.id)
-      setMovimientos(prev => prev.filter(x => x.id !== m.id))
+      mutarMovimientos(prev => prev.filter(x => x.id !== m.id))
     } catch { /* silencioso */ }
-  }
+  }, [extractoId, mutarMovimientos])
 
   const load = useCallback(async () => {
     if (!extractoId) return
@@ -267,6 +337,7 @@ export const Movimientos: React.FC = () => {
       const data = await apiClient.listExtractos(activeOrgId)
       setExtractos(data.items)
       load()
+      setCambios(c => c + 1)
     } catch (err: any) {
       setUmMsg(`✗ ${err.response?.data?.detail || 'Error al agregar UM'}`)
     } finally {
@@ -364,6 +435,7 @@ export const Movimientos: React.FC = () => {
                 const r = await apiClient.deleteUM(extractoId!)
                 setUmMsg(`✓ ${r.eliminados} movimientos UM eliminados`)
                 load()
+                setCambios(c => c + 1)
               } catch (err: any) {
                 const detail = err.response?.data?.detail
                 if (detail?.code === 'sin_lotes') {
@@ -372,6 +444,7 @@ export const Movimientos: React.FC = () => {
                   const r2 = await apiClient.deleteUM(extractoId!, true)
                   setUmMsg(`✓ ${r2.eliminados} movimientos UM eliminados`)
                   load()
+                  setCambios(c => c + 1)
                 } else {
                   setUmMsg(`✗ ${detail || err.message}`)
                 }
@@ -524,53 +597,8 @@ export const Movimientos: React.FC = () => {
                 {filteredMovs.length === 0 ? (
                   <tr><td colSpan={9} className="py-8 text-center text-gray-400">Sin resultados</td></tr>
                 ) : filteredMovs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(m => (
-                  <tr key={m.id}
-                    className={`transition-colors row-15 ${m.source === 'um' ? 'row-um' : 'hover:bg-gray-50 dark:hover:bg-slate-700/40'}`}>
-                    <td className="px-2 text-center text-gray-400 dark:text-gray-500 font-mono">{m.orden ?? '—'}</td>
-                    <td className="px-2 whitespace-nowrap dark:text-gray-300">{fmtDate(m.fecha)}</td>
-                    <td className="px-2 text-gray-500 dark:text-gray-400">{
-                      m.fecha ? new Date(m.fecha + 'T00:00:00').getMonth() + 1 : (m.mes || '—')
-                    }</td>
-                    <td className="px-2 max-w-[220px]">
-                      <p className="truncate dark:text-gray-200" title={m.titular || ''}>{m.titular || '—'}</p>
-                    </td>
-                    <td className="px-2 text-right font-mono font-semibold dark:text-white">{fmtARS(m.monto)}</td>
-                    <td className="px-2 text-right font-mono text-gray-400 dark:text-gray-500">
-                      {m.saldo != null ? fmtARS(m.saldo) : '—'}
-                    </td>
-                    <td className="px-2 cursor-pointer group/cliente" onClick={() => openAcredModal(m)} title="Clic para acreditar o editar">
-                      {m.monto < 0 && !(m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado')
-                        ? (m.egreso_id
-                            ? <span className="pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium"
-                                title="Débito explicado por un pago registrado en Pagos" onClick={e => e.stopPropagation()}>
-                                ✓ Pago #{m.egreso_id}
-                              </span>
-                            : m.gasto_bancario && !canReconcile
-                              ? <span className="text-[10px] text-gray-500 dark:text-gray-400" title={m.gasto_bancario}>Gasto bancario</span>
-                              : canReconcile
-                                ? <button type="button" onClick={e => { e.stopPropagation(); setResolverMov(m) }}
-                                    title={m.gasto_bancario ? `${m.gasto_bancario} — registrar como gasto` : 'Registrar el pago o gasto que explica este débito'}
-                                    className="text-ml-blue dark:text-blue-400 text-[10px] font-medium hover:underline">
-                                    {m.gasto_bancario ? 'Gasto bancario · ＋' : '＋ Resolver'}
-                                  </button>
-                                : <span className="text-gray-400 text-[10px]">—</span>)
-                        : m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado'
-                        ? <span className="inline-flex items-center gap-0.5 pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium group-hover/cliente:bg-green-200 dark:group-hover/cliente:bg-green-800/60 transition-colors">
-                            {m.cliente_acreditado}
-                            <span className="opacity-0 group-hover/cliente:opacity-50 text-[9px]">✏</span>
-                          </span>
-                        : <span className="text-ml-blue dark:text-blue-400 text-[10px] font-medium group-hover/cliente:underline">＋ Acreditar</span>}
-                    </td>
-                    <td className="px-2 whitespace-nowrap text-gray-500 dark:text-gray-400 cursor-pointer hover:text-ml-blue dark:hover:text-blue-400 transition-colors" onClick={() => openAcredModal(m)} title="Clic para editar acreditación">
-                      {fmtDate(m.fecha_acred)}
-                    </td>
-                    <td className="px-1 text-center">
-                      <div className="flex gap-1 justify-center">
-                        <button onClick={() => openModal(m)} title="Editar datos (titular, importe, fecha)" className="text-gray-400 hover:text-ml-blue dark:hover:text-blue-400 transition-colors">✏️</button>
-                        {canDelete && <button onClick={() => handleDeleteMovimiento(m)} title="Borrar movimiento" className="text-gray-400 hover:text-red-500 transition-colors">🗑</button>}
-                      </div>
-                    </td>
-                  </tr>
+                  <MovimientoRow key={m.id} m={m} canReconcile={canReconcile} canDelete={canDelete}
+                    onAcreditar={openAcredModal} onResolver={setResolverMov} onEditar={openModal} onBorrar={handleDeleteMovimiento} />
                 ))}
               </tbody>
             </table>
@@ -623,7 +651,7 @@ export const Movimientos: React.FC = () => {
         onClose={() => setResolverMov(null)}
         onResuelto={egresoId => {
           const id = resolverMov.id
-          setMovimientos(prev => prev.map(x => x.id === id ? { ...x, egreso_id: egresoId } : x))
+          mutarMovimientos(prev => prev.map(x => x.id === id ? { ...x, egreso_id: egresoId } : x))
           setResolverMov(null)
         }}
       />
