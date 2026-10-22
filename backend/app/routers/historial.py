@@ -8,7 +8,7 @@ import io
 
 from app.database import get_db
 from app.models.user import User
-from app.models.planilla import Planilla
+from app.models.planilla import Planilla, PlanillaRow
 from app.models.extracto import ExtractoBancario, MovimientoBanco
 from app.models.cliente import Cliente
 from app.schemas.historial import (
@@ -57,7 +57,6 @@ def list_planillas(
     total = q.count()
     planillas = (
         q.options(
-            selectinload(Planilla.rows),
             joinedload(Planilla.cliente),
             joinedload(Planilla.usuario),
         )
@@ -67,13 +66,27 @@ def list_planillas(
         .all()
     )
 
+    # Stats por planilla agregadas en SQL: (planilla, status) → cantidad y suma de
+    # montos. Antes se cargaban TODAS las filas de cada planilla (selectinload) para
+    # contarlas en Python.
+    por_status: dict[int, dict] = {}
+    if planillas:
+        for pid, status, cant, suma in (
+            db.query(PlanillaRow.planilla_id, PlanillaRow.status,
+                     func.count(PlanillaRow.id), func.sum(PlanillaRow.monto))
+            .filter(PlanillaRow.planilla_id.in_([p.id for p in planillas]))
+            .group_by(PlanillaRow.planilla_id, PlanillaRow.status)
+            .all()
+        ):
+            por_status.setdefault(pid, {})[status] = (int(cant or 0), suma)
+
     items = []
     for p in planillas:
-        rows = p.rows
-        statuses = [r.status for r in rows]
-        monto_ok = sum(
-            float(r.monto) for r in rows if r.status == "ok" and r.monto is not None
-        )
+        stats = por_status.get(p.id, {})
+        n_status = {st: c for st, (c, _) in stats.items()}
+        statuses = list(n_status)
+        ok_suma = stats.get("ok", (0, None))[1]
+        monto_ok = float(ok_suma) if ok_suma is not None else 0
         items.append(
             PlanillaHistorialItem(
                 id=p.id,
@@ -81,14 +94,14 @@ def list_planillas(
                 nombre_archivo=p.nombre_archivo,
                 fecha_carga=p.fecha_carga,
                 usuario_nombre=(p.usuario.full_name if p.usuario else "—"),
-                total_filas=len(statuses),
-                acreditadas=sum(1 for s in statuses if s == "ok"),
-                no_encontradas=sum(1 for s in statuses if s == "no está"),
+                total_filas=sum(n_status.values()),
+                acreditadas=n_status.get("ok", 0),
+                no_encontradas=n_status.get("no está", 0),
                 duplicadas=sum(
-                    1 for s in statuses
+                    n_status[s] for s in statuses
                     if s == "duplicado" or (isinstance(s, str) and s.startswith("acreditado"))
                 ),
-                sin_datos=sum(1 for s in statuses if s == "faltan datos"),
+                sin_datos=n_status.get("faltan datos", 0),
                 monto_conciliado=monto_ok,
                 porcentaje_comision=float(p.porcentaje_comision) if p.porcentaje_comision is not None else None,
             )
