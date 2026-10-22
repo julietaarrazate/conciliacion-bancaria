@@ -18,6 +18,7 @@ Rutas expuestas (bajo el prefix /contabilidad del router padre):
 """
 import logging
 import time
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -353,9 +354,10 @@ def get_libro_mayor(
     q = q.order_by(Asiento.fecha, Asiento.id)
 
     movimientos = []
-    saldo = 0.0
+    # Decimal: debe/haber son Numeric(12,2) → Decimal (float + Decimal = TypeError).
+    saldo = Decimal("0")
     for detalle, asiento in q.all():
-        saldo += detalle.debe - detalle.haber
+        saldo += (detalle.debe or Decimal("0")) - (detalle.haber or Decimal("0"))
         movimientos.append({
             "fecha":       asiento.fecha,
             "descripcion": asiento.descripcion,
