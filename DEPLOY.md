@@ -16,6 +16,12 @@ Arquitectura en producción:
 
 ⚠️ **Free tier duerme tras 15 min de inactividad** (mitigado con UptimeRobot, ver CLAUDE.md)
 
+**Versión de Python:** la fija `.python-version` (`3.11`: Render toma la última 3.11.x con parches de
+seguridad, igual que el CI). Hay una copia en la raíz del repo y otra en `backend/` (el `rootDir` del
+servicio), para que Render la encuentre en cualquiera de los dos lugares. Si en Render hay una env var
+`PYTHON_VERSION`, esa gana. `backend/runtime.txt` **no lo lee Render** (es de Heroku); queda solo
+por coherencia y no fija nada.
+
 ---
 
 ## 🌐 Frontend en Vercel
