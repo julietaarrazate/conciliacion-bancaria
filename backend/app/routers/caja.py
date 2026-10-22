@@ -1,7 +1,7 @@
 import logging
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import Optional
 from datetime import date
 
@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models.caja import ArqueoDiario, DENOMINACIONES, denominaciones_vacias
+from app.models.egreso import Egreso
 from app.models.user import User
 from app.middleware.auth import get_current_user, can_switch_org
 from app.services.tz import hoy_art
@@ -141,8 +142,11 @@ def historial_arqueos(
     current_user: User = Depends(get_current_user)
 ):
     org_id = _org_id(current_user, org_id)
+    # Egresos de todos los arqueos (y su cliente) en 2 queries en vez de 1-2 por arqueo.
     items = db.query(ArqueoDiario).filter(
         ArqueoDiario.organizacion_id == org_id
+    ).options(
+        selectinload(ArqueoDiario.egresos).joinedload(Egreso.cliente)
     ).order_by(ArqueoDiario.fecha.desc()).offset(skip).limit(limit).all()
     return [_arqueo_response(a) for a in items]
 
