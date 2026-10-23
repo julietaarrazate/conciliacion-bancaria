@@ -288,10 +288,10 @@ Cross-ref:
 - **Consecuencias:** Banco Macro en libros = suma de los movimientos de los
   extractos (control en `GET /contabilidad/control-banco`); las transitorias en
   cero significan "todo explicado"; su saldo es lo pendiente de imputar. Los
-  asientos viejos quedan como están hasta correr la corrección. Multi-banco
-  (un extracto de otro banco igual pega contra Banco Macro) y la cuenta de
-  `caja_efectivo` (reposición banco → caja, sigue contra la cuenta madre Banco)
-  quedan pendientes. Detalle en
+  asientos viejos quedan como están hasta correr la corrección (que también rehace
+  los UM viejos con egresos en 2-1-1-1 y lista "a revisar" los asientos de módulos
+  que pegaron directo contra el banco). Multi-banco (un extracto de otro banco igual
+  pega contra Banco Macro) queda pendiente. Detalle en
   [../architecture/ACCOUNTING_ENGINE.md](../architecture/ACCOUNTING_ENGINE.md) §2bis.
 - **Estado:** Aceptada y vigente (oct 2026).
 
