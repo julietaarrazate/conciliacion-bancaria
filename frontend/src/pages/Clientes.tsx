@@ -49,6 +49,20 @@ const GRADIENTS = [
   'linear-gradient(135deg, #06B6D4 0%, #10B981 100%)',
   'linear-gradient(135deg, #EF4444 0%, #F97316 100%)',
 ]
+
+/** Abre la foto compartida en una pestaña nueva para verla grande.
+ *  Arma el <img> con la API del DOM: antes se usaba document.write con la URL
+ *  interpolada en HTML, y una URL con comillas podía inyectar markup/script. */
+function abrirImagenEnPestana(src: string) {
+  const w = window.open()
+  if (!w) return
+  const img = w.document.createElement('img')
+  img.src = src
+  img.style.maxWidth = '100%'
+  img.style.height = 'auto'
+  w.document.body.appendChild(img)
+}
+
 function hashNombre(n: string): number {
   let h = 0
   for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0
@@ -377,10 +391,7 @@ export const Clientes: React.FC = () => {
             src={fotoRef}
             alt={fotoRefNombre}
             className="w-full max-h-48 object-contain bg-black/20"
-            onClick={() => {
-              const w = window.open()
-              if (w) { w.document.write(`<img src="${fotoRef}" style="max-width:100%;height:auto">`) }
-            }}
+            onClick={() => abrirImagenEnPestana(fotoRef)}
           />
           <div className="px-3 py-1.5 text-[11px] text-indigo-400/70">
             {fotoRefNombre} · tocá la imagen para ampliar
@@ -734,7 +745,7 @@ export const Clientes: React.FC = () => {
             {/* Foto de referencia dentro del modal si hay comprobante compartido */}
             {fotoRef && (
               <div className="mb-3 rounded-lg overflow-hidden border border-indigo-500/30 bg-black/20 cursor-pointer"
-                onClick={() => { const w = window.open(); if (w) w.document.write(`<img src="${fotoRef}" style="max-width:100%;height:auto">`) }}>
+                onClick={() => abrirImagenEnPestana(fotoRef)}>
                 <img src={fotoRef} alt="comprobante" className="w-full max-h-32 object-contain" />
                 <div className="px-2 py-1 text-[10px] text-indigo-400/70">Comprobante compartido · tocá para ampliar</div>
               </div>
