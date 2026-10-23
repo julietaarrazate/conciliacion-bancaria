@@ -516,15 +516,16 @@ def control_banco(db: Session, oid: int) -> dict:
                 MovimientoBanco.asiento_id.is_(None),
             ).count()
         )
-        con_saldo = MovimientoBanco.saldo.isnot(None)
+        # Sin fecha no se puede ordenar (y en Postgres los NULL van primero en DESC).
+        con_saldo = (MovimientoBanco.saldo.isnot(None)) & (MovimientoBanco.fecha.isnot(None))
         ultimo = (
             db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id.in_(ids_ext), con_saldo)
-            .order_by(MovimientoBanco.fecha.desc(), MovimientoBanco.orden.desc(), MovimientoBanco.id.desc())
+            .order_by(MovimientoBanco.fecha.desc(), MovimientoBanco.orden.desc().nullslast(), MovimientoBanco.id.desc())
             .first()
         )
         primero = (
             db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id.in_(ids_ext), con_saldo)
-            .order_by(MovimientoBanco.fecha.asc(), MovimientoBanco.orden.asc(), MovimientoBanco.id.asc())
+            .order_by(MovimientoBanco.fecha.asc(), MovimientoBanco.orden.asc().nullslast(), MovimientoBanco.id.asc())
             .first()
         )
         if ultimo is not None:
