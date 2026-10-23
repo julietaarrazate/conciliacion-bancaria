@@ -1,0 +1,68 @@
+# Dependencias de producción (lo que se edita a mano).
+# requirements.txt se GENERA desde este archivo con versiones exactas y hashes de
+# TODAS las dependencias (también las indirectas), para que un paquete publicado
+# comprometido no entre solo en un deploy (ver ataque a LiteLLM, oct 2026). Con
+# hashes, pip rechaza cualquier archivo que no coincida.
+# Regenerar (con Python 3.11, la misma versión que Render):
+#   pip install pip-tools
+#   pip-compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url -o requirements.txt requirements.in
+#   pip-compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url -o requirements-dev.txt requirements-dev.in
+# Dependabot entiende este formato y actualiza los dos archivos juntos.
+
+# Instalador (se actualiza en cada build de Render, fijado por hash)
+pip==26.2.2
+
+# Web framework
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+
+# Base de datos
+sqlalchemy==2.0.54
+psycopg2-binary==2.9.13          # PostgreSQL (Neon)
+
+# Autenticacion JWT
+python-jose[cryptography]==3.5.0
+
+# Validacion y settings
+pydantic==2.13.5
+pydantic[email]==2.13.5
+pydantic-settings==2.15.0
+email-validator==2.3.0
+
+# Upload de archivos (multipart/form-data)
+python-multipart==0.0.32
+
+# Excel
+openpyxl==3.1.5
+xlrd==2.0.2
+
+# Utilidades
+python-dotenv==1.2.3
+requests==2.34.2
+
+# Rate limiting (proteccion brute force)
+slowapi==0.1.10
+
+# Migraciones de base de datos
+alembic==1.20.0
+
+# Scheduler para backup automatico diario
+apscheduler==3.11.3
+
+# PDF reports (estado de cuenta + cierre mensual)
+reportlab==5.0.1
+
+# Web Push notifications (VAPID)
+pywebpush>=2.5.0
+
+# Storage S3/R2 (opcional, activado via env vars S3_*)
+boto3==1.43.98
+
+# Agente IA (Gemini Flash — activado via env var GEMINI_API_KEY)
+google-generativeai==0.8.6
+
+# Monitoreo de errores (opt-in via env var SENTRY_DSN)
+sentry-sdk[fastapi]
+
+# Parser de PDFs de tarjetas (opt-in: si no está instalado, tarjeta_parser degrada a carga manual)
+pdfminer.six>=20260107

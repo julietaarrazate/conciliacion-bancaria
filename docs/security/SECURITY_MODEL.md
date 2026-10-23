@@ -276,6 +276,19 @@ Observabilidad: requests por encima de `SLOW_REQUEST_MS` (default 1500) se logue
 
 ---
 
+## 11. Cadena de suministro (dependencias)
+
+- **Backend:** `requirements.txt` / `requirements-dev.txt` se generan con
+  `pip-compile --generate-hashes` desde `requirements.in` / `requirements-dev.in`. Fijan versión
+  y hash sha256 de todas las dependencias (directas e indirectas) y de `pip`. Con hashes pip
+  trabaja en modo estricto: rechaza un archivo alterado o una versión no listada. Render, el CI,
+  el Dockerfile y el hook de sesión instalan esos archivos.
+- **Actualizaciones:** Dependabot (semanal) regenera los dos archivos y el CI corre antes de
+  mergear. Un salto de versión entra solo por PR revisado, nunca solo en un deploy.
+- **Frontend:** `package-lock.json` (npm ya guarda `integrity` por paquete) + `npm ci`.
+- **Python:** `PYTHON_VERSION` en Render (3.11.17). La rama 3.11 tiene parches de seguridad
+  hasta oct/2027.
+
 ## Pendiente de revisar
 
 - **Payload del token de Google login**: `google_auth.py` usa
