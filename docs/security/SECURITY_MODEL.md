@@ -82,6 +82,28 @@ Notas (del propio código):
 - Acciones exclusivas del superadmin no usan la matriz sino `require_superadmin` (p. ej.
   `POST /auth/register`, decidir aprobaciones de login, limpieza masiva de extractos).
 
+**Toda ruta que escribe pide permiso (oct 2026).** El revisor es de solo lectura, pero ~30
+endpoints que escribían solo pedían `get_current_user` (subir extractos, editar movimientos,
+cheques, caja, clientes incluido fusionar). Ahora piden el permiso que ya tiene el rol que los usa:
+
+| Endpoints | Permiso |
+|-----------|---------|
+| `POST /extractos/upload`, `PATCH /extractos/{id}/renombrar`, `POST /extractos/{id}/agregar-um` | `upload_files` |
+| `PATCH /extractos/{id}/movimientos/{mov_id}`, `POST /planillas/{id}/revision/{row_id}/resolver`, `PATCH /planillas/rows/{id}`, `PUT /planillas/{id}/comision`, `POST /auditoria/patrones/importar-historico` | `reconcile` |
+| Clientes: `POST /clientes`, `PUT /clientes/{id}/renombrar`, `POST /clientes/{id}/fusionar`, `PUT /clientes/{id}/comision`, `POST /clientes/movimientos/{id}/acreditar`, `POST /clientes/{id}/share-link`; `POST /pagos/{id}/compartir` | `reconcile` |
+| Cheques (`POST /cheques`, `bulk-crear`, `portadores`, `PATCH /cheques/{id}`, `foto`, `importar`, `acreditar` uno y masivo, `rechazar`) y `PUT /caja/arqueo/hoy` | `manage_finance` |
+| `DELETE /extractos` (limpieza masiva), `POST /contabilidad/reset-y-rebuild`, `POST /push/test`, `POST /push/setup` | `require_superadmin` (antes chequeo inline) |
+
+Efecto por rol: admin, operador y contador siguen pudiendo todo lo de antes. El auditor conserva
+cheques y caja (`manage_finance`) pero ya no sube extractos ni edita clientes/planillas/movimientos.
+
+Sin permiso a propósito (lista `SIN_PERMISO_A_PROPOSITO` en `tests/test_seguridad_permisos.py`):
+login/2FA/recuperación/logout/Google (públicos), webhook de Resend (firma Svix), `/me` y
+`/push/subscribe` (autoservicio), asistente IA (`/agente/*`: solo lee, cupo por org) y dos POST de
+solo lectura de clientes (`buscar-movimiento`, `planillas/{id}/guardar`). Un meta-test recorre
+`app.routes` y falla si una ruta POST/PUT/PATCH/DELETE no pide `require_permission`/
+`require_superadmin` ni está en esa lista.
+
 Las 3 capas donde se aplica esto (router, endpoint, frontend) están descriptas en
 [../api/API_RULES.md](../api/API_RULES.md) §3.
 
@@ -109,6 +131,16 @@ def can_switch_org(user, org_id):
 usuario tiene permiso (`db.expunge(user)` para no persistirlo). Org A (`organizacion_id=1`) es la
 organización principal y por convención **nunca** se modifican sus datos existentes (solo cambios
 aditivos). Detalle de columnas y constraints: ver [../database/DATABASE_RULES.md](../database/DATABASE_RULES.md).
+
+**Auditoría por organización (oct 2026, migración 035).** Antes `/auditoria` filtraba por la org
+"de casa" del usuario que hizo la acción: un usuario con `view_audit` en la org 1 veía lo que hacía
+el superadmin en todas las orgs. Ahora `auditoria.organizacion_id` guarda la org de la acción:
+`registrar_log` usa (1) la org explícita si se pasa, (2) la del registro afectado si `tabla` es una
+tabla con `organizacion_id` (la de una organización es su id), (3) la org activa del request —
+contextvar `org_activa` que setea `get_current_user` después del override de `?org_id=`. Fuera de
+un request (schedulers) queda NULL. El listado y `/auditoria/insights` filtran por esa org; las
+filas NULL (las viejas, sin backfill) siguen filtrándose por la org del usuario, así el historial
+no desaparece. Tests: `tests/test_seguridad_permisos.py`.
 
 ---
 

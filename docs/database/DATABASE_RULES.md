@@ -221,6 +221,7 @@ Ver BUGS.md → "Fechas en zona horaria Argentina (UTC-3)".
 | 026 | `026_planilla_fingerprint.py` | `planillas.fingerprint` + índice único parcial (cliente, fingerprint, org) sin borradas |
 | 027 | `027_comprobantes_por_revisar.py` | `buzon_comprobantes` y `borradores_comprobante` (facturas de compra por mail / IA) |
 | 028 | `028_extractos_pdf.py` | `moldes_extracto_pdf` y `borradores_extracto_pdf` (extractos en PDF: formatos aprendidos y borradores de revisión) |
+| 035 | `035_auditoria_organizacion.py` | `auditoria.organizacion_id` (nullable, indexada, FK `ON DELETE SET NULL`): org de cada log. Sin backfill: las filas viejas quedan NULL y el listado las filtra por la org del usuario (ver SECURITY_MODEL §3) |
 
 ---
 
