@@ -41,6 +41,11 @@ Env vars opcionales en Render (feature flags — sin la var, la feature se degra
 `ARCA_ENCRYPTION_KEY` ya seteada, módulo ARCA construido pero desactivado a propósito (ver
 "Pendiente para próximas sesiones"). Stack: Python 3.11 / Node 24 (Vercel deja de buildear con Node 20 desde oct 2026), Neon free tier (puede dormir),
 Render free tier (cold start ~30s, mitigado con UptimeRobot + retry en frontend).
+Python en Render: env var `PYTHON_VERSION` (hoy `3.11.17`; Render ignora `runtime.txt`).
+**Dependencias del backend con versión y hash fijos** (oct 2026, tras el ataque a LiteLLM en PyPI):
+se editan `backend/requirements.in` / `requirements-dev.in` y se **regeneran** `requirements.txt` /
+`requirements-dev.txt` con `pip-compile --generate-hashes` (comando en el encabezado de
+`requirements.in`); nunca editar los `.txt` a mano. pip rechaza cualquier paquete cuyo hash no coincida.
 
 ---
 

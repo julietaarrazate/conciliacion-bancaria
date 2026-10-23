@@ -64,9 +64,10 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
       - name: Instalar dependencias
-        # requirements-dev.txt trae pytest/pytest-asyncio/httpx — sin él, el
-        # paso "Tests" muere con "No module named pytest".
-        run: pip install -r requirements.txt -r requirements-dev.txt ruff
+        # requirements-dev.txt (generado con pip-compile desde requirements-dev.in)
+        # trae TODO lo de producción + pytest/httpx/ruff, con versiones y hashes
+        # fijos: pip rechaza cualquier paquete que no coincida.
+        run: pip install -r requirements-dev.txt
       - name: Lint (ruff — reglas de bugs reales, ver ruff.toml)
         run: ruff check .
       - name: Tests

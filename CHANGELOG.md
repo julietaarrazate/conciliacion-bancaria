@@ -5,6 +5,19 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Seguridad (oct 2026) — Dependencias del backend con hash y Python 3.11.17
+
+- Tras el ataque a LiteLLM en PyPI (21/oct; Cuadra no lo usa): `requirements.txt` y
+  `requirements-dev.txt` pasan a generarse con `pip-compile --generate-hashes` desde
+  `requirements.in` / `requirements-dev.in`. Fijan versión y hash de **todas** las dependencias,
+  también las indirectas (antes `certifi`, `urllib3`, etc. entraban en la última versión del día
+  del deploy). pip rechaza cualquier archivo que no coincida.
+- `pip` 26.2.2 fijado en el mismo archivo: cada build de Render lo actualiza (antes usaba el de la
+  imagen, 24.0). CI y el hook de sesión instalan solo `requirements-dev.txt` (incluye `ruff`).
+- Python de Render: `PYTHON_VERSION` 3.11.9 → 3.11.17 (parche de seguridad del 1/oct/2026).
+
+---
+
 ### Fix (oct 2026) — Límites de protección + fuente Inter
 
 - **IP real en los límites:** slowapi usaba la IP del proxy de Render, así que todos compartían
