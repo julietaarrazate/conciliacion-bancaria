@@ -20,6 +20,7 @@ Seguridad:
 """
 
 import hashlib
+import html
 import logging
 import secrets
 from datetime import datetime, timedelta
@@ -149,7 +150,8 @@ def validar_y_cambiar_password(
 
 def _html_email(nombre: str, reset_url: str, ttl_min: int) -> str:
     """Email HTML con boton de reset. Diseño limpio, alta legibilidad mobile."""
-    saludo = (nombre or "").split()[0] if nombre else "Hola"
+    # El nombre lo carga el usuario: se escapa para que no inyecte HTML en el mail
+    saludo = html.escape((nombre or "").split()[0]) if (nombre or "").strip() else "Hola"
     return f"""
 <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;color:#222;padding:24px">
   <h2 style="color:#111;margin:0 0 12px;font-size:20px">Recuperar contraseña</h2>

@@ -339,3 +339,14 @@ def test_login_inactivo_mismo_401_que_password_mala(client):
 def test_login_inactivo_con_password_mala_tambien_401(client):
     r = client.post("/auth/login", json={"email": "inactivo@t.test", "password": "mala1234"})
     assert r.status_code == 401
+
+
+# ── 6. Mail de reset: el nombre va escapado ──────────────────────────────────
+
+def test_mail_reset_escapa_el_nombre():
+    from app.services.password_reset import _html_email
+    cuerpo = _html_email('<b>Juan</b> Pérez', "https://app/r?token=abc", 60)
+    assert "<b>" not in cuerpo
+    assert "&lt;b&gt;" in cuerpo
+    # Nombre vacío o solo espacios: saludo genérico (antes tiraba IndexError)
+    assert "Hola Hola" in _html_email("   ", "https://app/r", 60)
