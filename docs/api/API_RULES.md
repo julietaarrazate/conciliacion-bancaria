@@ -312,7 +312,16 @@ Los endpoints que reciben archivos validan en este orden (ver `upload_extracto` 
 `agregar_ultimos_movimientos` en `extractos.py`):
 
 1. **Extensión**: solo `.xlsx`, `.xls`, `.csv` → si no, `HTTPException(400)`.
-2. **Tamaño**: `len(content) > settings.max_file_size` (50 MB) → `HTTPException(413)`.
+2. **Tamaño y zip bomb**: nunca `await file.read()` sin tope. Las planillas se leen con
+   `leer_planilla(file, maximo)` de `services/limites.py`: lee como mucho `maximo + 1` bytes
+   (413 si se pasa) y, si es un .xlsx (ZIP), `excel_safe.verificar_xlsx` mira el índice del ZIP
+   sin descomprimir y responde 413 si el total descomprimido pasa de 100 MB o un archivo interno
+   de más de 1 MB comprime más de 200:1. Topes: extractos `settings.max_file_size` (50 MB);
+   planillas de clientes (`/planillas/preview` y `/upload`), `/tarjetas/upload`,
+   `/iva/comprobantes/comparar` e `/importar`, `/procesos-masivos/mis-comprobantes/*` y
+   `/cheques/importar` `MAX_BYTES_PLANILLA` (15 MB). Otros archivos usan
+   `leer_archivo(file, maximo)` (IA: `leer_archivo_ia`, 10 MB); Comprobantes por revisar lee como
+   mucho 5 MB + 1 por archivo.
 3. **Magic bytes** (anti-renombrado): el contenido real debe coincidir con la extensión.
    Un atacante no puede renombrar un binario a `.xlsx` para colarlo.
 
@@ -339,6 +348,12 @@ basura antes). El lector rechaza con 400 los PDF dañados, con contraseña de ap
 
 Imágenes/audio del asistente IA (`agente.py`) llegan como base64 o `UploadFile` y se validan por
 no-vacío; el procesamiento real lo hace Gemini. Ver [../ai/AI_GUIDE.md](../ai/AI_GUIDE.md).
+
+**Archivos que genera la API** (exports): todo libro openpyxl pasa por
+`excel_safe.sanear_workbook(wb)` justo antes de `save`, y los CSV pasan cada campo de texto por
+`excel_safe.safe_cell` (anti inyección de fórmulas, ver
+[../security/SECURITY_MODEL.md](../security/SECURITY_MODEL.md) §8d). En los PDF (reportlab) el
+texto de usuario que va en un `Paragraph` se escapa con `pdf_export._e`.
 
 ---
 

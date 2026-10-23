@@ -225,6 +225,31 @@ por ARCA para facturar bajo su CUIT) — el material más sensible que maneja el
   `GEMINI_API_KEY` del servidor. Esa key debe ser de un plan pago: el free tier de Gemini puede usar
   lo que recibe para mejorar sus modelos.
 
+## 8d. Entradas de terceros en archivos (oct 2026)
+
+Titulares, conceptos y nombres vienen del extracto, de la planilla del cliente o de lo que
+escribe el usuario: se tratan como no confiables al generar o leer archivos.
+
+- **Inyección de fórmulas (Excel/CSV)**: `services/excel_safe.safe_cell` antepone `'` al texto
+  que empieza con `=`, `+`, `-`, `@`, tab o CR (un `=HYPERLINK(...)` no queda como fórmula viva
+  cuando el contador abre el archivo). Números, fechas y Decimal no se tocan, ni el texto que es
+  solo un número (`-1234,56`, `-`). Se aplica con `sanear_workbook(wb)` antes de cada `save` en
+  `excel_export.py`, `routers/extractos.py` y `routers/cheques_reportes.py`, y campo por campo en
+  los CSV de `export_contable.py` (genérico y Regisoft). Los TXT de Tango/Holistor no se tocan: son
+  formatos de importación a software contable, no se abren como planilla.
+- **Tamaño y zip bomb al subir**: tope de bytes leyendo como mucho `maximo + 1` y chequeo del
+  índice del .xlsx antes de openpyxl/pandas (`limites.leer_planilla`). Detalle en
+  [../api/API_RULES.md](../api/API_RULES.md) §7.
+- **PDF (reportlab)**: `Paragraph` interpreta markup; el dato de usuario se escapa con
+  `pdf_export._e` (`xml.sax.saxutils.escape`) y el markup propio (`<b>`, `<font>`) se arma
+  alrededor. Un nombre `A & B <b>x` ya no rompe el PDF.
+- **Frontend**: la foto compartida en `Clientes.tsx` se abre armando el `<img>` con la API del DOM,
+  no con `document.write` de HTML interpolado.
+- **Push**: `DELETE /push/subscribe` borra solo la suscripción del usuario actual (antes cualquiera
+  que supiera el endpoint de otro dispositivo le cortaba las notificaciones).
+
+Tests: `tests/test_seguridad_entradas.py`.
+
 ## 9. Rate limiting (brute force)
 
 `slowapi` con clave = **IP real del cliente** (`services/limites.ip_cliente`): la primera IP
