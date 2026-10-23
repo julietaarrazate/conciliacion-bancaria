@@ -24,7 +24,7 @@ import io
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
 from sqlalchemy.orm import Session
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.services.limites import MAX_BYTES_IA, consumir_cupo_ia, ip_cliente
 import openpyxl
 
 from app.database import get_db
@@ -45,15 +45,18 @@ from .cheques_common import (
 )
 
 router = APIRouter(tags=["cheques"])
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=ip_cliente)
 
 
 # ── Carga masiva OCR ──────────────────────────────────────────────
 
 @router.post("/bulk-ocr")
+@limiter.limit("5/minute")
 async def bulk_ocr(
+    request: Request,
     fotos: List[UploadFile] = File(...),
-    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("upload_files")),
 ):
     """Recibe hasta 30 fotos y aplica OCR a cada una en paralelo.
 
@@ -77,7 +80,10 @@ async def bulk_ocr(
     if not api_key:
         raise HTTPException(503, "OCR no configurado (falta GEMINI_API_KEY)")
 
-    from routers.agente import _GEMINI_MODEL, _classify_gemini_error
+    from app.routers.agente import _GEMINI_MODEL, _classify_gemini_error
+
+    # Cupo diario de IA de la organización: una lectura por foto.
+    consumir_cupo_ia(db, current_user.organizacion_id or 1, "ocr", cantidad=len(fotos))
 
     OCR_PROMPT = (
         "Esta imagen contiene UNO O VARIOS cheques bancarios argentinos "
@@ -106,7 +112,9 @@ async def bulk_ocr(
     async def _ocr_photo(index: int, foto: UploadFile) -> List[dict]:
         filename = foto.filename or f"foto_{index}"
         try:
-            raw = await foto.read()
+            raw = await foto.read(MAX_BYTES_IA + 1)
+            if len(raw) > MAX_BYTES_IA:
+                return [_err_item(index, filename, "La foto supera el máximo de 10 MB")]
             mime_type = foto.content_type or "image/jpeg"
             # Llamada a Gemini en thread pool para no bloquear el event loop
             loop = asyncio.get_event_loop()

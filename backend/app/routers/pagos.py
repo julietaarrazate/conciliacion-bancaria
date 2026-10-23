@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_
 from sqlalchemy.orm import Session, defer, joinedload
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.services.limites import ip_cliente
 
 from app.database import get_db
 from app.middleware.auth import get_current_user, require_permission, can_switch_org
@@ -33,7 +33,7 @@ from app.services.tz import hoy_art
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=ip_cliente)
 
 
 def _org_id(user: User, org_id_param: Optional[int] = None) -> int:

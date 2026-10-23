@@ -31,7 +31,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import and_
 from sqlalchemy.orm import Session, defer, joinedload
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.services.limites import ip_cliente
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
@@ -54,7 +54,7 @@ from .cheques_common import (
 )
 
 router = APIRouter(prefix="/cheques", tags=["cheques"])
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=ip_cliente)
 
 
 # ── CRUD principal: listar / crear (paths vacíos, ver nota arriba) ──

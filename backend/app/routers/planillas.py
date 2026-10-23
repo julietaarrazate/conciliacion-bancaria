@@ -9,7 +9,7 @@ from sqlalchemy import func, cast, String, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.services.limites import ip_cliente
 import os
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ from app.services.tz import hoy_art
 from app.middleware.auth import get_current_user, require_permission, can_switch_org
 
 router = APIRouter(prefix="/planillas", tags=["planillas"])
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=ip_cliente)
 
 
 def _get_org_config(db: Session, organizacion_id: int) -> dict:

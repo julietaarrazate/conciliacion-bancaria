@@ -8,7 +8,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.services.limites import ip_cliente
 from jose import jwt as jose_jwt, JWTError
 
 from app.database import get_db
@@ -37,7 +37,7 @@ def _serialize_user(user: User) -> dict:
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=ip_cliente)
 _bearer = HTTPBearer(auto_error=False)
 
 
@@ -86,7 +86,7 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
     if not user:
         logger.warning(
             "LOGIN_FAILED email=%s ip=%s",
-            credentials.email, get_remote_address(request),
+            credentials.email, ip_cliente(request),
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -259,7 +259,7 @@ def forgot_password(
     el endpoint no se puede usar para descubrir cuales emails estan registrados.
     Rate limit: 3 pedidos por hora por IP (suficiente para uso real, blockea bots).
     """
-    ip = get_remote_address(request)
+    ip = ip_cliente(request)
     try:
         crear_token_y_enviar_email(db, payload.email, requested_ip=ip)
     except Exception as ex:
@@ -296,7 +296,7 @@ def reset_password(
     try:
         registrar_log(
             db, user.id, "users", user.id, "PASSWORD_RESET",
-            {"via": "email", "ip": get_remote_address(request)},
+            {"via": "email", "ip": ip_cliente(request)},
         )
     except Exception:
         pass

@@ -5,6 +5,21 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Fix (oct 2026) — Límites de protección + fuente Inter
+
+- **IP real en los límites:** slowapi usaba la IP del proxy de Render, así que todos compartían
+  un contador (un atacante bloqueaba login/recuperación de todos). Ahora `services/limites.ip_cliente`.
+- **Cupo diario de IA por organización** (`uso_ia_diario`, migración 034 + safety net): chat 200,
+  OCR 100 (una por foto), audio 100 por día, configurables por env var. Antes era un contador
+  global en memoria que gastaba cualquier org y se reiniciaba con cada deploy.
+- Límites por minuto y tamaño máximo (10 MB) en chat, OCR, transcripción y carga masiva de cheques.
+- **`/cheques/bulk-ocr` fallaba siempre**: importaba `routers.agente` (módulo inexistente). Ahora
+  `app.routers.agente`, con permiso `upload_files`.
+- **Fuente Inter / JetBrains Mono:** no se cargaban (el `@import` iba después de `@tailwind` y el
+  build lo descartaba). Ahora `<link>` + preconnect en `index.html`.
+
+---
+
 ### Fix (oct 2026) — Sentry en el frontend + Redeploy de Vercel
 
 - **Sentry del frontend nunca podía enviar errores**: la Content-Security-Policy de

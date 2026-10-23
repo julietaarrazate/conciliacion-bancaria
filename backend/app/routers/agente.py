@@ -4,19 +4,25 @@ import json
 import logging
 import time
 from threading import Lock
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from slowapi import Limiter
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.database import get_db
 from app.models.user import User
 from app.middleware.auth import get_current_user
+from app.services.limites import consumir_cupo_ia, ip_cliente, leer_archivo_ia, uso_ia
 from app.services.tz import hoy_art
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agente", tags=["agente"])
+limiter = Limiter(key_func=ip_cliente)
 
 # ── Daily rate limiting (OCR + Chat) ─────────────────────────────────────────
+# Tope global de la plataforma (protege la cuota de Gemini). Además cada endpoint
+# descuenta del cupo diario de SU organización (services/limites.py), así una org no
+# gasta el cupo de las demás.
 _OCR_DAILY_LIMIT  = int(os.environ.get("OCR_DAILY_LIMIT",  "150"))
 _CHAT_DAILY_LIMIT = int(os.environ.get("CHAT_DAILY_LIMIT", "200"))
 
@@ -431,14 +437,13 @@ def _run_chat_message(mensaje: str, db: Session, org_id: int, api_key: str) -> s
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/chat")
+@limiter.limit("20/minute")
 def chat(
+    request: Request,
     payload: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not _chat_allowed():
-        raise HTTPException(429, "Límite diario del asistente IA alcanzado. Volvé mañana 🙂")
-
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(503, "Agente no configurado (falta GEMINI_API_KEY en Render)")
@@ -446,8 +451,13 @@ def chat(
     mensaje = str(payload.get("mensaje", "")).strip()
     if not mensaje:
         raise HTTPException(400, "Mensaje vacío")
+    if len(mensaje) > 4000:
+        raise HTTPException(413, "El mensaje es demasiado largo (máximo 4000 caracteres)")
 
     org_id = current_user.organizacion_id or 1
+    consumir_cupo_ia(db, org_id, "chat")
+    if not _chat_allowed():
+        raise HTTPException(429, "Límite diario del asistente IA alcanzado. Volvé mañana 🙂")
 
     try:
         texto = _run_chat_message(mensaje, db, org_id, api_key)
@@ -459,7 +469,9 @@ def chat(
 
 
 @router.get("/saludo-proactivo")
+@limiter.limit("10/minute")
 def saludo_proactivo(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -469,10 +481,11 @@ def saludo_proactivo(
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(503, "Agente no configurado (falta GEMINI_API_KEY en Render)")
-    if not _chat_allowed():
-        raise HTTPException(429, "Límite diario del asistente IA alcanzado. Volvé mañana 🙂")
 
     org_id = current_user.organizacion_id or 1
+    consumir_cupo_ia(db, org_id, "chat")
+    if not _chat_allowed():
+        raise HTTPException(429, "Límite diario del asistente IA alcanzado. Volvé mañana 🙂")
     mensaje_interno = (
         "Dame un pantallazo proactivo de hoy: revisá las alertas vigentes y el resumen "
         "financiero del mes, y contame en 2 a 4 frases qué es lo más importante que tengo "
@@ -525,10 +538,16 @@ def _call_gemini_ocr(api_key: str, mime_type: str, raw_bytes: bytes, prompt: str
 
 
 @router.post("/ocr-cheque")
+@limiter.limit("20/minute")
 def ocr_cheque(
+    request: Request,
     payload: dict,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    imagen = str(payload.get("imagen_base64", ""))
+    if len(imagen) > 14 * 1024 * 1024:  # ~10 MB de imagen en base64
+        raise HTTPException(413, "La imagen supera el máximo de 10 MB")
     if not _ocr_allowed():
         raise HTTPException(429, "Límite diario de OCR alcanzado")
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
@@ -538,6 +557,7 @@ def ocr_cheque(
     imagen_b64 = str(payload.get("imagen_base64", "")).strip()
     if not imagen_b64:
         raise HTTPException(400, "Imagen vacía")
+    consumir_cupo_ia(db, current_user.organizacion_id or 1, "ocr")
 
     try:
         mime_type, raw_bytes = _parse_b64_image(imagen_b64)
@@ -560,10 +580,16 @@ def ocr_cheque(
 
 
 @router.post("/ocr-transferencia")
+@limiter.limit("20/minute")
 def ocr_transferencia(
+    request: Request,
     payload: dict,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    imagen = str(payload.get("imagen_base64", ""))
+    if len(imagen) > 14 * 1024 * 1024:  # ~10 MB de imagen en base64
+        raise HTTPException(413, "La imagen supera el máximo de 10 MB")
     if not _ocr_allowed():
         raise HTTPException(429, "Límite diario de OCR alcanzado")
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
@@ -573,6 +599,7 @@ def ocr_transferencia(
     imagen_b64 = str(payload.get("imagen_base64", "")).strip()
     if not imagen_b64:
         raise HTTPException(400, "Imagen vacía")
+    consumir_cupo_ia(db, current_user.organizacion_id or 1, "ocr")
 
     try:
         mime_type, raw_bytes = _parse_b64_image(imagen_b64)
@@ -610,7 +637,9 @@ def _glosario_transcripcion(db: Session, org_id: int) -> str:
 
 
 @router.post("/transcribir")
+@limiter.limit("20/minute")
 async def transcribir_audio(
+    request: Request,
     audio: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -620,9 +649,10 @@ async def transcribir_audio(
     if not api_key:
         raise HTTPException(503, "Transcripción no configurada (falta GEMINI_API_KEY)")
 
-    raw = await audio.read()
+    raw = await leer_archivo_ia(audio)
     if not raw:
         raise HTTPException(400, "Audio vacío")
+    consumir_cupo_ia(db, current_user.organizacion_id or 1, "audio")
     mime = audio.content_type or "audio/webm"
 
     try:
@@ -655,8 +685,14 @@ async def transcribir_audio(
 
 
 @router.get("/ocr-usage")
-def get_ocr_usage(current_user: User = Depends(get_current_user)):
+def get_ocr_usage(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Uso de IA de hoy de la organización del usuario (cupo propio de la org)."""
+    org_id = current_user.organizacion_id or 1
     return {
-        "ocr":  _usage(_ocr_ctr,  _OCR_DAILY_LIMIT),
-        "chat": _usage(_chat_ctr, _CHAT_DAILY_LIMIT),
+        "ocr":  uso_ia(db, org_id, "ocr"),
+        "chat": uso_ia(db, org_id, "chat"),
+        "audio": uso_ia(db, org_id, "audio"),
     }

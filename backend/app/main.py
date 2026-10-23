@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse as _BaseJSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from app.services.limites import ip_cliente
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
@@ -91,7 +91,7 @@ if settings.sentry_dsn:
     logger.info("Sentry inicializado")
 
 # Rate limiter — protección brute force
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=ip_cliente)
 
 
 def _exec_startup_ddl(conn, sql, retries=3):
