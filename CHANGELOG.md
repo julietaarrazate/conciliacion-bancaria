@@ -5,6 +5,19 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Seguridad (oct 2026) — PyJWT en lugar de python-jose + dependencias del backend al día
+
+- `python-jose` (casi sin mantenimiento, avisos PYSEC-2026-4298 y de `ecdsa` sin versión corregida)
+  → `PyJWT` 2.15.1 en `services/auth.py`, `routers/auth.py`, `clientes_dir.py` y `public_router.py`.
+  Los tokens ya emitidos (sesiones y links compartidos) siguen valiendo: `tests/test_jwt_compat.py`
+  usa tokens reales generados con python-jose. Trabajo portado de #256.
+- `cryptography` pasa a declararse explícita (la usa ARCA; antes llegaba vía python-jose).
+- Menores/parches de #260: fastapi 0.150.0, uvicorn 0.54.0, sqlalchemy 2.0.55, pydantic 2.14.1,
+  pydantic-settings 2.16.0, python-dotenv 1.2.4, boto3 1.43.115, ruff 0.17.1. Hashes regenerados.
+- `pip-audit`: 0 vulnerabilidades conocidas.
+
+---
+
 ### Seguridad (oct 2026) — Dependencias del backend con hash y Python 3.11.17
 
 - Tras el ataque a LiteLLM en PyPI (21/oct; Cuadra no lo usa): `requirements.txt` y

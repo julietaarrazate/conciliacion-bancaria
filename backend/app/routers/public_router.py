@@ -2,7 +2,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
-from jose import jwt as jose_jwt, JWTError
+import jwt
 
 from app.config import get_settings
 from app.database import get_db
@@ -20,8 +20,8 @@ def estado_cuenta_publico(token: str, db: Session = Depends(get_db)):
     """Estado de cuenta de un cliente — link compartido, no requiere autenticación."""
     settings = get_settings()
     try:
-        payload = jose_jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-    except JWTError:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+    except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Link inválido o expirado")
     if payload.get("type") != "share_cliente":
         raise HTTPException(status_code=401, detail="Token inválido")

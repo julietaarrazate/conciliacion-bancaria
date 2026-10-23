@@ -22,6 +22,11 @@ Documento relacionado: convenciones de API y dónde se aplica cada control →
   que habilita la **revocación individual** (logout). El payload típico:
   `{"sub": email, "user_id": ..., "role": ..., "exp": ..., "jti": ...}`.
 - Se envía como header `Authorization: Bearer <token>` y se valida en `get_current_user`.
+- Librería: **PyJWT** (`import jwt`; desde oct 2026 reemplaza a `python-jose`, sin mantenimiento y
+  con vulnerabilidades sin corregir). Toda decodificación pasa `algorithms=[settings.algorithm]`
+  explícito (nunca se acepta `alg: none` ni otro algoritmo) y captura `jwt.PyJWTError`. `sub` es
+  siempre el email (string, como exige PyJWT). Los tokens emitidos con python-jose siguen siendo
+  válidos (mismo HS256 y misma clave): lo prueba `tests/test_jwt_compat.py`.
 
 Variantes de expiración:
 - **Contador** (desde ago 2026): usa la sesión estándar de 8h, igual que el resto — el login por
