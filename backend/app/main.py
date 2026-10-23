@@ -662,6 +662,15 @@ app.add_middleware(GZipMiddleware, minimum_size=500)
 # Cualquier otro origen es rechazado.
 import os as _os
 _extra_origins = [o.strip() for o in _os.getenv("EXTRA_CORS_ORIGINS", "").split(",") if o.strip()]
+# Previews de Vercel de ESTE proyecto, con las dos formas de URL que genera Vercel:
+#   conciliacion-bancaria-<hash 9>-julietaarrazates-projects.vercel.app   (deploy)
+#   conciliacion-bancaria-git-<rama>-julietaarrazates-projects.vercel.app (rama)
+# Sin puntos en el medio (el `.*` anterior aceptaba cualquier subdominio que
+# terminara igual). Starlette compara con fullmatch.
+CORS_PREVIEW_REGEX = (
+    r"https://conciliacion-bancaria-(?:[a-z0-9]{9}|git-[a-z0-9]+(?:-[a-z0-9]+)*)"
+    r"-julietaarrazates-projects\.vercel\.app"
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -670,7 +679,7 @@ app.add_middleware(
         "http://localhost:5173",
         *_extra_origins,
     ],
-    allow_origin_regex=r"https://conciliacion-bancaria-.*-julietaarrazates-projects\.vercel\.app",
+    allow_origin_regex=CORS_PREVIEW_REGEX,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],

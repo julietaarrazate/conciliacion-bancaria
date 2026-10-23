@@ -350,3 +350,35 @@ def test_mail_reset_escapa_el_nombre():
     assert "&lt;b&gt;" in cuerpo
     # Nombre vacío o solo espacios: saludo genérico (antes tiraba IndexError)
     assert "Hola Hola" in _html_email("   ", "https://app/r", 60)
+
+
+# ── 7. CORS: solo producción, dev local y previews de este proyecto ──────────
+
+def _preflight(client, origin):
+    r = client.options("/auth/login", headers={
+        "Origin": origin, "Access-Control-Request-Method": "POST",
+    })
+    return r.headers.get("access-control-allow-origin") == origin
+
+
+@pytest.mark.parametrize("origin", [
+    "https://conciliacion-bancaria-ten.vercel.app",
+    "http://localhost:5173",
+    "https://conciliacion-bancaria-a1b2c3d4e-julietaarrazates-projects.vercel.app",
+    "https://conciliacion-bancaria-git-claude-seg-auth-julietaarrazates-projects.vercel.app",
+])
+def test_cors_acepta_produccion_y_previews_del_proyecto(client, origin):
+    assert _preflight(client, origin)
+
+
+@pytest.mark.parametrize("origin", [
+    "https://evil.com",
+    "https://conciliacion-bancaria-evil.attacker.com-julietaarrazates-projects.vercel.app",
+    "https://conciliacion-bancaria-x.y-julietaarrazates-projects.vercel.app",
+    "https://otro-proyecto-a1b2c3d4e-julietaarrazates-projects.vercel.app",
+    "https://conciliacion-bancaria-a1b2c3d4e-otro-equipo.vercel.app",
+    "http://conciliacion-bancaria-a1b2c3d4e-julietaarrazates-projects.vercel.app",
+    "https://conciliacion-bancaria-ten.vercel.app.evil.com",
+])
+def test_cors_rechaza_otros_origenes(client, origin):
+    assert not _preflight(client, origin)
