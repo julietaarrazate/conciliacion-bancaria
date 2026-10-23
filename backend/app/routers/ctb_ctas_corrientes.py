@@ -209,8 +209,8 @@ def get_cuenta_corriente(
         estado = "Conciliado"
         if es_reverso or a.id in reversados:
             estado = "Revertido"
-        elif modulo == "um_reclass_planilla":
-            # referencia_id es directamente el planilla_id
+        elif modulo in ("um_reclass_planilla", "reclass_planilla_principal", "reclass_planilla_extracto"):
+            # referencia_id es directamente el planilla_id (UM / extracto principal)
             origen["planilla_id"] = a.referencia_id
         elif modulo in ("um_reclass", "cc_inicial"):
             info = row_map.get(a.referencia_id)
@@ -297,7 +297,7 @@ def backfill_cuentas_corrientes(
     filas que ya tienen asiento del flujo normal (um_reclass) o un cc_inicial previo."""
     from decimal import Decimal as _D
     from app.models.planilla import Planilla, PlanillaRow
-    from app.services.motor_contable import _get_cuenta_por_codigo, _get_o_crear_cuenta_cliente, _monto
+    from app.services.motor_contable import _get_o_crear_cuenta_cliente, _monto
 
     oid = _org_id(current_user, org_id)
 
@@ -363,10 +363,13 @@ def backfill_cuentas_corrientes(
         for row, pl, cli in pendientes
     ]
 
-    # Pre-cachear cuenta Banco Macro (1 query en lugar de 1 por fila)
-    banco = _get_cuenta_por_codigo(db, "1-1-1-3-1", oid)
+    # Contrapartida del Debe: No identificado 2-1-1-1 (1 query en lugar de 1 por fila).
+    # Antes era Banco Macro; con el modelo de cuentas transitorias (oct 2026) el banco
+    # lo mueve solo el extracto (Banco D / 2-1-1-1 H) y esto reclasifica desde ahí.
+    from app.services.motor_contable import cuenta_banco_transitoria
+    banco = cuenta_banco_transitoria(db, oid, "ingreso")
     if not banco:
-        raise HTTPException(400, "No existe la cuenta Banco Macro (1-1-1-3-1). Verificá el plan de cuentas.")
+        raise HTTPException(400, "No existe la cuenta No identificado (2-1-1-1). Verificá el plan de cuentas.")
     banco_id = banco.id
 
     # Pre-cachear/crear cuentas de clientes únicos (M queries en lugar de N queries)

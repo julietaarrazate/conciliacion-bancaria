@@ -268,12 +268,13 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
 
 - **🔐 Seguridad**: estado completo y pendientes en `docs/security/ESTADO_SEGURIDAD.md` (revisión de
   oct 2026 cerrada en los PRs #254, #258, #259 y #261; quedan decisiones abiertas y un lote menor).
-- **📒 Contabilidad — modelo de cuentas transitorias estilo Odoo (en curso, oct 2026)**: el Banco lo
-  mueve solo el extracto/UM; ingresos contra 2-1-1-1 "No identificado", egresos contra 2-1-1-2
-  "Pagos a imputar" (nueva); pagos/cheques/tarjetas "por banco" van a la transitoria. Reemplaza al
-  PR #217. Corrige que el asiento del extracto sumaba los egresos al Debe del Banco (Org A, ~570 M de
-  más). La corrección de Org A es por contra-asientos con un endpoint de superadmin (dry_run) y
-  **solo se corre en prod con OK explícito de la operadora**.
+- **📒 Contabilidad — modelo de cuentas transitorias estilo Odoo (oct 2026)**: el Banco lo mueve solo
+  el extracto/UM; ingresos contra 2-1-1-1 "No identificado", egresos contra 2-1-1-2 "Pagos a
+  imputar"; todo lo que se paga o cobra "por banco" va a la transitoria (decisión de la operadora:
+  dos transitorias). Ver ADR-015 y `ACCOUNTING_ENGINE.md` §2bis. **Pendiente**: correr
+  `POST /contabilidad/corregir-asientos-banco` en prod para Org A — primero el `dry_run` (también
+  sobre una branch de Neon) y **solo con OK explícito de la operadora** tras ver los saldos; después
+  revisar con `GET /contabilidad/control-banco` y la lista "a revisar". Deuda: multi-banco (D-12).
 - **Frontend — saltos mayores** (Vite 8, React 19, Tailwind 4, Vitest 5): armados y verificados con
   diff visual, sin subir. Falta decidir si se acepta que Tailwind 4 exige iOS 16.4+ / Chrome 111+.
 

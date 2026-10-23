@@ -264,6 +264,39 @@ Cross-ref:
 
 ---
 
+## ADR-015 — Modelo de cuentas transitorias estilo Odoo
+
+- **Contexto:** (verificado contra producción, oct 2026) subir un extracto no
+  generaba asiento; el backfill de arranque generaba para la Organización A un
+  asiento "extracto" con `abs()` de todos los movimientos (los egresos en el Debe
+  del banco), contra la cuenta madre `1-1-1-3` y Pasivo Corriente `2-1-0-0`, con
+  fecha de hoy — Banco inflado en ~570M. Además los pagos/cheques/tarjetas "por
+  banco" movían el banco directo, así que con el extracto registrado el banco se
+  movía dos veces; y "Empezar limpio" borraba TODOS los asientos pero solo
+  rehacía UM y reclasificaciones.
+- **Decisión:** la cuenta del banco (Banco Macro `1-1-1-3-1`) la mueven **solo
+  los datos del banco** (extracto principal y UM). Todo lo que se carga en Cuadra
+  y también aparece en el extracto pega contra una de dos transitorias bajo
+  `2-1-1-0` "Pasivo a Confirmar" (partidas pendientes de imputación):
+  `2-1-1-1` No identificado (cobros a imputar) y `2-1-1-2` Pagos a imputar (nueva).
+  La elección está en un solo lugar (`motor_contable.cuenta_banco_transitoria`).
+  El extracto se registra con un asiento por día (`extracto_banco`, fecha real),
+  idempotente por movimiento (`movimientos_banco.asiento_id`). El arranque ya no
+  genera asientos; el histórico se corrige con un endpoint explícito
+  (`POST /contabilidad/corregir-asientos-banco`, superadmin, dry_run por defecto)
+  que reversa y rehace, sin borrar ni editar.
+- **Consecuencias:** Banco Macro en libros = suma de los movimientos de los
+  extractos (control en `GET /contabilidad/control-banco`); las transitorias en
+  cero significan "todo explicado"; su saldo es lo pendiente de imputar. Los
+  asientos viejos quedan como están hasta correr la corrección (que también rehace
+  los UM viejos con egresos en 2-1-1-1 y lista "a revisar" los asientos de módulos
+  que pegaron directo contra el banco). Multi-banco (un extracto de otro banco igual
+  pega contra Banco Macro) queda pendiente. Detalle en
+  [../architecture/ACCOUNTING_ENGINE.md](../architecture/ACCOUNTING_ENGINE.md) §2bis.
+- **Estado:** Aceptada y vigente (oct 2026).
+
+---
+
 ## Pendiente de revisar
 
 - La forma exacta de persistencia de la config por org (ADR-005) se documenta en

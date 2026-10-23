@@ -237,16 +237,19 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
       setBackfilling(true)
       // dry_run primero — muestra qué haría
       const prev = await apiClient.client.post(`/contabilidad/reset-y-rebuild?dry_run=true${orgQ ? '&' + orgQ.slice(1) : ''}`, {})
-      const { a_borrar, a_crear } = prev.data
+      const { a_borrar, a_conservar, a_crear } = prev.data
       const confirmar = window.confirm(
         `🧹 EMPEZAR LIMPIO — Libro Diario\n\n` +
-        `Borra TODOS los asientos y reconstruye desde cero, prolijo y numerado desde 1, ` +
-        `usando solo las fuentes confiables: importaciones del banco (UM) y conciliaciones agrupadas por planilla. ` +
+        `Rehace desde los datos del banco los asientos de extractos, últimos movimientos (UM) y ` +
+        `conciliaciones de planillas. Todos los demás asientos (pagos, cheques, tarjetas, sueldos, ` +
+        `ajustes manuales…) se conservan tal cual. Después numera todo el Libro Diario desde 1. ` +
         `Vincula la cuenta de cada cliente automáticamente.\n\n` +
-        `Se van a BORRAR: ${a_borrar.asientos} asientos (${a_borrar.detalles} líneas)\n` +
-        `Se van a CREAR: ${a_crear.total_asientos_nuevos} asientos limpios\n` +
+        `Se van a BORRAR y rehacer: ${a_borrar.asientos} asientos (${a_borrar.detalles} líneas)\n` +
+        `Se CONSERVAN sin cambios: ${a_conservar.asientos} asientos\n` +
+        `Se van a CREAR: ${a_crear.total_asientos_nuevos} asientos\n` +
+        `  · ${a_crear.dias_extracto} día(s) de extracto bancario (${a_crear.extractos} extracto(s))\n` +
         `  · ${a_crear.um_lotes} lote(s) de banco (UM)\n` +
-        `  · ${a_crear.um_reclass_planilla} transferencia(s) conciliada(s) (TT)\n\n` +
+        `  · ${a_crear.reclass_planilla_buckets} transferencia(s) conciliada(s) (TT)\n\n` +
         `¿Confirmás empezar limpio?`
       )
       if (!confirmar) return

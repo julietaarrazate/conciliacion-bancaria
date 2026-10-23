@@ -512,4 +512,7 @@ SAFETY_NET_DDL = [
     "ALTER TABLE auditoria ADD COLUMN IF NOT EXISTS organizacion_id INTEGER "
     "REFERENCES organizaciones(id) ON DELETE SET NULL",
     "CREATE INDEX IF NOT EXISTS ix_auditoria_organizacion_id ON auditoria (organizacion_id)",
+    # migración 037 — asiento contable que registró cada movimiento del extracto principal
+    # (FK lógica, sin constraint; ver motor_contable.registrar_asientos_extracto)
+    "ALTER TABLE movimientos_banco ADD COLUMN IF NOT EXISTS asiento_id INTEGER",
 ]

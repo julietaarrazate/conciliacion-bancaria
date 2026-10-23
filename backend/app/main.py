@@ -387,39 +387,20 @@ def _init_db():
     except Exception as ex:
         logger.warning("Error seed contabilidad: %s", ex)
 
-    # 7. Backfill contabilidad — genera asientos de extracto para los existentes.
+    # 7. (Removido, oct 2026) — antes este paso generaba en cada arranque, solo para
+    # la Organización A, un asiento "extracto" por cada extracto sin asiento, con la
+    # función vieja `registrar_extracto`: sumaba abs() de TODOS los movimientos
+    # (los egresos quedaban en el Debe del banco), usaba la cuenta madre 1-1-1-3 y
+    # Pasivo Corriente 2-1-0-0, y la fecha de hoy — inflaba el banco (~570M en
+    # producción). Hoy el asiento del extracto lo genera el upload en vivo
+    # (motor_contable.registrar_asientos_extracto, un asiento por día contra las
+    # transitorias 2-1-1-1 / 2-1-1-2) y el histórico se corrige SOLO a mano, con
+    # POST /contabilidad/corregir-asientos-banco (superadmin, dry_run por defecto).
+    # No reintroducir un backfill automático de asientos en el arranque.
     #
-    # El backfill de PLANILLAS se eliminó (ago 2026): usaba la función vieja
-    # `registrar_planilla` (regla `carga_planilla` → cuenta genérica 2-1-2-0
-    # "Cliente", no la cuenta corriente propia de cada cliente), recorría también
-    # planillas borradas (deleted_at) y, al correr en cada arranque, generaba
-    # asientos de planilla duplicados y mal imputados (cuentas corrientes por
-    # cliente vacías). El asiento por cliente correcto se genera en el flujo de
-    # conciliación con el tratamiento contable que defina la operadora; no
-    # reintroducir este backfill.
-    try:
-        from app.database import SessionLocal as SL
-        from app.models.extracto import ExtractoBancario as Ext
-        from app.models.contabilidad import Asiento as A
-        from app.services.motor_contable import registrar_extracto
-
-        db = SL()
-        ids_ext = {r[0] for r in db.query(A.referencia_id).filter(A.modulo == "extracto").all()}
-        n_ext = 0
-        for e in db.query(Ext).filter(Ext.organizacion_id == 1).all():
-            if e.id not in ids_ext:
-                registrar_extracto(
-                    db=db, extracto_id=e.id,
-                    org_id=e.organizacion_id or 1,
-                    usuario_id=e.creado_por,
-                    nombre_archivo=e.nombre_archivo or "",
-                    movimientos=e.movimientos,
-                )
-                n_ext += 1
-        logger.info("Backfill contabilidad: %d extracto(s)", n_ext)
-        db.close()
-    except Exception as ex:
-        logger.warning("Error backfill contabilidad: %s", ex)
+    # El backfill de PLANILLAS también se eliminó (ago 2026): usaba la función vieja
+    # `registrar_planilla` (cuenta genérica 2-1-2-0), recorría planillas borradas y
+    # duplicaba asientos en cada arranque. No reintroducirlo.
 
     # 7b. Backfill vínculo Cliente → cuenta contable (conservador)
     # Vincula cada cliente sin cuenta a la cuenta existente bajo 2-1-2-0 cuyo

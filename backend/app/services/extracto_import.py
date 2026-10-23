@@ -89,7 +89,8 @@ def crear_extracto_con_movimientos(
     `huella` es el resultado de `fingerprint(movs)` (se guarda en `fingerprint`).
     Con `commit=False` solo hace `flush` (el que llama confirma todo junto, p. ej. el
     importador de PDF marca el borrador como confirmado en la misma transacción).
-    No genera asiento contable: el extracto base no lo lleva (ver `upload_extracto`).
+    No genera el asiento contable: lo hace el que llama, después del commit, con
+    `motor_contable.registrar_asientos_extracto` (upload de Excel y PDF nuevo).
     """
     extracto = ExtractoBancario(nombre_archivo=nombre_archivo, creado_por=usuario_id, fingerprint=huella,
                                 banco=banco, organizacion_id=org_id)

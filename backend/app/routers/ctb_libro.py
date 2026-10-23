@@ -11,6 +11,8 @@ Rutas expuestas (bajo el prefix /contabilidad del router padre):
   GET    /sumas-saldo
   GET    /balance
   POST   /reset-y-rebuild
+  POST   /corregir-asientos-banco
+  GET    /control-banco
   POST   /asiento-manual
   PATCH  /asientos/{asiento_id}/fecha
   DELETE /asientos/{asiento_id}
@@ -496,268 +498,133 @@ def reset_y_rebuild_asientos(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin),
 ):
-    """Borra TODOS los asientos de la org y los reconstruye desde los datos reales:
-    - um_lote: un asiento por cada lote de UM importado en el extracto
-    - reclasificación por planilla conciliada (agrupada), un bucket por ORIGEN del
-      movimiento (extracto principal → Pasivo Corriente; UM → No identificado —
-      mismo criterio que el flujo vivo, ver conciliacion.py::conciliar_planilla),
-      acreditando al cliente por el NETO y separando la comisión (Planilla.porcentaje_comision)
-      en un asiento aparte contra Comisiones ganadas cuando corresponde.
-    Sólo superadmin puede ejecutarlo (dry_run=false).
+    """"Empezar limpio": borra y reconstruye desde los datos reales SOLO los
+    asientos que sabe reconstruir (modelo de cuentas transitorias, oct 2026):
+    - extracto_banco: un asiento por día del extracto principal (Banco Macro
+      contra 2-1-1-1 / 2-1-1-2), solo extractos no borrados;
+    - um_lote: un asiento por lote de UM importado (mismas cuentas);
+    - reclasificación por planilla conciliada, un bucket por ORIGEN del
+      movimiento (reclass_planilla_principal / um_reclass_planilla), siempre
+      No identificado D / Cliente H por el NETO + la comisión aparte;
+    más las versiones viejas de esos mismos módulos (extracto, um_mov, um_reclass,
+    cc_inicial, reclass_planilla_extracto, planilla) y los reversos de todos.
+    TODO lo demás (pagos/egresos y sus reversos, cheques, tarjetas, sueldos,
+    liquidaciones, caja, ARCA, ajustes manuales…) se CONSERVA intacto. Al final
+    renumera 1..N todos los asientos de la org por (fecha, id), incluidos los
+    conservados. Idempotente. Solo superadmin. Una sola transacción.
     """
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
 
-    from decimal import Decimal as _D
-    from datetime import date as _date
-    from app.models.extracto import MovimientoBanco, ExtractoBancario
-    from app.models.planilla import Planilla, PlanillaRow
-    from app.models.cliente import Cliente
-    from app.services.motor_contable import (
-        _get_cuenta_por_codigo, _get_o_crear_cuenta_cliente, _monto,
-    )
+    from app.services.asientos_banco import plan_reconstruccion, reconstruir_asientos_banco
+    from app.services.auditoria import registrar_log
 
     oid = _org_id(current_user, org_id)
 
-    # Self-heal: garantiza la columna numero_asiento aunque Render no haya
-    # corrido el safety net de startup todavía. Sin esto, la query de renumerado
-    # falla con "column numero_asiento does not exist" y revierte el borrado.
-    try:
-        db.execute(text("ALTER TABLE asientos ADD COLUMN IF NOT EXISTS numero_asiento INTEGER"))
-        db.commit()
-    except Exception as _col_ex:
-        db.rollback()
-        logger.warning("reset-y-rebuild: no se pudo asegurar numero_asiento: %s", _col_ex)
-
-    # ── Conteos actuales ──────────────────────────────────────────
-    n_asientos = db.query(Asiento).filter(Asiento.organizacion_id == oid).count()
-    n_detalles = (
-        db.query(AsientoDetalle)
-        .join(Asiento, AsientoDetalle.asiento_id == Asiento.id)
-        .filter(Asiento.organizacion_id == oid)
-        .count()
-    )
-
-    # ── Movimientos UM agrupados por lote ─────────────────────────
-    um_movs = (
-        db.query(MovimientoBanco)
-        .join(ExtractoBancario, MovimientoBanco.extracto_id == ExtractoBancario.id)
-        .filter(
-            ExtractoBancario.organizacion_id == oid,
-            MovimientoBanco.source == "um",
-        )
-        .order_by(MovimientoBanco.um_lote, MovimientoBanco.id)
-        .all()
-    )
-    lotes = {}
-    for m in um_movs:
-        lote_key = m.um_lote or 0
-        lotes.setdefault(lote_key, []).append(m)
-    n_um_lotes = len(lotes)
-
-    # ── Planillas conciliadas (agrupadas) ────────────────────────
-    # No exigimos cuenta_contable_id: el loop de rebuild crea/vincula la cuenta
-    # de cada cliente (_get_o_crear_cuenta_cliente), así el arranque limpio es
-    # un one-shot — no hace falta correr "crear cuentas faltantes" antes.
-    filas_ok = (
-        db.query(PlanillaRow, Planilla, Cliente)
-        .join(Planilla, PlanillaRow.planilla_id == Planilla.id)
-        .join(Cliente, Planilla.cliente_id == Cliente.id)
-        .filter(
-            Planilla.organizacion_id == oid,
-            Planilla.deleted_at.is_(None),
-            PlanillaRow.status.in_(["ok", "OK", "PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA"]),
-        )
-        .all()
-    )
-    # Agrupar por (planilla, ORIGEN del movimiento) → un bucket por combinación.
-    # El origen determina de qué cuenta salió realmente la plata (no es
-    # intercambiable): extracto principal → Pasivo Corriente (2-1-0-0), UM →
-    # No identificado (2-1-1-1) — mismo criterio que el flujo vivo
-    # (conciliacion.py::conciliar_planilla). Una planilla con filas de ambos
-    # orígenes genera dos buckets independientes.
-    ids_acreditados = {
-        row.orden_movimiento_acreditado for row, _p, _c in filas_ok
-        if row.orden_movimiento_acreditado
-    }
-    origen_por_mov = {
-        mid: ("um" if src == "um" else "extracto")
-        for mid, src in (
-            db.query(MovimientoBanco.id, MovimientoBanco.source)
-            .filter(MovimientoBanco.id.in_(ids_acreditados))
-            .all()
-            if ids_acreditados else []
-        )
-    }
-    planillas_map: dict = {}
-    for row, planilla, cliente in filas_ok:
-        origen = origen_por_mov.get(row.orden_movimiento_acreditado)
-        if origen is None:
-            continue
-        key = (planilla.id, origen)
-        if key not in planillas_map:
-            planillas_map[key] = {"planilla": planilla, "cliente": cliente, "origen": origen, "rows": []}
-        planillas_map[key]["rows"].append(row)
-    n_planillas = len(planillas_map)
-
-    if dry_run:
-        return {
-            "dry_run": True,
-            "a_borrar": {"asientos": n_asientos, "detalles": n_detalles},
-            "a_crear": {
-                "um_lotes": n_um_lotes,
-                "reclass_planilla_buckets": n_planillas,
-                "total_asientos_nuevos": "≥ " + str(n_um_lotes + n_planillas) + " (+1 por bucket con comisión > 0)",
-            },
-            "msg": "Ejecutá con dry_run=false para aplicar los cambios.",
-        }
-
-    # ── EJECUTAR: borrar todo ─────────────────────────────────────
-    try:
-        ids_asientos = [
-            a.id for a in db.query(Asiento.id).filter(Asiento.organizacion_id == oid).all()
-        ]
-        if ids_asientos:
-            db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id.in_(ids_asientos)).delete(synchronize_session=False)
-            db.query(Asiento).filter(Asiento.id.in_(ids_asientos)).delete(synchronize_session=False)
-        db.flush()
-
-        banco_macro = _get_cuenta_por_codigo(db, "1-1-1-3-1", oid)
-        no_id       = _get_cuenta_por_codigo(db, "2-1-1-1", oid)
-        if not banco_macro or not no_id:
+    # Self-heal: garantiza las columnas que usa el rebuild aunque Render no haya
+    # corrido el safety net de startup todavía (numero_asiento para renumerar,
+    # movimientos_banco.asiento_id para marcar los movimientos registrados).
+    for ddl in (
+        "ALTER TABLE asientos ADD COLUMN IF NOT EXISTS numero_asiento INTEGER",
+        "ALTER TABLE movimientos_banco ADD COLUMN IF NOT EXISTS asiento_id INTEGER",
+    ):
+        try:
+            db.execute(text(ddl))
+            db.commit()
+        except Exception as _col_ex:
             db.rollback()
-            raise HTTPException(status_code=500, detail="Plan de cuentas incompleto: faltan cuentas base (Banco Macro o No Identificado)")
+            logger.warning("reset-y-rebuild: no se pudo asegurar columna (%s): %s", ddl, _col_ex)
 
-        contador = 0
+    plan = plan_reconstruccion(db, oid)
+    if dry_run:
+        return {"dry_run": True, **plan, "msg": "Ejecutá con dry_run=false para aplicar los cambios."}
 
-        # ── Reconstruir um_lote ───────────────────────────────────
-        # Acumula asientos y hace un único flush para obtener todos los IDs
-        pending_um: list = []
-        for lote_key, movs in sorted(lotes.items()):
-            total_pos = sum(max(_monto(m.monto), _D("0")) for m in movs)
-            total_neg = sum(abs(min(_monto(m.monto), _D("0"))) for m in movs)
-            if total_pos <= 0 and total_neg <= 0:
-                continue
-            primer = movs[0]
-            fecha_ref = primer.fecha if isinstance(primer.fecha, _date) else hoy_art()
-            a = Asiento(
-                fecha=fecha_ref,
-                descripcion=f"UM lote {lote_key} — {len(movs)} movimientos (extracto #{primer.extracto_id})",
-                modulo="um_lote",
-                referencia_id=primer.id,
-                organizacion_id=oid,
-                usuario_id=current_user.id,
-            )
-            db.add(a)
-            pending_um.append((a, total_pos, total_neg))
-        db.flush()
-        for a, total_pos, total_neg in pending_um:
-            if total_pos > 0:
-                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=total_pos, haber=_D("0")))
-                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=_D("0"), haber=total_pos))
-            if total_neg > 0:
-                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=total_neg, haber=_D("0")))
-                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=_D("0"), haber=total_neg))
-        contador += len(pending_um)
-
-        # ── Reconstruir reclasificación por planilla, un bucket por origen ───
-        # (Pasivo Corriente para extracto principal, No identificado para UM —
-        # ver docstring). Acredita al cliente por el NETO y separa la comisión
-        # (Planilla.porcentaje_comision) en un asiento aparte.
-        pasivo_cte   = _get_cuenta_por_codigo(db, "2-1-0-0", oid)
-        comisiones   = _get_cuenta_por_codigo(db, "3-1-1-0", oid)
-        cuenta_origen_por_bucket = {"um": no_id, "extracto": pasivo_cte}
-
-        _cuenta_cache: dict = {}
-        pending_rp: list = []      # (asiento, monto_neto, cuenta_cliente_id, cuenta_origen_id)
-        pending_rp_com: list = []  # (asiento, monto_comision, cuenta_origen_id, cuenta_comisiones_id)
-        from datetime import datetime as _dt
-        for (planilla_id, origen), grupo in planillas_map.items():
-            planilla = grupo["planilla"]
-            cliente  = grupo["cliente"]
-            rows     = grupo["rows"]
-            cta_origen = cuenta_origen_por_bucket.get(origen)
-            if not cta_origen:
-                continue
-            if cliente.id not in _cuenta_cache:
-                _cuenta_cache[cliente.id] = _get_o_crear_cuenta_cliente(db, cliente.id, oid)
-            cuenta_cli = _cuenta_cache[cliente.id]
-            if not cuenta_cli:
-                continue
-            total_bruto = sum(abs(_monto(r.monto)) for r in rows)
-            if total_bruto <= 0:
-                continue
-            comision_pct = _D(str(planilla.porcentaje_comision or 0))
-            comision_monto = round(total_bruto * comision_pct / _D("100"), 2) if comision_pct > 0 else _D("0")
-            neto = total_bruto - comision_monto
-
-            # Fecha: la más reciente de las filas, o fecha_carga de la planilla
-            fechas = [r.fecha_acred for r in rows if r.fecha_acred]
-            fecha = max(fechas) if fechas else (planilla.fecha_carga or hoy_art())
-            if not isinstance(fecha, _date):
-                try:
-                    fecha = _dt.strptime(str(fecha)[:10], "%Y-%m-%d").date()
-                except Exception:
-                    fecha = hoy_art()
-
-            modulo = "um_reclass_planilla" if origen == "um" else "reclass_planilla_extracto"
-            a = Asiento(
-                fecha=fecha,
-                descripcion=f"TT {cliente.nombre} — {planilla.nombre_archivo}",
-                modulo=modulo,
-                referencia_id=planilla_id,
-                organizacion_id=oid,
-                usuario_id=current_user.id,
-            )
-            db.add(a)
-            pending_rp.append((a, neto, cuenta_cli.id, cta_origen.id))
-
-            if comision_monto > 0 and comisiones:
-                a2 = Asiento(
-                    fecha=fecha,
-                    descripcion=f"Comisión {comision_pct}% — {cliente.nombre}",
-                    modulo=modulo + "_comision",
-                    referencia_id=planilla_id,
-                    organizacion_id=oid,
-                    usuario_id=current_user.id,
-                )
-                db.add(a2)
-                pending_rp_com.append((a2, comision_monto, cta_origen.id, comisiones.id))
-        db.flush()
-        for a, monto, cuenta_cli_id, cuenta_origen_id in pending_rp:
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_origen_id, debe=monto,    haber=_D("0")))
-            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_cli_id,    debe=_D("0"),  haber=monto))
-        for a2, monto, cuenta_origen_id, cuenta_comisiones_id in pending_rp_com:
-            db.add(AsientoDetalle(asiento_id=a2.id, cuenta_id=cuenta_origen_id,     debe=monto,   haber=_D("0")))
-            db.add(AsientoDetalle(asiento_id=a2.id, cuenta_id=cuenta_comisiones_id, debe=_D("0"), haber=monto))
-        contador += len(pending_rp) + len(pending_rp_com)
-
-        # ── Renumerar correlativamente ────────────────────────────
-        nuevos = (
-            db.query(Asiento)
-            .filter(Asiento.organizacion_id == oid)
-            .order_by(Asiento.fecha, Asiento.id)
-            .all()
-        )
-        for i, a in enumerate(nuevos, start=1):
-            a.numero_asiento = i
-
+    try:
+        res = reconstruir_asientos_banco(db, oid, current_user.id)
         db.commit()
-        # Invalidar caches derivados (cartera + reportes): los asientos cambiaron
-        _invalidar_reportes(oid)
-        return {
-            "dry_run": False,
-            "borrados": {"asientos": n_asientos, "detalles": n_detalles},
-            "creados": contador,
-            "msg": f"Libro Diario reconstruido: {contador} asientos numerados del 1 al {contador}.",
-        }
-
-    except HTTPException:
-        raise
     except Exception as ex:
         db.rollback()
         logger.error("reset-y-rebuild error: %s", ex)
         raise HTTPException(status_code=500, detail=str(ex))
+    _invalidar_reportes(oid)
+    registrar_log(db, current_user.id, "asientos", 0, "RESET_Y_REBUILD", {
+        "org_id": oid, "borrados": res["borrados"], "creados": res["creados"],
+        "conservados": res["conservados"],
+    })
+    return {
+        "dry_run": False,
+        **res,
+        "msg": (
+            f"Libro Diario reconstruido: {res['creados']} asientos nuevos, {res['conservados']} "
+            f"conservados, numerados del 1 al {res['total_libro']}."
+        ),
+    }
+
+
+@router.post("/corregir-asientos-banco")
+def corregir_asientos_banco_endpoint(
+    dry_run: bool = Query(True, description="True = solo muestra qué haría (no guarda nada); False = ejecuta"),
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_superadmin),
+):
+    """Corrige el histórico al modelo de cuentas transitorias (oct 2026): reversa
+    los asientos "extracto" viejos y las reclasificaciones que debitaron Pasivo
+    Corriente 2-1-0-0, rehace esas reclasificaciones contra 2-1-1-1 y registra
+    los movimientos del extracto principal que no tienen asiento. Nunca borra ni
+    edita asientos existentes ni renumera. Idempotente. Solo superadmin, dry_run
+    por defecto (el dry_run arma todo y hace rollback: no persiste nada).
+    Detalle en services/asientos_banco.py::corregir_asientos_banco."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    from app.services.asientos_banco import corregir_asientos_banco
+    from app.services.auditoria import registrar_log
+
+    oid = _org_id(current_user, org_id)
+    try:
+        res = corregir_asientos_banco(db, oid, current_user.id, dry_run=dry_run)
+        if dry_run:
+            return {**res, "msg": "Ejecutá con dry_run=false para aplicar la corrección."}
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception as ex:
+        db.rollback()
+        logger.error("corregir-asientos-banco error (org %s): %s", oid, ex)
+        raise HTTPException(status_code=500, detail=str(ex))
+    _invalidar_reportes(oid)
+    if not res["nada_que_corregir"]:
+        registrar_log(db, current_user.id, "asientos", 0, "CORREGIR_ASIENTOS_BANCO", {
+            "org_id": oid,
+            "reversados": [a["id"] for a in res["a_reversar"]],
+            "creados_por_modulo": res["a_crear_por_modulo"],
+            "conflictos": len(res["conflictos"]),
+            "a_revisar": {"cantidad": res["a_revisar"]["cantidad"], "total": res["a_revisar"]["total"]},
+            "saldos_antes": res["saldos_antes"],
+            "saldos_despues": res["saldos_despues"],
+        })
+    return {
+        **res,
+        "msg": (
+            "Nada que corregir." if res["nada_que_corregir"]
+            else f"Corrección aplicada: {len(res['a_crear'])} asientos nuevos ({len(res['a_reversar'])} reversos de asientos viejos)."
+        ),
+    }
+
+
+@router.get("/control-banco")
+def get_control_banco(
+    org_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("view_accounting")),
+):
+    """Control del banco: saldo de Banco Macro en el Libro vs. la suma de los
+    movimientos de los extractos y el saldo del último extracto, más los saldos
+    de las transitorias 2-1-1-1 (cobros a imputar) y 2-1-1-2 (pagos a imputar)."""
+    from app.services.asientos_banco import control_banco
+
+    return control_banco(db, _org_id(current_user, org_id))
 
 
 # ── Ajuste manual del Libro Diario ──────────────────────────────────────────

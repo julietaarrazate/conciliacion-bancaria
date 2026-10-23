@@ -43,6 +43,10 @@ class MovimientoBanco(Base):
     fecha_acred = Column(Date, nullable=True)
     source = Column(String, nullable=True, default='extracto')
     um_lote = Column(Integer, nullable=True)
+    # Asiento "extracto_banco" que registró este movimiento (solo extracto principal;
+    # los UM los registra el asiento um_lote). FK lógica, sin constraint. NULL = todavía
+    # sin asiento. Ver motor_contable.registrar_asientos_extracto.
+    asiento_id = Column(Integer, nullable=True)
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=True, default=1)
 
     # Relationships

@@ -158,6 +158,13 @@ def purgar(
         reversar_asientos(db, modulo="extracto", referencia_id=registro_id,
                           org_id=item.organizacion_id, usuario_id=current_user.id,
                           motivo=f"Extracto purgado de papelera por {current_user.email}")
+        # Asientos del modelo nuevo (uno por día, "extracto_banco"): se ubican por
+        # MovimientoBanco.asiento_id antes de borrar los movimientos.
+        from app.services.motor_contable import asientos_de_extracto
+        for _a in asientos_de_extracto(db, registro_id, item.organizacion_id):
+            reversar_asientos(db, modulo=_a.modulo, referencia_id=_a.referencia_id,
+                              org_id=item.organizacion_id, usuario_id=current_user.id,
+                              motivo=f"Extracto purgado de papelera por {current_user.email}")
 
         # Desligar planillas y rows
         db.query(Planilla).filter(Planilla.extracto_id == registro_id)\

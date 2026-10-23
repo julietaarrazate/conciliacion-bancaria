@@ -42,6 +42,8 @@ REGLAS_TEST = [
 CUENTAS_TEST = [
     "1-1-1-2", "1-1-1-3", "1-1-1-3-1", "1-1-2-0", "2-1-0-0",
     "2-1-1-1", "2-1-2-0", "3-1-1-0", "3-2-0-0",
+    # Transitoria de pagos (modelo de cuentas transitorias, oct 2026)
+    "2-1-1-2",
     # Cuentas cheques v2 (regla contador junio 2026)
     "1-1-2-1", "2-1-3-1", "3-1-3-0", "3-2-2-1",
 ]
@@ -78,10 +80,6 @@ def db():
     session.close()
 
 
-def _mov(monto):
-    return SimpleNamespace(monto=monto)
-
-
 def _row(monto, status="ok"):
     return SimpleNamespace(monto=monto, status=status)
 
@@ -96,38 +94,66 @@ def _asientos_de(db, modulo, ref_id):
 
 # ─── Extracto ────────────────────────────────────────────────────────────────
 
-def test_extracto_crea_asiento_con_total_correcto(db):
-    movs = [_mov(1000), _mov(2500), _mov(500)]
-    mc.registrar_extracto(db, extracto_id=1, org_id=ORG_ID, usuario_id=1,
-                          nombre_archivo="test.xlsx", movimientos=movs)
+# Modelo de cuentas transitorias (oct 2026): un asiento "extracto_banco" por día,
+# ingresos Banco D / 2-1-1-1 H y egresos 2-1-1-2 D / Banco H. Reemplaza a los
+# tests de registrar_extracto (abs() de todo contra Pasivo Corriente), que se
+# eliminó por inflar el banco con los egresos. Más casos en
+# tests/test_contabilidad_transitorias.py.
 
-    asientos = _asientos_de(db, "extracto", 1)
+def _extracto_con_movs(db, montos, fecha=date(2026, 5, 23)):
+    from app.models.extracto import ExtractoBancario, MovimientoBanco
+    ext = ExtractoBancario(nombre_archivo="x.xlsx", creado_por=1, organizacion_id=ORG_ID)
+    db.add(ext)
+    db.flush()
+    for i, m in enumerate(montos, start=1):
+        db.add(MovimientoBanco(extracto_id=ext.id, orden=i, fecha=fecha, monto=Decimal(str(m)),
+                               source="extracto", organizacion_id=ORG_ID))
+    db.commit()
+    return ext
+
+
+def _asiento_legacy_extracto(db, ref_id, monto):
+    """Asiento como lo armaba el viejo registrar_extracto (regla carga_extracto)."""
+    regla = mc._get_regla(db, "carga_extracto", ORG_ID)
+    mc._crear_asiento(db, regla, date(2026, 5, 23), "Extracto: x.xlsx", "extracto",
+                      ref_id, ORG_ID, 1, Decimal(str(monto)))
+    db.commit()
+
+
+def test_extracto_crea_asiento_por_dia_con_total_correcto(db):
+    ext = _extracto_con_movs(db, [1000, 2500, 500])
+    assert mc.registrar_asientos_extracto(db, ext.id, 1) is True
+
+    asientos = db.query(Asiento).filter(Asiento.modulo == "extracto_banco").all()
     assert len(asientos) == 1
+    assert asientos[0].fecha == date(2026, 5, 23)
     assert len(asientos[0].lineas) == 2
-    total_debe  = sum(l.debe  for l in asientos[0].lineas)
-    total_haber = sum(l.haber for l in asientos[0].lineas)
-    assert total_debe  == 4000.0
-    assert total_haber == 4000.0
+    assert sum(l.debe for l in asientos[0].lineas) == Decimal("4000")
+    assert sum(l.haber for l in asientos[0].lineas) == Decimal("4000")
 
 
 def test_extracto_idempotente(db):
-    movs = [_mov(1000)]
-    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", movs)
-    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", movs)
-    assert len(_asientos_de(db, "extracto", 1)) == 1
+    ext = _extracto_con_movs(db, [1000])
+    mc.registrar_asientos_extracto(db, ext.id, 1)
+    mc.registrar_asientos_extracto(db, ext.id, 1)
+    assert db.query(Asiento).filter(Asiento.modulo == "extracto_banco").count() == 1
 
 
-def test_extracto_monto_cero_no_crea_asiento(db):
-    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", [])
-    assert len(_asientos_de(db, "extracto", 1)) == 0
+def test_extracto_sin_movimientos_no_crea_asiento(db):
+    ext = _extracto_con_movs(db, [])
+    mc.registrar_asientos_extracto(db, ext.id, 1)
+    assert db.query(Asiento).filter(Asiento.modulo == "extracto_banco").count() == 0
 
 
-def test_extracto_suma_montos_negativos_en_abs(db):
-    """Los retiros bancarios vienen negativos — el asiento debe sumar el absoluto."""
-    movs = [_mov(1000), _mov(-300)]
-    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", movs)
-    total = sum(l.debe for l in _asientos_de(db, "extracto", 1)[0].lineas)
-    assert total == 1300.0
+def test_extracto_egresos_van_al_haber_del_banco(db):
+    """Los débitos del banco vienen negativos: van al HABER del banco contra
+    Pagos a imputar, no se suman en abs() al Debe (bug del modelo viejo)."""
+    ext = _extracto_con_movs(db, [1000, -300])
+    mc.registrar_asientos_extracto(db, ext.id, 1)
+    a = db.query(Asiento).filter(Asiento.modulo == "extracto_banco").one()
+    banco = db.query(PlanCuenta).filter(PlanCuenta.codigo == "1-1-1-3-1").first()
+    assert sum(l.debe for l in a.lineas if l.cuenta_id == banco.id) == Decimal("1000")
+    assert sum(l.haber for l in a.lineas if l.cuenta_id == banco.id) == Decimal("300")
 
 
 # ─── Planilla ────────────────────────────────────────────────────────────────
@@ -257,9 +283,12 @@ def test_cheque_rechazo_sin_gastos_solo_reversion(db):
 
 def test_cheque_ciclo_completo_transitorias_netean_cero(db):
     """Ciclo registro→acreditación: Cartera y Depositados deben quedar en 0.
-    Saldos finales esperados: Banco +monto (D), Cliente +neto (H), Comisión (H)."""
+    Saldos finales esperados: No identificado +monto (D) — lo cancela el crédito
+    del extracto (Banco D / 2-1-1-1 H) —, Cliente +neto (H), Comisión (H).
+    (Antes del modelo de cuentas transitorias, oct 2026, el +monto iba a Banco.)"""
     fecha = date(2026, 5, 23)
-    banco_id   = _cuenta_id(db, "1-1-1-3-1")
+    banco_elegido_id = _cuenta_id(db, "1-1-1-3-1")
+    banco_id   = _cuenta_id(db, "2-1-1-1")
     cliente_id = _cuenta_id(db, "2-1-2-0")
     cartera_id = _cuenta_id(db, "1-1-2-1")
     deposit_id = _cuenta_id(db, "2-1-3-1")
@@ -267,7 +296,7 @@ def test_cheque_ciclo_completo_transitorias_netean_cero(db):
     mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=100000, comision=2000, fecha=fecha)
     mc.acreditar_cheque(db, cheque_id=1, org_id=ORG_ID, usuario_id=1, titular="X",
                         monto=100000, neto=98000,
-                        banco_cuenta_id=banco_id, cliente_cuenta_id=cliente_id, fecha=fecha)
+                        banco_cuenta_id=banco_elegido_id, cliente_cuenta_id=cliente_id, fecha=fecha)
 
     saldos: dict = {}
     for a in db.query(Asiento).filter(Asiento.organizacion_id == ORG_ID).all():
@@ -296,19 +325,21 @@ def test_egreso_idempotente(db):
     assert len(_asientos_de(db, "egreso", 1)) == 1
 
 
-def test_egreso_banco_usa_cuenta_hoja_banco_macro(db):
-    """Un egreso por banco debe acreditar Banco Macro (1-1-1-3-1, hoja), NO la madre 1-1-1-3."""
+def test_egreso_banco_acredita_pagos_a_imputar(db):
+    """Un egreso por banco acredita la transitoria Pagos a imputar (2-1-1-2), NO
+    el banco: el banco lo mueve el débito del extracto (modelo de cuentas
+    transitorias, oct 2026; antes acreditaba Banco Macro 1-1-1-3-1)."""
     fecha = date(2026, 5, 23)
     mc.registrar_egreso(db, egreso_id=2, org_id=ORG_ID, usuario_id=1,
                         tipo="gasto", forma_pago="banco",
                         monto=800, fecha=fecha, concepto="Impuestos")
     asientos = _asientos_de(db, "egreso", 2)
     assert len(asientos) == 1
-    banco_macro = db.query(PlanCuenta).filter(
-        PlanCuenta.codigo == "1-1-1-3-1", PlanCuenta.organizacion_id == ORG_ID).first()
+    pagos = db.query(PlanCuenta).filter(
+        PlanCuenta.codigo == "2-1-1-2", PlanCuenta.organizacion_id == ORG_ID).first()
     haber_lineas = [l for l in asientos[0].lineas if l.haber > 0]
     assert len(haber_lineas) == 1
-    assert haber_lineas[0].cuenta_id == banco_macro.id
+    assert haber_lineas[0].cuenta_id == pagos.id
 
 
 def test_egreso_efectivo_usa_cuenta_efectivo(db):
@@ -340,10 +371,10 @@ def test_ingreso_efectivo_upsert(db):
 
 def test_org_sin_regla_no_crashea(db):
     """Si la regla no existe para esa org, debe retornar sin error ni asiento."""
-    db.query(ReglaContable).filter(ReglaContable.evento == "carga_extracto").delete()
+    db.query(ReglaContable).filter(ReglaContable.evento == "carga_efectivo").delete()
     db.commit()
-    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", [_mov(1000)])
-    assert len(_asientos_de(db, "extracto", 1)) == 0
+    mc.registrar_ingreso_efectivo(db, 1, ORG_ID, 1, Decimal("1000"), date(2026, 5, 23))
+    assert len(_asientos_de(db, "caja_efectivo", 1)) == 0
 
 
 def test_monto_negativo_no_crea_asiento_planilla(db):
@@ -356,7 +387,7 @@ def test_monto_negativo_no_crea_asiento_planilla(db):
 def test_partida_doble_siempre_balanceada(db):
     """Invariante crítica: debe == haber en TODO asiento generado."""
     fecha = date(2026, 5, 23)
-    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", [_mov(1234.56)])
+    _asiento_legacy_extracto(db, 1, 1234.56)
     mc.registrar_planilla(db, 1, ORG_ID, 1, "X", "x.xlsx", [_row(789.12)], fecha)
     mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=999, comision=50, fecha=fecha)
     mc.registrar_egreso(db, 1, ORG_ID, 1, tipo="proveedor", forma_pago="efectivo",
@@ -371,7 +402,7 @@ def test_partida_doble_siempre_balanceada(db):
 # ─── Reversion contable ──────────────────────────────────────────────────────
 
 def test_reversar_crea_asiento_con_debe_haber_invertidos(db):
-    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", [_mov(1000)])
+    _asiento_legacy_extracto(db, 1, 1000)
     original = _asientos_de(db, "extracto", 1)[0]
     debe_orig = [l.debe for l in original.lineas]
     haber_orig = [l.haber for l in original.lineas]
@@ -390,7 +421,7 @@ def test_reversar_crea_asiento_con_debe_haber_invertidos(db):
 
 def test_reversar_es_idempotente(db):
     """Llamar reversar dos veces no debe crear dos reversos."""
-    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", [_mov(1000)])
+    _asiento_legacy_extracto(db, 1, 1000)
     mc.reversar_asientos(db, "extracto", 1, ORG_ID, usuario_id=1)
     creados_2 = mc.reversar_asientos(db, "extracto", 1, ORG_ID, usuario_id=1)
     assert creados_2 == 0
@@ -436,7 +467,7 @@ def test_reverso_mantiene_invariante_partida_doble(db):
 
 def test_reverso_referencia_al_asiento_original(db):
     """Trazabilidad: el reverso debe apuntar al asiento original via referencia_id."""
-    mc.registrar_extracto(db, 1, ORG_ID, 1, "x.xlsx", [_mov(500)])
+    _asiento_legacy_extracto(db, 1, 500)
     original = _asientos_de(db, "extracto", 1)[0]
 
     mc.reversar_asientos(db, "extracto", 1, ORG_ID, usuario_id=1)
@@ -550,24 +581,25 @@ def test_reclasificacion_planilla_bajar_comision_a_cero_borra_asiento_comision(d
     assert sum(l.debe for l in principal.lineas) == Decimal("10000.00")
 
 
-def test_reclasificacion_planilla_origen_extracto_usa_pasivo_corriente_y_modulo_propio(db):
-    """cuenta_origen_codigo='2-1-0-0' (extracto principal) postea contra Pasivo
-    Corriente, no contra No identificado, y usa un modulo DISTINTO al de UM —
-    para que ambos buckets convivan sin pisarse en la MISMA planilla (un cliente
-    puede tener filas conciliadas contra el extracto y contra UM a la vez)."""
+def test_reclasificacion_planilla_origen_extracto_usa_no_identificado_y_modulo_propio(db):
+    """origen='extracto' (extracto principal) debita No identificado 2-1-1-1 —
+    igual que UM, porque el crédito del extracto quedó ahí (modelo de cuentas
+    transitorias, oct 2026; antes era Pasivo Corriente 2-1-0-0) — pero usa un
+    módulo DISTINTO al de UM, para que ambos buckets convivan sin pisarse en la
+    MISMA planilla (un cliente puede tener filas contra el extracto y contra UM)."""
     cli, cuenta_cli = _cliente_con_cuenta(db)
-    pasivo = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-0-0", PlanCuenta.organizacion_id == ORG_ID).first()
+    no_id = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-1-1", PlanCuenta.organizacion_id == ORG_ID).first()
 
     mc.registrar_reclasificacion_planilla(
         db, planilla_id=30, org_id=ORG_ID, usuario_id=1,
         cliente_id=cli.id, cliente_nombre=cli.nombre,
         total_monto=Decimal("7000"), fecha=date(2026, 8, 20),
-        cuenta_origen_codigo="2-1-0-0",
+        origen="extracto",
     )
-    asientos_extracto = _asientos_de(db, "reclass_planilla_extracto", 30)
+    asientos_extracto = _asientos_de(db, "reclass_planilla_principal", 30)
     assert len(asientos_extracto) == 1
     origen_l = next(l for l in asientos_extracto[0].lineas if l.debe > 0)
-    assert origen_l.cuenta_id == pasivo.id
+    assert origen_l.cuenta_id == no_id.id
 
     # El mismo planilla_id, bucket UM (default) -> asiento aparte, no choca.
     mc.registrar_reclasificacion_planilla(
@@ -575,7 +607,7 @@ def test_reclasificacion_planilla_origen_extracto_usa_pasivo_corriente_y_modulo_
         cliente_id=cli.id, cliente_nombre=cli.nombre,
         total_monto=Decimal("1000"), fecha=date(2026, 8, 20),
     )
-    assert len(_asientos_de(db, "reclass_planilla_extracto", 30)) == 1
+    assert len(_asientos_de(db, "reclass_planilla_principal", 30)) == 1
     assert len(_asientos_de(db, "um_reclass_planilla", 30)) == 1
 
 
@@ -620,18 +652,18 @@ def test_conciliar_planilla_genera_asiento_por_origen_con_comision(db):
     )
     assert resultado["acreditadas"] == 2
 
-    principal_extracto = _asientos_de(db, "reclass_planilla_extracto", 99)
-    comision_extracto = _asientos_de(db, "reclass_planilla_extracto_comision", 99)
+    principal_extracto = _asientos_de(db, "reclass_planilla_principal", 99)
+    comision_extracto = _asientos_de(db, "reclass_planilla_principal_comision", 99)
     principal_um = _asientos_de(db, "um_reclass_planilla", 99)
     comision_um = _asientos_de(db, "um_reclass_planilla_comision", 99)
     assert len(principal_extracto) == 1 and len(comision_extracto) == 1
     assert len(principal_um) == 1 and len(comision_um) == 1
 
-    pasivo = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-0-0", PlanCuenta.organizacion_id == ORG_ID).first()
     no_id = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-1-1", PlanCuenta.organizacion_id == ORG_ID).first()
 
+    # Modelo de cuentas transitorias (oct 2026): ambos orígenes debitan 2-1-1-1.
     origen_pe = next(l for l in principal_extracto[0].lineas if l.debe > 0)
-    assert origen_pe.cuenta_id == pasivo.id
+    assert origen_pe.cuenta_id == no_id.id
     assert origen_pe.debe == Decimal("96040.00")  # 98000 - 2%
 
     origen_pu = next(l for l in principal_um[0].lineas if l.debe > 0)
