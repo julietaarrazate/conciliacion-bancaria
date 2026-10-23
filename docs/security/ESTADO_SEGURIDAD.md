@@ -17,7 +17,7 @@ en producción para verificar que no hubo aprovechamiento.
 | Tema | Estado | Dónde |
 |---|---|---|
 | Aislamiento entre organizaciones (endpoints que aceptaban IDs de otra org) | ✅ Corregido, sin rastros de uso en prod | PR #254 · `tests/test_seguridad_multitenant.py` |
-| Rate limiting por IP real (detrás del proxy de Render) + cupo diario de IA por organización en la base | ✅ | PR #255 · `tests/test_limites.py` |
+| Rate limiting por IP real (detrás del proxy de Render) + cupo diario de IA por organización en la base | ✅ | PR #258 · `tests/test_limites.py` |
 | Usuario demo activo en Org A | ✅ Desactivado en prod (auditoría `DESACTIVAR_SEGURIDAD`) | — |
 | Dependencias del backend con versión y hash fijos + pip 26.2.2 + Python 3.11.17 | ✅ | PR #259 |
 | python-jose → PyJWT, dependencias al día, `npm audit fix` | ✅ | PR #261 |

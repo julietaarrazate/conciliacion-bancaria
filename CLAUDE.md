@@ -267,7 +267,7 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
 ### Pendiente para próximas sesiones
 
 - **🔐 Seguridad**: estado completo y pendientes en `docs/security/ESTADO_SEGURIDAD.md` (revisión de
-  oct 2026 cerrada en los PRs #254, #255, #259 y #261; quedan decisiones abiertas y un lote menor).
+  oct 2026 cerrada en los PRs #254, #258, #259 y #261; quedan decisiones abiertas y un lote menor).
 - **📒 Contabilidad — modelo de cuentas transitorias estilo Odoo (en curso, oct 2026)**: el Banco lo
   mueve solo el extracto/UM; ingresos contra 2-1-1-1 "No identificado", egresos contra 2-1-1-2
   "Pagos a imputar" (nueva); pagos/cheques/tarjetas "por banco" van a la transitoria. Reemplaza al
