@@ -359,8 +359,12 @@ def acreditar_cheque(
     fecha: date,
 ) -> None:
     """Acreditación cheque — 2 asientos (nueva regla contador):
-    A1: Banco (D) / Cheques en cartera (H)  →  el dinero entra al banco
-    A2: Cheques depositados (D) / Cliente (H) →  cancela pasivo tránsito y acredita al cliente"""
+    A1: No identificado 2-1-1-1 (D) / Cheques en cartera (H) →  el dinero entra al banco
+    A2: Cheques depositados (D) / Cliente (H) →  cancela pasivo tránsito y acredita al cliente
+    A1 no debita el banco: el crédito del extracto ya lo hace (Banco D / 2-1-1-1 H) y
+    este asiento cancela esa transitoria (modelo de cuentas transitorias, oct 2026).
+    banco_cuenta_id se sigue validando y guardando en el cheque como referencia.
+    TODO multi-banco: con una cuenta por banco, la transitoria podría ser por banco."""
     try:
         monto = round(_monto(monto), 2)
         neto  = round(_monto(neto),  2)
@@ -369,14 +373,15 @@ def acreditar_cheque(
 
         cartera    = _get_cuenta_por_codigo(db, "1-1-2-1", org_id)
         depositados = _get_cuenta_por_codigo(db, "2-1-3-1", org_id)
-        banco = db.query(PlanCuenta).filter(PlanCuenta.id == banco_cuenta_id).first()
+        banco_elegido = db.query(PlanCuenta).filter(PlanCuenta.id == banco_cuenta_id).first()
+        banco = cuenta_banco_transitoria(db, org_id, "ingreso") if banco_elegido else None
         cliente_cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == cliente_cuenta_id).first()
 
         if not cartera or not depositados or not banco or not cliente_cuenta:
             logger.warning("Cuentas acreditación cheque no encontradas org %s cheque %s", org_id, cheque_id)
             return
 
-        # A1: Banco D / Cheques en cartera H
+        # A1: No identificado (en lugar de Banco) D / Cheques en cartera H
         if not _ya_existe(db, "cheque_acred_banco", cheque_id, org_id):
             _crear_asiento_directo(
                 db=db, fecha=fecha,
@@ -423,16 +428,20 @@ def rechazar_cheque(
     fecha: date,
 ) -> None:
     """Rechazo cheque — 3 asientos (regla contador junio 2026):
-    A1: Cliente (D) / Banco (H)                     →  reversión del cheque acreditado
-    A2: Cliente (D) / Gastos de rechazos 3-2-2-1 (H) →  traslado de gastos al cliente
-    A3: Gastos de rechazos 3-2-2-1 (D) / Banco (H)  →  débito bancario real"""
+    A1: Cliente (D) / Pagos a imputar 2-1-1-2 (H)     →  reversión del cheque acreditado
+    A2: Cliente (D) / Gastos de rechazos 3-2-2-1 (H)  →  traslado de gastos al cliente
+    A3: Gastos de rechazos 3-2-2-1 (D) / Pagos a imputar 2-1-1-2 (H) →  débito bancario real
+    El Haber de A1 y A3 era Banco: el débito del extracto ya mueve el banco
+    (2-1-1-2 D / Banco H), así que acá se acredita la transitoria de pagos
+    (modelo de cuentas transitorias, oct 2026)."""
     try:
         monto  = round(_monto(monto),  2)
         gastos = round(_monto(gastos), 2)
         if monto <= 0:
             return
 
-        banco          = db.query(PlanCuenta).filter(PlanCuenta.id == banco_cuenta_id).first()
+        banco_elegido  = db.query(PlanCuenta).filter(PlanCuenta.id == banco_cuenta_id).first()
+        banco          = cuenta_banco_transitoria(db, org_id, "egreso") if banco_elegido else None
         cliente_cuenta = db.query(PlanCuenta).filter(PlanCuenta.id == cliente_cuenta_id).first()
         gtos_rechazos  = _get_cuenta_por_codigo(db, "3-2-2-1", org_id)
 
@@ -539,8 +548,12 @@ def registrar_egreso(
     Matriz de cuentas:
       tipo=pago_cliente → Debe: cuenta del cliente (2-1-2-X)
       tipo=proveedor/gasto → Debe: Gastos (3-2-0-0)
-      forma_pago=banco    → Haber: Banco Macro (1-1-1-3-1, cuenta hoja)
+      forma_pago=banco    → Haber: Pagos a imputar (2-1-1-2, transitoria)
       forma_pago=efectivo → Haber: Efectivo (1-1-1-2)
+    El pago por banco no acredita el banco: lo hace el débito del extracto
+    (2-1-1-2 D / Banco H). Este asiento cancela esa transitoria; si el débito
+    todavía no llegó, 2-1-1-2 queda acreedora = pagos cargados aún no vistos en
+    el banco (modelo de cuentas transitorias, oct 2026; antes: Banco Macro H).
     """
     monto = round(_monto(monto), 2)
     try:
@@ -553,7 +566,7 @@ def registrar_egreso(
         if forma_pago == "efectivo":
             cuenta_haber = _get_cuenta_por_codigo(db, "1-1-1-2", org_id)   # Efectivo
         else:
-            cuenta_haber = _get_cuenta_por_codigo(db, "1-1-1-3-1", org_id) # Banco Macro (hoja)
+            cuenta_haber = cuenta_banco_transitoria(db, org_id, "egreso")  # Pagos a imputar
         if not cuenta_haber:
             logger.warning("registrar_egreso: falta cuenta Haber (forma=%s, org=%s)", forma_pago, org_id)
             return
@@ -1195,9 +1208,11 @@ def registrar_liquidacion_aprobacion(
     fecha: date,
 ) -> None:
     """Asiento al aprobar una liquidación, por cada detalle (cliente):
-    Cliente (2-1-2-X) D monto_conciliado / Banco Macro (1-1-1-3-1) H monto_neto
+    Cliente (2-1-2-X) D monto_conciliado / Pagos a imputar (2-1-1-2) H monto_neto
     + Comisiones ganadas (3-1-1-0) H monto_comision (si > 0).
-    Cancela la deuda con el cliente y reconoce la comisión como ingreso."""
+    Cancela la deuda con el cliente y reconoce la comisión como ingreso. El
+    pago al cliente sale por banco: el débito del extracto mueve el banco
+    (2-1-1-2 D / Banco H); acá se acredita la transitoria (antes: Banco Macro H)."""
     try:
         if _ya_existe(db, "liquidacion_aprobacion", detalle_id, org_id):
             return
@@ -1207,10 +1222,10 @@ def registrar_liquidacion_aprobacion(
         if monto_conciliado <= 0:
             return
         cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_id, org_id) if cliente_id else None
-        banco          = _get_cuenta_por_codigo(db, "1-1-1-3-1", org_id)
+        banco          = cuenta_banco_transitoria(db, org_id, "egreso")
         comisiones     = _get_cuenta_por_codigo(db, "3-1-1-0", org_id)
         # Exigir la cuenta de comisiones cuando hay comisión: sin ella el asiento
-        # quedaría desbalanceado (Cliente D conciliado / Banco H neto, con neto < conciliado).
+        # quedaría desbalanceado (Cliente D conciliado / Pagos a imputar H neto, con neto < conciliado).
         if not cuenta_cliente or not banco or (monto_comision > 0 and not comisiones):
             logger.warning("Cuentas liquidación incompletas org %s (cliente_id=%s) — no se postea", org_id, cliente_id)
             return
@@ -1326,8 +1341,11 @@ def registrar_cc_inicial(
     nombre_archivo: str = "",
 ) -> bool:
     """Backfill histórico de cuenta corriente: acreditación ya conciliada →
-    Banco Macro (D) / Cliente X (H). Asiento neto y balanceado para reconstruir
-    las cuentas corrientes desde datos cargados antes de que existiera el motor.
+    No identificado 2-1-1-1 (D) / Cliente X (H). Asiento neto y balanceado para
+    reconstruir las cuentas corrientes desde datos cargados antes de que existiera
+    el motor. El Debe era Banco Macro: con el modelo de cuentas transitorias
+    (oct 2026) el banco lo mueve solo el extracto (Banco D / 2-1-1-1 H) y esto
+    es una reclasificación más, como la de una planilla conciliada.
     Idempotente: no crea si la fila ya tiene asiento del flujo normal (um_reclass)
     ni un cc_inicial previo. Devuelve True si creó el asiento."""
     try:
@@ -1335,7 +1353,7 @@ def registrar_cc_inicial(
             return False
         if _ya_existe(db, "cc_inicial", planilla_row_id, org_id):
             return False
-        banco = _get_cuenta_por_codigo(db, "1-1-1-3-1", org_id)
+        banco = cuenta_banco_transitoria(db, org_id, "ingreso")
         cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_id, org_id) if cliente_id else None
         if not banco or not cuenta_cliente:
             return False
@@ -1499,12 +1517,16 @@ def registrar_liquidacion_tarjeta(
 ) -> Optional[int]:
     """Asiento mensual agrupado de liquidación de tarjeta (módulo `tarjeta_liq`).
 
-        Banco Macro (1-1-1-3-1)               D: neto
+        No identificado (2-1-1-1)             D: neto   (antes: Banco Macro)
         Aranceles tarjeta (3-2-3-X por marca) D: aranceles
         IVA Crédito Fiscal (1-1-2-4)          D: iva_df
         Percepciones IIBB (1-1-2-5)           D: percepciones_iibb
         Retenciones de impuestos (1-1-2-6)    D: retenciones
             Ingresos por tarjetas (3-1-4-0)   H: monto_bruto
+
+    El neto lo acredita el banco: ese crédito del extracto ya hace Banco D /
+    2-1-1-1 H, así que acá se debita la transitoria de cobros (modelo de cuentas
+    transitorias, oct 2026).
 
     Devuelve el ID del asiento creado (o None si no se pudo crear). Idempotente:
     no crea un segundo asiento para la misma (tarjeta_liq, liquidacion_id, org)."""
@@ -1528,7 +1550,7 @@ def registrar_liquidacion_tarjeta(
         retenciones       = round(_monto(retenciones), 2)
         neto              = round(_monto(neto), 2)
 
-        banco         = _get_cuenta_por_codigo(db, "1-1-1-3-1", org_id)
+        banco         = cuenta_banco_transitoria(db, org_id, "ingreso")
         ingresos      = _get_cuenta_por_codigo(db, "3-1-4-0", org_id)
         cta_iva       = _get_cuenta_por_codigo(db, "1-1-2-4", org_id)
         cta_iibb      = _get_cuenta_por_codigo(db, "1-1-2-5", org_id)

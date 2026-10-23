@@ -283,9 +283,12 @@ def test_cheque_rechazo_sin_gastos_solo_reversion(db):
 
 def test_cheque_ciclo_completo_transitorias_netean_cero(db):
     """Ciclo registro→acreditación: Cartera y Depositados deben quedar en 0.
-    Saldos finales esperados: Banco +monto (D), Cliente +neto (H), Comisión (H)."""
+    Saldos finales esperados: No identificado +monto (D) — lo cancela el crédito
+    del extracto (Banco D / 2-1-1-1 H) —, Cliente +neto (H), Comisión (H).
+    (Antes del modelo de cuentas transitorias, oct 2026, el +monto iba a Banco.)"""
     fecha = date(2026, 5, 23)
-    banco_id   = _cuenta_id(db, "1-1-1-3-1")
+    banco_elegido_id = _cuenta_id(db, "1-1-1-3-1")
+    banco_id   = _cuenta_id(db, "2-1-1-1")
     cliente_id = _cuenta_id(db, "2-1-2-0")
     cartera_id = _cuenta_id(db, "1-1-2-1")
     deposit_id = _cuenta_id(db, "2-1-3-1")
@@ -293,7 +296,7 @@ def test_cheque_ciclo_completo_transitorias_netean_cero(db):
     mc.registrar_cheque(db, 1, ORG_ID, 1, "X", monto=100000, comision=2000, fecha=fecha)
     mc.acreditar_cheque(db, cheque_id=1, org_id=ORG_ID, usuario_id=1, titular="X",
                         monto=100000, neto=98000,
-                        banco_cuenta_id=banco_id, cliente_cuenta_id=cliente_id, fecha=fecha)
+                        banco_cuenta_id=banco_elegido_id, cliente_cuenta_id=cliente_id, fecha=fecha)
 
     saldos: dict = {}
     for a in db.query(Asiento).filter(Asiento.organizacion_id == ORG_ID).all():
@@ -322,19 +325,21 @@ def test_egreso_idempotente(db):
     assert len(_asientos_de(db, "egreso", 1)) == 1
 
 
-def test_egreso_banco_usa_cuenta_hoja_banco_macro(db):
-    """Un egreso por banco debe acreditar Banco Macro (1-1-1-3-1, hoja), NO la madre 1-1-1-3."""
+def test_egreso_banco_acredita_pagos_a_imputar(db):
+    """Un egreso por banco acredita la transitoria Pagos a imputar (2-1-1-2), NO
+    el banco: el banco lo mueve el débito del extracto (modelo de cuentas
+    transitorias, oct 2026; antes acreditaba Banco Macro 1-1-1-3-1)."""
     fecha = date(2026, 5, 23)
     mc.registrar_egreso(db, egreso_id=2, org_id=ORG_ID, usuario_id=1,
                         tipo="gasto", forma_pago="banco",
                         monto=800, fecha=fecha, concepto="Impuestos")
     asientos = _asientos_de(db, "egreso", 2)
     assert len(asientos) == 1
-    banco_macro = db.query(PlanCuenta).filter(
-        PlanCuenta.codigo == "1-1-1-3-1", PlanCuenta.organizacion_id == ORG_ID).first()
+    pagos = db.query(PlanCuenta).filter(
+        PlanCuenta.codigo == "2-1-1-2", PlanCuenta.organizacion_id == ORG_ID).first()
     haber_lineas = [l for l in asientos[0].lineas if l.haber > 0]
     assert len(haber_lineas) == 1
-    assert haber_lineas[0].cuenta_id == banco_macro.id
+    assert haber_lineas[0].cuenta_id == pagos.id
 
 
 def test_egreso_efectivo_usa_cuenta_efectivo(db):
