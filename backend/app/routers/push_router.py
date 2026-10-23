@@ -51,7 +51,12 @@ def unsubscribe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    db.query(PushSubscription).filter(PushSubscription.endpoint == body.endpoint).delete()
+    # Solo borra la suscripción del usuario actual: sin el filtro por user_id, cualquiera
+    # que conociera el endpoint de otro dispositivo le cortaba las notificaciones.
+    db.query(PushSubscription).filter(
+        PushSubscription.endpoint == body.endpoint,
+        PushSubscription.user_id == current_user.id,
+    ).delete()
     db.commit()
     return {"ok": True}
 

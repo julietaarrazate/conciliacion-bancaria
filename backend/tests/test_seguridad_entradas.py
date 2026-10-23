@@ -5,6 +5,7 @@
 - Subidas con tope de tamaño (413 sin leer el archivo entero) y chequeo de zip bomb en
   .xlsx antes de pasarlo a openpyxl/pandas.
 - PDF: un nombre con `&` o `<b>` no rompe reportlab (se escapa el dato, no el markup propio).
+- DELETE /push/subscribe borra solo la suscripción del usuario actual, no la de otro.
 """
 import csv
 import io
@@ -23,6 +24,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.main import app
 from app.models.organizacion import Organizacion
+from app.models.push_subscription import PushSubscription
 from app.models.user import User
 from app.routers import planillas as planillas_router
 from app.services.auth import create_access_token, get_password_hash
@@ -263,3 +265,20 @@ def test_pdf_cierre_cuenta_corriente_y_recibo_con_markup():
         {"nombre": _MALO, "cuil": "20-1", "categoria_nombre": _MALO, "convenio_nombre": "<x"},
         "2026-01",
     ))
+
+
+# ── 5. DELETE /push/subscribe solo borra la suscripción propia ───────────────
+
+def test_desuscribir_push_no_borra_la_suscripcion_de_otro_usuario(client, db):
+    otro = db.query(User).filter(User.email == "op2@t.test").first()
+    db.add(PushSubscription(user_id=otro.id, endpoint="https://push.test/ajeno", p256dh="k", auth="a"))
+    db.commit()
+    body = {"endpoint": "https://push.test/ajeno", "keys": {}}
+    r = client.request("DELETE", "/push/subscribe", headers=_auth(db, "op1@t.test"), json=body)
+    assert r.status_code == 200
+    assert db.query(PushSubscription).filter_by(endpoint="https://push.test/ajeno").count() == 1
+
+    # El dueño sí la puede borrar.
+    r = client.request("DELETE", "/push/subscribe", headers=_auth(db, "op2@t.test"), json=body)
+    assert r.status_code == 200
+    assert db.query(PushSubscription).filter_by(endpoint="https://push.test/ajeno").count() == 0
