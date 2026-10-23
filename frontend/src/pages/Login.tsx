@@ -52,6 +52,11 @@ export const Login: React.FC = () => {
         return api.client.post('/auth/google', { code, redirect_uri: `${window.location.origin}/login` })
       })
       .then((res) => {
+        // Admin/superadmin: Google también pide el código 2FA por email
+        if (res.data?.requires_2fa) {
+          setTwofa({ email: (res.data as import('@/types').TwofaChallenge).email })
+          return
+        }
         const data = res.data as { access_token: string; user: import('@/types').User }
         apiClient.setToken(data.access_token)
         setUser(data.user)

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.revoked_token import RevokedToken
 from app.database import get_db
-from app.services.auth import verify_token
+from app.services.auth import verify_token, token_anterior_al_cambio_de_password
 from app.services.auditoria import org_activa
 
 security = HTTPBearer()
@@ -44,6 +44,13 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario no encontrado o inactivo"
+        )
+
+    # Cambio de contraseña: las sesiones abiertas antes del cambio quedan cerradas
+    if token_anterior_al_cambio_de_password(payload, user):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="La contraseña cambió. Iniciá sesión de nuevo."
         )
 
     # Override de org en memoria: si el request trae ?org_id= y el usuario

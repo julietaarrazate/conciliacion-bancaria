@@ -7,11 +7,15 @@ import { toast } from '@/store/toast'
 export const Perfil: React.FC = () => {
   const user = useAuthStore(s => s.user)
   const setUser = useAuthStore(s => s.setUser)
+  const setToken = useAuthStore(s => s.setToken)
 
   const [email, setEmail] = useState(user?.email || '')
   const [nombre, setNombre] = useState(user?.full_name || '')
   const [saving, setSaving] = useState(false)
   const [profileMsg, setProfileMsg] = useState('')
+  // Cambiar el email (usuario de login) pide la contraseña actual
+  const [emailPw, setEmailPw] = useState('')
+  const emailCambia = email.trim().toLowerCase() !== (user?.email || '').toLowerCase()
 
   const [pwActual, setPwActual] = useState('')
   const [pwNueva, setPwNueva] = useState('')
@@ -158,10 +162,12 @@ export const Perfil: React.FC = () => {
     setProfileMsg('')
     try {
       const updated = await apiClient.client.patch('/me', {
-        email: email !== user?.email ? email : undefined,
+        email: emailCambia ? email : undefined,
+        current_password: emailCambia ? emailPw : undefined,
         full_name: nombre !== user?.full_name ? nombre : undefined
       })
       setUser(updated.data)
+      setEmailPw('')
       setProfileMsg('✓ Perfil actualizado')
     } catch (err: any) {
       setProfileMsg('✗ ' + (err.response?.data?.detail || 'Error al guardar'))
@@ -175,10 +181,16 @@ export const Perfil: React.FC = () => {
     setPwLoading(true)
     setPwMsg('')
     try {
-      await apiClient.client.post('/me/change-password', {
+      const res = await apiClient.client.post('/me/change-password', {
         current_password: pwActual,
         new_password: pwNueva
       })
+      // El cambio cierra todas las sesiones abiertas: el backend devuelve un
+      // token nuevo para seguir trabajando en esta.
+      if (res.data?.access_token) {
+        apiClient.setToken(res.data.access_token)
+        setToken(res.data.access_token)
+      }
       setPwMsg('✓ Contraseña cambiada correctamente')
       setPwActual(''); setPwNueva(''); setPwConfirm('')
     } catch (err: any) {
@@ -210,6 +222,13 @@ export const Perfil: React.FC = () => {
             <label className="label">Email (para iniciar sesión)</label>
             <input type="email" className="input-field" value={email} onChange={e => setEmail(e.target.value)} />
           </div>
+          {emailCambia && (
+            <div>
+              <label className="label">Contraseña actual (para cambiar el email)</label>
+              <input type="password" className="input-field" autoComplete="current-password"
+                value={emailPw} onChange={e => setEmailPw(e.target.value)} required />
+            </div>
+          )}
           <div className="flex items-center gap-3 pt-1">
             <button type="submit" disabled={saving} className="btn-yellow">
               {saving ? 'Guardando...' : 'Guardar cambios'}

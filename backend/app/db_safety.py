@@ -45,6 +45,8 @@ SAFETY_NET_DDL = [
     "UPDATE cheques SET librador = titular WHERE librador IS NULL AND titular IS NOT NULL",
     "CREATE TABLE IF NOT EXISTS twofa_codes (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), code_hash VARCHAR NOT NULL, expires_at TIMESTAMP NOT NULL, used BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP DEFAULT NOW())",
     "ALTER TABLE twofa_codes ADD COLUMN IF NOT EXISTS failed_attempts INTEGER NOT NULL DEFAULT 0",
+    # oct 2026 — cambiar/restablecer la contraseña cierra las sesiones abiertas (JWT con iat anterior)
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMP",
     "CREATE INDEX IF NOT EXISTS ix_egresos_tipo ON egresos (tipo)",
     "CREATE INDEX IF NOT EXISTS ix_egresos_forma_pago ON egresos (forma_pago)",
     "CREATE INDEX IF NOT EXISTS ix_egresos_cliente_id ON egresos (cliente_id)",

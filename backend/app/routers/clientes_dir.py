@@ -675,7 +675,7 @@ def generar_share_link(
 ):
     """Genera un link público de solo lectura para el estado de cuenta del cliente (expira en 7 días)."""
     from datetime import timedelta
-    from jose import jwt as jose_jwt
+    import jwt
     from app.config import get_settings
     from app.models.cliente import Cliente
 
@@ -692,7 +692,7 @@ def generar_share_link(
         "org_id": org_id,
         "exp": exp,
     }
-    token = jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+    token = jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
     url = f"{settings.frontend_url}/p/{token}"
     return {
         "token": token,

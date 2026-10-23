@@ -8,8 +8,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 from slowapi import Limiter
+import jwt
 from app.services.limites import ip_cliente
-from jose import jwt as jose_jwt, JWTError
 
 from app.database import get_db
 from app.models.revoked_token import RevokedToken
@@ -29,6 +29,9 @@ from app.config import get_settings
 CONTADOR_SESSION_MINUTES = 240
 APPROVAL_REQUEST_TTL_MINUTES = 10
 TWOFA_CODE_TTL_MINUTES = 10
+# Cupo de códigos 2FA emitidos por usuario por hora: sin tope, cada login nuevo daba
+# otros TWOFA_MAX_ATTEMPTS intentos y el código se podía adivinar por fuerza bruta.
+TWOFA_MAX_CODES_PER_HOUR = 5
 
 
 def _serialize_user(user: User) -> dict:
@@ -83,7 +86,9 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
     — no reintroducir el gate salvo pedido explícito.
     """
     user = authenticate_user(db, credentials.email, credentials.password)
-    if not user:
+    # Usuario inactivo: mismo 401 que una contraseña mala (la contraseña se verifica
+    # antes en authenticate_user), así el login no revela qué cuentas están dadas de baja.
+    if not user or not user.is_active:
         logger.warning(
             "LOGIN_FAILED email=%s ip=%s",
             credentials.email, ip_cliente(request),
@@ -93,51 +98,104 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
             detail="Email o contraseña inválidos"
         )
 
-    # Superadmin y Admin con RESEND_API_KEY → 2FA por email
-    if (user.is_superadmin or user.role == RoleEnum.ADMIN.value) and settings.resend_api_key:
-        from app.models.twofa_code import TwofaCode
-        from app.services.email_sender import send_email
-        try:
-            # Limpiar códigos expirados del usuario antes de generar uno nuevo
-            db.query(TwofaCode).filter(
-                TwofaCode.user_id == user.id, TwofaCode.expires_at <= datetime.utcnow()
-            ).delete()
-            code = f"{secrets.randbelow(1_000_000):06d}"
-            code_hash = hashlib.sha256(code.encode()).hexdigest()
-            expires_at = datetime.utcnow() + timedelta(minutes=TWOFA_CODE_TTL_MINUTES)
-            db.add(TwofaCode(user_id=user.id, code_hash=code_hash, expires_at=expires_at))
-            db.commit()
-            try:
-                send_email(
-                    to=user.email,
-                    subject="Código de verificación Cuadra",
-                    html=f"""<div style="font-family:sans-serif;max-width:400px">
-                      <h2>Código de verificación</h2>
-                      <p>Tu código de acceso a Cuadra:</p>
-                      <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#5E6AD2;padding:16px 0">{code}</div>
-                      <p style="color:#666">Válido por {TWOFA_CODE_TTL_MINUTES} minutos.</p>
-                    </div>""",
-                )
-            except Exception as _email_ex:
-                logger.warning("2FA: no se pudo enviar email a %s: %s", user.email, _email_ex)
-                if settings.debug:
-                    logger.warning("2FA DEBUG code for %s: %s", user.email, code)
-            return JSONResponse(status_code=202, content={"requires_2fa": True, "email": user.email})
-        except Exception as _2fa_ex:
-            logger.error("2FA: error al crear código para %s — fallback a login directo: %s", user.email, _2fa_ex)
-            db.rollback()
+    return emitir_sesion(db, user)
 
-    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
-    access_token = create_access_token(
-        data={"sub": user.email, "user_id": user.id, "role": user.role},
-        expires_delta=access_token_expires
+
+def requiere_2fa(user: User) -> bool:
+    """Superadmin y Admin con RESEND_API_KEY → 2FA por email."""
+    return bool(
+        (user.is_superadmin or user.role == RoleEnum.ADMIN.value) and settings.resend_api_key
     )
 
+
+def emitir_sesion(db: Session, user: User):
+    """Respuesta de un login ya autenticado (contraseña o Google).
+
+    Admin/superadmin con 2FA → 202 y código por email; el resto → JWT directo.
+    """
+    if requiere_2fa(user):
+        return _iniciar_2fa(db, user)
+
+    access_token = create_access_token(
+        data={"sub": user.email, "user_id": user.id, "role": user.role},
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user": _serialize_user(user),
     }
+
+
+def _iniciar_2fa(db: Session, user: User) -> JSONResponse:
+    """Genera y manda el código 2FA. Falla cerrado: si no se puede crear o enviar el
+    código, el login se rechaza (nunca cae a login directo sin segundo factor)."""
+    from app.models.twofa_code import TwofaCode
+    from app.services.email_sender import send_email
+
+    now = datetime.utcnow()
+    hace_una_hora = now - timedelta(hours=1)
+    try:
+        # Los códigos de la última hora se conservan para contar el cupo; los más
+        # viejos ya no sirven para nada.
+        db.query(TwofaCode).filter(
+            TwofaCode.user_id == user.id, TwofaCode.created_at < hace_una_hora
+        ).delete()
+        emitidos = db.query(TwofaCode).filter(
+            TwofaCode.user_id == user.id, TwofaCode.created_at >= hace_una_hora
+        ).count()
+    except Exception as ex:
+        db.rollback()
+        logger.error("2FA: error al preparar el código para %s: %s", user.email, ex)
+        raise HTTPException(503, "No se pudo generar el código de verificación. Intentá de nuevo en unos minutos.")
+
+    if emitidos >= TWOFA_MAX_CODES_PER_HOUR:
+        db.commit()
+        logger.warning("2FA: cupo de códigos por hora agotado para %s", user.email)
+        raise HTTPException(429, "Pediste demasiados códigos de verificación. Esperá una hora y volvé a intentar.")
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    try:
+        # Un solo código vivo por usuario: el anterior deja de servir
+        db.query(TwofaCode).filter(
+            TwofaCode.user_id == user.id, TwofaCode.used == False  # noqa: E712
+        ).update({"used": True})
+        registro = TwofaCode(
+            user_id=user.id,
+            code_hash=hashlib.sha256(code.encode()).hexdigest(),
+            expires_at=now + timedelta(minutes=TWOFA_CODE_TTL_MINUTES),
+            created_at=now,
+        )
+        db.add(registro)
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        logger.error("2FA: error al crear el código para %s: %s", user.email, ex)
+        raise HTTPException(503, "No se pudo generar el código de verificación. Intentá de nuevo en unos minutos.")
+
+    try:
+        send_email(
+            to=user.email,
+            subject="Código de verificación Cuadra",
+            html=f"""<div style="font-family:sans-serif;max-width:400px">
+              <h2>Código de verificación</h2>
+              <p>Tu código de acceso a Cuadra:</p>
+              <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#5E6AD2;padding:16px 0">{code}</div>
+              <p style="color:#666">Válido por {TWOFA_CODE_TTL_MINUTES} minutos.</p>
+            </div>""",
+        )
+    except Exception as ex:
+        logger.warning("2FA: no se pudo enviar email a %s: %s", user.email, ex)
+        if settings.debug:
+            logger.warning("2FA DEBUG code for %s: %s", user.email, code)
+        else:
+            try:
+                registro.used = True
+                db.commit()
+            except Exception:
+                db.rollback()
+            raise HTTPException(503, "No se pudo enviar el código de verificación. Intentá de nuevo en unos minutos.")
+    return JSONResponse(status_code=202, content={"requires_2fa": True, "email": user.email})
 
 
 class DecisionBody(BaseModel):
@@ -316,12 +374,12 @@ def logout(
     if not credentials:
         return {"ok": True}
     try:
-        payload = jose_jwt.decode(
+        payload = jwt.decode(
             credentials.credentials, settings.secret_key,
             algorithms=[settings.algorithm],
             options={"verify_exp": False},
         )
-    except JWTError:
+    except jwt.PyJWTError:
         return {"ok": True}
 
     jti = payload.get("jti")

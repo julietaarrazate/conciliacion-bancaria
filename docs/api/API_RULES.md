@@ -293,6 +293,7 @@ Límites reales en el código (orientativos para endpoints nuevos del mismo tipo
 | `POST /extractos/{id}/agregar-um` | `20/minute` | `extractos.py` |
 | `POST /extractos-pdf/importar` | `10/minute` | `extractos_pdf.py` |
 | `POST /auth/login` | `10/minute` | `auth.py` |
+| `POST /auth/google` | `10/minute` | `google_auth.py` |
 | `POST /auth/register` | `5/minute` | `auth.py` |
 | `POST /auth/verify-2fa` | `3/minute` | `auth.py` |
 | `POST /auth/forgot-password` | `3/hour` | `auth.py` |

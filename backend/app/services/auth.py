@@ -4,7 +4,7 @@ import hashlib
 import os
 import hmac
 import uuid
-from jose import JWTError, jwt
+import jwt
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.schemas.user import UserRegister
@@ -12,8 +12,11 @@ from app.config import get_settings
 
 settings = get_settings()
 
-# pbkdf2_sha256 - viene en stdlib, no necesita compilar nada en el deploy
-PBKDF2_ITERATIONS = 120_000
+# pbkdf2_sha256 - viene en stdlib, no necesita compilar nada en el deploy.
+# 600.000 iteraciones (recomendación OWASP 2023+) para los hashes NUEVOS. Los hashes
+# viejos (120.000) siguen verificando porque cada hash guarda sus iteraciones, y se
+# rehashean solos en el próximo login correcto (ver password_necesita_rehash).
+PBKDF2_ITERATIONS = 600_000
 PBKDF2_ALGO = "sha256"
 SALT_LEN = 16
 
@@ -52,6 +55,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return False
 
 
+def password_necesita_rehash(hashed_password: str) -> bool:
+    """True si el hash es de un esquema/costo viejo (bcrypt legacy o menos iteraciones)."""
+    if not hashed_password:
+        return False
+    if hashed_password.startswith("pbkdf2_sha256$"):
+        try:
+            return int(hashed_password.split("$")[1]) < PBKDF2_ITERATIONS
+        except (IndexError, ValueError):
+            return False
+    return hashed_password.startswith("$2")
+
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     if expires_delta:
@@ -59,14 +74,43 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
     # jti unico por token — permite revocar individualmente
-    to_encode.update({"exp": expire, "jti": uuid.uuid4().hex})
+    # iat — permite invalidar las sesiones abiertas al cambiar la contraseña
+    to_encode.update({"exp": expire, "jti": uuid.uuid4().hex, "iat": datetime.utcnow()})
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+
+
+# Margen para la granularidad del reloj: `iat` va en segundos enteros y
+# password_changed_at tiene microsegundos; el token nuevo que se emite en el mismo
+# segundo del cambio no debe quedar afuera.
+MARGEN_IAT_SEGUNDOS = 1
+
+
+def marcar_cambio_password(user: User) -> None:
+    """Registra el cambio de contraseña: los JWT emitidos antes dejan de valer."""
+    user.password_changed_at = datetime.utcnow()
+
+
+def token_anterior_al_cambio_de_password(payload: dict, user: User) -> bool:
+    """True si el token se emitió antes del último cambio de contraseña del usuario.
+
+    Tokens sin `iat` (emitidos antes de este control) y usuarios que nunca cambiaron
+    la contraseña (password_changed_at NULL) pasan derecho (backward compat).
+    """
+    cambio = getattr(user, "password_changed_at", None)
+    iat = payload.get("iat")
+    if cambio is None or iat is None:
+        return False
+    try:
+        emitido = datetime.utcfromtimestamp(float(iat))
+    except (TypeError, ValueError, OverflowError):
+        return True
+    return emitido < cambio - timedelta(seconds=MARGEN_IAT_SEGUNDOS)
 
 
 def verify_token(token: str) -> Optional[dict]:
     try:
         return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-    except JWTError:
+    except jwt.PyJWTError:
         return None
 
 
@@ -85,10 +129,35 @@ def register_user(db: Session, user_data: UserRegister) -> Optional[User]:
     return user
 
 
+_HASH_FICTICIO: Optional[str] = None
+
+
+def _hash_ficticio() -> str:
+    """Hash descartable para verificar cuando el email no existe (mismo costo)."""
+    global _HASH_FICTICIO
+    if _HASH_FICTICIO is None:
+        _HASH_FICTICIO = get_password_hash(uuid.uuid4().hex)
+    return _HASH_FICTICIO
+
+
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
+    """Devuelve el usuario si la contraseña es correcta (activo o no: lo decide el caller).
+
+    Si el email no existe igual se calcula un hash, para que el tiempo de respuesta
+    no delate qué emails están registrados.
+    """
     user = db.query(User).filter(User.email == email).first()
     if not user:
+        verify_password(password, _hash_ficticio())
         return None
     if not verify_password(password, user.hashed_password):
         return None
+    # Login correcto con un hash viejo: se guarda con el costo actual (misma contraseña,
+    # no cierra sesiones). Si falla, el login sigue igual.
+    if password_necesita_rehash(user.hashed_password):
+        try:
+            user.hashed_password = get_password_hash(password)
+            db.commit()
+        except Exception:
+            db.rollback()
     return user
