@@ -616,6 +616,67 @@ def _get_cuenta_por_codigo(db: Session, codigo: str, org_id: int) -> Optional[Pl
     )
 
 
+# ─── Cuentas del banco: modelo de cuentas transitorias (estilo Odoo, oct 2026) ──
+#
+# La cuenta del banco la mueven SOLO los datos del banco (extracto principal y
+# Últimos Movimientos). Todo lo demás que cargamos en Cuadra y que también va a
+# aparecer en el extracto (pagos por banco, cheques acreditados, tarjetas, etc.)
+# pega contra una cuenta transitoria — "partidas pendientes de imputación":
+#   - 2-1-1-1 "No identificado"  = cobros a imputar (plata que ENTRA al banco).
+#     El crédito del extracto la acredita; la conciliación / acreditación la debita.
+#   - 2-1-1-2 "Pagos a imputar"  = pagos a imputar (plata que SALE del banco).
+#     El débito del extracto la debita; el pago cargado en Cuadra la acredita.
+# Si todo está explicado, ambas transitorias quedan en cero. Ver
+# ACCOUNTING_ENGINE.md §2bis y docs/adr/DECISIONS.md ("Modelo de cuentas
+# transitorias estilo Odoo"). Elegir la cuenta SOLO con estos helpers: no
+# desparramar códigos por los registrar_*.
+
+CUENTA_BANCO_EXTRACTO = "1-1-1-3-1"   # Banco Macro (hoja)
+CUENTA_COBROS_A_IMPUTAR = "2-1-1-1"   # No identificado
+CUENTA_PAGOS_A_IMPUTAR = "2-1-1-2"    # Pagos a imputar
+_CUENTA_PASIVO_A_CONFIRMAR = "2-1-1-0"  # rubro padre de las dos transitorias
+
+
+def cuenta_banco_extracto(db: Session, org_id: int) -> Optional[PlanCuenta]:
+    """Cuenta contable del banco que mueven los movimientos del extracto / UM.
+    TODO multi-banco: hoy todo extracto pega contra Banco Macro (1-1-1-3-1),
+    aunque sea de otro banco. Mapear ExtractoBancario.banco → cuenta hoja queda
+    para otro cambio (necesita una cuenta por banco en el plan)."""
+    return _get_cuenta_por_codigo(db, CUENTA_BANCO_EXTRACTO, org_id)
+
+
+def cuenta_banco_transitoria(db: Session, org_id: int, sentido: str) -> Optional[PlanCuenta]:
+    """Cuenta transitoria que reemplaza al banco en los asientos de módulos.
+    sentido="ingreso" (la plata entra al banco) → 2-1-1-1 No identificado.
+    sentido="egreso"  (la plata sale del banco) → 2-1-1-2 Pagos a imputar.
+    Si la org todavía no tiene 2-1-1-2 (el seed la agrega en el próximo arranque)
+    la crea acá bajo 2-1-1-0 — alta aditiva, nunca modifica cuentas existentes."""
+    if sentido not in ("ingreso", "egreso"):
+        raise ValueError(f"sentido inválido: {sentido!r} (usar 'ingreso' o 'egreso')")
+    if sentido == "ingreso":
+        return _get_cuenta_por_codigo(db, CUENTA_COBROS_A_IMPUTAR, org_id)
+    cuenta = _get_cuenta_por_codigo(db, CUENTA_PAGOS_A_IMPUTAR, org_id)
+    if cuenta:
+        return cuenta
+    padre = _get_cuenta_por_codigo(db, _CUENTA_PASIVO_A_CONFIRMAR, org_id)
+    if not padre:
+        return None
+    # Puede existir inactiva: no se duplica el código.
+    if db.query(PlanCuenta).filter(
+        PlanCuenta.codigo == CUENTA_PAGOS_A_IMPUTAR, PlanCuenta.organizacion_id == org_id,
+    ).first():
+        return None
+    cuenta = PlanCuenta(
+        codigo=CUENTA_PAGOS_A_IMPUTAR, nombre="Pagos a imputar", tipo="pasivo",
+        parent_id=padre.id, nivel=(padre.nivel or 3) + 1,
+        activo=True, organizacion_id=org_id,
+    )
+    db.add(cuenta)
+    db.flush()
+    logger.info("Cuenta 2-1-1-2 Pagos a imputar creada para org %s", org_id)
+    return cuenta
+
+
 def _get_o_crear_cuenta_cliente(db: Session, cliente_id: int, org_id: int, reusar_huecos: bool = False) -> Optional[PlanCuenta]:
     """Resuelve la cuenta contable del Cliente EXISTENTE (vínculo 1:1).
     1. Si el cliente ya tiene cuenta_contable_id → la reutiliza.

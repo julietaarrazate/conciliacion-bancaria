@@ -76,6 +76,11 @@ PLAN_PATCH = [
     ("3-2-4-0",   "Sueldos y cargas sociales",     "resultado", "3-2-0-0", 3),
     # Facturación electrónica ARCA — integración propia WSFEv1 (junio 2026)
     ("3-1-5-0",   "Ventas facturadas (ARCA)",      "resultado", "3-1-0-0", 3),
+    # Cuentas transitorias del banco, estilo Odoo (oct 2026): "partidas pendientes
+    # de imputación". 2-1-1-1 "No identificado" (ya existía) = cobros a imputar;
+    # 2-1-1-2 = pagos a imputar: el débito del extracto la debita y el pago cargado
+    # en Cuadra "por banco" la acredita. Ver ACCOUNTING_ENGINE.md §2bis.
+    ("2-1-1-2",   "Pagos a imputar",               "pasivo",    "2-1-1-0", 4),
 ]
 
 # (evento, descripcion, debe_codigo, haber_codigo)
