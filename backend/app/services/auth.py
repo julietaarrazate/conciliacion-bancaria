@@ -59,8 +59,37 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
     # jti unico por token — permite revocar individualmente
-    to_encode.update({"exp": expire, "jti": uuid.uuid4().hex})
+    # iat — permite invalidar las sesiones abiertas al cambiar la contraseña
+    to_encode.update({"exp": expire, "jti": uuid.uuid4().hex, "iat": datetime.utcnow()})
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+
+
+# Margen para la granularidad del reloj: `iat` va en segundos enteros y
+# password_changed_at tiene microsegundos; el token nuevo que se emite en el mismo
+# segundo del cambio no debe quedar afuera.
+MARGEN_IAT_SEGUNDOS = 1
+
+
+def marcar_cambio_password(user: User) -> None:
+    """Registra el cambio de contraseña: los JWT emitidos antes dejan de valer."""
+    user.password_changed_at = datetime.utcnow()
+
+
+def token_anterior_al_cambio_de_password(payload: dict, user: User) -> bool:
+    """True si el token se emitió antes del último cambio de contraseña del usuario.
+
+    Tokens sin `iat` (emitidos antes de este control) y usuarios que nunca cambiaron
+    la contraseña (password_changed_at NULL) pasan derecho (backward compat).
+    """
+    cambio = getattr(user, "password_changed_at", None)
+    iat = payload.get("iat")
+    if cambio is None or iat is None:
+        return False
+    try:
+        emitido = datetime.utcfromtimestamp(float(iat))
+    except (TypeError, ValueError, OverflowError):
+        return True
+    return emitido < cambio - timedelta(seconds=MARGEN_IAT_SEGUNDOS)
 
 
 def verify_token(token: str) -> Optional[dict]:

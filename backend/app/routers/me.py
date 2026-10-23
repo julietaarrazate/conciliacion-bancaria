@@ -6,7 +6,9 @@ from app.models.organizacion import Organizacion
 from app.schemas.user import UserResponse
 from app.middleware.auth import get_current_user
 from app.database import get_db
-from app.services.auth import get_password_hash, verify_password
+from app.services.auth import (
+    create_access_token, get_password_hash, marcar_cambio_password, verify_password,
+)
 
 router = APIRouter(tags=["me"])
 
@@ -43,14 +45,27 @@ def change_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Cambia la contraseña del usuario autenticado"""
+    """Cambia la contraseña del usuario autenticado.
+
+    Cierra todas las sesiones abiertas (incluida la actual) y devuelve un token
+    nuevo para que quien la cambió siga trabajando sin volver a loguearse.
+    """
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(400, "Contraseña actual incorrecta")
     if len(payload.new_password) < 6:
         raise HTTPException(400, "La nueva contraseña debe tener al menos 6 caracteres")
     current_user.hashed_password = get_password_hash(payload.new_password)
+    marcar_cambio_password(current_user)
     db.commit()
-    return {"ok": True, "mensaje": "Contraseña actualizada correctamente"}
+    access_token = create_access_token(
+        data={"sub": current_user.email, "user_id": current_user.id, "role": current_user.role},
+    )
+    return {
+        "ok": True,
+        "mensaje": "Contraseña actualizada correctamente",
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
 
 
 class UpdateProfileRequest(BaseModel):

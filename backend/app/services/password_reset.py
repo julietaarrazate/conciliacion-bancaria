@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models.password_reset import PasswordResetToken
 from app.models.user import User
-from app.services.auth import get_password_hash
+from app.services.auth import get_password_hash, marcar_cambio_password
 from app.services.email_sender import send_email
 
 logger = logging.getLogger(__name__)
@@ -131,6 +131,8 @@ def validar_y_cambiar_password(
 
     # Cambiar password
     user.hashed_password = get_password_hash(nueva_password)
+    # Cierra las sesiones abiertas (JWT emitidos antes del reset)
+    marcar_cambio_password(user)
     # Marcar este token como usado
     registro.used_at = datetime.utcnow()
     # Invalidar TODOS los otros tokens activos de este user (defense in depth)

@@ -7,6 +7,7 @@ import { toast } from '@/store/toast'
 export const Perfil: React.FC = () => {
   const user = useAuthStore(s => s.user)
   const setUser = useAuthStore(s => s.setUser)
+  const setToken = useAuthStore(s => s.setToken)
 
   const [email, setEmail] = useState(user?.email || '')
   const [nombre, setNombre] = useState(user?.full_name || '')
@@ -175,10 +176,16 @@ export const Perfil: React.FC = () => {
     setPwLoading(true)
     setPwMsg('')
     try {
-      await apiClient.client.post('/me/change-password', {
+      const res = await apiClient.client.post('/me/change-password', {
         current_password: pwActual,
         new_password: pwNueva
       })
+      // El cambio cierra todas las sesiones abiertas: el backend devuelve un
+      // token nuevo para seguir trabajando en esta.
+      if (res.data?.access_token) {
+        apiClient.setToken(res.data.access_token)
+        setToken(res.data.access_token)
+      }
       setPwMsg('✓ Contraseña cambiada correctamente')
       setPwActual(''); setPwNueva(''); setPwConfirm('')
     } catch (err: any) {
