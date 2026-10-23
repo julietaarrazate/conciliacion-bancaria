@@ -25,6 +25,11 @@ from app.services.password_reset import _hash_token
 settings = get_settings()
 
 
+@pytest.fixture(autouse=True)
+def _pbkdf2_rapido():
+    """Pisa el de conftest: acá se prueba con el costo real de producción (600.000)."""
+
+
 @pytest.fixture
 def db():
     engine = create_engine(
@@ -382,3 +387,48 @@ def test_cors_acepta_produccion_y_previews_del_proyecto(client, origin):
 ])
 def test_cors_rechaza_otros_origenes(client, origin):
     assert not _preflight(client, origin)
+
+
+# ── 8. PBKDF2: 600.000 iteraciones y rehash en el login ──────────────────────
+
+def _hash_120k(password):
+    import hashlib
+    import os
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 120_000)
+    return f"pbkdf2_sha256$120000${salt.hex()}${dk.hex()}"
+
+
+def test_hash_nuevo_usa_600k():
+    h = get_password_hash("pw123456")
+    assert h.split("$")[1] == "600000"
+    assert verify_password("pw123456", h)
+
+
+def test_hash_viejo_sigue_verificando_y_se_rehashea_en_el_login(client, db):
+    from app.services.auth import password_necesita_rehash
+    u = _user(db, "op1@t.test")
+    u.hashed_password = _hash_120k("pw123456")
+    db.commit()
+    assert verify_password("pw123456", u.hashed_password)
+    assert password_necesita_rehash(u.hashed_password)
+
+    r = client.post("/auth/login", json={"email": "op1@t.test", "password": "pw123456"})
+    assert r.status_code == 200
+    db.refresh(u)
+    assert u.hashed_password.split("$")[1] == "600000"
+    assert not password_necesita_rehash(u.hashed_password)
+    # El rehash no es un cambio de contraseña: no cierra sesiones
+    assert u.password_changed_at is None
+    r = client.post("/auth/login", json={"email": "op1@t.test", "password": "pw123456"})
+    assert r.status_code == 200
+
+
+def test_login_fallido_no_rehashea(client, db):
+    u = _user(db, "op1@t.test")
+    viejo = _hash_120k("pw123456")
+    u.hashed_password = viejo
+    db.commit()
+    assert client.post("/auth/login", json={"email": "op1@t.test", "password": "mala1234"}).status_code == 401
+    db.refresh(u)
+    assert u.hashed_password == viejo

@@ -12,8 +12,11 @@ from app.config import get_settings
 
 settings = get_settings()
 
-# pbkdf2_sha256 - viene en stdlib, no necesita compilar nada en el deploy
-PBKDF2_ITERATIONS = 120_000
+# pbkdf2_sha256 - viene en stdlib, no necesita compilar nada en el deploy.
+# 600.000 iteraciones (recomendación OWASP 2023+) para los hashes NUEVOS. Los hashes
+# viejos (120.000) siguen verificando porque cada hash guarda sus iteraciones, y se
+# rehashean solos en el próximo login correcto (ver password_necesita_rehash).
+PBKDF2_ITERATIONS = 600_000
 PBKDF2_ALGO = "sha256"
 SALT_LEN = 16
 
@@ -50,6 +53,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     except Exception:
         return False
     return False
+
+
+def password_necesita_rehash(hashed_password: str) -> bool:
+    """True si el hash es de un esquema/costo viejo (bcrypt legacy o menos iteraciones)."""
+    if not hashed_password:
+        return False
+    if hashed_password.startswith("pbkdf2_sha256$"):
+        try:
+            return int(hashed_password.split("$")[1]) < PBKDF2_ITERATIONS
+        except (IndexError, ValueError):
+            return False
+    return hashed_password.startswith("$2")
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -137,4 +152,12 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
         return None
     if not verify_password(password, user.hashed_password):
         return None
+    # Login correcto con un hash viejo: se guarda con el costo actual (misma contraseña,
+    # no cierra sesiones). Si falla, el login sigue igual.
+    if password_necesita_rehash(user.hashed_password):
+        try:
+            user.hashed_password = get_password_hash(password)
+            db.commit()
+        except Exception:
+            db.rollback()
     return user
