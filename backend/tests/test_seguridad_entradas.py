@@ -4,6 +4,7 @@
   exporta como texto (con apóstrofo), no como fórmula viva. Números/fechas no cambian.
 - Subidas con tope de tamaño (413 sin leer el archivo entero) y chequeo de zip bomb en
   .xlsx antes de pasarlo a openpyxl/pandas.
+- PDF: un nombre con `&` o `<b>` no rompe reportlab (se escapa el dato, no el markup propio).
 """
 import csv
 import io
@@ -27,8 +28,12 @@ from app.routers import planillas as planillas_router
 from app.services.auth import create_access_token, get_password_hash
 from app.services.excel_export import export_movimientos
 from app.services.excel_safe import safe_cell, sanear_workbook, verificar_xlsx
-from app.services.limites import MAX_BYTES_PLANILLA
 from app.services.export_contable import _export_csv, _export_regisoft
+from app.services.limites import MAX_BYTES_PLANILLA
+from app.services.pdf_export import (
+    cierre_mensual_pdf, cuenta_corriente_pdf, estado_cuenta_pdf, export_planilla_conciliada_pdf,
+    recibo_sueldo_pdf,
+)
 
 
 @pytest.fixture
@@ -212,3 +217,49 @@ def test_mis_comprobantes_de_varias_orgs_rechaza_zip_bomb(client, db):
                     headers=_auth(db, "op1@t.test"),
                     files=[("files", ("x.xlsx", _zip_bomb(5), _XLSX))])
     assert r.status_code == 413, r.text
+
+
+# ── 3. Escape de texto en los PDF (reportlab interpreta markup) ──────────────
+
+_MALO = "A & B <b>x"
+
+
+def _es_pdf(b: bytes) -> bool:
+    return b.startswith(b"%PDF")
+
+
+def test_pdf_planilla_conciliada_con_nombre_con_markup():
+    pdf = export_planilla_conciliada_pdf({
+        "cliente_nombre": _MALO, "nombre_archivo": "pl <i>.xlsx",
+        "rows": [{"monto": Decimal("10.00"), "titular": _MALO, "status": "ok", "cuit": "20123456789"}],
+        "total_declarado": None,
+    })
+    assert _es_pdf(pdf)
+
+
+def test_pdf_estado_cuenta_con_nombre_con_markup():
+    pdf = estado_cuenta_pdf({
+        "cliente": {"nombre": _MALO, "cuit": "20-1 & <x>"},
+        "periodo": {"desde": "2026-01-01", "hasta": "2026-01-31"},
+        "resumen": {"conciliado_periodo": 10, "pendiente_periodo": 0},
+        "planillas": [{"nombre_archivo": _MALO, "filas": []}],
+        "cheques": [{"banco_origen": _MALO, "monto": 5}],
+        "pagos": [{"concepto": _MALO, "monto": 1}],
+    })
+    assert _es_pdf(pdf)
+
+
+def test_pdf_cierre_cuenta_corriente_y_recibo_con_markup():
+    assert _es_pdf(cierre_mensual_pdf({
+        "periodo_actual": {}, "top_clientes": [{"nombre": _MALO, "total": 1}],
+        "cheques": {"proximos_a_vencer": [{"cliente_nombre": _MALO, "monto": 1}]},
+    }, 2026, 1, org_nombre=_MALO))
+    assert _es_pdf(cuenta_corriente_pdf({
+        "cliente": {"nombre": _MALO}, "cuenta": {"codigo": "1.1", "nombre": _MALO},
+        "movimientos": [{"fecha": "2026-01-02", "tipo_label": _MALO, "referencia": _MALO, "debito": 1}],
+    }))
+    assert _es_pdf(recibo_sueldo_pdf(
+        {"sueldo_bruto": 100, "sueldo_neto": 80, "total_aportes": 20},
+        {"nombre": _MALO, "cuil": "20-1", "categoria_nombre": _MALO, "convenio_nombre": "<x"},
+        "2026-01",
+    ))
