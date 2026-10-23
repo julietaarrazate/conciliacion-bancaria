@@ -142,3 +142,44 @@ def test_margen_de_un_segundo_para_el_token_del_mismo_segundo(client, db):
     tok = create_access_token({"sub": u.email})
     assert client.get("/me", headers=_auth(tok)).status_code == 200
     assert verify_password("pw123456", u.hashed_password)
+
+
+# ── 2. PATCH /me: cambiar el email pide la contraseña ────────────────────────
+
+def test_patch_me_email_sin_password_se_rechaza(client, db):
+    tok = create_access_token({"sub": "op1@t.test"})
+    r = client.patch("/me", headers=_auth(tok), json={"email": "otro@t.test"})
+    assert r.status_code == 400
+    r = client.patch("/me", headers=_auth(tok),
+                     json={"email": "otro@t.test", "current_password": "mala"})
+    assert r.status_code == 400
+    assert _user(db, "op1@t.test") is not None
+    assert _user(db, "otro@t.test") is None
+
+
+def test_patch_me_email_con_password_normaliza(client, db):
+    tok = create_access_token({"sub": "op1@t.test"})
+    r = client.patch("/me", headers=_auth(tok),
+                     json={"email": "  Nuevo@T.Test ", "current_password": "pw123456"})
+    assert r.status_code == 200
+    assert r.json()["email"] == "nuevo@t.test"
+
+
+def test_patch_me_email_invalido_o_en_uso(client, db):
+    tok = create_access_token({"sub": "op1@t.test"})
+    r = client.patch("/me", headers=_auth(tok),
+                     json={"email": "no-es-un-mail", "current_password": "pw123456"})
+    assert r.status_code == 400
+    r = client.patch("/me", headers=_auth(tok),
+                     json={"email": "ADMIN1@t.test", "current_password": "pw123456"})
+    assert r.status_code == 400
+    assert "en uso" in r.json()["detail"]
+
+
+def test_patch_me_solo_nombre_o_mismo_email_no_pide_password(client, db):
+    tok = create_access_token({"sub": "op1@t.test"})
+    r = client.patch("/me", headers=_auth(tok),
+                     json={"full_name": "Nombre Nuevo", "email": "OP1@t.test"})
+    assert r.status_code == 200
+    assert r.json()["full_name"] == "Nombre Nuevo"
+    assert r.json()["email"] == "op1@t.test"

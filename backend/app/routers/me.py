@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.organizacion import Organizacion
-from app.schemas.user import UserResponse
+from app.schemas.user import UserResponse, _validar_email
 from app.middleware.auth import get_current_user
 from app.database import get_db
 from app.services.auth import (
@@ -71,6 +71,8 @@ def change_password(
 class UpdateProfileRequest(BaseModel):
     full_name: str | None = None
     email: str | None = None
+    # Obligatoria solo si cambia el email (es el usuario de login)
+    current_password: str | None = None
 
 
 @router.patch("/me", response_model=UserResponse)
@@ -79,14 +81,29 @@ def update_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Actualiza perfil del usuario autenticado (nombre, email)"""
-    if payload.full_name:
-        current_user.full_name = payload.full_name
+    """Actualiza perfil del usuario autenticado (nombre, email).
+
+    Cambiar el email pide la contraseña actual: con un token robado no se puede
+    tomar la cuenta cambiando el email y pidiendo después un reset de contraseña.
+    """
+    if payload.full_name and payload.full_name.strip():
+        current_user.full_name = payload.full_name.strip()
     if payload.email:
-        existing = db.query(User).filter(User.email == payload.email, User.id != current_user.id).first()
-        if existing:
-            raise HTTPException(400, "Ese email ya está en uso")
-        current_user.email = payload.email
+        try:
+            nuevo_email = _validar_email(payload.email)
+        except ValueError as ex:
+            raise HTTPException(400, str(ex))
+        if nuevo_email != (current_user.email or "").strip().lower():
+            if not payload.current_password or not verify_password(
+                payload.current_password, current_user.hashed_password
+            ):
+                raise HTTPException(400, "Para cambiar el email ingresá tu contraseña actual")
+            existing = db.query(User).filter(
+                User.email == nuevo_email, User.id != current_user.id
+            ).first()
+            if existing:
+                raise HTTPException(400, "Ese email ya está en uso")
+            current_user.email = nuevo_email
     db.commit()
     db.refresh(current_user)
     return current_user
