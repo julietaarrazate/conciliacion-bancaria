@@ -6,6 +6,7 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo as _ZI
 from slowapi import Limiter
 from app.services.limites import ip_cliente
+from app.services.excel_safe import sanear_workbook
 _ARG = _ZI('America/Argentina/Buenos_Aires')
 from typing import Optional
 import tempfile, os, io
@@ -870,6 +871,7 @@ def export_conciliaciones(
         ws.column_dimensions[col_letter].width = width
 
     buf = io.BytesIO()
+    sanear_workbook(wb)  # anti inyección de fórmulas (titulares/conceptos de terceros)
     wb.save(buf)
     buf.seek(0)
 
