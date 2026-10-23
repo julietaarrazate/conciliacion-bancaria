@@ -13,20 +13,20 @@
 pip==26.2.2
 
 # Web framework
-fastapi==0.141.1
-uvicorn[standard]==0.53.0
+fastapi==0.150.0
+uvicorn[standard]==0.54.0
 
 # Base de datos
-sqlalchemy==2.0.54
+sqlalchemy==2.0.55
 psycopg2-binary==2.9.13          # PostgreSQL (Neon)
 
 # Autenticacion JWT
 python-jose[cryptography]==3.5.0
 
 # Validacion y settings
-pydantic==2.13.5
-pydantic[email]==2.13.5
-pydantic-settings==2.15.0
+pydantic==2.14.1
+pydantic[email]==2.14.1
+pydantic-settings==2.16.0
 email-validator==2.3.0
 
 # Upload de archivos (multipart/form-data)
@@ -37,7 +37,7 @@ openpyxl==3.1.5
 xlrd==2.0.2
 
 # Utilidades
-python-dotenv==1.2.3
+python-dotenv==1.2.4
 requests==2.34.2
 
 # Rate limiting (proteccion brute force)
@@ -56,7 +56,7 @@ reportlab==5.0.1
 pywebpush>=2.5.0
 
 # Storage S3/R2 (opcional, activado via env vars S3_*)
-boto3==1.43.98
+boto3==1.43.115
 
 # Agente IA (Gemini Flash — activado via env var GEMINI_API_KEY)
 google-generativeai==0.8.6
