@@ -166,7 +166,13 @@ export const Perfil: React.FC = () => {
         current_password: emailCambia ? emailPw : undefined,
         full_name: nombre !== user?.full_name ? nombre : undefined
       })
-      setUser(updated.data)
+      // Si cambió el email el backend devuelve un token nuevo (el anterior ya no vale)
+      const { access_token, ...perfil } = updated.data
+      if (access_token) {
+        apiClient.setToken(access_token)
+        setToken(access_token)
+      }
+      setUser(perfil)
       setEmailPw('')
       setProfileMsg('✓ Perfil actualizado')
     } catch (err: any) {

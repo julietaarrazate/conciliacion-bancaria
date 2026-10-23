@@ -5,6 +5,27 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Seguridad (oct 2026) — tercer lote de la revisión: sesiones, permisos, auditoría y archivos
+
+- **Sesiones**: cambiar o restablecer la contraseña cierra las sesiones abiertas
+  (`users.password_changed_at`, migración 036; el JWT lleva `iat`). Cambiar el email en `/me` pide
+  la contraseña actual, lo normaliza y devuelve un token nuevo.
+- **Login**: un usuario desactivado ya no puede entrar (no se chequeaba); mail inexistente,
+  contraseña mala y usuario inactivo dan el mismo 401. Google: `email_verified` se compara bien,
+  tiene límite y los admins pasan por el 2FA. 2FA: máx. 5 códigos por hora, vale solo el último y
+  falla cerrado. PBKDF2 a 600.000 iteraciones para hashes nuevos (rehash al loguear).
+- **Permisos**: toda ruta que escribe pide permiso (el revisor queda de solo lectura); un meta-test
+  recorre `app.routes` y falla si aparece una ruta que escribe sin permiso ni lista explícita.
+- **Auditoría por organización**: `auditoria.organizacion_id` (migración 035); quien tiene
+  `view_audit` ya no ve acciones del superadmin en otras orgs.
+- **Archivos**: Excel/CSV exportados sin fórmulas inyectadas (`excel_safe.safe_cell`), tope de
+  tamaño y chequeo de zip bomb en todas las subidas, PDFs que no se rompen con `<b>` o `&`,
+  `document.write` fuera de Clientes, `DELETE /push/subscribe` solo borra la propia.
+- Otros: nombre escapado en el mail de recuperación y CORS de previews de Vercel acotado a este
+  proyecto.
+
+---
+
 ### Seguridad (oct 2026) — PyJWT en lugar de python-jose + dependencias del backend al día
 
 - `python-jose` (casi sin mantenimiento, avisos PYSEC-2026-4298 y de `ecdsa` sin versión corregida)

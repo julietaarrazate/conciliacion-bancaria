@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.organizacion import Organizacion
-from app.schemas.user import UserResponse, _validar_email
+from app.schemas.user import ProfileUpdateResponse, UserResponse, _validar_email
 from app.middleware.auth import get_current_user
 from app.database import get_db
 from app.services.auth import (
@@ -75,7 +75,7 @@ class UpdateProfileRequest(BaseModel):
     current_password: str | None = None
 
 
-@router.patch("/me", response_model=UserResponse)
+@router.patch("/me", response_model=ProfileUpdateResponse)
 def update_profile(
     payload: UpdateProfileRequest,
     db: Session = Depends(get_db),
@@ -86,6 +86,7 @@ def update_profile(
     Cambiar el email pide la contraseña actual: con un token robado no se puede
     tomar la cuenta cambiando el email y pidiendo después un reset de contraseña.
     """
+    nuevo_token = None
     if payload.full_name and payload.full_name.strip():
         current_user.full_name = payload.full_name.strip()
     if payload.email:
@@ -104,6 +105,13 @@ def update_profile(
             if existing:
                 raise HTTPException(400, "Ese email ya está en uso")
             current_user.email = nuevo_email
+            # Las sesiones viejas quedan cerradas (su `sub` es el email anterior):
+            # se devuelve un token nuevo para seguir en esta.
+            nuevo_token = create_access_token(
+                data={"sub": nuevo_email, "user_id": current_user.id, "role": current_user.role},
+            )
     db.commit()
     db.refresh(current_user)
-    return current_user
+    respuesta = ProfileUpdateResponse.model_validate(current_user)
+    respuesta.access_token = nuevo_token
+    return respuesta

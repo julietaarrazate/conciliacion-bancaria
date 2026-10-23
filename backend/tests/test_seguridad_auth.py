@@ -175,6 +175,10 @@ def test_patch_me_email_con_password_normaliza(client, db):
                      json={"email": "  Nuevo@T.Test ", "current_password": "pw123456"})
     assert r.status_code == 200
     assert r.json()["email"] == "nuevo@t.test"
+    # El token viejo (sub = email anterior) ya no vale; el nuevo sí
+    assert client.get("/me", headers=_auth(tok)).status_code == 401
+    nuevo = r.json()["access_token"]
+    assert client.get("/me", headers=_auth(nuevo)).json()["email"] == "nuevo@t.test"
 
 
 def test_patch_me_email_invalido_o_en_uso(client, db):
@@ -195,6 +199,7 @@ def test_patch_me_solo_nombre_o_mismo_email_no_pide_password(client, db):
     assert r.status_code == 200
     assert r.json()["full_name"] == "Nombre Nuevo"
     assert r.json()["email"] == "op1@t.test"
+    assert r.json()["access_token"] is None
 
 
 # ── 3. Login con Google ──────────────────────────────────────────────────────
