@@ -1464,43 +1464,10 @@ def reversar_asientos(
         if not originales:
             return 0
 
-        modulo_reverso = f"{modulo}_reverso"
         creados = 0
         for orig in originales:
-            # Idempotencia: no duplicar si ya hay un reverso para este asiento
-            ya_reversado = (
-                db.query(Asiento)
-                .filter(
-                    Asiento.modulo == modulo_reverso,
-                    Asiento.referencia_id == orig.id,
-                    Asiento.organizacion_id == org_id,
-                )
-                .first()
-            )
-            if ya_reversado:
-                continue
-
-            reverso = Asiento(
-                fecha=hoy_art(),
-                descripcion=f"REVERSO #{orig.id}: {orig.descripcion or ''} — {motivo}",
-                modulo=modulo_reverso,
-                referencia_id=orig.id,
-                organizacion_id=org_id,
-                usuario_id=usuario_id,
-                numero_asiento=_next_numero_asiento(db, org_id),
-            )
-            db.add(reverso)
-            db.flush()
-
-            # Invertir cada línea del original (debe ↔ haber)
-            for linea in orig.lineas:
-                db.add(AsientoDetalle(
-                    asiento_id=reverso.id,
-                    cuenta_id=linea.cuenta_id,
-                    debe=linea.haber,
-                    haber=linea.debe,
-                ))
-            creados += 1
+            if construir_reverso(db, orig, usuario_id, motivo) is not None:
+                creados += 1
 
         if creados:
             db.commit()
@@ -1509,6 +1476,43 @@ def reversar_asientos(
         db.rollback()
         logger.warning("Error reversando %s/%s: %s", modulo, referencia_id, ex)
         return 0
+
+
+def construir_reverso(
+    db: Session,
+    orig: Asiento,
+    usuario_id: Optional[int],
+    motivo: str,
+    fecha: Optional[date] = None,
+) -> Optional[Asiento]:
+    """Arma (sin commit) el asiento `{modulo}_reverso` de `orig` con debe↔haber
+    invertidos. Idempotente: si `orig` ya tiene reverso devuelve None. `fecha`
+    por defecto es hoy (baja del registro origen); la corrección del modelo de
+    cuentas transitorias pasa la fecha del original para que los saldos por
+    fecha queden bien. Lanza ante un error (el que llama hace commit/rollback)."""
+    if esta_reversado(db, orig):
+        return None
+    reverso = Asiento(
+        fecha=fecha or hoy_art(),
+        descripcion=f"REVERSO #{orig.id}: {orig.descripcion or ''} — {motivo}",
+        modulo=f"{orig.modulo}_reverso",
+        referencia_id=orig.id,
+        organizacion_id=orig.organizacion_id,
+        usuario_id=usuario_id,
+        numero_asiento=_next_numero_asiento(db, orig.organizacion_id),
+    )
+    db.add(reverso)
+    db.flush()
+    # Invertir cada línea del original (debe ↔ haber)
+    for linea in orig.lineas:
+        db.add(AsientoDetalle(
+            asiento_id=reverso.id,
+            cuenta_id=linea.cuenta_id,
+            debe=linea.haber,
+            haber=linea.debe,
+        ))
+    db.flush()
+    return reverso
 
 
 def registrar_ajuste_manual(
