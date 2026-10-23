@@ -246,9 +246,13 @@ gasto que lo explica ("＋ Resolver"), sin ir a Pagos. El vínculo es
   ±10 días (`DIAS_CANDIDATOS`), el más cercano primero; el modal los muestra
   arriba. `POST /pagos/{id}/vincular-movimiento` guarda solo el vínculo, **sin
   reversar ni rehacer el asiento** (el PATCH sí los rehace).
-- **Contabilidad sin cambios**: el egreso genera el mismo asiento que cargado a
-  mano en Pagos (`registrar_egreso`). Borrar el movimiento deja el pago sin
-  vínculo; borrar el pago libera el movimiento.
+- **Contabilidad**: el egreso genera el mismo asiento que cargado a mano en Pagos
+  (`registrar_egreso`): Gasto (o Cliente, si es OP por cuenta de un cliente) D /
+  **Pagos a imputar 2-1-1-2** H. El débito del extracto ya registró 2-1-1-2 D /
+  Banco H, así que la transitoria queda en cero y el banco se movió una sola vez
+  (modelo de cuentas transitorias, oct 2026 — ver
+  [ACCOUNTING_ENGINE](../architecture/ACCOUNTING_ENGINE.md) §2bis). Borrar el
+  movimiento deja el pago sin vínculo; borrar el pago libera el movimiento.
 
 ```mermaid
 sequenceDiagram
@@ -306,6 +310,8 @@ incremental (`extracto_merger.py:184-188`).
 Detalle completo en [EXTRACTOS_PDF.md](./EXTRACTOS_PDF.md). Lo que toca a estas reglas:
 - Un PDF que se pisa con un extracto existente se agrega con **este mismo merge** de UM
   (`source='um'`, `um_lote`, asiento automático): no hay una segunda lógica de deduplicación.
+  Un PDF guardado como extracto nuevo genera el asiento del extracto principal igual que el
+  Excel (uno por día, `extracto_banco`).
 - Antes de guardar, el PDF se valida con `saldo inicial + créditos − débitos = saldo final`
   (Decimal, tolerancia $0,01) y el saldo corrido fila por fila; si no cierra, solo se guarda con
   confirmación explícita.
@@ -398,18 +404,21 @@ a la cuenta corriente del cliente:
 - **Comisión** → asiento aparte: **Comisiones ganadas** (3-1-1-0) al Haber, se
   reconoce como ingreso nuestro independiente de la cuenta del cliente.
 
-**Contrapartida (Debe) según el ORIGEN del movimiento** — de dónde salió la
-plata realmente, no es intercambiable:
-| Origen del movimiento (`MovimientoBanco.source`) | Cuenta de origen (Debe) | Por qué |
+**Contrapartida (Debe): siempre No identificado (2-1-1-1)** — cobros a imputar.
+Desde el modelo de cuentas transitorias (oct 2026) el crédito del banco queda en
+2-1-1-1 venga de donde venga, y la reclasificación lo cancela:
+| Origen del movimiento (`MovimientoBanco.source`) | Asiento del banco | Reclasificación (módulo) |
 |---|---|---|
-| `"extracto"` (extracto bancario principal) | **Pasivo Corriente** (2-1-0-0) | Ahí quedó la plata al importar el extracto (`registrar_extracto`: Banco D / Pasivo Corriente H). |
-| `"um"` (Últimos Movimientos) | **No identificado** (2-1-1-1) | Ahí quedó la plata al importar el UM (`registrar_um_import`: Banco D / No identificado H). |
+| `"extracto"` (extracto bancario principal) | `extracto_banco`: Banco Macro D / 2-1-1-1 H (uno por día) | 2-1-1-1 D / Cliente H (`reclass_planilla_principal`) |
+| `"um"` (Últimos Movimientos) | `um_lote`: Banco Macro D / 2-1-1-1 H | 2-1-1-1 D / Cliente H (`um_reclass_planilla`) |
 
-Una planilla con filas conciliadas contra **ambos** orígenes genera **dos
-asientos principales independientes** (uno por origen, módulos
-`reclass_planilla_extracto` / `um_reclass_planilla`) — cada uno neteando su
-propia comisión proporcional — para no dejar ninguna de las dos cuentas de
-origen mal (una nunca se cancelaría, la otra quedaría negativa).
+Una planilla con filas conciliadas contra **ambos** orígenes sigue generando
+**dos asientos principales independientes** (uno por origen) — cada uno neteando
+su propia comisión proporcional —, por trazabilidad y para que el upsert de un
+bucket no pise al otro. Hasta oct 2026 el origen extracto debitaba Pasivo
+Corriente (2-1-0-0) en el módulo `reclass_planilla_extracto`; esos asientos viejos
+no se tocan y se corrigen con `POST /contabilidad/corregir-asientos-banco`
+(ver [ACCOUNTING_ENGINE](../architecture/ACCOUNTING_ENGINE.md) §7bis).
 
 - El **% de comisión efectivo** es el que se manda en el request de conciliar
   si es `> 0`, o si no vino, el que ya tenía guardado `Planilla.porcentaje_comision`

@@ -110,6 +110,10 @@ Reglas:
 - Si el PDF trae filas **más viejas** que el último movimiento del extracto y que no están en
   él, el merge no las agrega: la pantalla lo avisa antes (`anteriores`) y la respuesta lo dice
   (`no_agregados`), con la sugerencia de guardar el PDF como extracto nuevo.
+- Guardar como extracto **nuevo** genera el mismo asiento que el upload de Excel (uno por día,
+  `motor_contable.registrar_asientos_extracto`, después del commit; si falla, el extracto queda
+  guardado y la respuesta trae `contabilidad_ok: false`). "Agregar solo los nuevos" entra como UM
+  y lo registra `um_lote`, así que no se duplica.
 - Agregar a un existente: si algo se corta después del merge (que commitea solo), el reintento
   genera el asiento que haya faltado (el asiento de UM es idempotente). La auditoría va aparte:
   si falla, el extracto queda guardado y se loguea el error.
