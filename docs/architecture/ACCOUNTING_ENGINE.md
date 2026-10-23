@@ -380,6 +380,11 @@ asiento `*_reverso` como su original (detecta `Asiento.modulo.like("%_reverso")`
 
 ### 7bis. Corrección explícita del histórico (`POST /contabilidad/corregir-asientos-banco`)
 
+En la UI: **Contabilidad → Cuentas corrientes → "🏦 Corregir asientos del banco"** (solo superadmin).
+Corre primero el `dry_run` y muestra en un confirm los asientos a anular/crear, los saldos antes →
+después de Banco Macro, cuenta madre, Pasivo Corriente y las dos transitorias, los conflictos y los
+"a revisar"; recién al confirmar ejecuta.
+
 Solo superadmin, `?dry_run=true` por defecto, `?org_id=` para elegir la org. Lógica en
 `services/asientos_banco.py::corregir_asientos_banco`. **Nunca corre sola** (el arranque ya no
 genera asientos: el backfill del paso 7 de `main.py` se eliminó en oct 2026).

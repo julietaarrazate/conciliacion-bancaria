@@ -264,6 +264,47 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
     }
   }
 
+  // Corrección del histórico al modelo de cuentas transitorias (superadmin): primero
+  // la simulación (dry_run, el backend no guarda nada), después confirmar y aplicar.
+  const corregirAsientosBanco = async () => {
+    const orgQ = activeOrgId ? `&org_id=${activeOrgId}` : ''
+    const fmt = (v: string) => Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    try {
+      setBackfilling(true)
+      const prev = await apiClient.client.post(`/contabilidad/corregir-asientos-banco?dry_run=true${orgQ}`, {}, { timeout: 300000 })
+      const d = prev.data
+      if (d.nada_que_corregir) {
+        alert('✅ No hay nada que corregir: los asientos del banco ya están en el modelo de cuentas transitorias.')
+        return
+      }
+      const filas: [string, string][] = [
+        ['banco', 'Banco Macro'], ['banco_cuenta_madre', 'Banco (cuenta madre)'],
+        ['pasivo_corriente', 'Pasivo Corriente'], ['cobros_a_imputar', 'No identificado'],
+        ['pagos_a_imputar', 'Pagos a imputar'],
+      ]
+      const saldos = filas.map(([k, nombre]) =>
+        `  ${nombre}: ${fmt(d.saldos_antes[k].saldo)} → ${fmt(d.saldos_despues[k].saldo)}`).join('\n')
+      const modulos = Object.entries(d.a_crear_por_modulo).map(([m, n]) => `  · ${m}: ${n}`).join('\n')
+      const confirmar = window.confirm(
+        `🏦 CORREGIR ASIENTOS DEL BANCO — simulación\n\n` +
+        `No se borra ni se edita nada: se anulan ${d.a_reversar.length} asiento(s) viejo(s) con contra-asientos ` +
+        `y se crean ${d.a_crear.length} asiento(s) con el modelo nuevo:\n${modulos}\n\n` +
+        `Saldos (antes → después):\n${saldos}\n\n` +
+        (d.conflictos.length ? `⚠️ ${d.conflictos.length} conflicto(s) que no se tocan (revisar a mano).\n` : '') +
+        (d.a_revisar.cantidad ? `ℹ️ ${d.a_revisar.cantidad} asiento(s) viejo(s) de otros módulos tocan el banco directo (total ${fmt(d.a_revisar.total)}): quedan como están, para revisar con el contador.\n` : '') +
+        `\n¿Aplicar la corrección?`
+      )
+      if (!confirmar) return
+      const r = await apiClient.client.post(`/contabilidad/corregir-asientos-banco?dry_run=false${orgQ}`, {}, { timeout: 300000 })
+      toast.success(`Corrección aplicada: ${r.data.a_reversar.length} anulado(s), ${r.data.a_crear.length} creado(s)`)
+      recargarTodo()
+    } catch (e) {
+      alert(`❌ Error al corregir los asientos del banco:\n\n${apiDetail(e, 'Error desconocido')}`)
+    } finally {
+      setBackfilling(false)
+    }
+  }
+
   const verGaps = async () => {
     const q = activeOrgId ? `?org_id=${activeOrgId}` : ''
     const r = await apiClient.client.get(`/contabilidad/asientos/gaps${q}`)
@@ -503,7 +544,7 @@ export function useContabilidad(modo: 'full' | 'ctacte') {
     cartera, loadingCartera, ccFiltro, setCcFiltro, ccBusqueda, setCcBusqueda,
     setCtaCte, setCtaCteClienteId,
     recargarTodo, cargarLibroMayor, cargarCartera, verCtaCteCliente, toggleCat,
-    asignarCuenta, crearCuenta, crearCuentasFaltantes, resetYRebuild, verGaps,
+    asignarCuenta, crearCuenta, crearCuentasFaltantes, resetYRebuild, corregirAsientosBanco, verGaps,
     backfilling, creandoFaltantes,
     // fix fechas
     fixFechasOpen, setFixFechasOpen, fixDesde, setFixDesde, fixHasta, setFixHasta,

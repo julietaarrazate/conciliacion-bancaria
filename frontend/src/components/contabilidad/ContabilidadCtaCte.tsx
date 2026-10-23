@@ -25,6 +25,14 @@ export const ContabilidadCtaCteLista: React.FC<{ c: ContabilidadCtx }> = ({ c })
                   {c.backfilling ? 'Empezando…' : '🧹 Empezar limpio'}
                 </button>
                 <button
+                  onClick={c.corregirAsientosBanco}
+                  disabled={c.backfilling}
+                  className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-medium hover:bg-emerald-50 dark:hover:bg-emerald-900/20 disabled:opacity-50"
+                  title="Pasa los asientos viejos del banco al modelo de cuentas transitorias con contra-asientos. Primero muestra una simulación con los saldos antes y después."
+                >
+                  🏦 Corregir asientos del banco
+                </button>
+                <button
                   onClick={c.fixFechasUtc}
                   className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-orange-300 dark:border-orange-800 text-orange-600 dark:text-orange-400 font-medium hover:bg-orange-50 dark:hover:bg-orange-900/20"
                   title="Identifica y corrige registros con fecha UTC en vez de ART"

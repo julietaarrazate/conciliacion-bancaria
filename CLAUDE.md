@@ -272,7 +272,7 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
   el extracto/UM; ingresos contra 2-1-1-1 "No identificado", egresos contra 2-1-1-2 "Pagos a
   imputar"; todo lo que se paga o cobra "por banco" va a la transitoria (decisión de la operadora:
   dos transitorias). Ver ADR-015 y `ACCOUNTING_ENGINE.md` §2bis. **Pendiente**: correr
-  `POST /contabilidad/corregir-asientos-banco` en prod para Org A — primero el `dry_run` (también
+  `POST /contabilidad/corregir-asientos-banco` en prod para Org A (botón "🏦 Corregir asientos del banco" en Contabilidad → Cuentas corrientes) — primero el `dry_run` (también
   sobre una branch de Neon) y **solo con OK explícito de la operadora** tras ver los saldos; después
   revisar con `GET /contabilidad/control-banco` y la lista "a revisar". Deuda: multi-banco (D-12).
 - **Frontend — saltos mayores** (Vite 8, React 19, Tailwind 4, Vitest 5): armados y verificados con
