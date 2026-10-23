@@ -35,7 +35,7 @@ from app.services.excel_export import export_movimientos, export_extracto_contad
 from app.services.gastos_bancarios import clasificar_gasto, resumen_extracto as resumen_gastos_extracto
 from app.services.movimiento_egreso import egresos_por_movimiento
 import logging
-from app.middleware.auth import get_current_user, require_permission, can_switch_org
+from app.middleware.auth import get_current_user, require_permission, require_superadmin, can_switch_org
 from app.config import get_settings
 
 
@@ -98,7 +98,7 @@ async def upload_extracto(request: Request,
                           banco: str = Query("Banco Macro"),
                           org_id: Optional[int] = Query(None),
                           db: Session = Depends(get_db),
-                          current_user: User = Depends(get_current_user)):
+                          current_user: User = Depends(require_permission("upload_files"))):
     # Org destino: la activa seleccionada por el usuario (si tiene permiso para
     # operar ahí), si no la propia. Antes esto se ignoraba y todo se guardaba
     # con el default del modelo (organizacion_id=1) sin importar qué org tenía
@@ -211,7 +211,7 @@ async def upload_extracto(request: Request,
 @router.patch("/{extracto_id}/renombrar")
 def renombrar_extracto(extracto_id: int, payload: dict,
                        db: Session = Depends(get_db),
-                       current_user: User = Depends(get_current_user)):
+                       current_user: User = Depends(require_permission("upload_files"))):
     """Cambia el nombre visible del extracto."""
     extracto = _extracto_for_user(db, extracto_id, current_user)
     nuevo_nombre = (payload.get("nombre") or "").strip()
@@ -281,7 +281,7 @@ def delete_extracto(extracto_id: int, db: Session = Depends(get_db),
 
 @router.delete("")
 def delete_todos_extractos(db: Session = Depends(get_db),
-                           current_user: User = Depends(get_current_user)):
+                           current_user: User = Depends(require_superadmin)):
     """Elimina TODOS los extractos, planillas y movimientos DE LA ORG ACTUAL.
     Solo superadmin. Aislado por organizacion_id — no toca otras orgs."""
     if not current_user.is_superadmin:
@@ -400,7 +400,7 @@ async def agregar_ultimos_movimientos(
     corte_saldo: Optional[float] = Form(None),
     modo_asiento: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("upload_files")),
 ):
     extracto = _extracto_for_user(db, extracto_id, current_user)
     if extracto.archivado_at is not None:
@@ -564,7 +564,7 @@ def update_movimiento(
     mov_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("reconcile"))
 ):
     """Edita un movimiento bancario (titular, monto, fecha, etc.) — para correcciones manuales."""
     extracto = _extracto_for_user(db, extracto_id, current_user, include_deleted=True)

@@ -624,7 +624,7 @@ def resolver_revision(
     row_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("reconcile"))
 ):
     """
     Resuelve una fila EN_REVISION.
@@ -693,7 +693,7 @@ def patch_row_status(
     row_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("reconcile"))
 ):
     """
     Modifica el estado de una fila de planilla manualmente.
@@ -952,7 +952,7 @@ def actualizar_comision_planilla(
     planilla_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reconcile")),
 ):
     """Setea o borra el % de comisión propio de esta planilla para liquidaciones."""
     planilla = _planilla_for_user(db, planilla_id, current_user)

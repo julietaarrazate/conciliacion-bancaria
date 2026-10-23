@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models.caja import ArqueoDiario, DENOMINACIONES, denominaciones_vacias
 from app.models.egreso import Egreso
 from app.models.user import User
-from app.middleware.auth import get_current_user, can_switch_org
+from app.middleware.auth import get_current_user, require_permission, can_switch_org
 from app.services.tz import hoy_art
 
 router = APIRouter(prefix="/caja", tags=["caja"])
@@ -78,7 +78,7 @@ def get_arqueo_hoy(
 def update_arqueo(
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("manage_finance"))
 ):
     """Actualiza saldo inicial, pesos agregados, ingresos o denominaciones físicas del día."""
     org_id = _org_id(current_user, payload.get("org_id"))

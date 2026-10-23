@@ -14,7 +14,7 @@ from slowapi import Limiter
 from app.services.limites import ip_cliente
 
 from app.database import get_db
-from app.middleware.auth import get_current_user
+from app.middleware.auth import require_permission
 from app.models.user import User
 from app.models.cheque import Cheque
 from app.models.cliente import Cliente
@@ -36,7 +36,7 @@ def acreditar(
     cheque_id: int,
     body: AcreditarIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("manage_finance")),
 ):
     oid = current_user.organizacion_id or 1
     c = db.query(Cheque).filter(Cheque.id == cheque_id).first()
@@ -91,7 +91,7 @@ def acreditar_masivo(
     body: AcreditarMasivoIn,
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("manage_finance")),
 ):
     """Acredita uno o varios cheques de una sola vez (flujo Por depósito)."""
     oid = _org_id(current_user, org_id)
@@ -150,7 +150,7 @@ def rechazar(
     cheque_id: int,
     body: RechazarIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("manage_finance")),
 ):
     oid = current_user.organizacion_id or 1
     c = db.query(Cheque).filter(Cheque.id == cheque_id).first()

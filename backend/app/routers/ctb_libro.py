@@ -27,7 +27,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.middleware.auth import get_current_user, require_permission
+from app.middleware.auth import get_current_user, require_permission, require_superadmin
 from app.models.contabilidad import Asiento, AsientoDetalle, PlanCuenta
 from app.models.user import User
 from app.services.tz import hoy_art
@@ -494,7 +494,7 @@ def reset_y_rebuild_asientos(
     dry_run: bool = Query(True, description="True = solo muestra qué haría; False = ejecuta"),
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_superadmin),
 ):
     """Borra TODOS los asientos de la org y los reconstruye desde los datos reales:
     - um_lote: un asiento por cada lote de UM importado en el extracto

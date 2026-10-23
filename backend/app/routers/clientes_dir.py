@@ -462,7 +462,7 @@ def acreditar_movimiento_a_cliente(
     mov_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reconcile")),
 ):
     """
     Marca un movimiento como acreditado al cliente indicado, con la fecha indicada.
@@ -671,7 +671,7 @@ def borrar_cliente(cliente_id: int,
 def generar_share_link(
     cliente_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reconcile")),
 ):
     """Genera un link público de solo lectura para el estado de cuenta del cliente (expira en 7 días)."""
     from datetime import timedelta
@@ -705,7 +705,7 @@ def generar_share_link(
 @router.post("")
 def crear_cliente(payload: dict,
                   db: Session = Depends(get_db),
-                  current_user: User = Depends(get_current_user)):
+                  current_user: User = Depends(require_permission("reconcile"))):
     """Crea un nuevo cliente (carpeta) en la organizacion del usuario."""
     from app.models.cliente import Cliente
     from app.services.auditoria import registrar_log
@@ -751,7 +751,7 @@ def renombrar_cliente(
     cliente_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reconcile")),
 ):
     """Cambia el nombre de un cliente y actualiza todos los movimientos que lo referencian."""
     from app.models.cliente import Cliente
@@ -798,7 +798,7 @@ def fusionar_clientes(
     cliente_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reconcile")),
 ):
     """
     Fusiona cliente_id (source) dentro de target_id.
@@ -862,7 +862,7 @@ def actualizar_comision_cliente(
     cliente_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("reconcile"))
 ):
     """Setea o borra los % de comision del cliente. NULL = usa default de la org.
     Acepta: porcentaje_comision (general/TT), porcentaje_comision_local y

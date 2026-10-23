@@ -147,3 +147,139 @@ def test_endpoint_marca_el_log_con_la_org_activa(client, db):
     assert log.organizacion_id == 2
     # Y la org 1 no lo ve, aunque el superadmin sea "de" la org 1.
     assert "UPDATE" not in _acciones(client, db, "aud1@t.test")
+
+
+# ── 2. Escrituras con permiso: el revisor es de solo lectura ──────────────
+
+_XLSX = {"file": ("x.xlsx", b"PK\x03\x04",
+                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+
+# (método, path, kwargs del request). El permiso se chequea antes de validar el body,
+# así que alcanza con un body mínimo: lo que importa es que el revisor reciba 403.
+ESCRITURAS_REVISOR = [
+    ("post", "/extractos/upload", {"files": _XLSX}),
+    ("patch", "/extractos/1/renombrar", {"json": {"nombre": "x"}}),
+    ("post", "/extractos/1/agregar-um", {"files": _XLSX}),
+    ("patch", "/extractos/1/movimientos/1", {"json": {"titular": "x"}}),
+    ("delete", "/extractos", {}),
+    ("post", "/planillas/1/revision/1/resolver", {"json": {}}),
+    ("patch", "/planillas/rows/1", {"json": {"status": "ok"}}),
+    ("put", "/planillas/1/comision", {"json": {"porcentaje": 0.01}}),
+    ("post", "/auditoria/patrones/importar-historico", {"json": {"patrones": []}}),
+    ("post", "/clientes", {"json": {"nombre": "Nuevo"}}),
+    ("put", "/clientes/1/renombrar", {"json": {"nombre": "Otro"}}),
+    ("post", "/clientes/1/fusionar", {"json": {"target_id": 2}}),
+    ("put", "/clientes/1/comision", {"json": {"porcentaje": 0.01}}),
+    ("post", "/clientes/movimientos/1/acreditar", {"json": {"cliente_id": 1}}),
+    ("post", "/clientes/1/share-link", {}),
+    ("put", "/caja/arqueo/hoy", {"json": {"saldo_inicial": 1}}),
+    ("post", "/cheques", {"json": {}}),
+    ("post", "/cheques/bulk-crear", {"json": {"cheques": []}}),
+    ("post", "/cheques/portadores", {"json": {"nombre": "P"}}),
+    ("patch", "/cheques/1", {"json": {"monto": 1}}),
+    ("post", "/cheques/1/foto", {"json": {"foto": "x"}}),
+    ("post", "/cheques/importar", {"files": _XLSX}),
+    ("post", "/cheques/1/acreditar", {"json": {}}),
+    ("post", "/cheques/acreditar", {"json": {"ids": [1]}}),
+    ("post", "/cheques/1/rechazar", {"json": {}}),
+    ("post", "/pagos/1/compartir", {}),
+    ("post", "/contabilidad/reset-y-rebuild", {}),
+    ("post", "/push/test", {}),
+    ("post", "/push/setup", {}),
+]
+
+
+@pytest.mark.parametrize("metodo,path,kwargs", ESCRITURAS_REVISOR,
+                         ids=[f"{m.upper()} {p}" for m, p, _ in ESCRITURAS_REVISOR])
+def test_revisor_no_puede_escribir(client, db, metodo, path, kwargs):
+    r = getattr(client, metodo)(path, headers=_auth(db, "rev1@t.test"), **kwargs)
+    assert r.status_code == 403, f"{metodo.upper()} {path} → {r.status_code}: {r.text[:200]}"
+
+
+def test_operador_sigue_pudiendo_escribir(client, db):
+    h = _auth(db, "op1@t.test")
+    r = client.post("/clientes", headers=h, json={"nombre": "Cliente del operador"})
+    assert r.status_code == 200, r.text
+    cid = r.json()["id"]
+    r = client.put(f"/clientes/{cid}/renombrar", headers=h, json={"nombre": "Renombrado"})
+    assert r.status_code == 200, r.text
+    r = client.post("/cheques/portadores", headers=h, json={"nombre": "Portador op"})
+    assert r.status_code in (200, 201), r.text
+    # Sin datos: no es 403 (pasa el permiso y falla después por otra razón).
+    assert client.put("/caja/arqueo/hoy", headers=h, json={"saldo_inicial": 1}).status_code != 403
+    assert client.patch("/extractos/999/renombrar", headers=h,
+                        json={"nombre": "x"}).status_code == 404
+    assert client.patch("/planillas/rows/999", headers=h,
+                        json={"status": "ok"}).status_code != 403
+
+
+def test_auditor_conserva_finanzas(client, db):
+    """El auditor tiene manage_finance: cheques y caja le siguen andando."""
+    r = client.post("/cheques/portadores", headers=_auth(db, "aud1@t.test"),
+                    json={"nombre": "Portador aud"})
+    assert r.status_code in (200, 201), r.text
+
+
+# ── 3. Meta-test: toda ruta que escribe pide permiso o está en la lista ───
+
+# Rutas que escriben sin require_permission / require_superadmin, a propósito.
+# Clave: "<módulo del router>.<función>" (no depende del prefijo ni de la versión de FastAPI).
+SIN_PERMISO_A_PROPOSITO = {
+    # Públicas (sin JWT): login, recuperación de contraseña, 2FA, Google, logout.
+    "auth.login", "auth.forgot_password", "auth.reset_password", "auth.logout",
+    "auth.verify_2fa", "google_auth.google_login",
+    # Webhook de Resend Inbound: firma Svix, sin JWT (SECURITY_MODEL §8b).
+    "comprobantes_compra.webhook_resend",
+    # Autoservicio del propio usuario.
+    "me.change_password", "me.update_profile",
+    "push_router.subscribe", "push_router.unsubscribe",
+    # Asistente IA: solo lee y devuelve datos; no escribe en la base (cupo diario por org).
+    "agente.chat", "agente.ocr_cheque", "agente.ocr_transferencia", "agente.transcribir_audio",
+    # POST de solo lectura: busca candidatos o devuelve un archivo, no modifica la base.
+    "clientes_dir.buscar_movimiento_para_acreditar",
+    "clientes_dir.guardar_planilla_en_carpeta",
+}
+
+
+def _rutas(routes):
+    """APIRoutes de la app. FastAPI ≥0.150 anida los routers incluidos (`original_router`)."""
+    from fastapi.routing import APIRoute
+    for r in routes:
+        if isinstance(r, APIRoute):
+            yield r
+        elif hasattr(r, "original_router"):
+            yield from _rutas(r.original_router.routes)
+
+
+def _dependencias(dependant):
+    for sub in dependant.dependencies:
+        yield sub.call
+        yield from _dependencias(sub)
+
+
+def _pide_permiso(route) -> bool:
+    for call in _dependencias(route.dependant):
+        nombre = getattr(call, "__qualname__", "")
+        if nombre.startswith("require_permission.") or nombre == "require_superadmin":
+            return True
+    return False
+
+
+def test_toda_ruta_que_escribe_pide_permiso():
+    mutantes = [r for r in _rutas(app.routes) if r.methods - {"GET", "HEAD", "OPTIONS"}]
+    assert len(mutantes) > 100, "no se encontraron las rutas: ¿cambió la estructura de FastAPI?"
+    vistas, faltan = set(), []
+    for r in mutantes:
+        clave = f"{r.endpoint.__module__.rsplit('.', 1)[-1]}.{r.endpoint.__name__}"
+        if _pide_permiso(r):
+            continue
+        vistas.add(clave)
+        if clave not in SIN_PERMISO_A_PROPOSITO:
+            faltan.append(f"{sorted(r.methods)} {r.path} ({clave})")
+    assert not faltan, (
+        "Rutas que escriben sin require_permission/require_superadmin. Agregá el permiso "
+        "o, si es autoservicio/pública, sumala a SIN_PERMISO_A_PROPOSITO:\n  - "
+        + "\n  - ".join(faltan)
+    )
+    # La lista no acumula entradas muertas.
+    assert not (SIN_PERMISO_A_PROPOSITO - vistas), SIN_PERMISO_A_PROPOSITO - vistas

@@ -34,7 +34,7 @@ from slowapi import Limiter
 from app.services.limites import ip_cliente
 
 from app.database import get_db
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, require_permission
 from app.models.user import User
 from app.models.cheque import Cheque
 from app.models.cliente import Cliente
@@ -100,7 +100,7 @@ def crear_cheque(
     body: ChequeIn,
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("manage_finance")),
 ):
     oid = _org_id(current_user, org_id)
     if body.cliente_id:

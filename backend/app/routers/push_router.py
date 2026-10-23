@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, require_superadmin
 from app.models.push_subscription import PushSubscription
 from app.models.user import User
 from app.config import get_settings
@@ -64,7 +64,7 @@ def unsubscribe(
 @router.post("/test")
 def send_test_push(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_superadmin),
 ):
     if not current_user.is_superadmin:
         raise HTTPException(403, "Solo superadmin")
@@ -115,7 +115,7 @@ def send_test_push(
 
 
 @router.post("/setup")
-def setup_vapid(current_user: User = Depends(get_current_user)):
+def setup_vapid(current_user: User = Depends(require_superadmin)):
     """Genera un par de claves VAPID en formato base64url, listas para pegar como env vars."""
     if not current_user.is_superadmin:
         raise HTTPException(403, "Solo superadmin")

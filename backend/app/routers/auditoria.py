@@ -265,7 +265,7 @@ def get_insights(
 def importar_patrones_historicos(
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("reconcile"))
 ):
     """
     Importa patrones de aprendizaje desde planillas historicas ya conciliadas.
