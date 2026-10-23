@@ -1,7 +1,14 @@
 """Autenticación (revisión de seguridad oct/2026).
 
-- Cambiar o restablecer la contraseña cierra las sesiones abiertas (JWT con `iat`
-  anterior a `users.password_changed_at`).
+1. Cambiar o restablecer la contraseña cierra las sesiones abiertas (JWT con `iat`
+   anterior a `users.password_changed_at`).
+2. `PATCH /me` pide la contraseña actual para cambiar el email (y lo normaliza).
+3. Google: `email_verified` bien comparado, rate limit y 2FA para admin/superadmin.
+4. 2FA: cupo de códigos por hora, intentos por código y falla cerrada.
+5. Usuario inactivo: el login responde igual que con contraseña mala.
+6. Mail de reset: el nombre va escapado.
+7. CORS: solo producción, dev local y previews de este proyecto.
+8. PBKDF2 600.000 para hashes nuevos; los viejos verifican y se rehashean.
 """
 from datetime import datetime, timedelta
 
