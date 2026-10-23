@@ -37,6 +37,7 @@ Env vars opcionales en Render (feature flags — sin la var, la feature se degra
 `VITE_GOOGLE_CLIENT_ID` (Vercel) login Google · `S3_*` (5 vars) storage fotos R2 ·
 `INBOUND_EMAIL_DOMAIN` + `RESEND_INBOUND_SECRET` recepción de facturas por mail (Comprobantes por revisar) ·
 `EXTRACTOS_PDF_IA_DAILY_LIMIT` tope diario de lecturas de extractos PDF con IA (default 100) ·
+`IA_TOPE_DIARIO_CHAT` / `IA_TOPE_DIARIO_OCR` / `IA_TOPE_DIARIO_AUDIO` cupo diario de IA **por organización** (default 200/100/100) ·
 `ARCA_ENCRYPTION_KEY` ya seteada, módulo ARCA construido pero desactivado a propósito (ver
 "Pendiente para próximas sesiones"). Stack: Python 3.11 / Node 24 (Vercel deja de buildear con Node 20 desde oct 2026), Neon free tier (puede dormir),
 Render free tier (cold start ~30s, mitigado con UptimeRobot + retry en frontend).

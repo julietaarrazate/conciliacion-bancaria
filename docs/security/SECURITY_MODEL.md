@@ -227,10 +227,22 @@ por ARCA para facturar bajo su CUIT) — el material más sensible que maneja el
 
 ## 9. Rate limiting (brute force)
 
-`slowapi` con clave = IP remota (`main.py`, `app.state.limiter`). Protege login y endpoints
-sensibles. Tabla de límites por endpoint en [../api/API_RULES.md](../api/API_RULES.md) §6.
+`slowapi` con clave = **IP real del cliente** (`services/limites.ip_cliente`): la primera IP
+pública de `X-Forwarded-For` contando desde la derecha (la que agrega el proxy de Render). Antes
+se usaba la IP de la conexión, que es la del proxy: todos compartían un mismo contador y un
+atacante bloqueaba el login de todos. Lo que el cliente escribe a la izquierda del header no
+cambia la clave. Protege login y endpoints sensibles. Tabla de límites por endpoint en [../api/API_RULES.md](../api/API_RULES.md) §6.
 Relevantes para seguridad: `login` `10/minute`, `verify-2fa` `3/minute`, `forgot-password`
 `3/hour`, `register` `5/minute`.
+
+**IA (oct 2026):** además del tope global en memoria (`agente.py`), cada llamada a la IA
+descuenta del **cupo diario de la organización** en la tabla `uso_ia_diario` (migración 034 +
+safety net), con un único `INSERT ... ON CONFLICT DO UPDATE ... WHERE cantidad < tope` para que
+dos pedidos simultáneos no pasen el tope. Topes por env var: `IA_TOPE_DIARIO_CHAT` (200),
+`IA_TOPE_DIARIO_OCR` (100, una lectura por foto, también en `/cheques/bulk-ocr`),
+`IA_TOPE_DIARIO_AUDIO` (100). Límites por IP: chat/OCR/transcripción `20/minute`,
+saludo `10/minute`, `bulk-ocr` `5/minute` (y requiere `upload_files`). Tamaño máximo de audio y
+fotos: 10 MB (413); mensaje de chat: 4000 caracteres. Tests: `tests/test_limites.py`.
 
 Defensas adicionales en auth:
 - `forgot-password` responde **siempre 200** con el mismo mensaje (exista o no el email) → no se

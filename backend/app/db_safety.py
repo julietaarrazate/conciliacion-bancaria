@@ -497,4 +497,13 @@ SAFETY_NET_DDL = [
     "CREATE INDEX IF NOT EXISTS ix_planilla_rows_orden_movimiento_acreditado "
     "ON planilla_rows (orden_movimiento_acreditado)",
     "CREATE INDEX IF NOT EXISTS ix_egresos_arqueo_id ON egresos (arqueo_id)",
+    # migración 034 — cupo diario de IA por organización
+    "CREATE TABLE IF NOT EXISTS uso_ia_diario ("
+    "id SERIAL PRIMARY KEY, "
+    "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+    "fecha DATE NOT NULL, "
+    "tipo VARCHAR(20) NOT NULL, "
+    "cantidad INTEGER NOT NULL DEFAULT 0, "
+    "CONSTRAINT uq_uso_ia_org_fecha_tipo UNIQUE (organizacion_id, fecha, tipo))",
+    "CREATE INDEX IF NOT EXISTS ix_uso_ia_diario_organizacion_id ON uso_ia_diario (organizacion_id)",
 ]

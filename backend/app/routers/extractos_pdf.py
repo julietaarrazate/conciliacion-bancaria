@@ -23,7 +23,7 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.services.limites import ip_cliente
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -39,7 +39,7 @@ from app.services import extracto_pdf_service as svc
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/extractos-pdf", tags=["extractos-pdf"])
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=ip_cliente)
 
 # Sesión del procesamiento en segundo plano (los tests la reemplazan).
 _session_factory = SessionLocal

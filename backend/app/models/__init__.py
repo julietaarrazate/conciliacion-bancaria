@@ -20,6 +20,7 @@ from .comprobante_compra import BuzonComprobantes, BorradorComprobante
 from .extracto_pdf import BorradorExtractoPdf, MoldeExtractoPdf
 from .vencimientos import CalendarioVencimiento, VencimientoMarcado
 from .proveedor import Proveedor
+from .uso_ia import UsoIaDiario
 
 __all__ = [
     "Organizacion", "User", "Cliente",
@@ -40,4 +41,5 @@ __all__ = [
     "BorradorExtractoPdf", "MoldeExtractoPdf",
     "CalendarioVencimiento", "VencimientoMarcado",
     "Proveedor",
+    "UsoIaDiario",
 ]

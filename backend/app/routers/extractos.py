@@ -5,7 +5,7 @@ from sqlalchemy import desc, and_, or_, func
 from datetime import date, datetime
 from zoneinfo import ZoneInfo as _ZI
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.services.limites import ip_cliente
 _ARG = _ZI('America/Argentina/Buenos_Aires')
 from typing import Optional
 import tempfile, os, io
@@ -55,7 +55,7 @@ def _extracto_for_user(db: Session, extracto_id: int, current_user: User,
 settings = get_settings()
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/extractos", tags=["extractos"])
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=ip_cliente)
 
 @router.get("", response_model=ExtractoListResponse)
 def list_extractos(skip: int = 0, limit: int = 50,
