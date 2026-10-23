@@ -5,6 +5,7 @@ from app.models.user import User
 from app.models.revoked_token import RevokedToken
 from app.database import get_db
 from app.services.auth import verify_token
+from app.services.auditoria import org_activa
 
 security = HTTPBearer()
 
@@ -54,6 +55,10 @@ async def get_current_user(
             # Expunge para que SQLAlchemy no persista el cambio en el commit del endpoint
             db.expunge(user)
             user.organizacion_id = requested_org
+
+    # Org activa del request para la auditoría (registrar_log la usa si no sabe la org del
+    # registro). Se setea en cada request: el contexto es propio de cada request.
+    org_activa.set(user.organizacion_id)
 
     return user
 

@@ -124,7 +124,8 @@ async def importar_varios(
             r = importar_filas(db, org_id, direccion, periodo, filas, nombre)
             item.update(importados=r["importados"], duplicados=r["duplicados"], lote=r["lote"])
             registrar_log(db, current_user.id, "comprobantes_iva", 0, "IMPORTAR_MASIVO",
-                          {"organizacion_id": org_id, "direccion": direccion, **r})
+                          {"organizacion_id": org_id, "direccion": direccion, **r},
+                          organizacion_id=org_id)
             db.commit()
         archivos.append(item)
     return {"direccion": direccion, "periodo": periodo, "archivos": archivos}

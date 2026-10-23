@@ -134,7 +134,8 @@ def correr(db: Session, accion: str, periodo: str, org_ids: Iterable[int],
                         detalle="Ya estaba presentado: no se recalculó" if resultado == "ya_presentado" else None)
             if resultado == "calculado":
                 registrar_log(db, usuario_id, tabla, ref_id, "CALCULAR_MASIVO",
-                              {"periodo": periodo, "accion": accion, **resumen})
+                              {"periodo": periodo, "accion": accion, **resumen},
+                              organizacion_id=org_id)
             db.commit()
         except _ERRORES_MODULO as ex:
             db.rollback()
