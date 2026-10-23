@@ -20,6 +20,7 @@ from fastapi import HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.models.uso_ia import UsoIaDiario
+from app.services.excel_safe import verificar_xlsx
 from app.services.tz import hoy_art
 
 # Topes diarios por organización (configurables por env var en Render).
@@ -34,6 +35,9 @@ _MENSAJES_TOPE = {
 
 # Tamaño máximo de un archivo que se manda a la IA (audio o foto).
 MAX_BYTES_IA = 10 * 1024 * 1024
+# Tamaño máximo de una planilla subida (Excel/CSV de clientes, tarjetas, Mis Comprobantes,
+# cheques). Los extractos bancarios usan `settings.max_file_size` (50 MB).
+MAX_BYTES_PLANILLA = 15 * 1024 * 1024
 
 
 def ip_cliente(request: Request) -> str:
@@ -100,9 +104,26 @@ def uso_ia(db: Session, organizacion_id: int, tipo: str, fecha: Optional[date] =
     return {"used": usado, "limit": tope, "remaining": max(0, tope - usado), "date": str(fecha)}
 
 
-async def leer_archivo_ia(archivo: UploadFile, maximo: int = MAX_BYTES_IA) -> bytes:
-    """Lee un archivo para mandar a la IA cortando en `maximo` bytes (413 si es más grande)."""
+async def leer_archivo(archivo: UploadFile, maximo: int) -> bytes:
+    """Lee un archivo subido cortando en `maximo` bytes (413 si es más grande).
+
+    Lee como mucho `maximo + 1` bytes: un archivo enorme no se carga entero en memoria."""
     raw = await archivo.read(maximo + 1)
     if len(raw) > maximo:
         raise HTTPException(413, f"El archivo supera el máximo de {maximo // (1024 * 1024)} MB")
+    return raw
+
+
+async def leer_archivo_ia(archivo: UploadFile, maximo: int = MAX_BYTES_IA) -> bytes:
+    """Lee un archivo para mandar a la IA (audio o foto) con el tope de la IA."""
+    return await leer_archivo(archivo, maximo)
+
+
+async def leer_planilla(archivo: UploadFile, maximo: int = MAX_BYTES_PLANILLA) -> bytes:
+    """Lee una planilla subida (.xlsx/.xls/.csv) con tope de tamaño y chequeo de zip bomb.
+
+    Punto único antes de pasarle el archivo a openpyxl/pandas: si es un .xlsx (ZIP), revisa
+    el tamaño descomprimido y la tasa de compresión (`excel_safe.verificar_xlsx`, 413)."""
+    raw = await leer_archivo(archivo, maximo)
+    verificar_xlsx(raw)
     return raw

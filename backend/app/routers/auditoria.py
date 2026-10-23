@@ -1,7 +1,7 @@
 from decimal import Decimal
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload, selectinload
-from sqlalchemy import desc, func
+from sqlalchemy import and_, desc, func, or_
 from typing import Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -14,6 +14,19 @@ from app.schemas.auditoria import AuditoriaListResponse, AuditoriaLogResponse
 from app.middleware.auth import require_permission, get_current_user, can_switch_org
 
 router = APIRouter(prefix="/auditoria", tags=["auditoria"])
+
+
+def _filtrar_por_org(q, oid: int):
+    """Logs de la org `oid`: los marcados con esa org y, de los viejos sin org (NULL, antes
+    de la migración 035), los hechos por usuarios de esa org — el criterio de siempre, para
+    que el historial no desaparezca. Un log marcado con otra org no se ve aunque lo haya
+    hecho un usuario de `oid` (p. ej. el superadmin trabajando en otra organización)."""
+    return q.outerjoin(User, User.id == AuditoriaLog.usuario_id).filter(
+        or_(
+            AuditoriaLog.organizacion_id == oid,
+            and_(AuditoriaLog.organizacion_id.is_(None), User.organizacion_id == oid),
+        )
+    )
 
 
 @router.get("", response_model=AuditoriaListResponse)
@@ -38,13 +51,9 @@ def list_auditoria(
 
     # Multi-tenant: filtrar por organizacion del actor
     if can_switch_org(current_user, org_id) and org_id:
-        q = q.join(User, User.id == AuditoriaLog.usuario_id).filter(
-            User.organizacion_id == org_id
-        )
+        q = _filtrar_por_org(q, org_id)
     elif not current_user.is_superadmin:
-        q = q.join(User, User.id == AuditoriaLog.usuario_id).filter(
-            User.organizacion_id == current_user.organizacion_id
-        )
+        q = _filtrar_por_org(q, current_user.organizacion_id or 1)
 
     if tabla:
         q = q.filter(AuditoriaLog.tabla == tabla)
@@ -177,9 +186,7 @@ def get_insights(
         AuditoriaLog.timestamp >= desde
     )
     if not current_user.is_superadmin:
-        correcciones_q = correcciones_q.join(User, User.id == AuditoriaLog.usuario_id).filter(
-            User.organizacion_id == oid
-        )
+        correcciones_q = _filtrar_por_org(correcciones_q, oid)
     correcciones = correcciones_q.all()
     correcciones_manuales = len(correcciones)
 
@@ -216,12 +223,16 @@ def get_insights(
         AuditoriaLog.timestamp >= desde
     )
     if not current_user.is_superadmin:
-        actividad_q = actividad_q.join(User, User.id == AuditoriaLog.usuario_id).filter(
-            User.organizacion_id == oid
-        )
+        actividad_q = _filtrar_por_org(actividad_q, oid)
     actividad = actividad_q.group_by(AuditoriaLog.accion).all()
 
     actividad_dict = {a.accion: a.cantidad for a in actividad}
+
+    # Antes contaba las correcciones de TODAS las orgs: ahora solo las de la org (salvo superadmin).
+    historicas_q = db.query(AuditoriaLog).filter(AuditoriaLog.accion == "UPDATE_STATUS")
+    if not current_user.is_superadmin:
+        historicas_q = _filtrar_por_org(historicas_q, oid)
+    total_correcciones_historicas = historicas_q.count()
 
     tasa_auto = round(auto_ok / total_filas * 100, 1) if total_filas > 0 else 0
 
@@ -241,7 +252,7 @@ def get_insights(
         "actividad_por_accion": actividad_dict,
         "aprendizaje": {
             "descripcion": "Cada corrección manual entrena al sistema. Con más correcciones, el match mejora automáticamente.",
-            "total_correcciones_historicas": db.query(AuditoriaLog).filter(AuditoriaLog.accion == "UPDATE_STATUS").count(),
+            "total_correcciones_historicas": total_correcciones_historicas,
             "patrones_frecuentes": [
                 {"patron": k, "veces": v}
                 for k, v in sorted(patrones_correccion.items(), key=lambda x: x[1], reverse=True)[:5]
@@ -254,7 +265,7 @@ def get_insights(
 def importar_patrones_historicos(
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("reconcile"))
 ):
     """
     Importa patrones de aprendizaje desde planillas historicas ya conciliadas.

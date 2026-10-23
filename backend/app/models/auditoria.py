@@ -8,6 +8,12 @@ class AuditoriaLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     usuario_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # Org a la que pertenece la acción (migración 035). La completa `registrar_log` con la org
+    # del registro afectado o, si no se puede saber, con la org activa del usuario. Las filas
+    # viejas quedan en NULL: el listado las filtra como antes (por la org del usuario).
+    organizacion_id = Column(
+        Integer, ForeignKey("organizaciones.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     tabla = Column(String, nullable=False)  # Nombre de tabla afectada
     registro_id = Column(Integer, nullable=False)  # ID del registro

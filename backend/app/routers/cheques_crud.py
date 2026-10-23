@@ -24,7 +24,7 @@ import io
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
 from sqlalchemy.orm import Session
 from slowapi import Limiter
-from app.services.limites import MAX_BYTES_IA, consumir_cupo_ia, ip_cliente
+from app.services.limites import MAX_BYTES_IA, consumir_cupo_ia, ip_cliente, leer_planilla
 import openpyxl
 
 from app.database import get_db
@@ -164,7 +164,7 @@ async def bulk_ocr(
 def bulk_crear(
     body: BulkCrearIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("manage_finance")),
 ):
     """Crea múltiples cheques en un solo request. Valida cliente por item; no aborta ante error parcial."""
     oid = _org_id(current_user, body.org_id)
@@ -296,7 +296,7 @@ def crear_portador(
     body: PortadorIn,
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("manage_finance")),
 ):
     oid = _org_id(current_user, org_id)
     nombre = body.nombre.strip()
@@ -339,7 +339,7 @@ def editar_cheque(
     cheque_id: int,
     body: ChequeIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("manage_finance")),
 ):
     oid = current_user.organizacion_id or 1
     c = db.query(Cheque).filter(Cheque.id == cheque_id).first()
@@ -416,7 +416,7 @@ def subir_foto(
     cheque_id: int,
     body: FotoIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("manage_finance")),
 ):
     oid = current_user.organizacion_id or 1
     c = db.query(Cheque).filter(Cheque.id == cheque_id).first()
@@ -470,14 +470,14 @@ async def importar_excel(
     file: UploadFile = File(...),
     org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("manage_finance")),
 ):
     oid = _org_id(current_user, org_id)
     ext = (file.filename or '').lower().split('.')[-1]
     if ext not in ('xlsx', 'xls'):
         raise HTTPException(400, "Solo se aceptan archivos .xlsx o .xls")
 
-    content = await file.read()
+    content = await leer_planilla(file)
     try:
         wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active

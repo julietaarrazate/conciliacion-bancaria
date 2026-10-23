@@ -405,7 +405,7 @@ def actualizar_escala_sembrada(db: Session, organizacion_id: int) -> int:
                 "tipo_actividad": c.tipo_actividad,
                 "limite_anterior": str(actual),
                 "limite_anual": str(nuevo),
-            }, autocommit=False)
+            }, autocommit=False, organizacion_id=c.organizacion_id)
         actualizadas += 1
     if actualizadas:
         db.commit()

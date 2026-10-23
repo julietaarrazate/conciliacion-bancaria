@@ -20,6 +20,7 @@ Seguridad:
 """
 
 import hashlib
+import html
 import logging
 import secrets
 from datetime import datetime, timedelta
@@ -30,7 +31,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models.password_reset import PasswordResetToken
 from app.models.user import User
-from app.services.auth import get_password_hash
+from app.services.auth import get_password_hash, marcar_cambio_password
 from app.services.email_sender import send_email
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,8 @@ def validar_y_cambiar_password(
 
     # Cambiar password
     user.hashed_password = get_password_hash(nueva_password)
+    # Cierra las sesiones abiertas (JWT emitidos antes del reset)
+    marcar_cambio_password(user)
     # Marcar este token como usado
     registro.used_at = datetime.utcnow()
     # Invalidar TODOS los otros tokens activos de este user (defense in depth)
@@ -147,7 +150,8 @@ def validar_y_cambiar_password(
 
 def _html_email(nombre: str, reset_url: str, ttl_min: int) -> str:
     """Email HTML con boton de reset. Diseño limpio, alta legibilidad mobile."""
-    saludo = (nombre or "").split()[0] if nombre else "Hola"
+    # El nombre lo carga el usuario: se escapa para que no inyecte HTML en el mail
+    saludo = html.escape((nombre or "").split()[0]) if (nombre or "").strip() else "Hola"
     return f"""
 <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;color:#222;padding:24px">
   <h2 style="color:#111;margin:0 0 12px;font-size:20px">Recuperar contraseña</h2>

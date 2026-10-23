@@ -55,6 +55,11 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class ProfileUpdateResponse(UserResponse):
+    # Token nuevo cuando cambió el email: el JWT lleva el email en `sub`, así que
+    # los tokens anteriores dejan de valer y la sesión actual seguiría con uno roto.
+    access_token: str | None = None
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

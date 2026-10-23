@@ -14,6 +14,7 @@ from app.models.user import User
 from app.services import procesos_masivos as svc
 from app.services.acceso_orgs import orgs_accesibles
 from app.services.auditoria import registrar_log
+from app.services.limites import leer_planilla
 from app.services.comparar_mis_comprobantes import comparar, importar_filas
 from app.services.mis_comprobantes_parser import parsear_mis_comprobantes
 
@@ -65,7 +66,7 @@ async def _leer(db: Session, user: User, direccion: str, files: List[UploadFile]
     accesibles = orgs_accesibles(db, user)
     out = []
     for f in files:
-        contenido = await f.read()
+        contenido = await leer_planilla(f)
         cuit = svc.cuit_del_titulo(contenido)
         org_id, error = svc.asignar_org(db, cuit, accesibles)
         filas = None
@@ -123,7 +124,8 @@ async def importar_varios(
             r = importar_filas(db, org_id, direccion, periodo, filas, nombre)
             item.update(importados=r["importados"], duplicados=r["duplicados"], lote=r["lote"])
             registrar_log(db, current_user.id, "comprobantes_iva", 0, "IMPORTAR_MASIVO",
-                          {"organizacion_id": org_id, "direccion": direccion, **r})
+                          {"organizacion_id": org_id, "direccion": direccion, **r},
+                          organizacion_id=org_id)
             db.commit()
         archivos.append(item)
     return {"direccion": direccion, "periodo": periodo, "archivos": archivos}

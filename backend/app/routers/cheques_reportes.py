@@ -19,6 +19,7 @@ from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models.user import User
 from app.models.cheque import Cheque
+from app.services.excel_safe import sanear_workbook
 
 from .cheques_common import _org_id, _cheque_dict
 
@@ -116,6 +117,7 @@ def exportar_todos_excel(
         ws.cell(row=total_row, column=12).number_format = '#,##0.00'
 
     buf = io.BytesIO()
+    sanear_workbook(wb)  # anti inyección de fórmulas (titulares/conceptos de terceros)
     wb.save(buf)
     buf.seek(0)
     filename = "cheques.xlsx"
@@ -224,6 +226,7 @@ def exportar_deposito_excel(
     ws.cell(row=total_row, column=10).number_format = '#,##0.00'
 
     buf = io.BytesIO()
+    sanear_workbook(wb)  # anti inyección de fórmulas (titulares/conceptos de terceros)
     wb.save(buf)
     buf.seek(0)
     filename = f"cheques_deposito_{fecha}.xlsx"

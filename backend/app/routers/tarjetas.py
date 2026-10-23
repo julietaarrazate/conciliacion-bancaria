@@ -33,6 +33,7 @@ from app.services.decimal_utils import to_decimal as _D
 from app.services.motor_contable import registrar_liquidacion_tarjeta, reversar_asientos
 from app.services.tarjeta_parser import parse_liquidacion
 from app.services.auditoria import registrar_log
+from app.services.limites import leer_planilla
 
 router = APIRouter(prefix="/tarjetas", tags=["tarjetas"])
 
@@ -109,7 +110,7 @@ async def upload_tarjeta(
 
     filename = file.filename or "liquidacion"
     suffix = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
-    content = await file.read()
+    content = await leer_planilla(file)
 
     tmp_path = None
     try:

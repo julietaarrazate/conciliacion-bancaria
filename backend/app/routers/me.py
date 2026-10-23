@@ -3,10 +3,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.organizacion import Organizacion
-from app.schemas.user import UserResponse
+from app.schemas.user import ProfileUpdateResponse, UserResponse, _validar_email
 from app.middleware.auth import get_current_user
 from app.database import get_db
-from app.services.auth import get_password_hash, verify_password
+from app.services.auth import (
+    create_access_token, get_password_hash, marcar_cambio_password, verify_password,
+)
 
 router = APIRouter(tags=["me"])
 
@@ -43,35 +45,73 @@ def change_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Cambia la contraseña del usuario autenticado"""
+    """Cambia la contraseña del usuario autenticado.
+
+    Cierra todas las sesiones abiertas (incluida la actual) y devuelve un token
+    nuevo para que quien la cambió siga trabajando sin volver a loguearse.
+    """
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(400, "Contraseña actual incorrecta")
     if len(payload.new_password) < 6:
         raise HTTPException(400, "La nueva contraseña debe tener al menos 6 caracteres")
     current_user.hashed_password = get_password_hash(payload.new_password)
+    marcar_cambio_password(current_user)
     db.commit()
-    return {"ok": True, "mensaje": "Contraseña actualizada correctamente"}
+    access_token = create_access_token(
+        data={"sub": current_user.email, "user_id": current_user.id, "role": current_user.role},
+    )
+    return {
+        "ok": True,
+        "mensaje": "Contraseña actualizada correctamente",
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
 
 
 class UpdateProfileRequest(BaseModel):
     full_name: str | None = None
     email: str | None = None
+    # Obligatoria solo si cambia el email (es el usuario de login)
+    current_password: str | None = None
 
 
-@router.patch("/me", response_model=UserResponse)
+@router.patch("/me", response_model=ProfileUpdateResponse)
 def update_profile(
     payload: UpdateProfileRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Actualiza perfil del usuario autenticado (nombre, email)"""
-    if payload.full_name:
-        current_user.full_name = payload.full_name
+    """Actualiza perfil del usuario autenticado (nombre, email).
+
+    Cambiar el email pide la contraseña actual: con un token robado no se puede
+    tomar la cuenta cambiando el email y pidiendo después un reset de contraseña.
+    """
+    nuevo_token = None
+    if payload.full_name and payload.full_name.strip():
+        current_user.full_name = payload.full_name.strip()
     if payload.email:
-        existing = db.query(User).filter(User.email == payload.email, User.id != current_user.id).first()
-        if existing:
-            raise HTTPException(400, "Ese email ya está en uso")
-        current_user.email = payload.email
+        try:
+            nuevo_email = _validar_email(payload.email)
+        except ValueError as ex:
+            raise HTTPException(400, str(ex))
+        if nuevo_email != (current_user.email or "").strip().lower():
+            if not payload.current_password or not verify_password(
+                payload.current_password, current_user.hashed_password
+            ):
+                raise HTTPException(400, "Para cambiar el email ingresá tu contraseña actual")
+            existing = db.query(User).filter(
+                User.email == nuevo_email, User.id != current_user.id
+            ).first()
+            if existing:
+                raise HTTPException(400, "Ese email ya está en uso")
+            current_user.email = nuevo_email
+            # Las sesiones viejas quedan cerradas (su `sub` es el email anterior):
+            # se devuelve un token nuevo para seguir en esta.
+            nuevo_token = create_access_token(
+                data={"sub": nuevo_email, "user_id": current_user.id, "role": current_user.role},
+            )
     db.commit()
     db.refresh(current_user)
-    return current_user
+    respuesta = ProfileUpdateResponse.model_validate(current_user)
+    respuesta.access_token = nuevo_token
+    return respuesta

@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 from decimal import Decimal
 from typing import Any, Optional
+from xml.sax.saxutils import escape as _xml_escape
 from app.services.tz import now_art
 
 from reportlab.lib import colors
@@ -115,13 +116,21 @@ def _styles() -> dict[str, ParagraphStyle]:
     }
 
 
+def _e(valor) -> str:
+    """Escapa texto para un Paragraph de reportlab (que interpreta markup tipo XML).
+
+    Un nombre como `A & B <b>x` rompía la generación del PDF o metía markup ajeno. Se
+    escapa solo el dato; el markup propio (`<b>`, `<font>`, `<br/>`) se arma alrededor."""
+    return _xml_escape(str(valor))
+
+
 # ── Componentes de diseño ─────────────────────────────────────────────────────
 def _header_band(titulo: str, etiqueta_der: str, valor_der: str) -> Table:
     s = _styles()
-    left = Paragraph(titulo, s["band"])
+    left = Paragraph(_e(titulo), s["band"])
     right = Paragraph(
-        f'<font color="#DDE1F7" size="8">{etiqueta_der}</font><br/>'
-        f'<font color="white" size="9.5"><b>{valor_der}</b></font>',
+        f'<font color="#DDE1F7" size="8">{_e(etiqueta_der)}</font><br/>'
+        f'<font color="white" size="9.5"><b>{_e(valor_der)}</b></font>',
         s["band_right"],
     )
     t = Table([[left, right]], colWidths=[_CONTENT_W * 0.62, _CONTENT_W * 0.38])
@@ -145,8 +154,8 @@ def _kpi_cards(items: list[tuple[str, str, Any]]) -> Table:
     for label, valor, color_v in items:
         col = color_v or _BRAND
         cells.append(Paragraph(
-            f'<font color="{_GRAY.hexval()}" size="7">{label.upper()}</font><br/>'
-            f'<font color="{col.hexval()}" size="13"><b>{valor}</b></font>',
+            f'<font color="{_GRAY.hexval()}" size="7">{_e(label.upper())}</font><br/>'
+            f'<font color="{col.hexval()}" size="13"><b>{_e(valor)}</b></font>',
             s["kpi"],
         ))
         accents.append(col)
@@ -170,7 +179,7 @@ def _kpi_cards(items: list[tuple[str, str, Any]]) -> Table:
 
 def _section(texto: str) -> list:
     s = _styles()
-    p = Paragraph(texto, s["h2"])
+    p = Paragraph(_e(texto), s["h2"])
     rule = Table([[""]], colWidths=[_CONTENT_W], rowHeights=[1.4])
     rule.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), _BRAND)]))
     return [Spacer(1, 10), p, rule, Spacer(1, 5)]
@@ -226,11 +235,11 @@ def _totales_box(items: list[tuple[str, str, Any, bool]]) -> Table:
     for label, valor, color_v, fuerte in items:
         col = color_v or _DARK
         lbl = Paragraph(
-            (f"<b>{label}</b>" if fuerte else label), s["body"],
+            (f"<b>{_e(label)}</b>" if fuerte else _e(label)), s["body"],
         )
         size = 12 if fuerte else 9
         val = Paragraph(
-            f'<para align="right"><font color="{col.hexval()}" size="{size}"><b>{valor}</b></font></para>',
+            f'<para align="right"><font color="{col.hexval()}" size="{size}"><b>{_e(valor)}</b></font></para>',
             s["body"],
         )
         rows.append([lbl, val])
@@ -272,7 +281,7 @@ def _page_decorator(generado_por: str):
 
 
 def _empty_note(texto: str) -> Paragraph:
-    return Paragraph(texto, _styles()["empty"])
+    return Paragraph(_e(texto), _styles()["empty"])
 
 
 # ---------------------------------------------------------------------------
@@ -302,9 +311,9 @@ def estado_cuenta_pdf(data: dict, generado_por: str = "Julieta Arrazate") -> byt
         f"{periodo['desde']}  a  {periodo['hasta']}",
     ))
     # Datos del cliente
-    sub = f"<b>{cliente['nombre']}</b>"
+    sub = f"<b>{_e(cliente['nombre'])}</b>"
     if cliente.get("cuit"):
-        sub += f'  ·  CUIT {cliente["cuit"]}'
+        sub += f'  ·  CUIT {_e(cliente["cuit"])}'
     pct = resumen.get("porcentaje_comision")
     if pct:
         sub += f'  ·  Comisión {float(pct):.2f}%'
@@ -343,7 +352,7 @@ def estado_cuenta_pdf(data: dict, generado_por: str = "Julieta Arrazate") -> byt
             fecha = (p.get("fecha_carga") or "")[:10]
             rows.append([
                 fecha,
-                Paragraph((p.get("nombre_archivo") or "-"), s["cell"]),
+                Paragraph(_e(p.get("nombre_archivo") or "-"), s["cell"]),
                 str(len(p.get("filas") or [])),
                 _fmt_ars(p.get("subtotal_ok") or 0),
                 _fmt_ars(p.get("subtotal_pendiente") or 0),
@@ -366,7 +375,7 @@ def estado_cuenta_pdf(data: dict, generado_por: str = "Julieta Arrazate") -> byt
         for c in cheques:
             rows.append([
                 c.get("numero") or "-",
-                Paragraph((c.get("banco_origen") or "-"), s["cell"]),
+                Paragraph(_e(c.get("banco_origen") or "-"), s["cell"]),
                 (c.get("fecha_emision") or "-")[:10],
                 (c.get("fecha_deposito") or "-")[:10],
                 _fmt_ars(c.get("monto") or 0),
@@ -389,7 +398,7 @@ def estado_cuenta_pdf(data: dict, generado_por: str = "Julieta Arrazate") -> byt
         for p in pagos:
             rows.append([
                 (p.get("fecha") or "-")[:10],
-                Paragraph((p.get("concepto") or "-"), s["cell"]),
+                Paragraph(_e(p.get("concepto") or "-"), s["cell"]),
                 p.get("medio") or "-",
                 _fmt_ars(p.get("monto") or 0),
             ])
@@ -440,7 +449,7 @@ def cierre_mensual_pdf(
     ))
     if org_nombre and (rango.get("desde") or rango.get("hasta")):
         story.append(Paragraph(
-            f"Período: {rango.get('desde', '')} a {rango.get('hasta', '')}",
+            f"Período: {_e(rango.get('desde', ''))} a {_e(rango.get('hasta', ''))}",
             s["subtitle"],
         ))
 
@@ -478,7 +487,7 @@ def cierre_mensual_pdf(
         for i, c in enumerate(top, 1):
             rows.append([
                 str(i),
-                Paragraph((c.get("nombre") or "-"), s["cell"]),
+                Paragraph(_e(c.get("nombre") or "-"), s["cell"]),
                 _fmt_ars(c.get("total") or 0),
             ])
         block.append(_tabla(
@@ -523,7 +532,7 @@ def cierre_mensual_pdf(
             who = c.get("cliente_nombre") or c.get("titular") or "-"
             rows.append([
                 c.get("numero") or "-",
-                Paragraph(who, s["cell"]),
+                Paragraph(_e(who), s["cell"]),
                 (c.get("fecha_deposito") or "-")[:10],
                 str(c.get("dias_para_vencer") if c.get("dias_para_vencer") is not None else "-"),
                 _fmt_ars(c.get("monto") or 0),
@@ -567,7 +576,7 @@ def cuenta_corriente_pdf(data: dict, generado_por: str = "Julieta Arrazate") -> 
         "Cuenta",
         f"{cuenta.get('codigo', '')} {cuenta.get('nombre', '')}".strip() or "—",
     ))
-    story.append(Paragraph(f"<b>{cliente.get('nombre', '—')}</b>", s["subtitle"]))
+    story.append(Paragraph(f"<b>{_e(cliente.get('nombre', '—'))}</b>", s["subtitle"]))
     story.append(Spacer(1, 4))
 
     total_debito  = data.get("total_debito",  0)
@@ -594,8 +603,8 @@ def cuenta_corriente_pdf(data: dict, generado_por: str = "Julieta Arrazate") -> 
             sal    = m.get("saldo",   0) or 0
             rows.append([
                 fecha,
-                Paragraph(tipo[:30], s["cell"]),
-                Paragraph(ref[:45], s["cell"]),
+                Paragraph(_e(tipo[:30]), s["cell"]),
+                Paragraph(_e(ref[:45]), s["cell"]),
                 estado,
                 _fmt_ars(deb) if deb else "",
                 _fmt_ars(cre) if cre else "",
@@ -659,15 +668,15 @@ def recibo_sueldo_pdf(
     story: list = []
     story.append(_header_band("Recibo de sueldo", "Período", periodo))
 
-    sub = f"<b>{nombre}</b>"
+    sub = f"<b>{_e(nombre)}</b>"
     if empleado.get("cuil"):
-        sub += f'  ·  CUIL {empleado["cuil"]}'
+        sub += f'  ·  CUIL {_e(empleado["cuil"])}'
     if empleado.get("categoria_nombre"):
-        sub += f'  ·  {empleado["categoria_nombre"]}'
+        sub += f'  ·  {_e(empleado["categoria_nombre"])}'
     if empleado.get("convenio_nombre"):
-        sub += f' ({empleado["convenio_nombre"]})'
+        sub += f' ({_e(empleado["convenio_nombre"])})'
     if empleado.get("fecha_ingreso"):
-        sub += f'  ·  Ingreso {empleado["fecha_ingreso"]}'
+        sub += f'  ·  Ingreso {_e(empleado["fecha_ingreso"])}'
     story.append(Paragraph(sub, s["subtitle"]))
 
     # Haberes / Descuentos en dos columnas
@@ -690,7 +699,7 @@ def recibo_sueldo_pdf(
     descuentos_rows.append(["Total descuentos", _fmt_ars(total_descuentos)])
 
     def _col_table(titulo, rows):
-        block = [Paragraph(titulo, s["h2"])]
+        block = [Paragraph(_e(titulo), s["h2"])]
         t = Table(rows, colWidths=[(_CONTENT_W * 0.48) * 0.62, (_CONTENT_W * 0.48) * 0.38])
         style = [
             ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
@@ -785,7 +794,7 @@ def export_planilla_conciliada_pdf(planilla_data: dict, generado_por: str = "Jul
         "Generado",
         now_art().strftime("%d/%m/%Y %H:%M"),
     ))
-    story.append(Paragraph(f"<b>{cliente_nombre}</b>  ·  {nombre_archivo}", s["subtitle"]))
+    story.append(Paragraph(f"<b>{_e(cliente_nombre)}</b>  ·  {_e(nombre_archivo)}", s["subtitle"]))
 
     total_monto = Decimal("0")
     for r in rows_data:
@@ -818,7 +827,7 @@ def export_planilla_conciliada_pdf(planilla_data: dict, generado_por: str = "Jul
             table_rows.append([
                 str(orden) if orden else "-",
                 _fmt_fecha(fecha),
-                Paragraph(titular, s["cell"]),
+                Paragraph(_e(titular), s["cell"]),
                 cuit,
                 _fmt_ars(monto),
                 estado,

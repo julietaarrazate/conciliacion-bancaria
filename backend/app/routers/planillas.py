@@ -9,7 +9,7 @@ from sqlalchemy import func, cast, String, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from slowapi import Limiter
-from app.services.limites import ip_cliente
+from app.services.limites import ip_cliente, leer_planilla
 import os
 
 logger = logging.getLogger(__name__)
@@ -139,7 +139,7 @@ async def preview_planilla(
         ).first()
         mapeo_perfil = cli.mapeo_planilla if cli else None
 
-    contents = await file.read()
+    contents = await leer_planilla(file)
     try:
         resultado = estandarizar_planilla(contents, mapeo=mapeo_perfil)
     except Exception as e:
@@ -226,7 +226,7 @@ async def upload_planilla(
         cliente_nombre = cliente.nombre
 
     try:
-        contents = await file.read()
+        contents = await leer_planilla(file)
 
         # Bloquea re-subir la MISMA planilla (mismo contenido de archivo) para el
         # mismo cliente mientras la anterior siga activa (no borrada). Evita el
@@ -624,7 +624,7 @@ def resolver_revision(
     row_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("reconcile"))
 ):
     """
     Resuelve una fila EN_REVISION.
@@ -693,7 +693,7 @@ def patch_row_status(
     row_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("reconcile"))
 ):
     """
     Modifica el estado de una fila de planilla manualmente.
@@ -952,7 +952,7 @@ def actualizar_comision_planilla(
     planilla_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reconcile")),
 ):
     """Setea o borra el % de comisión propio de esta planilla para liquidaciones."""
     planilla = _planilla_for_user(db, planilla_id, current_user)

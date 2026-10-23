@@ -24,6 +24,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.services.excel_safe import safe_cell
+
 
 def _fmt_fecha(d, formato: str) -> str:
     if d is None:
@@ -177,15 +179,15 @@ def _export_csv(filas, separador, encoding, fmt_fecha, config):
             elif col == "numero_asiento":
                 row.append(str(f["numero_asiento"]))
             elif col == "codigo_cuenta":
-                row.append(f["codigo_cuenta"])
+                row.append(safe_cell(f["codigo_cuenta"]))
             elif col == "nombre_cuenta":
-                row.append(f["nombre_cuenta"])
+                row.append(safe_cell(f["nombre_cuenta"]))
             elif col == "debe":
                 row.append(_fmt_monto(f["debe"]))
             elif col == "haber":
                 row.append(_fmt_monto(f["haber"]))
             elif col == "descripcion":
-                row.append(f["descripcion"])
+                row.append(safe_cell(f["descripcion"]))
             else:
                 row.append("")
         writer.writerow(row)
@@ -261,8 +263,8 @@ def _export_regisoft(filas):
     for f in filas:
         writer.writerow([
             _fmt_fecha(f["fecha"], "DD/MM/YYYY"),
-            f["codigo_cuenta"],
-            f["descripcion"],
+            safe_cell(f["codigo_cuenta"]),
+            safe_cell(f["descripcion"]),
             _fmt_monto(f["debe"]),
             _fmt_monto(f["haber"]),
         ])

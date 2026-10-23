@@ -19,9 +19,34 @@ Documento relacionado: convenciones de API y dónde se aplica cada control →
 - Expiración por defecto: `access_token_expire_minutes = 480` (**8 horas** = jornada laboral),
   definido en `config.py`.
 - Cada token incluye un `jti` único (UUID) generado en `create_access_token` (`services/auth.py`),
-  que habilita la **revocación individual** (logout). El payload típico:
-  `{"sub": email, "user_id": ..., "role": ..., "exp": ..., "jti": ...}`.
+  que habilita la **revocación individual** (logout), y un `iat` (emisión) que habilita cerrar
+  todas las sesiones al cambiar la contraseña (ver abajo). El payload típico:
+  `{"sub": email, "user_id": ..., "role": ..., "exp": ..., "jti": ..., "iat": ...}`.
 - Se envía como header `Authorization: Bearer <token>` y se valida en `get_current_user`.
+- Librería: **PyJWT** (`import jwt`; desde oct 2026 reemplaza a `python-jose`, sin mantenimiento y
+  con vulnerabilidades sin corregir). Toda decodificación pasa `algorithms=[settings.algorithm]`
+  explícito (nunca se acepta `alg: none` ni otro algoritmo) y captura `jwt.PyJWTError`. `sub` es
+  siempre el email (string, como exige PyJWT). Los tokens emitidos con python-jose siguen siendo
+  válidos (mismo HS256 y misma clave): lo prueba `tests/test_jwt_compat.py`.
+
+**Cambio de contraseña cierra las sesiones** (oct 2026): `users.password_changed_at` (migración
+035 + safety net) se setea en `POST /me/change-password` y en `POST /auth/reset-password`
+(`marcar_cambio_password` en `services/auth.py`). `get_current_user` rechaza con
+`401 "La contraseña cambió..."` un token cuyo `iat` sea anterior a ese momento, con un margen de
+1s (`MARGEN_IAT_SEGUNDOS`: `iat` va en segundos enteros). Tokens sin `iat` (emitidos antes de
+este control) y usuarios con `password_changed_at` NULL siguen andando. `change-password`
+devuelve un `access_token` nuevo y `Perfil.tsx` lo guarda, así quien cambió su contraseña sigue
+en su sesión. El rehash automático por costo (abajo) **no** cuenta como cambio. Tests:
+`tests/test_seguridad_auth.py`.
+
+**Login y usuario inactivo**: `authenticate_user` verifica la contraseña (y, si el email no
+existe, calcula igual un hash descartable para no delatar por tiempo qué emails existen);
+recién después `POST /auth/login` mira `is_active`. Inactivo, contraseña mala o email inexistente
+dan el mismo `401 "Email o contraseña inválidos"`.
+
+**Cambio de email** (`PATCH /me`): normaliza (strip + lower) y valida el formato con
+`_validar_email`; si el email cambia exige `current_password` (400 si falta o es incorrecta). Así
+un token robado no alcanza para cambiar el email y después pedir un reset de contraseña.
 
 Variantes de expiración:
 - **Contador** (desde ago 2026): usa la sesión estándar de 8h, igual que el resto — el login por
@@ -31,8 +56,14 @@ Variantes de expiración:
 ### Hashing de contraseñas: `pbkdf2_sha256`
 
 `services/auth.py`:
-- Hash con `pbkdf2_hmac("sha256", ...)`, **120.000 iteraciones**, salt aleatorio de 16 bytes.
-  Formato almacenado: `pbkdf2_sha256$<iters>$<salt_hex>$<dk_hex>`.
+- Hash con `pbkdf2_hmac("sha256", ...)`, **600.000 iteraciones** para los hashes nuevos (oct
+  2026; antes 120.000), salt aleatorio de 16 bytes. Formato almacenado:
+  `pbkdf2_sha256$<iters>$<salt_hex>$<dk_hex>` — cada hash guarda sus iteraciones, así que los
+  viejos siguen verificando.
+- **Rehash en el login**: si el login es correcto y `password_necesita_rehash` (menos iteraciones
+  que `PBKDF2_ITERATIONS`, o bcrypt legacy), `authenticate_user` guarda el hash con el costo
+  actual. No toca `password_changed_at`. En los tests, `conftest.py` baja las iteraciones (la
+  suite tardaba casi el triple), salvo en `test_seguridad_auth.py`.
 - Verificación con `hmac.compare_digest` (comparación en tiempo constante).
 - Compatibilidad legacy: si el hash empieza con `$2`, verifica con `bcrypt` (usuarios viejos).
 - Elegido por venir en la stdlib (no compila nada en el deploy de Render).
@@ -82,6 +113,28 @@ Notas (del propio código):
 - Acciones exclusivas del superadmin no usan la matriz sino `require_superadmin` (p. ej.
   `POST /auth/register`, decidir aprobaciones de login, limpieza masiva de extractos).
 
+**Toda ruta que escribe pide permiso (oct 2026).** El revisor es de solo lectura, pero ~30
+endpoints que escribían solo pedían `get_current_user` (subir extractos, editar movimientos,
+cheques, caja, clientes incluido fusionar). Ahora piden el permiso que ya tiene el rol que los usa:
+
+| Endpoints | Permiso |
+|-----------|---------|
+| `POST /extractos/upload`, `PATCH /extractos/{id}/renombrar`, `POST /extractos/{id}/agregar-um` | `upload_files` |
+| `PATCH /extractos/{id}/movimientos/{mov_id}`, `POST /planillas/{id}/revision/{row_id}/resolver`, `PATCH /planillas/rows/{id}`, `PUT /planillas/{id}/comision`, `POST /auditoria/patrones/importar-historico` | `reconcile` |
+| Clientes: `POST /clientes`, `PUT /clientes/{id}/renombrar`, `POST /clientes/{id}/fusionar`, `PUT /clientes/{id}/comision`, `POST /clientes/movimientos/{id}/acreditar`, `POST /clientes/{id}/share-link`; `POST /pagos/{id}/compartir` | `reconcile` |
+| Cheques (`POST /cheques`, `bulk-crear`, `portadores`, `PATCH /cheques/{id}`, `foto`, `importar`, `acreditar` uno y masivo, `rechazar`) y `PUT /caja/arqueo/hoy` | `manage_finance` |
+| `DELETE /extractos` (limpieza masiva), `POST /contabilidad/reset-y-rebuild`, `POST /push/test`, `POST /push/setup` | `require_superadmin` (antes chequeo inline) |
+
+Efecto por rol: admin, operador y contador siguen pudiendo todo lo de antes. El auditor conserva
+cheques y caja (`manage_finance`) pero ya no sube extractos ni edita clientes/planillas/movimientos.
+
+Sin permiso a propósito (lista `SIN_PERMISO_A_PROPOSITO` en `tests/test_seguridad_permisos.py`):
+login/2FA/recuperación/logout/Google (públicos), webhook de Resend (firma Svix), `/me` y
+`/push/subscribe` (autoservicio), asistente IA (`/agente/*`: solo lee, cupo por org) y dos POST de
+solo lectura de clientes (`buscar-movimiento`, `planillas/{id}/guardar`). Un meta-test recorre
+`app.routes` y falla si una ruta POST/PUT/PATCH/DELETE no pide `require_permission`/
+`require_superadmin` ni está en esa lista.
+
 Las 3 capas donde se aplica esto (router, endpoint, frontend) están descriptas en
 [../api/API_RULES.md](../api/API_RULES.md) §3.
 
@@ -110,6 +163,16 @@ usuario tiene permiso (`db.expunge(user)` para no persistirlo). Org A (`organiza
 organización principal y por convención **nunca** se modifican sus datos existentes (solo cambios
 aditivos). Detalle de columnas y constraints: ver [../database/DATABASE_RULES.md](../database/DATABASE_RULES.md).
 
+**Auditoría por organización (oct 2026, migración 035).** Antes `/auditoria` filtraba por la org
+"de casa" del usuario que hizo la acción: un usuario con `view_audit` en la org 1 veía lo que hacía
+el superadmin en todas las orgs. Ahora `auditoria.organizacion_id` guarda la org de la acción:
+`registrar_log` usa (1) la org explícita si se pasa, (2) la del registro afectado si `tabla` es una
+tabla con `organizacion_id` (la de una organización es su id), (3) la org activa del request —
+contextvar `org_activa` que setea `get_current_user` después del override de `?org_id=`. Fuera de
+un request (schedulers) queda NULL. El listado y `/auditoria/insights` filtran por esa org; las
+filas NULL (las viejas, sin backfill) siguen filtrándose por la org del usuario, así el historial
+no desaparece. Tests: `tests/test_seguridad_permisos.py`.
+
 ---
 
 ## 4. 2FA por email (opt-in admin/superadmin)
@@ -117,15 +180,21 @@ aditivos). Detalle de columnas y constraints: ver [../database/DATABASE_RULES.md
 `routers/auth.py` + `models/twofa_code.py`. Activo solo si `RESEND_API_KEY` está seteada
 (si no, el login es directo — degradación silenciosa).
 
-- Aplica a usuarios con `is_superadmin` o rol `admin`.
+- Aplica a usuarios con `is_superadmin` o rol `admin`, tanto en el login con contraseña como en
+  el de Google (los dos pasan por `emitir_sesion` en `routers/auth.py`).
 - En el login, en vez de devolver el token, se genera un código de **6 dígitos**, se guarda su
   **sha256** (`code_hash`) con expiración de **10 min** (`TWOFA_CODE_TTL_MINUTES`) y se manda por
   email (Resend). La respuesta es `202 {"requires_2fa": true, "email": ...}`.
 - El usuario confirma en `POST /auth/verify-2fa` (rate limit `3/minute`). Recién ahí se emite el JWT.
 - **Lockout**: `failed_attempts`; tras `TWOFA_MAX_ATTEMPTS = 3` fallos el código se marca `used` y
   hay que pedir uno nuevo reiniciando sesión.
-- Códigos expirados se purgan antes de generar uno nuevo. Si falla el envío de email, hay fallback
-  a login directo (se loguea el error). El `code_hash` nunca se guarda en claro.
+- **Cupo de códigos** (oct 2026): como mucho `TWOFA_MAX_CODES_PER_HOUR = 5` códigos por usuario por
+  hora (`429` al pasarse); sin tope, cada login nuevo daba otros 3 intentos. Un solo código vivo:
+  al emitir uno nuevo, los anteriores se marcan `used`. Se borran los códigos de más de 1 hora
+  (los de la última hora se conservan para contar el cupo).
+- **Falla cerrada** (oct 2026): si no se puede crear el código o mandar el mail, el login responde
+  `503` y no entrega token (antes caía a login directo sin segundo factor). Excepción: con
+  `DEBUG` el código se loguea y se responde `202` igual. El `code_hash` nunca se guarda en claro.
 
 ---
 
@@ -176,13 +245,15 @@ hasta recibir el token (4h, `CONTADOR_SESSION_MINUTES`) cuando el superadmin dec
 1. `POST /auth/google` recibe `{code, redirect_uri}`.
 2. El backend intercambia el code por tokens contra `oauth2.googleapis.com/token` (con el secret).
 3. Verifica el `id_token` contra `tokeninfo`, valida que `aud == GOOGLE_CLIENT_ID` y que el email
-   esté verificado (`email_verified`).
+   esté verificado: `email_verified` tiene que ser `True` o el string `"true"` (`tokeninfo` lo
+   devuelve como string; antes un `"false"` contaba como verificado).
 4. **Solo usuarios ya registrados**: si el email no existe → `404` (no auto-registra; el alta de
    usuarios la gestiona un admin). Cuenta desactivada → `403`.
-5. Emite el JWT de sesión.
+5. Responde con `emitir_sesion` (igual que el login con contraseña): JWT con `sub`, `user_id` y
+   `role`, o `202 requires_2fa` para admin/superadmin con 2FA activo (`Login.tsx` muestra el
+   formulario del código en los dos casos).
 
-> Nota: este token se crea con `create_access_token({"sub": user.email})` sin `user_id`/`role` en
-> el payload — ver "Pendiente de revisar".
+Rate limit `10/minute` por IP (igual que `login`).
 
 ---
 
@@ -225,6 +296,31 @@ por ARCA para facturar bajo su CUIT) — el material más sensible que maneja el
   `GEMINI_API_KEY` del servidor. Esa key debe ser de un plan pago: el free tier de Gemini puede usar
   lo que recibe para mejorar sus modelos.
 
+## 8d. Entradas de terceros en archivos (oct 2026)
+
+Titulares, conceptos y nombres vienen del extracto, de la planilla del cliente o de lo que
+escribe el usuario: se tratan como no confiables al generar o leer archivos.
+
+- **Inyección de fórmulas (Excel/CSV)**: `services/excel_safe.safe_cell` antepone `'` al texto
+  que empieza con `=`, `+`, `-`, `@`, tab o CR (un `=HYPERLINK(...)` no queda como fórmula viva
+  cuando el contador abre el archivo). Números, fechas y Decimal no se tocan, ni el texto que es
+  solo un número (`-1234,56`, `-`). Se aplica con `sanear_workbook(wb)` antes de cada `save` en
+  `excel_export.py`, `routers/extractos.py` y `routers/cheques_reportes.py`, y campo por campo en
+  los CSV de `export_contable.py` (genérico y Regisoft). Los TXT de Tango/Holistor no se tocan: son
+  formatos de importación a software contable, no se abren como planilla.
+- **Tamaño y zip bomb al subir**: tope de bytes leyendo como mucho `maximo + 1` y chequeo del
+  índice del .xlsx antes de openpyxl/pandas (`limites.leer_planilla`). Detalle en
+  [../api/API_RULES.md](../api/API_RULES.md) §7.
+- **PDF (reportlab)**: `Paragraph` interpreta markup; el dato de usuario se escapa con
+  `pdf_export._e` (`xml.sax.saxutils.escape`) y el markup propio (`<b>`, `<font>`) se arma
+  alrededor. Un nombre `A & B <b>x` ya no rompe el PDF.
+- **Frontend**: la foto compartida en `Clientes.tsx` se abre armando el `<img>` con la API del DOM,
+  no con `document.write` de HTML interpolado.
+- **Push**: `DELETE /push/subscribe` borra solo la suscripción del usuario actual (antes cualquiera
+  que supiera el endpoint de otro dispositivo le cortaba las notificaciones).
+
+Tests: `tests/test_seguridad_entradas.py`.
+
 ## 9. Rate limiting (brute force)
 
 `slowapi` con clave = **IP real del cliente** (`services/limites.ip_cliente`): la primera IP
@@ -232,7 +328,7 @@ pública de `X-Forwarded-For` contando desde la derecha (la que agrega el proxy 
 se usaba la IP de la conexión, que es la del proxy: todos compartían un mismo contador y un
 atacante bloqueaba el login de todos. Lo que el cliente escribe a la izquierda del header no
 cambia la clave. Protege login y endpoints sensibles. Tabla de límites por endpoint en [../api/API_RULES.md](../api/API_RULES.md) §6.
-Relevantes para seguridad: `login` `10/minute`, `verify-2fa` `3/minute`, `forgot-password`
+Relevantes para seguridad: `login` `10/minute`, `google` `10/minute`, `verify-2fa` `3/minute`, `forgot-password`
 `3/hour`, `register` `5/minute`.
 
 **IA (oct 2026):** además del tope global en memoria (`agente.py`), cada llamada a la IA
@@ -248,6 +344,8 @@ Defensas adicionales en auth:
 - `forgot-password` responde **siempre 200** con el mismo mensaje (exista o no el email) → no se
   puede usar para enumerar usuarios registrados.
 - `reset-password` devuelve errores genéricos (no revela si el token existía).
+- El mail de reset escapa (`html.escape`) el nombre del usuario: lo carga el propio usuario y no
+  debe poder inyectar HTML en el correo.
 - Logins fallidos se loguean (`LOGIN_FAILED email=... ip=...`).
 
 ---
@@ -265,8 +363,12 @@ Middleware `security_headers` en `main.py` agrega a cada respuesta:
 | `Permissions-Policy` | `geolocation=(), microphone=(self), camera=(self), payment=()` |
 | `X-Process-Time` | latencia del request en ms (observabilidad) |
 
-CORS (`CORSMiddleware`): allowlist cerrada al dominio de producción de Vercel + regex de previews
-de Vercel + `localhost:3000/5173`. `allow_credentials=False`; métodos `GET/POST/PUT/DELETE/PATCH/
+CORS (`CORSMiddleware`): allowlist cerrada al dominio de producción de Vercel + previews de Vercel
+de este proyecto + `localhost:3000/5173`. Las previews se aceptan con `CORS_PREVIEW_REGEX`
+(`main.py`, comparado con `fullmatch`), solo en las dos formas que genera Vercel:
+`conciliacion-bancaria-<hash de 9>-julietaarrazates-projects.vercel.app` (deploy) y
+`conciliacion-bancaria-git-<rama>-julietaarrazates-projects.vercel.app` (rama), sin puntos en el
+medio (el `.*` anterior aceptaba cualquier subdominio que terminara igual). `allow_credentials=False`; métodos `GET/POST/PUT/DELETE/PATCH/
 OPTIONS`; headers `Authorization, Content-Type, Accept`. Orígenes extra solo vía
 `EXTRA_CORS_ORIGINS`.
 
@@ -291,10 +393,19 @@ Observabilidad: requests por encima de `SLOW_REQUEST_MS` (default 1500) se logue
 
 ## Pendiente de revisar
 
-- **Payload del token de Google login**: `google_auth.py` usa
-  `create_access_token({"sub": user.email})` sin `user_id` ni `role`, mientras que el login normal
-  y el de contador sí los incluyen. `get_current_user` solo necesita `sub`, pero conviene confirmar
-  que ningún consumidor del token dependa de `role`/`user_id` en el payload tras un login Google.
+- **Previews de CORS**: el regex no puede distinguir un proyecto ajeno de Vercel cuyo *nombre*
+  produzca exactamente la misma forma de subdominio (`conciliacion-bancaria-git-x-julietaarrazates-projects`).
+  El riesgo es bajo (`allow_credentials=False` y el token vive en el `sessionStorage` del origen
+  propio), pero si se quiere cerrar del todo: sacar el regex y listar las previews necesarias en
+  `EXTRA_CORS_ORIGINS`.
+- **Cambiar el email cierra la sesión**: el `sub` del JWT es el email, así que después de un
+  `PATCH /me` con email nuevo el token viejo deja de encontrar al usuario (401) y hay que volver a
+  entrar. No es un agujero, pero es una molestia; se podría devolver un token nuevo como en
+  `change-password`.
+- **Superadmin con contraseña del env**: el arranque (`main.py`, paso 8) re-hashea en cada deploy la
+  contraseña del superadmin desde `SUPERADMIN_PASSWORD` (pisa cualquier cambio hecho desde
+  `/perfil`) y no setea `password_changed_at`, así que un deploy no cierra sesiones. Se dejó así a
+  propósito.
 - **2FA solo para admin/superadmin**: `contador` y `operador` no tienen 2FA — login directo con
   email + contraseña únicamente. Es intencional según el código (contador ya no tiene tampoco el
   gate de aprobación que tuvo hasta ago 2026, ver §6), pero documentado aquí por las dudas: si se

@@ -93,6 +93,9 @@ es la referencia profunda. **Consultá el doc correspondiente ANTES de tocar su 
 - Agregar módulo/endpoint/banco/parser/reporte/módulo-contable → `docs/playbooks/`
 - Mapa general y entidades → `docs/architecture/SYSTEM_MAP.md`, `DOMAIN_MODEL.md` · Índice: `docs/README.md`
 - Auditoría de ingeniería (madurez, deuda técnica, roadmap de ingeniería) → `ENGINEERING_AUDIT.md`
+- **Estado de seguridad** (qué se revisó, qué se corrigió y qué falta, mantenimiento periódico) →
+  `docs/security/ESTADO_SEGURIDAD.md`. **Actualizarlo al cerrar cada sesión** que toque seguridad,
+  dependencias o infraestructura.
 
 Cada doc tiene una sección `## Pendiente de revisar` con discrepancias código↔doc detectadas.
 Si cambiás el código de un área, actualizá su doc (la doc describe el código tal como está).
@@ -250,7 +253,7 @@ Liquidaciones, Contabilidad con cuentas corrientes); 5 módulos de liquidación 
 (IVA Proyección, IVA Liquidación real con "Mis Comprobantes" de ARCA, Monotributo, Ingresos Brutos,
 Sueldos/F931); asistente IA con OCR/voz/proactividad (Gemini);
 ARCA (facturación electrónica WSFEv1) construido pero desactivado a propósito (ver "Pendiente para
-próximas sesiones" abajo). **~1065 tests backend + ~118 tests frontend** pasando.
+próximas sesiones" abajo). **~1370 tests backend + ~174 tests frontend** pasando.
 
 Profesionalización de ingeniería (jun 2026): base de documentación en `/docs` (arquitectura,
 negocio, API, BD, seguridad, UX, playbooks, ADR — cada doc con su "Pendiente de revisar"),
@@ -262,6 +265,17 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
 ---
 
 ### Pendiente para próximas sesiones
+
+- **🔐 Seguridad**: estado completo y pendientes en `docs/security/ESTADO_SEGURIDAD.md` (revisión de
+  oct 2026 cerrada en los PRs #254, #258, #259 y #261; quedan decisiones abiertas y un lote menor).
+- **📒 Contabilidad — modelo de cuentas transitorias estilo Odoo (en curso, oct 2026)**: el Banco lo
+  mueve solo el extracto/UM; ingresos contra 2-1-1-1 "No identificado", egresos contra 2-1-1-2
+  "Pagos a imputar" (nueva); pagos/cheques/tarjetas "por banco" van a la transitoria. Reemplaza al
+  PR #217. Corrige que el asiento del extracto sumaba los egresos al Debe del Banco (Org A, ~570 M de
+  más). La corrección de Org A es por contra-asientos con un endpoint de superadmin (dry_run) y
+  **solo se corre en prod con OK explícito de la operadora**.
+- **Frontend — saltos mayores** (Vite 8, React 19, Tailwind 4, Vitest 5): armados y verificados con
+  diff visual, sin subir. Falta decidir si se acepta que Tailwind 4 exige iOS 16.4+ / Chrome 111+.
 
 - **📅 TODOS LOS MESES — cargar el calendario de vencimientos (v3.35)**: en `/vencimientos` →
   "Cargar calendario" (superadmin), copiar de argentina.gob.ar/arca/vencimientos las fechas del

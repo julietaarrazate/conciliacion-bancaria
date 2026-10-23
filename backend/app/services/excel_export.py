@@ -9,6 +9,8 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+from app.services.excel_safe import sanear_workbook
+
 _ARG = ZoneInfo('America/Argentina/Buenos_Aires')
 
 def _now() -> datetime:
@@ -115,6 +117,7 @@ def export_movimientos(extracto_nombre: str, movimientos: List[dict]) -> bytes:
     ws.freeze_panes = "A6"
 
     buf = io.BytesIO()
+    sanear_workbook(wb)  # anti inyección de fórmulas (titulares/conceptos de terceros)
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
@@ -261,6 +264,7 @@ def export_planilla_conciliada(planilla_data: dict, movimientos_acreditados: Lis
     _autosize(ws2, 9)
 
     buf = io.BytesIO()
+    sanear_workbook(wb)  # anti inyección de fórmulas (titulares/conceptos de terceros)
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
@@ -433,6 +437,7 @@ def export_extracto_contador(extracto_nombre: str, movimientos: List[dict]) -> b
         ws2.cell(row=k, column=2).number_format = '0" movimientos"'
 
     buf = io.BytesIO()
+    sanear_workbook(wb)  # anti inyección de fórmulas (titulares/conceptos de terceros)
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
@@ -470,6 +475,7 @@ def export_historial_planillas(planillas: List[dict]) -> bytes:
     ws.freeze_panes = "A5"
 
     buf = io.BytesIO()
+    sanear_workbook(wb)  # anti inyección de fórmulas (titulares/conceptos de terceros)
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
@@ -520,6 +526,7 @@ def export_backup_completo(org_nombre: str, planillas: List[dict], extractos: Li
     _autosize(ws2, 4)
 
     buf = io.BytesIO()
+    sanear_workbook(wb)  # anti inyección de fórmulas (titulares/conceptos de terceros)
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
@@ -635,6 +642,7 @@ def export_liquidacion_excel(liquidacion, revisiones) -> bytes:
         _autosize(ws3, 6)
 
     buf = io.BytesIO()
+    sanear_workbook(wb)  # anti inyección de fórmulas (titulares/conceptos de terceros)
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
@@ -721,6 +729,7 @@ def export_eft_historial(ops: list, periodo: str = "") -> bytes:
     ws2.column_dimensions["B"].width = 16
 
     buf = io.BytesIO()
+    sanear_workbook(wb)  # anti inyección de fórmulas (titulares/conceptos de terceros)
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
@@ -791,6 +800,7 @@ def export_cierre_mensual_xlsx(planillas: list, anio: int, mes: int) -> bytes:
         ws2.freeze_panes = "A4"
 
     buf2 = io.BytesIO()
+    sanear_workbook(wb)  # anti inyección de fórmulas (titulares/conceptos de terceros)
     wb.save(buf2)
     buf2.seek(0)
     return buf2.getvalue()

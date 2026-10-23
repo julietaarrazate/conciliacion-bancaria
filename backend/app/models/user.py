@@ -29,6 +29,9 @@ class User(Base):
     allowed_org_ids = Column(JSON, nullable=True, default=list)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Último cambio/restablecimiento de contraseña (UTC). Los JWT con `iat` anterior
+    # quedan inválidos (cierra las sesiones abiertas). NULL = nunca cambió.
+    password_changed_at = Column(DateTime, nullable=True)
 
     # Relationships
     planillas = relationship("Planilla", back_populates="usuario")
