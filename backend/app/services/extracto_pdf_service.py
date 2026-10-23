@@ -1173,7 +1173,8 @@ def _confirmar_nuevo(db: Session, b: BorradorExtractoPdf, filas_parser: list[dic
             "duplicados": 0, "no_agregados": 0, "molde_aprendido": False, "contabilidad_ok": True,
             "mensaje": f"Extracto guardado: {n} movimientos.",
         }
-        # Igual que el upload de Excel: el extracto base no genera asiento propio.
+        # El asiento del extracto (igual que el upload de Excel) se genera
+        # después del commit, más abajo: registrar_asientos_extracto commitea solo.
         accion, cambios = "INSERT", {"nombre_archivo": nombre, "movimientos": n, "origen": "pdf",
                                      "metodo": metodo, "borrador_id": b.id}
     b.estado = "confirmado"
@@ -1183,6 +1184,12 @@ def _confirmar_nuevo(db: Session, b: BorradorExtractoPdf, filas_parser: list[dic
     _guardar_confirmacion(db, b, resultado)
     registrar_log(db, usuario_id, "extractos_bancarios", ext.id, accion, cambios, autocommit=False)
     db.commit()
+    if not resultado["ya_existia"]:
+        # Mismo asiento que el upload de Excel (un asiento por día del extracto
+        # principal). Idempotente; si falla, el extracto ya quedó guardado.
+        from app.services.motor_contable import registrar_asientos_extracto
+        if not registrar_asientos_extracto(db, resultado["extracto_id"], usuario_id):
+            resultado["contabilidad_ok"] = False
     return resultado
 
 

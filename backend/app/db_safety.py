@@ -506,4 +506,7 @@ SAFETY_NET_DDL = [
     "cantidad INTEGER NOT NULL DEFAULT 0, "
     "CONSTRAINT uq_uso_ia_org_fecha_tipo UNIQUE (organizacion_id, fecha, tipo))",
     "CREATE INDEX IF NOT EXISTS ix_uso_ia_diario_organizacion_id ON uso_ia_diario (organizacion_id)",
+    # migración 035 — asiento contable que registró cada movimiento del extracto principal
+    # (FK lógica, sin constraint; ver motor_contable.registrar_asientos_extracto)
+    "ALTER TABLE movimientos_banco ADD COLUMN IF NOT EXISTS asiento_id INTEGER",
 ]

@@ -193,9 +193,14 @@ async def upload_extracto(request: Request,
         )
         registrar_log(db, current_user.id, "extractos_bancarios", extracto.id, "INSERT",
                       {"nombre_archivo": file.filename, "movimientos": len(movs)})
-        # El extracto NO genera asiento propio: el UM importa los movimientos
-        # con cuentas correctas (um_lote: 1-1-1-3-1 / 2-1-1-1).
-        # registrar_extracto() usaba cuentas madre y duplicaba con um_lote.
+        # Asiento del extracto principal: uno por día de movimientos (Banco Macro
+        # contra las transitorias 2-1-1-1 / 2-1-1-2). Los UM que se agreguen
+        # después los registra um_lote, así que no se duplican. Tolerante a
+        # fallos: el extracto ya quedó guardado aunque el asiento falle.
+        from app.services.motor_contable import registrar_asientos_extracto
+        if not registrar_asientos_extracto(db, extracto.id, current_user.id):
+            logger.error("motor_contable extracto falló (extracto %s)", extracto.id)
+        db.refresh(extracto)
         return extracto
     except HTTPException:
         raise

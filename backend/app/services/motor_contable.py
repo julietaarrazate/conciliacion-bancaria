@@ -90,40 +90,165 @@ def _crear_asiento(
     db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=regla.cuenta_haber_id, debe=Decimal("0"),  haber=monto))
 
 
-def registrar_extracto(
-    db: Session,
-    extracto_id: int,
-    org_id: int,
-    usuario_id: Optional[int],
-    nombre_archivo: str,
-    movimientos,
-) -> None:
-    """Asiento al subir un extracto bancario: Banco (D) / Pasivo Corriente (H)."""
-    try:
-        if _ya_existe(db, "extracto", extracto_id, org_id):
-            return
-        regla = _get_regla(db, "carga_extracto", org_id)
-        if not regla:
-            return
-        total = sum(abs(_monto(m.monto)) for m in movimientos)
-        if total <= 0:
-            return
-        hoy = hoy_art()
-        _crear_asiento(
-            db=db,
-            regla=regla,
-            fecha=hoy,
-            descripcion=f"Extracto: {nombre_archivo}",
-            modulo="extracto",
-            referencia_id=extracto_id,
-            org_id=org_id,
-            usuario_id=usuario_id,
-            monto=total,
+# ─── Extracto bancario principal ─────────────────────────────────────────────
+#
+# Módulo "extracto_banco": UN asiento por DÍA de movimientos del extracto
+# principal (no UM — esos los registra um_lote). Fecha del asiento = fecha de
+# los movimientos, así el Libro Diario y el Mayor de Banco siguen las fechas
+# reales del banco. Por día, a lo sumo dos pares de líneas:
+#     Ingresos del día: Banco Macro D / 2-1-1-1 No identificado H
+#     Egresos del día:  2-1-1-2 Pagos a imputar D / Banco Macro H
+# referencia_id = id del primer movimiento (menor id) del grupo — mismo criterio
+# que um_lote — para respetar el índice único (modulo, referencia_id, org).
+# Idempotencia a nivel movimiento: cada movimiento registrado queda marcado con
+# MovimientoBanco.asiento_id; correr de nuevo solo toma los que no tienen
+# asiento. Reemplaza al viejo registrar_extracto (módulo "extracto": regla
+# carga_extracto, cuenta madre 1-1-1-3, abs() de todo contra Pasivo Corriente y
+# fecha de hoy), que inflaba el banco con los egresos. Esos asientos viejos se
+# corrigen solo con POST /contabilidad/corregir-asientos-banco.
+
+MODULO_EXTRACTO = "extracto_banco"
+MODULO_EXTRACTO_LEGACY = "extracto"
+
+
+def _fecha_movimiento(m, extracto) -> date:
+    """Fecha contable de un movimiento: la suya; si no tiene, la del extracto."""
+    if isinstance(getattr(m, "fecha", None), date):
+        return m.fecha
+    if extracto is not None and isinstance(getattr(extracto, "fecha_extracto", None), date):
+        return extracto.fecha_extracto
+    if extracto is not None and getattr(extracto, "fecha_creacion", None):
+        return extracto.fecha_creacion.date()
+    return hoy_art()
+
+
+def movimientos_extracto_sin_asiento(db: Session, extracto_id: int) -> list:
+    """Movimientos del extracto principal (source != "um") todavía sin asiento."""
+    from sqlalchemy import or_
+    from app.models.extracto import MovimientoBanco
+    return (
+        db.query(MovimientoBanco)
+        .filter(
+            MovimientoBanco.extracto_id == extracto_id,
+            or_(MovimientoBanco.source.is_(None), MovimientoBanco.source != "um"),
+            MovimientoBanco.asiento_id.is_(None),
         )
+        .order_by(MovimientoBanco.id)
+        .all()
+    )
+
+
+def construir_asientos_extracto(db: Session, extracto, usuario_id: Optional[int]) -> list:
+    """Arma (sin commit) los asientos "extracto_banco" de los movimientos del
+    extracto principal que todavía no tienen asiento. Devuelve los asientos
+    creados. Lanza excepción ante un error — el que llama decide el commit o
+    rollback (así lo puede usar "Empezar limpio" dentro de su transacción)."""
+    org_id = extracto.organizacion_id or 1
+    movs = movimientos_extracto_sin_asiento(db, extracto.id)
+    if not movs:
+        return []
+    banco = cuenta_banco_extracto(db, org_id)
+    cobros = cuenta_banco_transitoria(db, org_id, "ingreso")
+    pagos = cuenta_banco_transitoria(db, org_id, "egreso")
+    if not banco or not cobros or not pagos:
+        logger.warning(
+            "Cuentas del extracto no encontradas org %s (%s / %s / %s) — no se postea",
+            org_id, CUENTA_BANCO_EXTRACTO, CUENTA_COBROS_A_IMPUTAR, CUENTA_PAGOS_A_IMPUTAR,
+        )
+        return []
+
+    grupos: dict = {}
+    for m in movs:
+        grupos.setdefault(_fecha_movimiento(m, extracto), []).append(m)
+
+    creados = []
+    nombre = extracto.nombre_archivo or f"#{extracto.id}"
+    for fecha in sorted(grupos):
+        grupo = grupos[fecha]
+        ingresos = sum((_monto(m.monto) for m in grupo if _monto(m.monto) > 0), Decimal("0"))
+        egresos = sum((-_monto(m.monto) for m in grupo if _monto(m.monto) < 0), Decimal("0"))
+        if ingresos <= 0 and egresos <= 0:
+            continue
+        ref = min(m.id for m in grupo)
+        existente = (
+            db.query(Asiento)
+            .filter(
+                Asiento.modulo == MODULO_EXTRACTO,
+                Asiento.referencia_id == ref,
+                Asiento.organizacion_id == org_id,
+            )
+            .first()
+        )
+        if existente:
+            # Ya registrado (p. ej. por otro request): solo marcar los movimientos.
+            for m in grupo:
+                m.asiento_id = existente.id
+            continue
+        lineas = []
+        if ingresos > 0:
+            lineas += [(banco.id, ingresos, Decimal("0")), (cobros.id, Decimal("0"), ingresos)]
+        if egresos > 0:
+            lineas += [(pagos.id, egresos, Decimal("0")), (banco.id, Decimal("0"), egresos)]
+        total_debe = sum(d for _c, d, _h in lineas)
+        total_haber = sum(h for _c, _d, h in lineas)
+        if total_debe != total_haber:  # red de seguridad de partida doble
+            raise ValueError(f"Asiento extracto {extracto.id} {fecha} no balancea")
+        a = Asiento(
+            fecha=fecha,
+            descripcion=f"Extracto {nombre} — movimientos del {fecha.strftime('%d/%m/%Y')} ({len(grupo)})",
+            modulo=MODULO_EXTRACTO,
+            referencia_id=ref,
+            organizacion_id=org_id,
+            usuario_id=usuario_id,
+            numero_asiento=_next_numero_asiento(db, org_id),
+        )
+        db.add(a)
+        db.flush()
+        for cuenta_id, debe, haber in lineas:
+            db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=cuenta_id, debe=debe, haber=haber))
+        for m in grupo:
+            m.asiento_id = a.id
+        db.flush()
+        creados.append(a)
+    return creados
+
+
+def registrar_asientos_extracto(db: Session, extracto_id: int, usuario_id: Optional[int]) -> bool:
+    """Registra en el Libro Diario los movimientos del extracto principal que
+    todavía no tienen asiento (ver construir_asientos_extracto). Lo llaman el
+    upload de Excel y la confirmación de un PDF nuevo. Idempotente; un extracto
+    borrado no se registra. Tolerante a fallos: devuelve False si no pudo
+    (el extracto ya quedó guardado, igual que con el asiento de UM)."""
+    try:
+        from app.models.extracto import ExtractoBancario
+        extracto = db.query(ExtractoBancario).filter(ExtractoBancario.id == extracto_id).first()
+        if not extracto or extracto.deleted_at is not None:
+            return True
+        construir_asientos_extracto(db, extracto, usuario_id)
         db.commit()
+        return True
     except Exception as ex:
         db.rollback()
         logger.warning("Error asiento extracto %s: %s", extracto_id, ex)
+        return False
+
+
+def asientos_de_extracto(db: Session, extracto_id: int, org_id: int) -> list:
+    """Asientos "extracto_banco" que registraron movimientos de este extracto."""
+    from app.models.extracto import MovimientoBanco
+    ids = {
+        r[0] for r in db.query(MovimientoBanco.asiento_id)
+        .filter(MovimientoBanco.extracto_id == extracto_id, MovimientoBanco.asiento_id.isnot(None))
+        .distinct().all()
+    }
+    if not ids:
+        return []
+    return (
+        db.query(Asiento)
+        .filter(Asiento.id.in_(ids), Asiento.organizacion_id == org_id, Asiento.modulo == MODULO_EXTRACTO)
+        .order_by(Asiento.id)
+        .all()
+    )
 
 
 def _crear_asiento_multilinea(
@@ -758,16 +883,20 @@ def registrar_um_import(
     movimientos_nuevos,
     modo: str = "agrupado",
 ) -> None:
-    """Asiento al importar UM: Banco Macro (D) / No identificado (H).
+    """Asiento al importar UM, mismas cuentas que el extracto principal:
+      ingreso: Banco Macro (D) / No identificado 2-1-1-1 (H)
+      egreso:  Pagos a imputar 2-1-1-2 (D) / Banco Macro (H)
+    (hasta oct 2026 el egreso iba contra 2-1-1-1; los asientos viejos quedan como están).
     modo='agrupado' → un asiento por lote (suma total).
     modo='individual' → un asiento por movimiento."""
     try:
         if not movimientos_nuevos:
             return
-        banco_macro = _get_cuenta_por_codigo(db, "1-1-1-3-1", org_id)
-        no_id = _get_cuenta_por_codigo(db, "2-1-1-1", org_id)
-        if not banco_macro or not no_id:
-            logger.warning("Cuentas UM no encontradas org %s (1-1-1-3-1 / 2-1-1-1)", org_id)
+        banco_macro = cuenta_banco_extracto(db, org_id)
+        no_id = cuenta_banco_transitoria(db, org_id, "ingreso")
+        pagos = cuenta_banco_transitoria(db, org_id, "egreso")
+        if not banco_macro or not no_id or not pagos:
+            logger.warning("Cuentas UM no encontradas org %s (1-1-1-3-1 / 2-1-1-1 / 2-1-1-2)", org_id)
             return
         if modo == "individual":
             for mov in movimientos_nuevos:
@@ -793,41 +922,68 @@ def registrar_um_import(
                     db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=monto_abs, haber=Decimal("0")))
                     db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=Decimal("0"), haber=monto_abs))
                 else:
-                    # Egreso: No Identificado Debe / Banco Haber
-                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=monto_abs, haber=Decimal("0")))
+                    # Egreso: Pagos a imputar Debe / Banco Haber
+                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=pagos.id, debe=monto_abs, haber=Decimal("0")))
                     db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=Decimal("0"), haber=monto_abs))
         else:
-            primer_mov = movimientos_nuevos[0]
-            if _ya_existe(db, "um_lote", primer_mov.id, org_id):
-                return
-            total_pos = sum(max(_monto(m.monto), Decimal("0")) for m in movimientos_nuevos)
-            total_neg = sum(abs(min(_monto(m.monto), Decimal("0"))) for m in movimientos_nuevos)
-            if total_pos <= 0 and total_neg <= 0:
-                return
-            fecha_ref = primer_mov.fecha if isinstance(primer_mov.fecha, date) else hoy_art()
-            lote = primer_mov.um_lote or 1
-            a = Asiento(
-                fecha=fecha_ref,
-                descripcion=f"UM lote {lote} — {len(movimientos_nuevos)} movimientos (extracto #{extracto_id})",
-                modulo="um_lote",
-                referencia_id=primer_mov.id,
-                organizacion_id=org_id,
-                usuario_id=usuario_id,
-            )
-            db.add(a)
-            db.flush()
-            if total_pos > 0:
-                # Ingresos: Banco Debe / No Identificado Haber
-                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=total_pos, haber=Decimal("0")))
-                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=Decimal("0"), haber=total_pos))
-            if total_neg > 0:
-                # Egresos: No Identificado Debe / Banco Haber
-                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=total_neg, haber=Decimal("0")))
-                db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=Decimal("0"), haber=total_neg))
+            construir_asiento_um_lote(db, extracto_id, org_id, usuario_id, movimientos_nuevos)
         db.commit()
     except Exception as ex:
         db.rollback()
         logger.warning("Error asiento UM import %s: %s", extracto_id, ex)
+
+
+def construir_asiento_um_lote(
+    db: Session,
+    extracto_id: int,
+    org_id: int,
+    usuario_id: Optional[int],
+    movimientos,
+) -> Optional[Asiento]:
+    """Arma (sin commit) el asiento agrupado "um_lote" de un lote de UM:
+      Σ ingresos: Banco Macro D / No identificado 2-1-1-1 H
+      Σ egresos:  Pagos a imputar 2-1-1-2 D / Banco Macro H
+    referencia_id = id del primer movimiento del lote. Idempotente (no crea si
+    ya existe). Lo usan el import de UM y "Empezar limpio" (reset-y-rebuild),
+    para que ambos armen exactamente el mismo asiento. Lanza ante un error."""
+    if not movimientos:
+        return None
+    primer_mov = movimientos[0]
+    if _ya_existe(db, "um_lote", primer_mov.id, org_id):
+        return None
+    banco_macro = cuenta_banco_extracto(db, org_id)
+    no_id = cuenta_banco_transitoria(db, org_id, "ingreso")
+    pagos = cuenta_banco_transitoria(db, org_id, "egreso")
+    if not banco_macro or not no_id or not pagos:
+        logger.warning("Cuentas UM no encontradas org %s (1-1-1-3-1 / 2-1-1-1 / 2-1-1-2)", org_id)
+        return None
+    total_pos = sum((max(_monto(m.monto), Decimal("0")) for m in movimientos), Decimal("0"))
+    total_neg = sum((abs(min(_monto(m.monto), Decimal("0"))) for m in movimientos), Decimal("0"))
+    if total_pos <= 0 and total_neg <= 0:
+        return None
+    fecha_ref = primer_mov.fecha if isinstance(primer_mov.fecha, date) else hoy_art()
+    lote = primer_mov.um_lote or 1
+    a = Asiento(
+        fecha=fecha_ref,
+        descripcion=f"UM lote {lote} — {len(movimientos)} movimientos (extracto #{extracto_id})",
+        modulo="um_lote",
+        referencia_id=primer_mov.id,
+        organizacion_id=org_id,
+        usuario_id=usuario_id,
+        numero_asiento=_next_numero_asiento(db, org_id),
+    )
+    db.add(a)
+    db.flush()
+    if total_pos > 0:
+        # Ingresos: Banco Debe / No Identificado Haber
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=total_pos, haber=Decimal("0")))
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=Decimal("0"), haber=total_pos))
+    if total_neg > 0:
+        # Egresos: Pagos a imputar Debe / Banco Haber
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=pagos.id, debe=total_neg, haber=Decimal("0")))
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=Decimal("0"), haber=total_neg))
+    db.flush()
+    return a
 
 
 def registrar_reclasificacion_um(

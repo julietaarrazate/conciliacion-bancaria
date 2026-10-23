@@ -100,7 +100,10 @@ organización, e igualmente es idempotente (ver [ACCOUNTING_ENGINE](../architect
 4. Migraciones de columnas legacy (try/except).
 5. Normalizaciones y backfills (`organizacion_id`, `mes`, fingerprints).
 6. Seed de la Organización A (id=1) y seed contable + categorías por organización.
-7. Backfill de asientos contables para extractos/planillas existentes.
+7. ~~Backfill de asientos contables para extractos/planillas existentes~~ — eliminado (planillas
+   ago 2026, extractos oct 2026): el arranque ya **no genera asientos**. El histórico de extractos
+   se corrige solo a mano con `POST /contabilidad/corregir-asientos-banco` (ver
+   [ACCOUNTING_ENGINE](../architecture/ACCOUNTING_ENGINE.md) §7bis).
 
 ---
 
@@ -221,6 +224,7 @@ Ver BUGS.md → "Fechas en zona horaria Argentina (UTC-3)".
 | 026 | `026_planilla_fingerprint.py` | `planillas.fingerprint` + índice único parcial (cliente, fingerprint, org) sin borradas |
 | 027 | `027_comprobantes_por_revisar.py` | `buzon_comprobantes` y `borradores_comprobante` (facturas de compra por mail / IA) |
 | 028 | `028_extractos_pdf.py` | `moldes_extracto_pdf` y `borradores_extracto_pdf` (extractos en PDF: formatos aprendidos y borradores de revisión) |
+| 035 | `035_movimiento_asiento_id.py` | `movimientos_banco.asiento_id` (FK lógica, sin constraint): asiento `extracto_banco` que registró cada movimiento del extracto principal (idempotencia por movimiento) |
 
 ---
 
