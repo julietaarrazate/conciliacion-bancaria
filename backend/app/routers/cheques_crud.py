@@ -24,7 +24,7 @@ import io
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
 from sqlalchemy.orm import Session
 from slowapi import Limiter
-from app.services.limites import MAX_BYTES_IA, consumir_cupo_ia, ip_cliente
+from app.services.limites import MAX_BYTES_IA, consumir_cupo_ia, ip_cliente, leer_planilla
 import openpyxl
 
 from app.database import get_db
@@ -477,7 +477,7 @@ async def importar_excel(
     if ext not in ('xlsx', 'xls'):
         raise HTTPException(400, "Solo se aceptan archivos .xlsx o .xls")
 
-    content = await file.read()
+    content = await leer_planilla(file)
     try:
         wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active

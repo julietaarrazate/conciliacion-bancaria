@@ -32,6 +32,7 @@ from app.models.proyeccion_iva import ProyeccionIva
 from app.models.iva_liquidacion import ComprobanteIva, LiquidacionIva
 from app.models.user import User
 from app.services.auditoria import registrar_log
+from app.services.limites import leer_planilla
 from app.services.iva_service import (
     calcular_proyeccion_iva,
     guardar_o_actualizar_proyeccion,
@@ -365,7 +366,7 @@ def _fila_dict(fila: dict) -> dict:
 async def _leer_mis_comprobantes(file: UploadFile, direccion: str) -> list:
     if direccion not in ("emitido", "recibido"):
         raise HTTPException(422, "direccion debe ser 'emitido' o 'recibido'")
-    contenido = await file.read()
+    contenido = await leer_planilla(file)
     try:
         return parsear_mis_comprobantes(contenido, direccion)
     except ValueError as ex:

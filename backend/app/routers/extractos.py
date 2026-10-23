@@ -5,7 +5,7 @@ from sqlalchemy import desc, and_, or_, func
 from datetime import date, datetime
 from zoneinfo import ZoneInfo as _ZI
 from slowapi import Limiter
-from app.services.limites import ip_cliente
+from app.services.limites import ip_cliente, leer_planilla
 from app.services.excel_safe import sanear_workbook
 _ARG = _ZI('America/Argentina/Buenos_Aires')
 from typing import Optional
@@ -111,9 +111,8 @@ async def upload_extracto(request: Request,
         raise HTTPException(400, "Formatos aceptados: .xlsx, .xls, .csv")
     tmp_path = None
     try:
-        content = await file.read()
-        if len(content) > settings.max_file_size:
-            raise HTTPException(413, f"El archivo supera el límite de {settings.max_file_size // (1024 * 1024)} MB.")
+        # Tope de tamaño leyendo como mucho max_file_size + 1 bytes, y chequeo de zip bomb.
+        content = await leer_planilla(file, settings.max_file_size)
         # Validación de magic bytes: evita que archivos renombrados pasen la validación de extensión
         _XLSX_MAGIC = b'PK\x03\x04'       # ZIP (XLSX internamente es ZIP)
         _XLS_MAGIC  = b'\xd0\xcf\x11\xe0'  # OLE2 (formato binario .xls)
@@ -411,9 +410,8 @@ async def agregar_ultimos_movimientos(
         raise HTTPException(400, "Formatos aceptados: .xlsx, .xls, .csv")
     tmp_path = None
     try:
-        content = await file.read()
-        if len(content) > settings.max_file_size:
-            raise HTTPException(413, f"El archivo supera el límite de {settings.max_file_size // (1024 * 1024)} MB.")
+        # Tope de tamaño leyendo como mucho max_file_size + 1 bytes, y chequeo de zip bomb.
+        content = await leer_planilla(file, settings.max_file_size)
         # Validación de magic bytes
         _XLSX_MAGIC = b'PK\x03\x04'
         _XLS_MAGIC  = b'\xd0\xcf\x11\xe0'

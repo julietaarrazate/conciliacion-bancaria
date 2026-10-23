@@ -214,7 +214,8 @@ async def subir_comprobantes(
         mime = svc.mime_normalizado(f.content_type, f.filename)
         if not mime:
             raise HTTPException(400, f"{f.filename}: solo se aceptan PDF, JPG, PNG o WebP")
-        contenido = await f.read()
+        # Lee como mucho el tope + 1 byte: un archivo enorme no se carga entero en memoria.
+        contenido = await f.read(svc.MAX_ARCHIVO_BYTES + 1)
         if not contenido:
             raise HTTPException(400, f"{f.filename}: el archivo está vacío")
         if len(contenido) > svc.MAX_ARCHIVO_BYTES:
