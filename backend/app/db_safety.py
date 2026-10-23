@@ -506,4 +506,8 @@ SAFETY_NET_DDL = [
     "cantidad INTEGER NOT NULL DEFAULT 0, "
     "CONSTRAINT uq_uso_ia_org_fecha_tipo UNIQUE (organizacion_id, fecha, tipo))",
     "CREATE INDEX IF NOT EXISTS ix_uso_ia_diario_organizacion_id ON uso_ia_diario (organizacion_id)",
+    # migración 035 — auditoría por organización (filas viejas quedan en NULL)
+    "ALTER TABLE auditoria ADD COLUMN IF NOT EXISTS organizacion_id INTEGER "
+    "REFERENCES organizaciones(id) ON DELETE SET NULL",
+    "CREATE INDEX IF NOT EXISTS ix_auditoria_organizacion_id ON auditoria (organizacion_id)",
 ]
