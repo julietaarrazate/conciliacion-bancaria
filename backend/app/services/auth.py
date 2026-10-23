@@ -114,9 +114,26 @@ def register_user(db: Session, user_data: UserRegister) -> Optional[User]:
     return user
 
 
+_HASH_FICTICIO: Optional[str] = None
+
+
+def _hash_ficticio() -> str:
+    """Hash descartable para verificar cuando el email no existe (mismo costo)."""
+    global _HASH_FICTICIO
+    if _HASH_FICTICIO is None:
+        _HASH_FICTICIO = get_password_hash(uuid.uuid4().hex)
+    return _HASH_FICTICIO
+
+
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
+    """Devuelve el usuario si la contraseña es correcta (activo o no: lo decide el caller).
+
+    Si el email no existe igual se calcula un hash, para que el tiempo de respuesta
+    no delate qué emails están registrados.
+    """
     user = db.query(User).filter(User.email == email).first()
     if not user:
+        verify_password(password, _hash_ficticio())
         return None
     if not verify_password(password, user.hashed_password):
         return None

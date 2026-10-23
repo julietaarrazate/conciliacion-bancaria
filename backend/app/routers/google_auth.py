@@ -1,18 +1,20 @@
 import logging
 import requests as http_requests
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from slowapi import Limiter
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import UserResponse
-from app.services.auth import create_access_token
+from app.routers.auth import emitir_sesion
+from app.services.limites import ip_cliente
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+limiter = Limiter(key_func=ip_cliente)
 
 
 class GoogleCodePayload(BaseModel):
@@ -20,12 +22,15 @@ class GoogleCodePayload(BaseModel):
     redirect_uri: str
 
 
-def _serialize_user(user: User) -> dict:
-    return UserResponse.model_validate(user).model_dump(mode="json")
+def _email_verificado(valor) -> bool:
+    """tokeninfo devuelve email_verified como string ("true"/"false"): un "false"
+    no vacío no puede contar como verificado."""
+    return valor is True or (isinstance(valor, str) and valor.strip().lower() == "true")
 
 
 @router.post("/google")
-def google_login(payload: GoogleCodePayload, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def google_login(request: Request, payload: GoogleCodePayload, db: Session = Depends(get_db)):
     """Intercambia un Google authorization code y devuelve un JWT de sesión.
     Flujo auth-code (redirect) — funciona en mobile sin popups.
     Solo funciona para usuarios ya registrados en el sistema.
@@ -77,7 +82,7 @@ def google_login(payload: GoogleCodePayload, db: Session = Depends(get_db)):
         raise HTTPException(401, "Token de Google no pertenece a esta aplicación")
 
     email = info.get("email", "").lower().strip()
-    if not email or not info.get("email_verified"):
+    if not email or not _email_verificado(info.get("email_verified")):
         raise HTTPException(401, "Email no verificado por Google")
 
     # Only allow existing users — admins manage user creation
@@ -91,11 +96,7 @@ def google_login(payload: GoogleCodePayload, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(403, "Cuenta desactivada. Contactá al administrador.")
 
-    access_token = create_access_token({"sub": user.email})
     logger.info("Google OAuth login: %s", email)
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": _serialize_user(user),
-    }
+    # Mismo camino que el login con contraseña: admin/superadmin pasan por el 2FA
+    # por email (si RESEND está configurado) en vez de recibir el token directo.
+    return emitir_sesion(db, user)

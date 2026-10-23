@@ -183,3 +183,159 @@ def test_patch_me_solo_nombre_o_mismo_email_no_pide_password(client, db):
     assert r.status_code == 200
     assert r.json()["full_name"] == "Nombre Nuevo"
     assert r.json()["email"] == "op1@t.test"
+
+
+# ── 3. Login con Google ──────────────────────────────────────────────────────
+
+class _Resp:
+    def __init__(self, status_code, data):
+        self.status_code = status_code
+        self._data = data
+        self.text = str(data)
+
+    def json(self):
+        return self._data
+
+
+@pytest.fixture
+def google(monkeypatch):
+    """Simula Google: el test elige qué devuelve tokeninfo."""
+    from app.routers import google_auth
+    monkeypatch.setattr(google_auth.settings, "google_client_id", "cid")
+    monkeypatch.setattr(google_auth.settings, "google_client_secret", "secret")
+    google_auth.limiter.reset()
+    info = {"aud": "cid", "email": "op1@t.test", "email_verified": "true"}
+    monkeypatch.setattr(google_auth.http_requests, "post",
+                        lambda *a, **k: _Resp(200, {"id_token": "idt"}))
+    monkeypatch.setattr(google_auth.http_requests, "get", lambda *a, **k: _Resp(200, info))
+    return info
+
+
+def _google_login(client):
+    return client.post("/auth/google", json={"code": "c", "redirect_uri": "https://x/login"})
+
+
+@pytest.mark.parametrize("valor,ok", [
+    ("true", True), (True, True), ("TRUE", True),
+    ("false", False), (False, False), ("", False), (None, False), ("0", False),
+])
+def test_google_email_verified_se_compara_bien(client, google, valor, ok):
+    google["email_verified"] = valor
+    r = _google_login(client)
+    assert r.status_code == (200 if ok else 401)
+
+
+def test_google_tiene_rate_limit(client, google):
+    codigos = [_google_login(client).status_code for _ in range(12)]
+    assert codigos[:10] == [200] * 10
+    assert 429 in codigos[10:]
+
+
+def test_google_admin_pasa_por_2fa(client, google, monkeypatch):
+    enviados = []
+    monkeypatch.setattr(auth_router.settings, "resend_api_key", "re_test")
+    monkeypatch.setattr("app.services.email_sender.send_email", lambda **k: enviados.append(k))
+    google["email"] = "admin1@t.test"
+    r = _google_login(client)
+    assert r.status_code == 202
+    assert r.json()["requires_2fa"] is True
+    assert "access_token" not in r.json()
+    assert len(enviados) == 1
+
+
+# ── 4. 2FA: cupo de códigos, intentos y falla cerrada ────────────────────────
+
+@pytest.fixture
+def twofa(monkeypatch):
+    """2FA activo; guarda los códigos 'enviados' por mail."""
+    import re
+    enviados = []
+    monkeypatch.setattr(auth_router.settings, "resend_api_key", "re_test")
+    monkeypatch.setattr(auth_router.settings, "debug", False)
+
+    def _send(**k):
+        enviados.append(re.search(r">(\d{6})<", k["html"]).group(1))
+    monkeypatch.setattr("app.services.email_sender.send_email", _send)
+    return enviados
+
+
+def _login_admin(client):
+    return client.post("/auth/login", json={"email": "admin1@t.test", "password": "pw123456"})
+
+
+def test_2fa_flujo_ok(client, twofa):
+    r = _login_admin(client)
+    assert r.status_code == 202
+    r = client.post("/auth/verify-2fa", json={"email": "admin1@t.test", "code": twofa[-1]})
+    assert r.status_code == 200
+    assert r.json()["access_token"]
+
+
+def test_2fa_cupo_de_codigos_por_hora(client, twofa):
+    for _ in range(auth_router.TWOFA_MAX_CODES_PER_HOUR):
+        assert _login_admin(client).status_code == 202
+    r = _login_admin(client)
+    assert r.status_code == 429
+    assert len(twofa) == auth_router.TWOFA_MAX_CODES_PER_HOUR
+
+
+def test_2fa_codigo_nuevo_invalida_el_anterior(client, twofa):
+    _login_admin(client)
+    primero = twofa[-1]
+    _login_admin(client)
+    if primero != twofa[-1]:
+        r = client.post("/auth/verify-2fa", json={"email": "admin1@t.test", "code": primero})
+        assert r.status_code == 401
+
+
+def test_2fa_intentos_fallidos_invalidan_el_codigo(client, twofa):
+    _login_admin(client)
+    bueno = twofa[-1]
+    malo = "000000" if bueno != "000000" else "111111"
+    for _ in range(auth_router.TWOFA_MAX_ATTEMPTS):
+        auth_router.limiter.reset()
+        r = client.post("/auth/verify-2fa", json={"email": "admin1@t.test", "code": malo})
+        assert r.status_code == 401
+    auth_router.limiter.reset()
+    r = client.post("/auth/verify-2fa", json={"email": "admin1@t.test", "code": bueno})
+    assert r.status_code == 401
+
+
+def test_2fa_falla_cerrado_si_no_se_envia_el_mail(client, twofa, monkeypatch):
+    def _falla(**k):
+        raise RuntimeError("Resend caído")
+    monkeypatch.setattr("app.services.email_sender.send_email", _falla)
+    r = _login_admin(client)
+    assert r.status_code == 503
+    assert "access_token" not in r.json()
+
+
+def test_2fa_falla_cerrado_si_no_se_crea_el_codigo(client, twofa, monkeypatch):
+    import app.models.twofa_code as m
+
+    class _Rota:
+        user_id = m.TwofaCode.user_id
+        created_at = m.TwofaCode.created_at
+        used = m.TwofaCode.used
+
+        def __init__(self, *a, **k):
+            raise RuntimeError("DB rota")
+    monkeypatch.setattr(m, "TwofaCode", _Rota)
+    r = _login_admin(client)
+    assert r.status_code == 503
+    assert "access_token" not in r.json()
+
+
+# ── 5. Usuario inactivo: mismo 401 que contraseña mala ───────────────────────
+
+def test_login_inactivo_mismo_401_que_password_mala(client):
+    r_inactivo = client.post("/auth/login", json={"email": "inactivo@t.test", "password": "pw123456"})
+    r_mala = client.post("/auth/login", json={"email": "op1@t.test", "password": "mala1234"})
+    r_inexistente = client.post("/auth/login", json={"email": "nadie@t.test", "password": "pw123456"})
+    assert r_inactivo.status_code == r_mala.status_code == r_inexistente.status_code == 401
+    assert r_inactivo.json() == r_mala.json() == r_inexistente.json()
+
+
+def test_login_inactivo_con_password_mala_tambien_401(client):
+    r = client.post("/auth/login", json={"email": "inactivo@t.test", "password": "mala1234"})
+    assert r.status_code == 401
