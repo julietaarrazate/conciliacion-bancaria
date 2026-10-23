@@ -372,9 +372,12 @@ def eliminar_movimientos_um(extracto_id: int,
             from app.services.motor_contable import reversar_asientos as _rev
             _org_id = extracto.organizacion_id or 1
             for _mv in movs_a_borrar:
-                _rev(db, "um_mov", _mv.id, _org_id, current_user.id, "Baja lote UM")
+                for _mod in ("um_mov", "um_mov_corregido"):
+                    _rev(db, _mod, _mv.id, _org_id, current_user.id, "Baja lote UM")
             if movs_a_borrar:
-                _rev(db, "um_lote", movs_a_borrar[0].id, _org_id, current_user.id, "Baja lote UM")
+                # um_lote_corregido: el mismo lote rehecho por corregir-asientos-banco
+                for _mod in ("um_lote", "um_lote_corregido"):
+                    _rev(db, _mod, movs_a_borrar[0].id, _org_id, current_user.id, "Baja lote UM")
         except Exception as _mc_ex:
             logger.error("reverso UM asientos falló (extracto %s, lote %s): %s", extracto_id, max_lote, _mc_ex)
             contabilidad_ok = False

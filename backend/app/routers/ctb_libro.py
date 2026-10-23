@@ -599,6 +599,8 @@ def corregir_asientos_banco_endpoint(
             "org_id": oid,
             "reversados": [a["id"] for a in res["a_reversar"]],
             "creados_por_modulo": res["a_crear_por_modulo"],
+            "conflictos": len(res["conflictos"]),
+            "a_revisar": {"cantidad": res["a_revisar"]["cantidad"], "total": res["a_revisar"]["total"]},
             "saldos_antes": res["saldos_antes"],
             "saldos_despues": res["saldos_despues"],
         })

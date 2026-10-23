@@ -607,13 +607,22 @@ def registrar_ingreso_efectivo(
     monto: Decimal,
     fecha: date,
 ) -> None:
-    """Reposición de efectivo (banco → caja): Efectivo (D) / Banco (H).
-    Upsert: si ya existe para este arqueo actualiza el monto."""
+    """Reposición de efectivo (banco → caja): Efectivo (D) / Pagos a imputar 2-1-1-2 (H).
+    La plata sale del banco y ese débito aparece en el extracto (2-1-1-2 D /
+    Banco H), así que acá se acredita la transitoria de pagos y no el banco
+    (modelo de cuentas transitorias, oct 2026; antes: Banco madre 1-1-1-3 H por
+    la regla carga_efectivo). El Debe sigue saliendo de la regla (Efectivo).
+    Upsert: si ya existe para este arqueo actualiza el monto (y la fecha) sin
+    cambiar sus cuentas — un asiento viejo contra 1-1-1-3 sigue con esa cuenta."""
     try:
         if monto <= 0:
             return
         regla = _get_regla(db, "carga_efectivo", org_id)
         if not regla:
+            return
+        pagos = cuenta_banco_transitoria(db, org_id, "egreso")
+        if not pagos:
+            logger.warning("Cuenta 2-1-1-2 no encontrada org %s — no se postea caja_efectivo", org_id)
             return
         existente = (
             db.query(Asiento)
@@ -635,14 +644,16 @@ def registrar_ingreso_efectivo(
             existente.fecha = fecha
             db.commit()
         else:
-            _crear_asiento(
-                db=db, regla=regla,
+            _crear_asiento_directo(
+                db=db,
                 fecha=fecha,
                 descripcion="Reposición efectivo desde banco",
                 modulo="caja_efectivo",
                 referencia_id=arqueo_id,
                 org_id=org_id,
                 usuario_id=usuario_id,
+                cuenta_debe_id=regla.cuenta_debe_id,
+                cuenta_haber_id=pagos.id,
                 monto=round(monto, 2),
             )
             db.commit()
@@ -913,31 +924,7 @@ def registrar_um_import(
             return
         if modo == "individual":
             for mov in movimientos_nuevos:
-                if _ya_existe(db, "um_mov", mov.id, org_id):
-                    continue
-                monto = _monto(mov.monto)
-                monto_abs = abs(monto)
-                if monto_abs <= 0:
-                    continue
-                fecha_mov = mov.fecha if isinstance(mov.fecha, date) else hoy_art()
-                a = Asiento(
-                    fecha=fecha_mov,
-                    descripcion=f"UM: {mov.titular or 'Sin titular'}",
-                    modulo="um_mov",
-                    referencia_id=mov.id,
-                    organizacion_id=org_id,
-                    usuario_id=usuario_id,
-                )
-                db.add(a)
-                db.flush()
-                if monto >= 0:
-                    # Ingreso: Banco Debe / No Identificado Haber
-                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=monto_abs, haber=Decimal("0")))
-                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=Decimal("0"), haber=monto_abs))
-                else:
-                    # Egreso: Pagos a imputar Debe / Banco Haber
-                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=pagos.id, debe=monto_abs, haber=Decimal("0")))
-                    db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=Decimal("0"), haber=monto_abs))
+                construir_asiento_um_mov(db, mov, org_id, usuario_id)
         else:
             construir_asiento_um_lote(db, extracto_id, org_id, usuario_id, movimientos_nuevos)
         db.commit()
@@ -946,23 +933,74 @@ def registrar_um_import(
         logger.warning("Error asiento UM import %s: %s", extracto_id, ex)
 
 
+def construir_asiento_um_mov(
+    db: Session,
+    mov,
+    org_id: int,
+    usuario_id: Optional[int],
+    modulo: str = "um_mov",
+) -> Optional[Asiento]:
+    """Arma (sin commit) el asiento individual de un movimiento UM:
+      ingreso: Banco Macro D / No identificado 2-1-1-1 H
+      egreso:  Pagos a imputar 2-1-1-2 D / Banco Macro H
+    referencia_id = id del movimiento. Idempotente. `modulo` distinto solo lo usa
+    la corrección del histórico (um_mov_corregido). Lanza ante un error."""
+    if _ya_existe(db, modulo, mov.id, org_id):
+        return None
+    banco_macro = cuenta_banco_extracto(db, org_id)
+    no_id = cuenta_banco_transitoria(db, org_id, "ingreso")
+    pagos = cuenta_banco_transitoria(db, org_id, "egreso")
+    if not banco_macro or not no_id or not pagos:
+        logger.warning("Cuentas UM no encontradas org %s (1-1-1-3-1 / 2-1-1-1 / 2-1-1-2)", org_id)
+        return None
+    monto = _monto(mov.monto)
+    monto_abs = abs(monto)
+    if monto_abs <= 0:
+        return None
+    a = Asiento(
+        fecha=mov.fecha if isinstance(mov.fecha, date) else hoy_art(),
+        descripcion=f"UM: {mov.titular or 'Sin titular'}",
+        modulo=modulo,
+        referencia_id=mov.id,
+        organizacion_id=org_id,
+        usuario_id=usuario_id,
+        numero_asiento=_next_numero_asiento(db, org_id),
+    )
+    db.add(a)
+    db.flush()
+    if monto >= 0:
+        # Ingreso: Banco Debe / No Identificado Haber
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=monto_abs, haber=Decimal("0")))
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=no_id.id, debe=Decimal("0"), haber=monto_abs))
+    else:
+        # Egreso: Pagos a imputar Debe / Banco Haber
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=pagos.id, debe=monto_abs, haber=Decimal("0")))
+        db.add(AsientoDetalle(asiento_id=a.id, cuenta_id=banco_macro.id, debe=Decimal("0"), haber=monto_abs))
+    db.flush()
+    return a
+
+
 def construir_asiento_um_lote(
     db: Session,
     extracto_id: int,
     org_id: int,
     usuario_id: Optional[int],
     movimientos,
+    modulo: str = "um_lote",
 ) -> Optional[Asiento]:
     """Arma (sin commit) el asiento agrupado "um_lote" de un lote de UM:
       Σ ingresos: Banco Macro D / No identificado 2-1-1-1 H
       Σ egresos:  Pagos a imputar 2-1-1-2 D / Banco Macro H
     referencia_id = id del primer movimiento del lote. Idempotente (no crea si
-    ya existe). Lo usan el import de UM y "Empezar limpio" (reset-y-rebuild),
-    para que ambos armen exactamente el mismo asiento. Lanza ante un error."""
+    ya existe). Lo usan el import de UM, "Empezar limpio" (reset-y-rebuild) y la
+    corrección del histórico (con modulo="um_lote_corregido": el índice único
+    (modulo, referencia_id, org) no deja repetir "um_lote" para el mismo lote
+    mientras el viejo siga en el libro), para que todos armen el mismo asiento.
+    Lanza ante un error."""
     if not movimientos:
         return None
     primer_mov = movimientos[0]
-    if _ya_existe(db, "um_lote", primer_mov.id, org_id):
+    if _ya_existe(db, modulo, primer_mov.id, org_id):
         return None
     banco_macro = cuenta_banco_extracto(db, org_id)
     no_id = cuenta_banco_transitoria(db, org_id, "ingreso")
@@ -979,7 +1017,7 @@ def construir_asiento_um_lote(
     a = Asiento(
         fecha=fecha_ref,
         descripcion=f"UM lote {lote} — {len(movimientos)} movimientos (extracto #{extracto_id})",
-        modulo="um_lote",
+        modulo=modulo,
         referencia_id=primer_mov.id,
         organizacion_id=org_id,
         usuario_id=usuario_id,

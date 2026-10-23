@@ -521,3 +521,126 @@ def test_reset_y_correccion_de_org1_no_tocan_org2(client, db, superadmin, org2):
     # Y la org 2 se corrige sola cuando se pide explícitamente para ella
     r = client.post("/contabilidad/corregir-asientos-banco?dry_run=true&org_id=2", headers=_auth(superadmin))
     assert r.status_code == 200 and r.json()["org_id"] == 2 and len(r.json()["a_reversar"]) == 3
+
+
+# ── Caja: reposición desde el banco ──────────────────────────────────────────
+
+def test_reposicion_de_caja_acredita_pagos_a_imputar_y_netea_con_el_debito(db):
+    mc.registrar_ingreso_efectivo(db, arqueo_id=7, org_id=1, usuario_id=None,
+                                  monto=Decimal("3000"), fecha=date(2026, 9, 4))
+    mc.registrar_ingreso_efectivo(db, arqueo_id=7, org_id=1, usuario_id=None,
+                                  monto=Decimal("3500"), fecha=date(2026, 9, 4))  # upsert
+    (a,) = _asientos(db, "caja_efectivo")
+    assert _balanceado(a)
+    assert {(ln.cuenta_id, ln.debe, ln.haber) for ln in a.lineas} == {
+        (_cuenta(db, "1-1-1-2").id, Decimal("3500"), Decimal("0")),
+        (_cuenta(db, PAGOS).id, Decimal("0"), Decimal("3500")),
+    }
+    assert _saldo(db, BANCO) == 0 and _saldo(db, "1-1-1-3") == 0
+    # El retiro aparece en el extracto: 2-1-1-2 queda en cero y el banco se mueve una vez
+    ext, _ = _extracto(db, [(date(2026, 9, 4), 10000), (date(2026, 9, 4), -3500)])
+    mc.registrar_asientos_extracto(db, ext.id, None)
+    assert _saldo(db, PAGOS) == 0 and _saldo(db, BANCO) == Decimal("6500")
+
+
+def test_reposicion_de_caja_vieja_se_actualiza_sin_cambiar_su_cuenta(db):
+    """Un caja_efectivo viejo (Efectivo D / Banco madre H) no se corrige en
+    silencio: el upsert cambia el monto, no la cuenta."""
+    _asiento_legacy(db, "caja_efectivo", 9, date(2026, 8, 1), [("1-1-1-2", 1000, 0), ("1-1-1-3", 0, 1000)])
+    mc.registrar_ingreso_efectivo(db, 9, 1, None, Decimal("1200"), date(2026, 8, 1))
+    (a,) = _asientos(db, "caja_efectivo")
+    assert {ln.cuenta_id for ln in a.lineas} == {_cuenta(db, "1-1-1-2").id, _cuenta(db, "1-1-1-3").id}
+    assert _balanceado(a) and sum(ln.debe for ln in a.lineas) == Decimal("1200")
+
+
+# ── Corrección de UM viejos (egresos contra 2-1-1-1) ─────────────────────────
+
+def _um_lote_viejo_como_prod(db, oid=1):
+    """Forma del único um_lote de producción (Org A, id 8, 24/08/2026): Banco
+    Macro D 40.318.005,96 / No identificado H y No identificado D 12.448.365,13
+    / Banco Macro H (egresos contra 2-1-1-1, modelo viejo)."""
+    ext, movs = _extracto(db, [(date(2026, 8, 24), "30000000.00"), (date(2026, 8, 24), "10318005.96"),
+                               (date(2026, 8, 24), "-12000000.00"), (date(2026, 8, 24), "-448365.13")],
+                          oid=oid, source="um")
+    viejo = _asiento_legacy(db, "um_lote", movs[0].id, date(2026, 8, 24), [
+        (BANCO, "40318005.96", 0), (NO_ID, 0, "40318005.96"),
+        (NO_ID, "12448365.13", 0), (BANCO, 0, "12448365.13"),
+    ], oid=oid)
+    return ext, movs, viejo
+
+
+def test_correccion_rehace_um_lote_viejo_con_egresos_en_pagos_a_imputar(client, db, superadmin):
+    ext, movs, viejo = _um_lote_viejo_como_prod(db)
+    foto = _foto_asientos(db, 1)
+
+    d = client.post("/contabilidad/corregir-asientos-banco", headers=_auth(superadmin)).json()
+    assert [a["id"] for a in d["a_reversar"]] == [viejo.id]
+    assert d["a_crear_por_modulo"] == {"um_lote_corregido": 1, "um_lote_reverso": 1}
+    assert d["conflictos"] == []
+    assert d["saldos_antes"]["banco"]["saldo"] == d["saldos_despues"]["banco"]["saldo"] == "27869640.83"
+    assert d["saldos_antes"]["pagos_a_imputar"]["saldo"] == "0.00"
+    assert d["saldos_despues"]["pagos_a_imputar"]["saldo"] == "12448365.13"
+    assert d["saldos_antes"]["cobros_a_imputar"]["saldo"] == "-27869640.83"
+    assert d["saldos_despues"]["cobros_a_imputar"]["saldo"] == "-40318005.96"
+    db.expire_all()
+    assert _foto_asientos(db, 1) == foto  # dry_run no escribe
+
+    r = client.post("/contabilidad/corregir-asientos-banco?dry_run=false", headers=_auth(superadmin))
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    (nuevo,) = _asientos(db, "um_lote_corregido")
+    assert nuevo.fecha == date(2026, 8, 24) and nuevo.referencia_id == movs[0].id and _balanceado(nuevo)
+    assert {(ln.cuenta_id, ln.debe, ln.haber) for ln in nuevo.lineas} == {
+        (_cuenta(db, BANCO).id, Decimal("40318005.96"), Decimal("0")),
+        (_cuenta(db, NO_ID).id, Decimal("0"), Decimal("40318005.96")),
+        (_cuenta(db, PAGOS).id, Decimal("12448365.13"), Decimal("0")),
+        (_cuenta(db, BANCO).id, Decimal("0"), Decimal("12448365.13")),
+    }
+    rev = db.query(Asiento).filter(Asiento.modulo == "um_lote_reverso", Asiento.referencia_id == viejo.id).one()
+    assert rev.fecha == date(2026, 8, 24)
+    assert _saldo(db, BANCO) == Decimal("27869640.83")
+    assert _saldo(db, PAGOS) == Decimal("12448365.13")
+    # El viejo sigue en el libro, igual
+    assert {x[0]: x for x in _foto_asientos(db, 1)}[viejo.id] == {x[0]: x for x in foto}[viejo.id]
+
+    # Idempotente
+    r2 = client.post("/contabilidad/corregir-asientos-banco?dry_run=false", headers=_auth(superadmin)).json()
+    assert r2["nada_que_corregir"] is True
+    assert len(_asientos(db, "um_lote_corregido")) == 1
+
+    # Dar de baja el lote reversa también el corregido (y no deja banco colgado)
+    r = client.delete(f"/extractos/{ext.id}/movimientos-um", headers=_auth(_token(db, "admin@ctb.test")))
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    assert db.query(Asiento).filter(Asiento.modulo == "um_lote_corregido_reverso").count() == 1
+    assert _saldo(db, BANCO) == 0 and _saldo(db, PAGOS) == 0 and _saldo(db, NO_ID) == 0
+
+
+def test_correccion_um_mov_viejo_y_um_editado_va_a_conflictos(client, db, superadmin):
+    ext, (m_ing, m_eg) = _extracto(db, [(date(2026, 8, 1), 500), (date(2026, 8, 2), -200)], source="um")
+    viejo_mov = _asiento_legacy(db, "um_mov", m_eg.id, date(2026, 8, 2), [(NO_ID, 200, 0), (BANCO, 0, 200)])
+    # um_lote viejo cuyo movimiento se editó después: no cuadra → conflicto, no se toca
+    ext2, movs2 = _extracto(db, [(date(2026, 8, 3), -90)], source="um")
+    viejo_lote = _asiento_legacy(db, "um_lote", movs2[0].id, date(2026, 8, 3), [(NO_ID, 75, 0), (BANCO, 0, 75)])
+
+    d = client.post("/contabilidad/corregir-asientos-banco?dry_run=false", headers=_auth(superadmin)).json()
+    assert [a["id"] for a in d["a_reversar"]] == [viejo_mov.id]
+    assert [c["asiento_id"] for c in d["conflictos"]] == [viejo_lote.id]
+    db.expire_all()
+    (nuevo,) = _asientos(db, "um_mov_corregido")
+    assert {(ln.cuenta_id, ln.debe) for ln in nuevo.lineas if ln.debe > 0} == {(_cuenta(db, PAGOS).id, Decimal("200"))}
+    assert db.query(Asiento).filter(Asiento.modulo == "um_lote_reverso").count() == 0
+
+
+def test_correccion_lista_a_revisar_sin_tocarlos(client, db, superadmin):
+    """Egresos / caja viejos contra el banco quedan fuera de alcance: se listan."""
+    egreso = _asiento_legacy(db, "egreso", 1, date(2026, 8, 5), [("3-2-0-0", 500, 0), (BANCO, 0, 500)])
+    caja = _asiento_legacy(db, "caja_efectivo", 2, date(2026, 8, 6), [("1-1-1-2", 300, 0), ("1-1-1-3", 0, 300)])
+    foto = _foto_asientos(db, 1)
+    d = client.post("/contabilidad/corregir-asientos-banco?dry_run=false", headers=_auth(superadmin)).json()
+    assert d["a_revisar"]["cantidad"] == 2 and d["a_revisar"]["total"] == "800.00"
+    assert d["a_revisar"]["por_modulo"] == {"caja_efectivo": 1, "egreso": 1}
+    assert {a["id"] for a in d["a_revisar"]["asientos"]} == {egreso.id, caja.id}
+    assert d["nada_que_corregir"] is True
+    db.expire_all()
+    assert _foto_asientos(db, 1) == foto

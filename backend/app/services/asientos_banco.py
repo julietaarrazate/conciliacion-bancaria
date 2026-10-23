@@ -53,6 +53,7 @@ MODULOS_RECONSTRUIBLES = (
 MODULOS_REEMPLAZADOS = (
     mc.MODULO_EXTRACTO_LEGACY,                # extracto viejo (abs() contra 2-1-0-0)
     "um_mov",                                 # UM en modo individual
+    "um_lote_corregido", "um_mov_corregido",  # UM rehechos por corregir_asientos_banco
     "um_reclass", "cc_inicial",               # reclasificación por fila (legacy / histórica)
     mc.MODULO_RECLASS_LEGACY_EXTRACTO, mc.MODULO_RECLASS_LEGACY_EXTRACTO + "_comision",
     "planilla", "planilla_comision",          # registrar_planilla (dead code)
@@ -390,6 +391,89 @@ def _cuenta_pagos_a_imputar_info(db: Session, oid: int) -> dict:
     }
 
 
+MODULO_UM_LOTE_CORREGIDO = "um_lote_corregido"
+MODULO_UM_MOV_CORREGIDO = "um_mov_corregido"
+
+# Módulos que son "datos del banco" (o su corrección): no van a la lista "a revisar".
+_MODULOS_DATOS_BANCO = {
+    mc.MODULO_EXTRACTO, mc.MODULO_EXTRACTO_LEGACY,
+    "um_lote", "um_mov", MODULO_UM_LOTE_CORREGIDO, MODULO_UM_MOV_CORREGIDO,
+}
+
+
+def _legacy_um_vigentes(db: Session, oid: int) -> list:
+    """Asientos um_lote / um_mov sin reversar cuyos egresos debitaron
+    No identificado 2-1-1-1 (modelo viejo; hoy van contra 2-1-1-2)."""
+    no_id = mc.cuenta_banco_transitoria(db, oid, "ingreso")
+    if not no_id:
+        return []
+    out = []
+    for a in (
+        db.query(Asiento).filter(Asiento.organizacion_id == oid, Asiento.modulo.in_(("um_lote", "um_mov")))
+        .order_by(Asiento.id).all()
+    ):
+        if any(ln.cuenta_id == no_id.id and (ln.debe or 0) > 0 for ln in a.lineas) and not mc.esta_reversado(db, a):
+            out.append(a)
+    return out
+
+
+def _movimientos_del_asiento_um(db: Session, a: Asiento) -> list:
+    """Movimientos UM que cubre un asiento um_lote (el lote de su primer
+    movimiento, ordenado por id) o um_mov (el movimiento mismo)."""
+    primer = db.query(MovimientoBanco).filter(MovimientoBanco.id == a.referencia_id).first()
+    if primer is None or primer.source != "um":
+        return []
+    if a.modulo == "um_mov":
+        return [primer]
+    q = db.query(MovimientoBanco).filter(
+        MovimientoBanco.extracto_id == primer.extracto_id, MovimientoBanco.source == "um",
+    )
+    q = q.filter(MovimientoBanco.um_lote == primer.um_lote) if primer.um_lote is not None \
+        else q.filter(MovimientoBanco.um_lote.is_(None))
+    movs = q.order_by(MovimientoBanco.id).all()
+    return movs if movs and movs[0].id == primer.id else []
+
+
+def _totales_banco(lineas, banco_id: int) -> tuple:
+    debe = sum((Decimal(str(ln.debe or 0)) for ln in lineas if ln.cuenta_id == banco_id), _CERO)
+    haber = sum((Decimal(str(ln.haber or 0)) for ln in lineas if ln.cuenta_id == banco_id), _CERO)
+    return debe, haber
+
+
+def _asientos_a_revisar(db: Session, oid: int) -> dict:
+    """Asientos de módulos (egresos, cheques, tarjetas, liquidaciones, caja,
+    ajustes…) que pegan directo contra el banco (Banco Macro o la cuenta madre)
+    y siguen vigentes. La corrección NO los toca: se listan para revisarlos con
+    el contador (con el extracto registrado, mueven el banco dos veces)."""
+    ids_banco = [
+        c.id for c in db.query(PlanCuenta).filter(
+            PlanCuenta.organizacion_id == oid, PlanCuenta.codigo.in_((mc.CUENTA_BANCO_EXTRACTO, "1-1-1-3")),
+        ).all()
+    ]
+    if not ids_banco:
+        return {"cantidad": 0, "total": "0.00", "por_modulo": {}, "asientos": []}
+    candidatos = (
+        db.query(Asiento)
+        .join(AsientoDetalle, AsientoDetalle.asiento_id == Asiento.id)
+        .filter(Asiento.organizacion_id == oid, AsientoDetalle.cuenta_id.in_(ids_banco))
+        .distinct().order_by(Asiento.id).all()
+    )
+    lista, total, por_modulo = [], _CERO, {}
+    for a in candidatos:
+        modulo = a.modulo or "(sin módulo)"
+        if modulo in _MODULOS_DATOS_BANCO or modulo.endswith("_reverso") or mc.esta_reversado(db, a):
+            continue
+        monto = sum((Decimal(str(ln.debe or 0)) + Decimal(str(ln.haber or 0))
+                     for ln in a.lineas if ln.cuenta_id in ids_banco), _CERO)
+        total += monto
+        por_modulo[modulo] = por_modulo.get(modulo, 0) + 1
+        r = _resumen_asiento(a)
+        r["monto_banco"] = str(monto)
+        lista.append(r)
+    return {"cantidad": len(lista), "total": str(total.quantize(Decimal("0.01"))),
+            "por_modulo": dict(sorted(por_modulo.items())), "asientos": lista}
+
+
 def corregir_asientos_banco(db: Session, oid: int, usuario_id: Optional[int], dry_run: bool = True) -> dict:
     """Corrige el histórico del banco al modelo de cuentas transitorias, sin
     borrar ni editar ningún asiento existente:
@@ -400,9 +484,20 @@ def corregir_asientos_banco(db: Session, oid: int, usuario_id: Optional[int], dr
        (reclass_planilla_extracto[_comision]) → un REVERSO y la misma
        reclasificación rehecha contra No identificado 2-1-1-1 en
        reclass_planilla_principal[_comision] (mismos montos, fecha y cliente).
-    3. Los movimientos del extracto principal sin asiento (extractos no
+    3. Cada um_lote / um_mov viejo cuyos egresos debitaron 2-1-1-1 → un REVERSO
+       y el mismo asiento rehecho con el armador actual (egresos contra 2-1-1-2)
+       en um_lote_corregido / um_mov_corregido (el índice único no deja repetir
+       el módulo para la misma referencia), con la fecha del original. Solo si
+       los movimientos del lote siguen dando los mismos importes de banco que
+       el asiento viejo; si no, se informa en `conflictos` y no se toca. El
+       saldo del banco no cambia (solo se mueve la contrapartida de los egresos).
+    4. Los movimientos del extracto principal sin asiento (extractos no
        borrados) → registrados con construir_asientos_extracto (uno por día,
        fecha real, Banco Macro contra 2-1-1-1 / 2-1-1-2).
+
+    Fuera de alcance (solo se listan en `a_revisar`, con cantidad y total):
+    egresos, cheques, tarjetas, liquidaciones, caja y ajustes viejos que pegan
+    directo contra el banco.
 
     Los reversos llevan la fecha del asiento original, así los saldos por fecha
     del Mayor quedan coherentes con los asientos nuevos (que van con la fecha
@@ -415,21 +510,29 @@ def corregir_asientos_banco(db: Session, oid: int, usuario_id: Optional[int], dr
     No hace commit si dry_run=False: lo hace el router (junto con la auditoría)."""
     saldos_antes = saldos_cuentas_banco(db, oid)
     cuenta_2112 = _cuenta_pagos_a_imputar_info(db, oid)
+    a_revisar = _asientos_a_revisar(db, oid)
     motivo = "Corrección al modelo de cuentas transitorias (oct 2026)"
 
     legacy_ext = _legacy_extracto_vigentes(db, oid)
     legacy_rec = _legacy_reclass_vigentes(db, oid)
-    a_reversar = [_resumen_asiento(a) for a in legacy_ext + legacy_rec]
+    legacy_um = _legacy_um_vigentes(db, oid)
 
+    reversados: list = []
     creados: list = []
     conflictos: list = []
     no_id = mc.cuenta_banco_transitoria(db, oid, "ingreso")
     pasivo = mc._get_cuenta_por_codigo(db, mc.CUENTA_PASIVO_CORRIENTE_LEGACY, oid)
+    banco = mc.cuenta_banco_extracto(db, oid)
 
-    for a in legacy_ext:
+    def _reversar(a: Asiento) -> None:
+        resumen = _resumen_asiento(a)
         rev = mc.construir_reverso(db, a, usuario_id, motivo, fecha=a.fecha)
         if rev is not None:
+            reversados.append(resumen)
             creados.append(rev)
+
+    for a in legacy_ext:
+        _reversar(a)
 
     for a in legacy_rec:
         modulo_nuevo = (
@@ -445,9 +548,7 @@ def corregir_asientos_banco(db: Session, oid: int, usuario_id: Optional[int], dr
             conflictos.append({"asiento_id": a.id, "modulo": a.modulo, "planilla_id": a.referencia_id,
                                "motivo": f"ya existe {modulo_nuevo} #{ya.id}"})
             continue
-        rev = mc.construir_reverso(db, a, usuario_id, motivo, fecha=a.fecha)
-        if rev is not None:
-            creados.append(rev)
+        _reversar(a)
         nuevo = Asiento(
             fecha=a.fecha, descripcion=a.descripcion, modulo=modulo_nuevo,
             referencia_id=a.referencia_id, organizacion_id=oid, usuario_id=usuario_id,
@@ -458,6 +559,36 @@ def corregir_asientos_banco(db: Session, oid: int, usuario_id: Optional[int], dr
         for ln in a.lineas:
             cuenta_id = no_id.id if (pasivo and ln.cuenta_id == pasivo.id) else ln.cuenta_id
             db.add(AsientoDetalle(asiento_id=nuevo.id, cuenta_id=cuenta_id, debe=ln.debe, haber=ln.haber))
+        db.flush()
+        creados.append(nuevo)
+
+    for a in legacy_um:
+        modulo_nuevo = MODULO_UM_MOV_CORREGIDO if a.modulo == "um_mov" else MODULO_UM_LOTE_CORREGIDO
+        movs = _movimientos_del_asiento_um(db, a)
+        if not movs or not banco:
+            conflictos.append({"asiento_id": a.id, "modulo": a.modulo, "referencia_id": a.referencia_id,
+                               "motivo": "no se encontraron los movimientos UM del asiento"})
+            continue
+        pos = sum((max(mc._monto(m.monto), _CERO) for m in movs), _CERO)
+        neg = sum((-min(mc._monto(m.monto), _CERO) for m in movs), _CERO)
+        if (pos, neg) != _totales_banco(a.lineas, banco.id):
+            conflictos.append({"asiento_id": a.id, "modulo": a.modulo, "referencia_id": a.referencia_id,
+                               "motivo": "los movimientos ya no suman lo mismo que el asiento (se editaron)"})
+            continue
+        if db.query(Asiento.id).filter(Asiento.modulo == modulo_nuevo, Asiento.referencia_id == a.referencia_id,
+                                       Asiento.organizacion_id == oid).first():
+            conflictos.append({"asiento_id": a.id, "modulo": a.modulo, "referencia_id": a.referencia_id,
+                               "motivo": f"ya existe {modulo_nuevo}"})
+            continue
+        _reversar(a)
+        if a.modulo == "um_mov":
+            nuevo = mc.construir_asiento_um_mov(db, movs[0], oid, usuario_id, modulo=modulo_nuevo)
+        else:
+            nuevo = mc.construir_asiento_um_lote(db, movs[0].extracto_id, oid, usuario_id, movs,
+                                                 modulo=modulo_nuevo)
+        if nuevo is None:
+            raise ValueError(f"No se pudo rehacer el asiento UM #{a.id}")
+        nuevo.fecha = a.fecha  # misma fecha que el original
         db.flush()
         creados.append(nuevo)
 
@@ -476,10 +607,11 @@ def corregir_asientos_banco(db: Session, oid: int, usuario_id: Optional[int], dr
     resultado = {
         "dry_run": dry_run,
         "org_id": oid,
-        "a_reversar": a_reversar,
+        "a_reversar": reversados,
         "a_crear": a_crear,
         "a_crear_por_modulo": dict(sorted(resumen_modulos.items())),
         "conflictos": conflictos,
+        "a_revisar": a_revisar,
         "saldos_antes": saldos_antes,
         "saldos_despues": saldos_despues,
         "cuenta_pagos_a_imputar": cuenta_2112,
