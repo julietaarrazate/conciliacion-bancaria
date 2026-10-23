@@ -193,9 +193,14 @@ async def upload_extracto(request: Request,
         )
         registrar_log(db, current_user.id, "extractos_bancarios", extracto.id, "INSERT",
                       {"nombre_archivo": file.filename, "movimientos": len(movs)})
-        # El extracto NO genera asiento propio: el UM importa los movimientos
-        # con cuentas correctas (um_lote: 1-1-1-3-1 / 2-1-1-1).
-        # registrar_extracto() usaba cuentas madre y duplicaba con um_lote.
+        # Asiento del extracto principal: uno por día de movimientos (Banco Macro
+        # contra las transitorias 2-1-1-1 / 2-1-1-2). Los UM que se agreguen
+        # después los registra um_lote, así que no se duplican. Tolerante a
+        # fallos: el extracto ya quedó guardado aunque el asiento falle.
+        from app.services.motor_contable import registrar_asientos_extracto
+        if not registrar_asientos_extracto(db, extracto.id, current_user.id):
+            logger.error("motor_contable extracto falló (extracto %s)", extracto.id)
+        db.refresh(extracto)
         return extracto
     except HTTPException:
         raise
@@ -367,9 +372,12 @@ def eliminar_movimientos_um(extracto_id: int,
             from app.services.motor_contable import reversar_asientos as _rev
             _org_id = extracto.organizacion_id or 1
             for _mv in movs_a_borrar:
-                _rev(db, "um_mov", _mv.id, _org_id, current_user.id, "Baja lote UM")
+                for _mod in ("um_mov", "um_mov_corregido"):
+                    _rev(db, _mod, _mv.id, _org_id, current_user.id, "Baja lote UM")
             if movs_a_borrar:
-                _rev(db, "um_lote", movs_a_borrar[0].id, _org_id, current_user.id, "Baja lote UM")
+                # um_lote_corregido: el mismo lote rehecho por corregir-asientos-banco
+                for _mod in ("um_lote", "um_lote_corregido"):
+                    _rev(db, _mod, movs_a_borrar[0].id, _org_id, current_user.id, "Baja lote UM")
         except Exception as _mc_ex:
             logger.error("reverso UM asientos falló (extracto %s, lote %s): %s", extracto_id, max_lote, _mc_ex)
             contabilidad_ok = False

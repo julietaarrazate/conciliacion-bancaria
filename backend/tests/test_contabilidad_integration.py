@@ -438,8 +438,8 @@ class TestResetYRebuild:
                 Asiento.organizacion_id == 1,
             ).all()
 
-        principal_extracto = _asientos("reclass_planilla_extracto")
-        comision_extracto = _asientos("reclass_planilla_extracto_comision")
+        principal_extracto = _asientos("reclass_planilla_principal")
+        comision_extracto = _asientos("reclass_planilla_principal_comision")
         principal_um = _asientos("um_reclass_planilla")
         comision_um = _asientos("um_reclass_planilla_comision")
         assert len(principal_extracto) == 1 and len(comision_extracto) == 1
@@ -450,9 +450,10 @@ class TestResetYRebuild:
         origen_pu = next(l for l in principal_um[0].lineas if l.debe > 0)
         assert origen_pu.debe == pytest.approx(48020.0)  # 49000 - 2%
 
-        cuenta_pasivo = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-0-0", PlanCuenta.organizacion_id == 1).first()
+        # Modelo de cuentas transitorias (oct 2026): los dos orígenes debitan
+        # No identificado (antes el extracto principal debitaba 2-1-0-0).
         cuenta_no_id = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-1-1", PlanCuenta.organizacion_id == 1).first()
-        assert origen_pe.cuenta_id == cuenta_pasivo.id
+        assert origen_pe.cuenta_id == cuenta_no_id.id
         assert origen_pu.cuenta_id == cuenta_no_id.id
 
     def test_rebuild_sin_comision_no_crea_asiento_comision(self, client, db):
@@ -470,8 +471,8 @@ class TestResetYRebuild:
                 Asiento.organizacion_id == 1,
             ).all()
 
-        assert len(_asientos("reclass_planilla_extracto")) == 1
-        assert len(_asientos("reclass_planilla_extracto_comision")) == 0
+        assert len(_asientos("reclass_planilla_principal")) == 1
+        assert len(_asientos("reclass_planilla_principal_comision")) == 0
         assert len(_asientos("um_reclass_planilla")) == 1
         assert len(_asientos("um_reclass_planilla_comision")) == 0
 

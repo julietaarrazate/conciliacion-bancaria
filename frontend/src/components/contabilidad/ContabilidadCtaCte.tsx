@@ -20,9 +20,17 @@ export const ContabilidadCtaCteLista: React.FC<{ c: ContabilidadCtx }> = ({ c })
                   onClick={c.resetYRebuild}
                   disabled={c.backfilling}
                   className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
-                  title="Borra TODOS los asientos y reconstruye el Libro Diario limpio desde cero (banco UM + conciliaciones agrupadas), numerado desde 1. Vincula cuentas de clientes automáticamente."
+                  title="Rehace desde los datos del banco los asientos de extractos, UM y conciliaciones agrupadas; conserva el resto (pagos, cheques, ajustes…) y numera el Libro Diario desde 1. Vincula cuentas de clientes automáticamente."
                 >
                   {c.backfilling ? 'Empezando…' : '🧹 Empezar limpio'}
+                </button>
+                <button
+                  onClick={c.corregirAsientosBanco}
+                  disabled={c.backfilling}
+                  className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-medium hover:bg-emerald-50 dark:hover:bg-emerald-900/20 disabled:opacity-50"
+                  title="Pasa los asientos viejos del banco al modelo de cuentas transitorias con contra-asientos. Primero muestra una simulación con los saldos antes y después."
+                >
+                  🏦 Corregir asientos del banco
                 </button>
                 <button
                   onClick={c.fixFechasUtc}

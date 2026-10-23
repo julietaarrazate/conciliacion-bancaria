@@ -608,12 +608,12 @@ def conciliar_planilla(
             else:
                 res["sin_datos"] += 1
 
-    # Asiento agrupado por planilla, separado por ORIGEN del movimiento: la
-    # cuenta de donde sale la plata depende de dónde quedó parqueada al entrar
-    # — Pasivo Corriente para el extracto bancario principal (registrar_extracto:
-    # Banco D / Pasivo Corriente H), No identificado para Últimos Movimientos
-    # (registrar_um_import: Banco D / No identificado H). Mezclar el origen
-    # dejaría una de las dos mal (nunca se cancela, o queda negativa). El % de
+    # Asiento agrupado por planilla, separado por ORIGEN del movimiento (extracto
+    # principal / Últimos Movimientos). Con el modelo de cuentas transitorias
+    # (oct 2026) los dos orígenes dejan la plata en No identificado 2-1-1-1
+    # (Banco D / 2-1-1-1 H) y la reclasificación siempre la debita; el origen
+    # solo elige el módulo (reclass_planilla_principal / um_reclass_planilla),
+    # para trazabilidad y para que los dos buckets no se pisen. El % de
     # comisión se aplica en cada bucket por igual, así el cliente queda
     # acreditado por el NETO total sin importar de qué origen vino cada pago
     # (ver BUSINESS_RULES.md §4.1). Se recomputa el total sobre TODAS las filas
@@ -637,7 +637,6 @@ def conciliar_planilla(
                 m.id: ("um" if getattr(m, "source", None) == "um" else "extracto")
                 for m in movimientos
             }
-            cuenta_origen_por_bucket = {"um": "2-1-1-1", "extracto": "2-1-0-0"}
             totales = {"um": Decimal("0"), "extracto": Decimal("0")}
             fechas_ref = {"um": None, "extracto": None}
             for r in planilla_rows:
@@ -663,7 +662,7 @@ def conciliar_planilla(
                         total_monto=total,
                         fecha=fechas_ref[bucket] or _hoy_art(),
                         nombre_archivo=nombre_archivo,
-                        cuenta_origen_codigo=cuenta_origen_por_bucket[bucket],
+                        origen=bucket,
                         comision_pct=comision_pct,
                     )
         except Exception as _ex:
