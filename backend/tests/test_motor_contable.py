@@ -581,24 +581,25 @@ def test_reclasificacion_planilla_bajar_comision_a_cero_borra_asiento_comision(d
     assert sum(l.debe for l in principal.lineas) == Decimal("10000.00")
 
 
-def test_reclasificacion_planilla_origen_extracto_usa_pasivo_corriente_y_modulo_propio(db):
-    """cuenta_origen_codigo='2-1-0-0' (extracto principal) postea contra Pasivo
-    Corriente, no contra No identificado, y usa un modulo DISTINTO al de UM —
-    para que ambos buckets convivan sin pisarse en la MISMA planilla (un cliente
-    puede tener filas conciliadas contra el extracto y contra UM a la vez)."""
+def test_reclasificacion_planilla_origen_extracto_usa_no_identificado_y_modulo_propio(db):
+    """origen='extracto' (extracto principal) debita No identificado 2-1-1-1 —
+    igual que UM, porque el crédito del extracto quedó ahí (modelo de cuentas
+    transitorias, oct 2026; antes era Pasivo Corriente 2-1-0-0) — pero usa un
+    módulo DISTINTO al de UM, para que ambos buckets convivan sin pisarse en la
+    MISMA planilla (un cliente puede tener filas contra el extracto y contra UM)."""
     cli, cuenta_cli = _cliente_con_cuenta(db)
-    pasivo = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-0-0", PlanCuenta.organizacion_id == ORG_ID).first()
+    no_id = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-1-1", PlanCuenta.organizacion_id == ORG_ID).first()
 
     mc.registrar_reclasificacion_planilla(
         db, planilla_id=30, org_id=ORG_ID, usuario_id=1,
         cliente_id=cli.id, cliente_nombre=cli.nombre,
         total_monto=Decimal("7000"), fecha=date(2026, 8, 20),
-        cuenta_origen_codigo="2-1-0-0",
+        origen="extracto",
     )
-    asientos_extracto = _asientos_de(db, "reclass_planilla_extracto", 30)
+    asientos_extracto = _asientos_de(db, "reclass_planilla_principal", 30)
     assert len(asientos_extracto) == 1
     origen_l = next(l for l in asientos_extracto[0].lineas if l.debe > 0)
-    assert origen_l.cuenta_id == pasivo.id
+    assert origen_l.cuenta_id == no_id.id
 
     # El mismo planilla_id, bucket UM (default) -> asiento aparte, no choca.
     mc.registrar_reclasificacion_planilla(
@@ -606,7 +607,7 @@ def test_reclasificacion_planilla_origen_extracto_usa_pasivo_corriente_y_modulo_
         cliente_id=cli.id, cliente_nombre=cli.nombre,
         total_monto=Decimal("1000"), fecha=date(2026, 8, 20),
     )
-    assert len(_asientos_de(db, "reclass_planilla_extracto", 30)) == 1
+    assert len(_asientos_de(db, "reclass_planilla_principal", 30)) == 1
     assert len(_asientos_de(db, "um_reclass_planilla", 30)) == 1
 
 
@@ -651,18 +652,18 @@ def test_conciliar_planilla_genera_asiento_por_origen_con_comision(db):
     )
     assert resultado["acreditadas"] == 2
 
-    principal_extracto = _asientos_de(db, "reclass_planilla_extracto", 99)
-    comision_extracto = _asientos_de(db, "reclass_planilla_extracto_comision", 99)
+    principal_extracto = _asientos_de(db, "reclass_planilla_principal", 99)
+    comision_extracto = _asientos_de(db, "reclass_planilla_principal_comision", 99)
     principal_um = _asientos_de(db, "um_reclass_planilla", 99)
     comision_um = _asientos_de(db, "um_reclass_planilla_comision", 99)
     assert len(principal_extracto) == 1 and len(comision_extracto) == 1
     assert len(principal_um) == 1 and len(comision_um) == 1
 
-    pasivo = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-0-0", PlanCuenta.organizacion_id == ORG_ID).first()
     no_id = db.query(PlanCuenta).filter(PlanCuenta.codigo == "2-1-1-1", PlanCuenta.organizacion_id == ORG_ID).first()
 
+    # Modelo de cuentas transitorias (oct 2026): ambos orígenes debitan 2-1-1-1.
     origen_pe = next(l for l in principal_extracto[0].lineas if l.debe > 0)
-    assert origen_pe.cuenta_id == pasivo.id
+    assert origen_pe.cuenta_id == no_id.id
     assert origen_pe.debe == Decimal("96040.00")  # 98000 - 2%
 
     origen_pu = next(l for l in principal_um[0].lineas if l.debe > 0)

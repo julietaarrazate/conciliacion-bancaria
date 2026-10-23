@@ -1041,6 +1041,43 @@ def registrar_reclasificacion_um(
         logger.warning("Error asiento reclasif. row %s: %s", planilla_row_id, ex)
 
 
+# Módulos de la reclasificación por planilla, según el origen del movimiento.
+MODULO_RECLASS = {"um": "um_reclass_planilla", "extracto": "reclass_planilla_principal"}
+# Bucket del extracto principal antes del modelo de cuentas transitorias
+# (debitaba Pasivo Corriente 2-1-0-0). Solo lo crean los datos viejos.
+MODULO_RECLASS_LEGACY_EXTRACTO = "reclass_planilla_extracto"
+CUENTA_PASIVO_CORRIENTE_LEGACY = "2-1-0-0"
+
+
+def esta_reversado(db: Session, asiento: Asiento) -> bool:
+    """True si el asiento ya tiene su `{modulo}_reverso` (ver reversar_asientos)."""
+    return (
+        db.query(Asiento.id)
+        .filter(
+            Asiento.modulo == f"{asiento.modulo}_reverso",
+            Asiento.referencia_id == asiento.id,
+            Asiento.organizacion_id == asiento.organizacion_id,
+        )
+        .first()
+    ) is not None
+
+
+def asiento_reclass_legacy_vigente(db: Session, planilla_id: int, org_id: int) -> Optional[Asiento]:
+    """Asiento viejo reclass_planilla_extracto de la planilla, si existe y no fue reversado."""
+    a = (
+        db.query(Asiento)
+        .filter(
+            Asiento.modulo == MODULO_RECLASS_LEGACY_EXTRACTO,
+            Asiento.referencia_id == planilla_id,
+            Asiento.organizacion_id == org_id,
+        )
+        .first()
+    )
+    if a is None or esta_reversado(db, a):
+        return None
+    return a
+
+
 def registrar_reclasificacion_planilla(
     db: Session,
     planilla_id: int,
@@ -1051,23 +1088,29 @@ def registrar_reclasificacion_planilla(
     total_monto: Decimal,
     fecha: date,
     nombre_archivo: str = "",
-    cuenta_origen_codigo: str = "2-1-1-1",
+    origen: str = "um",
     comision_pct: Decimal = Decimal("0"),
 ) -> None:
     """Asiento(s) agrupado(s) por planilla al conciliar pagos identificados a un
-    cliente. Un asiento principal — cuenta de origen (D) / Cliente (H) — por el
-    NETO (total menos comisión). Si comision_pct > 0, un segundo asiento
-    separado — cuenta de origen (D) / Comisiones ganadas (H) — por la comisión.
+    cliente. Un asiento principal — No identificado 2-1-1-1 (D) / Cliente (H) —
+    por el NETO (total menos comisión). Si comision_pct > 0, un segundo asiento
+    separado — No identificado (D) / Comisiones ganadas (H) — por la comisión.
     Así el cliente queda acreditado por el neto y la comisión se reconoce como
     ingreso aparte (tratamiento acordado con el contador, ago 2026).
 
-    La cuenta de origen depende de DÓNDE quedó parqueada la plata al entrar —
-    mezclar el origen dejaría una de las dos cuentas mal (nunca se cancela, o
-    queda negativa), porque no es de ahí de donde salió la plata realmente:
-      - "2-1-0-0" Pasivo Corriente — movimientos del extracto bancario
-        principal (ver registrar_extracto: Banco D / Pasivo Corriente H).
-      - "2-1-1-1" No identificado (default) — movimientos de Últimos
-        Movimientos (ver registrar_um_import: Banco D / No identificado H).
+    Modelo de cuentas transitorias (oct 2026): el crédito del banco, venga del
+    extracto principal o de Últimos Movimientos, queda en 2-1-1-1 (Banco D /
+    No identificado H), así que la reclasificación siempre debita 2-1-1-1.
+    `origen` ("um" | "extracto") ya no cambia la cuenta, solo el módulo, para
+    trazabilidad y para que los dos buckets de una misma planilla no se pisen:
+      - "um"       → um_reclass_planilla (+ _comision)
+      - "extracto" → reclass_planilla_principal (+ _comision)
+    Hasta oct 2026 el bucket del extracto principal usaba el módulo
+    reclass_planilla_extracto contra Pasivo Corriente 2-1-0-0. Si la planilla
+    todavía tiene ese asiento viejo SIN reversar, una re-conciliación lo sigue
+    actualizando con su cuenta vieja (no se corrige en silencio ni se duplica la
+    acreditación al cliente); POST /contabilidad/corregir-asientos-banco lo
+    reversa y lo rehace en reclass_planilla_principal.
 
     La cuenta del cliente se resuelve/crea/vincula vía _get_o_crear_cuenta_cliente
     (nunca la cuenta madre genérica "Cliente" 2-1-2-0 — eso fue el bug del
@@ -1082,12 +1125,23 @@ def registrar_reclasificacion_planilla(
         total_monto = abs(round(_monto(total_monto), 2))
         if total_monto <= 0:
             return
-        origen = _get_cuenta_por_codigo(db, cuenta_origen_codigo, org_id)
+        if origen not in MODULO_RECLASS:
+            raise ValueError(f"origen inválido: {origen!r} (usar 'um' o 'extracto')")
+        modulo = MODULO_RECLASS[origen]
+        cuenta_origen = cuenta_banco_transitoria(db, org_id, "ingreso")
+        if origen == "extracto":
+            legacy = asiento_reclass_legacy_vigente(db, planilla_id, org_id)
+            if legacy is not None:
+                modulo = MODULO_RECLASS_LEGACY_EXTRACTO
+                linea_origen = next((ln for ln in legacy.lineas if (ln.debe or 0) > 0), None)
+                if linea_origen is not None:
+                    cuenta_origen = db.query(PlanCuenta).filter(PlanCuenta.id == linea_origen.cuenta_id).first()
+        origen = cuenta_origen
         cuenta_cliente = _get_o_crear_cuenta_cliente(db, cliente_id, org_id) if cliente_id else None
         if not origen or not cuenta_cliente:
             logger.warning(
-                "Cuentas reclasificación planilla no encontradas org %s (cliente_id=%s, origen=%s)",
-                org_id, cliente_id, cuenta_origen_codigo,
+                "Cuentas reclasificación planilla no encontradas org %s (cliente_id=%s, modulo=%s)",
+                org_id, cliente_id, modulo,
             )
             return
 
@@ -1100,10 +1154,6 @@ def registrar_reclasificacion_planilla(
         if nombre_archivo:
             desc += f" — {nombre_archivo}"
 
-        # "um_reclass_planilla" se mantiene tal cual para UM (compatibilidad con
-        # asientos ya existentes en producción); el bucket de extracto principal
-        # usa un módulo propio para no chocar con UM en la misma planilla.
-        modulo = "um_reclass_planilla" if cuenta_origen_codigo == "2-1-1-1" else "reclass_planilla_extracto"
         modulo_com = modulo + "_comision"
 
         existente = (

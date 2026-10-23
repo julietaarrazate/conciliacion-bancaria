@@ -209,8 +209,8 @@ def get_cuenta_corriente(
         estado = "Conciliado"
         if es_reverso or a.id in reversados:
             estado = "Revertido"
-        elif modulo == "um_reclass_planilla":
-            # referencia_id es directamente el planilla_id
+        elif modulo in ("um_reclass_planilla", "reclass_planilla_principal", "reclass_planilla_extracto"):
+            # referencia_id es directamente el planilla_id (UM / extracto principal)
             origen["planilla_id"] = a.referencia_id
         elif modulo in ("um_reclass", "cc_inicial"):
             info = row_map.get(a.referencia_id)
