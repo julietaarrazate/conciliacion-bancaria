@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
+import { useAuthStore } from '@/store/auth'
 import { statusLabel, motivoMatchLabel } from '@/utils/status'
 import { fmtARS, fmtFechaCorta as fmtDate } from '@/utils/formato'
 
@@ -81,6 +82,10 @@ const ESTADOS_DISPONIBLES = [
 ]
 
 export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }) => {
+  // Editar estado y asignar movimiento piden `reconcile`; borrar filas, `delete_records`.
+  // El revisor es de solo lectura: no ve esas acciones.
+  const canReconcile = useAuthStore(s => s.hasPermission('reconcile'))
+  const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
   const [meta, setMeta] = useState<MetaDetalle | null>(null)
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(false)
@@ -387,26 +392,26 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
             {selectedRows.size > 0 && (
               <div className="flex items-center gap-1 ml-auto">
                 <span className="text-ml-blue font-semibold">{selectedRows.size} sel.</span>
-                <select
+                {canReconcile && <select
                   className="text-[10px] border border-gray-300 dark:border-slate-600 rounded px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white"
                   value={bulkStatus}
                   onChange={e => setBulkStatus(e.target.value)}
                 >
                   <option value="">Cambiar a...</option>
                   {ESTADOS_DISPONIBLES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                {bulkStatus && (
+                </select>}
+                {canReconcile && bulkStatus && (
                   <button
                     onClick={applyBulkStatus}
                     disabled={savingRow}
                     className="bg-ml-blue text-white text-[10px] rounded px-2 py-0.5 disabled:opacity-50"
                   >Aplicar</button>
                 )}
-                <button
+                {canDelete && <button
                   onClick={bulkDelete}
                   disabled={savingRow}
                   className="bg-red-500 text-white text-[10px] rounded px-2 py-0.5 disabled:opacity-50"
-                >Borrar</button>
+                >Borrar</button>}
               </div>
             )}
           </div>
@@ -532,8 +537,9 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                           </div>
                         ) : (
                           <button
-                            onClick={() => startEdit(row)}
-                            className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer active:scale-95 transition-transform"
+                            onClick={canReconcile ? () => startEdit(row) : undefined}
+                            disabled={!canReconcile}
+                            className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${canReconcile ? 'cursor-pointer active:scale-95' : 'cursor-default'} transition-transform`}
                           >
                             <span className={`inline-flex px-2 py-0.5 rounded-full ${statusStyle(row.status)}`} title={row.status}>
                               {statusLabel(row.status)}
@@ -550,18 +556,18 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                         )}
                       </td>
                       <td className="px-1 py-px text-center whitespace-nowrap">
-                        {row.status !== 'ok' && (
+                        {canReconcile && row.status !== 'ok' && (
                           <button
                             onClick={() => openAsignar(row)}
                             className="text-gray-300 hover:text-ml-blue dark:text-gray-600 dark:hover:text-ml-blue text-[10px] transition-colors mr-2"
                             title="Asignar movimiento manualmente"
                           >🔗</button>
                         )}
-                        <button
+                        {canDelete && <button
                           onClick={() => deleteRow(row.id)}
                           className="text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 text-[10px] transition-colors"
                           title="Eliminar fila"
-                        >X</button>
+                        >X</button>}
                       </td>
                     </tr>
                   ))

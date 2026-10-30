@@ -5,6 +5,24 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Seguridad + contabilidad (oct 2026) — lote 4, React Router 7 y control del banco
+
+- **Contraseña del superadmin**: `SUPERADMIN_PASSWORD` se usa solo al crear el usuario (un cambio
+  desde `/perfil` ya no se pisa en cada deploy). Emergencia: `SUPERADMIN_PASSWORD_RESET=1`.
+- **Fusionar clientes** pide además `delete_records` (borra el cliente origen): solo admin y superadmin.
+- `POST /push/subscribe` reasigna al usuario actual un endpoint de otro usuario.
+- `GET /caja/arqueo/hoy` ya no escribe: devuelve el borrador; lo crean el PUT o un pago en efectivo,
+  ahora siempre con el saldo arrastrado (`services/arqueo.py`).
+- Backup y reset operativo filtran la auditoría por la org del log (`filtro_auditoria_de_orgs`).
+- Frontend: se ocultan al revisor las acciones que el backend le rechaza.
+- **react-router-dom 7.18.5** (open redirect con `\` en v6): `npm audit --omit=dev` sin avisos.
+- **Contabilidad → Cuentas corrientes: tarjeta "Control del banco"** — Banco en libros vs extracto y
+  saldos de "Cobros a imputar" / "Pagos a imputar", explicados en criollo.
+- Corrección de asientos del banco de Org A **ejecutada por la operadora el 30/oct**: Banco Macro en
+  libros = neto real de los extractos (89.573.449,47); Pasivo Corriente y cuenta madre en 0.
+
+---
+
 ### Contabilidad (oct 2026) — modelo de cuentas transitorias estilo Odoo (reemplaza #217)
 
 El asiento del extracto sumaba los egresos al Debe del Banco (cuenta madre, contra el rubro Pasivo

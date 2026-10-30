@@ -22,6 +22,7 @@ from app.models.user import User
 from app.models.cliente import Cliente
 from app.models.egreso import Egreso, CategoriaEgreso, TIPOS_EGRESO, FORMAS_PAGO
 from app.models.caja import ArqueoDiario, denominaciones_vacias
+from app.services.arqueo import obtener_o_crear_arqueo
 from app.services.auditoria import registrar_log
 from app.services.proveedores import ProveedorInvalido, validar_para_egreso
 from app.services.movimiento_egreso import (
@@ -190,19 +191,8 @@ def crear_egreso(
     # Si es efectivo, engancha al arqueo del día y descuenta denominaciones
     arqueo = None
     if forma_pago == "efectivo":
-        arqueo = db.query(ArqueoDiario).filter(
-            ArqueoDiario.organizacion_id == oid,
-            ArqueoDiario.fecha == fecha,
-        ).first()
-        if not arqueo:
-            arqueo = ArqueoDiario(
-                organizacion_id=oid, fecha=fecha,
-                saldo_inicial=0, pesos_agregados=0, ingresos=0,
-                denominaciones=denominaciones_vacias(),
-                creado_por=current_user.id,
-            )
-            db.add(arqueo)
-            db.flush()
+        # Si el arqueo del día no existe se crea con el saldo arrastrado del día anterior
+        arqueo = obtener_o_crear_arqueo(db, oid, fecha, current_user.id)
         if dens_usadas:
             dens = dict(arqueo.denominaciones or denominaciones_vacias())
             for den_str, cant in dens_usadas.items():
@@ -423,19 +413,7 @@ def editar_egreso(
 
         if nueva_forma_pago == "efectivo":
             dens_usadas = payload.get("denominaciones") or {}
-            arqueo = db.query(ArqueoDiario).filter(
-                ArqueoDiario.organizacion_id == e.organizacion_id,
-                ArqueoDiario.fecha == e.fecha,
-            ).first()
-            if not arqueo:
-                arqueo = ArqueoDiario(
-                    organizacion_id=e.organizacion_id, fecha=e.fecha,
-                    saldo_inicial=0, pesos_agregados=0, ingresos=0,
-                    denominaciones=denominaciones_vacias(),
-                    creado_por=current_user.id,
-                )
-                db.add(arqueo)
-                db.flush()
+            arqueo = obtener_o_crear_arqueo(db, e.organizacion_id, e.fecha, current_user.id)
             if dens_usadas:
                 dens = dict(arqueo.denominaciones or denominaciones_vacias())
                 for den_str, cant in dens_usadas.items():

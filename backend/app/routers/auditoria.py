@@ -1,7 +1,7 @@
 from decimal import Decimal
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload, selectinload
-from sqlalchemy import and_, desc, func, or_
+from sqlalchemy import desc, func
 from typing import Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -12,21 +12,15 @@ from app.models.planilla import Planilla
 from app.models.user import User
 from app.schemas.auditoria import AuditoriaListResponse, AuditoriaLogResponse
 from app.middleware.auth import require_permission, get_current_user, can_switch_org
+from app.services.auditoria import filtro_auditoria_de_orgs
 
 router = APIRouter(prefix="/auditoria", tags=["auditoria"])
 
 
 def _filtrar_por_org(q, oid: int):
-    """Logs de la org `oid`: los marcados con esa org y, de los viejos sin org (NULL, antes
-    de la migración 035), los hechos por usuarios de esa org — el criterio de siempre, para
-    que el historial no desaparezca. Un log marcado con otra org no se ve aunque lo haya
-    hecho un usuario de `oid` (p. ej. el superadmin trabajando en otra organización)."""
-    return q.outerjoin(User, User.id == AuditoriaLog.usuario_id).filter(
-        or_(
-            AuditoriaLog.organizacion_id == oid,
-            and_(AuditoriaLog.organizacion_id.is_(None), User.organizacion_id == oid),
-        )
-    )
+    """Logs de la org `oid` (criterio en `services.auditoria.filtro_auditoria_de_orgs`):
+    los marcados con esa org y, de los viejos sin org, los hechos por usuarios de esa org."""
+    return q.filter(filtro_auditoria_de_orgs(oid))
 
 
 @router.get("", response_model=AuditoriaListResponse)

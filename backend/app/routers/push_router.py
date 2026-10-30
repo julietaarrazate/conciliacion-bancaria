@@ -33,7 +33,16 @@ def subscribe(
 ):
     existing = db.query(PushSubscription).filter(PushSubscription.endpoint == body.endpoint).first()
     if existing:
-        return {"ok": True, "status": "already_subscribed"}
+        if existing.user_id == current_user.id:
+            return {"ok": True, "status": "already_subscribed"}
+        # El endpoint es del navegador, no de la persona: si ahora hay otra persona
+        # logueada en ese navegador, la suscripción pasa a ella. Si no, el usuario
+        # anterior seguiría recibiendo en este dispositivo los avisos de su cuenta.
+        existing.user_id = current_user.id
+        existing.p256dh = body.keys.get("p256dh", "") or existing.p256dh
+        existing.auth = body.keys.get("auth", "") or existing.auth
+        db.commit()
+        return {"ok": True, "status": "reassigned"}
     sub = PushSubscription(
         user_id=current_user.id,
         endpoint=body.endpoint,

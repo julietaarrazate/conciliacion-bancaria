@@ -793,7 +793,11 @@ def renombrar_cliente(
     return {"id": cli.id, "nombre": cli.nombre}
 
 
-@router.post("/{cliente_id}/fusionar")
+# Fusionar borra el cliente origen: además de `reconcile` pide `delete_records` (hoy
+# admin y superadmin). Operador y contador dejan de poder fusionar, a propósito: es una
+# acción destructiva y el contador "no borra nada" (SECURITY_MODEL §2).
+@router.post("/{cliente_id}/fusionar",
+             dependencies=[Depends(require_permission("delete_records"))])
 def fusionar_clientes(
     cliente_id: int,
     payload: dict,

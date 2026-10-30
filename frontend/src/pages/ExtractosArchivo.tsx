@@ -59,6 +59,8 @@ export const ExtractosArchivo: React.FC = () => {
   const navigate = useNavigate()
   const { activeOrgId } = useOrgStore()
   const canUpload = useAuthStore(s => s.hasPermission('upload_files'))
+  // Archivar/reabrir pide delete_records en el backend (cierre de período).
+  const canArchivar = useAuthStore(s => s.hasPermission('delete_records'))
   const [items, setItems]         = useState<ExtractoHistorialItem[]>([])
   const [loading, setLoading]     = useState(true)
   const [openBancos, setOpenBancos] = useState<Set<string>>(new Set())
@@ -416,9 +418,11 @@ export const ExtractosArchivo: React.FC = () => {
                                                     <p className="text-xs font-medium text-ml-text dark:text-gray-200 truncate" title={e.nombre_archivo}>
                                                       {e.nombre_archivo}
                                                     </p>
-                                                    <button onClick={() => startRename(e)}
-                                                      className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-ml-blue transition-opacity text-[11px] shrink-0"
-                                                      title="Renombrar">✏️</button>
+                                                    {canUpload && (
+                                                      <button onClick={() => startRename(e)}
+                                                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-ml-blue transition-opacity text-[11px] shrink-0"
+                                                        title="Renombrar">✏️</button>
+                                                    )}
                                                   </div>
                                                 )}
                                                 <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
@@ -454,7 +458,7 @@ export const ExtractosArchivo: React.FC = () => {
                                                 >
                                                   {dlLoading === e.id ? '⏳' : '⬇️'} .xlsx
                                                 </button>
-                                                <button
+                                                {canArchivar && <button
                                                   onClick={() => handleArchivar(e)}
                                                   disabled={archLoading === e.id}
                                                   className="px-2.5 py-1 text-[11px] text-gray-500 border border-gray-300 dark:border-ml-dark-border rounded-md hover:bg-gray-50 dark:hover:bg-ml-dark-hover disabled:opacity-50 transition-colors whitespace-nowrap"
@@ -463,7 +467,7 @@ export const ExtractosArchivo: React.FC = () => {
                                                     : 'Cerrar el período: queda guardado y consultable, pero no recibe más movimientos. Podés subir un extracto nuevo del banco.'}
                                                 >
                                                   {archLoading === e.id ? '⏳' : e.archivado ? '↩️ Reabrir' : '📦 Archivar'}
-                                                </button>
+                                                </button>}
                                               </div>
                                             </div>
                                           )

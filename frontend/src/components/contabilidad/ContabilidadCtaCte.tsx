@@ -2,12 +2,16 @@ import React from 'react'
 import { apiClient } from '@/services/api'
 import { toast } from '@/store/toast'
 import { fmtDate, fmtNum, CAT_KEYS, CAT_LABEL, ESTADO_BADGE, GEN_BADGE, CcFiltro } from './shared'
+import { ControlBancoCard } from './ControlBancoCard'
+import { useOrgStore } from '@/store/org'
 import type { ContabilidadCtx } from './useContabilidad'
 
 export const ContabilidadCtaCteLista: React.FC<{ c: ContabilidadCtx }> = ({ c }) => {
   const { user } = c
+  const { activeOrgId } = useOrgStore()
   return (
     <div>
+      {c.canViewAccounting && <ControlBancoCard orgId={activeOrgId ?? undefined} />}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
         <p className="text-xs text-gray-500 dark:text-gray-400 flex-1">
           Visión global de la cartera. Saldo, último movimiento y estado por cliente — vista derivada de los asientos. No genera asientos.

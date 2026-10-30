@@ -146,6 +146,21 @@ interface CacheEntry { data: unknown; at: number }
 // frescura cuando algo realmente cambia.
 const REPORTS_TTL_MS = 5 * 60_000
 
+/** Respuesta de GET /contabilidad/control-banco. Importes en string (Decimal del backend). */
+export interface ControlBanco {
+  org_id: number
+  saldo_libro_banco: string
+  suma_movimientos_extractos: string
+  diferencia_libro_vs_movimientos: string
+  saldo_ultimo_extracto: string | null
+  saldo_inicial_primer_extracto: string | null
+  diferencia_libro_vs_extracto: string | null
+  movimientos_extracto_sin_asiento: number
+  saldos: Record<'banco' | 'banco_cuenta_madre' | 'pasivo_corriente' | 'cobros_a_imputar' | 'pagos_a_imputar', { codigo: string; saldo: string }>
+  ok: boolean
+  nota: string
+}
+
 class ApiClient {
   client: AxiosInstance   // público para endpoints puntuales
   private token: string | null = null
@@ -1216,6 +1231,15 @@ class ApiClient {
   }): Promise<CalendarioVencimientoFila[]> {
     const res = await this.client.put('/vencimientos/calendario', body)
     return res.data
+  }
+
+  /** Control del banco: saldo en libros vs. extracto y saldos de las cuentas transitorias (importes como string). */
+  async getControlBanco(orgId?: number): Promise<ControlBanco> {
+    const key = this._cacheKey('/contabilidad/control-banco', { org_id: orgId })
+    return this._cached(key, 30_000, async () => {
+      const res = await this.client.get('/contabilidad/control-banco', { params: this._orgParams(orgId) })
+      return res.data
+    })
   }
 
   /** CUIT de la organización contra el que se controla a nombre de quién está cada factura. */

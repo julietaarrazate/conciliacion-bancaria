@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
+import { useAuthStore } from '@/store/auth'
 import { localIsoDate, isoHaceNDias } from '@/utils/fecha'
 
 type Resumen = {
@@ -77,6 +78,8 @@ const PERIODOS = [
 export const EstadoCuenta: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const clienteId = Number(id)
+  // El link público lo genera `POST /clientes/{id}/share-link`, que pide `reconcile`.
+  const canCompartir = useAuthStore(s => s.hasPermission('reconcile'))
   const [periodoDias, setPeriodoDias] = useState(90)
   const [data, setData] = useState<EstadoCuentaData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -175,13 +178,13 @@ export const EstadoCuenta: React.FC = () => {
             >
               {downloadingPdf ? 'Generando…' : '📄 PDF'}
             </button>
-            <button
+            {canCompartir && <button
               onClick={handleShare}
               disabled={sharingLink}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors disabled:opacity-50"
             >
               {linkCopiado ? '✓ Link copiado' : '🔗 Compartir'}
-            </button>
+            </button>}
           </div>
         </div>
         <p className="text-[11px] text-ml-text-soft dark:text-zinc-600 mt-2">
