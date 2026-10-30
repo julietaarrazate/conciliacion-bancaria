@@ -1,4 +1,4 @@
-/// <reference types="vitest" />
+/// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
@@ -32,7 +32,11 @@ function precargarChunks(): Plugin {
         for (const { condicion, modulos } of PRECARGAS) {
           const archivos = new Set<string>()
           for (const m of modulos) {
-            const chunk = chunks.find((c) => c.facadeModuleId?.replace(/\\/g, '/').endsWith(m))
+            // Rolldown (Vite 8) deja sin facadeModuleId a los chunks compartidos
+            // (ej. services/api, que el Layout importa estático y App.tsx dinámico):
+            // si no hay fachada, se busca el chunk que contiene el módulo.
+            const termina = (id: string | null | undefined) => !!id && id.replace(/\\/g, '/').endsWith(m)
+            const chunk = chunks.find((c) => termina(c.facadeModuleId)) ?? chunks.find((c) => c.moduleIds.some(termina))
             if (!chunk) continue
             for (const f of [chunk.fileName, ...chunk.imports]) if (!yaCargados.has(f)) archivos.add(f)
           }
@@ -57,7 +61,7 @@ function precargarChunks(): Plugin {
 export default defineConfig({
   plugins: [react(), precargarChunks()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, './src') }
+    alias: { '@': path.resolve(import.meta.dirname, './src') }
   },
   build: {
     rollupOptions: {
