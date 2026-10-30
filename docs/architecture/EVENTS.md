@@ -35,8 +35,9 @@ asiento (cuentas, débito/haber, idempotencia) está en
 
 | Acción del usuario | Función del motor | Módulo del asiento |
 |---|---|---|
+| Subir extracto (Excel o PDF nuevo) | `registrar_asientos_extracto` | `extracto_banco` (uno por día) |
 | Importar UM (lote de banco) | `registrar_um_import` | `um_lote` |
-| Conciliar planilla contra UM | `registrar_reclasificacion_planilla` | `um_reclass_planilla` |
+| Conciliar planilla | `registrar_reclasificacion_planilla` | `um_reclass_planilla` / `reclass_planilla_principal` |
 | Registrar pago/gasto (egreso) | `registrar_egreso` | egreso |
 | Registrar ingreso en efectivo | `registrar_ingreso_efectivo` | caja |
 | Acreditar/registrar cheque | `registrar_cheque` | cheque |
@@ -45,8 +46,10 @@ asiento (cuentas, débito/haber, idempotencia) está en
 | Emitir factura ARCA | (router `arca`) | ARCA |
 | Ajuste manual | router `ctb_libro` | `ajuste_manual` |
 
-> El extracto en sí **no** genera asiento propio: los movimientos entran vía `um_lote`
-> (ver comentario en `routers/extractos.py`).
+> Desde oct 2026 el extracto principal **sí** genera asiento al subirlo (Banco Macro contra las
+> transitorias 2-1-1-1 / 2-1-1-2, ver [ACCOUNTING_ENGINE](./ACCOUNTING_ENGINE.md) §2bis); los UM
+> que se agregan después los cubre `um_lote`. El merge de un PDF sobre un extracto existente va
+> por UM. El arranque ya no genera asientos.
 
 Cada mutación de asientos invalida los cachés derivados (cartera, sumas-saldo, balance) — ver
 `routers/ctb_libro.py::_invalidar_reportes`.

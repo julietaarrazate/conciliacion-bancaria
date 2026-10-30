@@ -64,11 +64,13 @@ re-aplica en cada arranque (idempotente). Cuentas clave que el motor referencia 
 | Código | Nombre | Tipo | Usada por |
 |--------|--------|------|-----------|
 | `1-1-1-2` | Efectivo | activo | egresos/ingresos en efectivo |
-| `1-1-1-3` | Banco | activo | regla `carga_extracto` |
-| `1-1-1-3-1` | Banco Macro (hoja) | activo | UM, egresos banco, liquidaciones, tarjetas, cc_inicial |
+| `1-1-1-3` | Banco (madre) | activo | ya no la usa el motor (regla `carga_efectivo` solo aporta el Debe Efectivo); solo asientos viejos (`extracto`, `caja_efectivo`) |
+| `1-1-1-3-1` | Banco Macro (hoja) | activo | **solo** datos del banco: `extracto_banco`, `um_lote`/`um_mov` y sus `_corregido` (ver §2bis) |
 | `1-1-2-1` | Cheques en cartera | activo | cheques |
 | `1-1-2-4/5/6` | IVA Crédito Fiscal / Percepciones IIBB / Retenciones | activo | tarjetas |
-| `2-1-1-1` | No identificado | pasivo | UM import / reclasificación |
+| `2-1-0-0` | Pasivo Corriente (rubro) | pasivo | ya no lo usa el motor; solo asientos viejos (`extracto`, `reclass_planilla_extracto`) |
+| `2-1-1-1` | No identificado = **cobros a imputar** | pasivo | transitoria: crédito del banco (H) / reclasificación, cheque acreditado, tarjeta (D) |
+| `2-1-1-2` | **Pagos a imputar** (oct 2026) | pasivo | transitoria: débito del banco (D) / pago por banco, rechazo, liquidación (H) |
 | `2-1-2-0` | Cliente (nodo padre) | pasivo | padre de las cuentas corrientes de cliente |
 | `2-1-2-X` | una cuenta por cliente (ej. Cliente Norte) | pasivo | cuenta corriente por cliente |
 | `2-1-3-1` | Cheques depositados | pasivo | cheques |
@@ -84,7 +86,57 @@ re-aplica en cada arranque (idempotente). Cuentas clave que el motor referencia 
 | `3-2-4-0` | Sueldos y cargas sociales | resultado | sueldos |
 
 > El plan completo (lista `PLAN` + `PLAN_PATCH`) vive en `seed_contable.py`; este doc cita
-> solo las cuentas que el motor resuelve por código.
+> solo las cuentas que el motor resuelve por código. `2-1-1-2` está en `PLAN_PATCH`: el seed
+> de cada arranque la agrega a las orgs existentes (alta aditiva, por org, si falta), y
+> `cuenta_banco_transitoria` la crea al vuelo si alguna org todavía no la tiene.
+
+---
+
+## 2bis. Modelo de cuentas transitorias (estilo Odoo, oct 2026)
+
+Decisión: [ADR-015](../adr/DECISIONS.md). Equivalente a "bank suspense + outstanding
+receipts/payments" de Odoo; en Argentina, "partidas pendientes de imputación".
+
+1. **La cuenta del banco la mueven solo los datos del banco**: movimientos del extracto
+   principal y de Últimos Movimientos, siempre contra la hoja Banco Macro `1-1-1-3-1`
+   (`cuenta_banco_extracto`; TODO multi-banco: un extracto de otro banco también pega ahí).
+2. **Dos transitorias** bajo `2-1-1-0` "Pasivo a Confirmar":
+   - `2-1-1-1` No identificado = **cobros a imputar**. El crédito del banco la acredita; la
+     conciliación con un cliente, el cheque acreditado o la liquidación de tarjeta la debitan.
+   - `2-1-1-2` Pagos a imputar = **pagos a imputar**. El débito del banco la debita; el pago
+     cargado en Cuadra "por banco" (y los demás egresos bancarios de módulos) la acredita.
+3. Todo asiento de módulo que antes pegaba contra el banco por plata que también va a
+   aparecer en el extracto usa la transitoria. La elección está en **un solo helper**:
+   `motor_contable.cuenta_banco_transitoria(db, org_id, sentido)` con
+   `sentido="ingreso"` → 2-1-1-1, `"egreso"` → 2-1-1-2. No escribir códigos en los `registrar_*`.
+4. Lectura de los saldos: 2-1-1-1 acreedora = cobros del banco sin imputar a un cliente;
+   2-1-1-2 deudora = débitos del banco sin un pago cargado, acreedora = pagos cargados que el
+   banco todavía no debitó. Con todo explicado, ambas quedan en cero y Banco Macro = suma de
+   los movimientos de los extractos (`GET /contabilidad/control-banco`).
+
+### Qué cuenta toca cada módulo (antes → después)
+
+Solo asientos **nuevos**; los viejos quedan como están (se corrigen con §7bis).
+
+| Módulo (función) | Antes | Después |
+|---|---|---|
+| Extracto principal (`registrar_asientos_extracto`, módulo `extracto_banco`) | Sin asiento al subir; backfill de arranque `extracto` (solo Org A): `abs()` de todo, Banco madre `1-1-1-3` D / Pasivo Corriente `2-1-0-0` H, fecha de hoy | Un asiento por día, fecha real. Ingresos: Banco Macro D / 2-1-1-1 H · Egresos: 2-1-1-2 D / Banco Macro H |
+| UM (`registrar_um_import`, `um_lote` / `um_mov`) | Ingreso Banco Macro D / 2-1-1-1 H · Egreso 2-1-1-1 D / Banco Macro H | Ingreso igual · Egreso **2-1-1-2** D / Banco Macro H |
+| Reclasificación, origen extracto principal (`registrar_reclasificacion_planilla`) | `reclass_planilla_extracto`: 2-1-0-0 D / Cliente H | `reclass_planilla_principal`: **2-1-1-1** D / Cliente H (+ `_comision`: 2-1-1-1 D / Comisiones H) |
+| Reclasificación, origen UM | `um_reclass_planilla`: 2-1-1-1 D / Cliente H | sin cambio |
+| Pago / gasto / OP por banco (`registrar_egreso`, `egreso`) | Gasto o Cliente D / Banco Macro H | Gasto o Cliente D / **2-1-1-2** H |
+| Pago en efectivo (`registrar_egreso`) | … / Efectivo H | sin cambio |
+| Cheque acreditado (`acreditar_cheque`, `cheque_acred_banco`) | Banco elegido D / Cheques en cartera H | **2-1-1-1** D / Cheques en cartera H (el banco elegido se valida y queda en el cheque) |
+| Cheque rechazado (`rechazar_cheque`, `cheque_rechazo_banco` / `_gasto`) | Cliente D / Banco H · Gastos rechazos D / Banco H | Cliente D / **2-1-1-2** H · Gastos rechazos D / **2-1-1-2** H |
+| Liquidación de cliente aprobada (`registrar_liquidacion_aprobacion`) | Cliente D / Banco Macro H neto + Comisiones H | Cliente D / **2-1-1-2** H neto + Comisiones H |
+| Liquidación de tarjeta (`registrar_liquidacion_tarjeta`, `tarjeta_liq`) | Banco Macro D neto + aranceles/IVA/… D / Ingresos H | **2-1-1-1** D neto + … / Ingresos H |
+| Acreditación histórica (`registrar_cc_inicial` y `POST /backfill-cuentas-corrientes`) | Banco Macro D / Cliente H | **2-1-1-1** D / Cliente H |
+| Reposición de caja desde el banco (`registrar_ingreso_efectivo`, `caja_efectivo`) | Efectivo D / Banco madre `1-1-1-3` H (regla `carga_efectivo`) | Efectivo D / **2-1-1-2** H (el retiro aparece en el extracto). Es el único asiento de caja que toca el banco; los pagos en efectivo (Efectivo H) no cambian |
+| Cheque registrado, sueldos, ARCA, ajuste manual | no tocan el banco | sin cambio |
+
+Flujo completo de un pago por banco (v3.32, "resolver débito pendiente"): el extracto registra
+`2-1-1-2 D / Banco H`; el pago vinculado registra `Gasto (o Cliente) D / 2-1-1-2 H` → 2-1-1-2
+queda en cero y el banco se movió una sola vez.
 
 ### Cuentas corrientes de cliente (`2-1-2-X`)
 
@@ -178,7 +230,10 @@ el destino contable de un evento sin tocar código. Sembradas en `seed_contable.
 
 > No todos los `registrar_*` usan `ReglaContable`: los flujos con cuentas dinámicas (cliente,
 > banco elegido, multilínea) resuelven cuentas por código directamente. Las reglas se usan en
-> `registrar_extracto`, `registrar_planilla`, `registrar_ingreso_efectivo`.
+> `registrar_planilla` (dead code) y `registrar_ingreso_efectivo`. `carga_extracto` ya no la
+> consume nada (oct 2026: el extracto usa §2bis). Las reglas sembradas no se modificaron en las
+> orgs existentes (Org A: solo cambios aditivos), así que siguen mostrando `1-1-1-3` en
+> `pago_cliente_banco` / `asig_gasto_banco` aunque el motor pegue contra 2-1-1-2.
 
 ---
 
@@ -191,20 +246,24 @@ docstring de cada una. Resumen:
 
 | Función | Módulo(s) | Asiento |
 |---------|-----------|---------|
-| `registrar_um_import` | `um_lote` (agrupado) / `um_mov` (individual) | Banco Macro D / No identificado H (ingreso); invertido si egreso. Modo según config org `modo_asiento_um` |
+| `registrar_asientos_extracto` (núcleo `construir_asientos_extracto`) | `extracto_banco` | Un asiento por **día** de movimientos del extracto principal (no UM), fecha = la del movimiento. Ingresos: Banco Macro D / 2-1-1-1 H · Egresos: 2-1-1-2 D / Banco Macro H. `referencia_id` = menor id de movimiento del día; idempotente por movimiento (`MovimientoBanco.asiento_id`). Lo llaman el upload de Excel y la confirmación de un PDF nuevo |
+| `registrar_um_import` (núcleo `construir_asiento_um_lote`) | `um_lote` (agrupado) / `um_mov` (individual) | Banco Macro D / 2-1-1-1 H (ingreso) · 2-1-1-2 D / Banco Macro H (egreso; hasta oct 2026 iba contra 2-1-1-1). Modo según config org `modo_asiento_um` |
 | `registrar_reclasificacion_um` | `um_reclass` | No identificado D / Cliente X H (per-fila, legacy) |
-| `registrar_reclasificacion_planilla` | `um_reclass_planilla` (+ `_comision`) — origen UM<br>`reclass_planilla_extracto` (+ `_comision`) — origen extracto principal | Origen D / Cliente X H por el **NETO** + Origen D / Comisiones ganadas H por la comisión (asiento aparte, solo si `comision_pct > 0`). Agrupado por planilla, **upsert** en re-conciliación. Tratamiento acordado con el contador (ago 2026) — ver `BUSINESS_RULES.md` §4.1bis. |
+| `registrar_reclasificacion_planilla` | `um_reclass_planilla` (+ `_comision`) — origen UM<br>`reclass_planilla_principal` (+ `_comision`) — origen extracto principal | **No identificado (2-1-1-1)** D / Cliente X H por el **NETO** + No identificado D / Comisiones ganadas H por la comisión (asiento aparte, solo si `comision_pct > 0`). Agrupado por planilla, **upsert** en re-conciliación. Tratamiento acordado con el contador (ago 2026) — ver `BUSINESS_RULES.md` §4.1bis. |
 | `registrar_planilla` | `planilla` / `planilla_comision` | Pasivo Corriente D / Cliente **madre genérica** H (+ comisión opcional). **Dead code**: ya no la llama nada (el backfill de arranque que la invocaba se eliminó, ago 2026, por duplicar asientos y no resolver la cuenta por cliente) — queda solo por sus tests, no reintroducir su uso. |
-| `registrar_extracto` | `extracto` | Banco D / Pasivo Corriente H (total del extracto) |
-| `registrar_cc_inicial` | `cc_inicial` | Banco Macro D / Cliente H — backfill histórico de cta. cte. |
+| ~~`registrar_extracto`~~ | `extracto` | **Eliminada (oct 2026).** Banco madre D / Pasivo Corriente H por `abs()` de todo el extracto, fecha de hoy. Los asientos que dejó en producción se corrigen con §7bis |
+| `registrar_cc_inicial` | `cc_inicial` | 2-1-1-1 D / Cliente H — backfill histórico de cta. cte. (antes Banco Macro D) |
 
-El flujo vivo es: `um_lote` deja el dinero en **No identificado** (2-1-1-1) y `extracto` lo
-deja en **Pasivo Corriente** (2-1-0-0); al conciliar una planilla, `registrar_reclasificacion_planilla`
-reclasifica CADA origen por separado hacia la cuenta del cliente (neto) + Comisiones ganadas
-(comisión), según de qué cuenta salió realmente la plata — mezclar el origen dejaría una de
-las dos cuentas mal (nunca se cancela, o queda negativa). Una planilla con filas de ambos
-orígenes genera dos pares de asientos independientes. Por eso el reset-y-rebuild solo
-reconstruye estos módulos (ver §7).
+El flujo vivo es: el extracto principal (`extracto_banco`) y los UM (`um_lote`) dejan el
+crédito del banco en **No identificado** (2-1-1-1); al conciliar una planilla,
+`registrar_reclasificacion_planilla` lo reclasifica a la cuenta del cliente (neto) + Comisiones
+ganadas (comisión). El origen del movimiento ya no cambia la cuenta, solo el módulo (un bucket
+por origen, para trazabilidad y para que no se pisen en la misma planilla).
+
+**Asientos viejos `reclass_planilla_extracto`** (2-1-0-0 D, hasta oct 2026): no se tocan. Si una
+planilla todavía tiene uno **sin reversar**, re-conciliarla lo sigue actualizando con su cuenta
+vieja (crear uno nuevo en `reclass_planilla_principal` acreditaría dos veces al cliente);
+§7bis lo reversa y lo rehace en `reclass_planilla_principal`, y desde ahí el upsert usa el nuevo.
 
 ### Egresos / Pagos (`registrar_egreso`, módulo `egreso`)
 
@@ -212,31 +271,37 @@ Una sola función para proveedor/gasto/pago_cliente, en banco o efectivo. Matriz
 
 - `tipo=pago_cliente` → Debe: cuenta del cliente `2-1-2-X`
 - `tipo=proveedor`/`gasto` → Debe: Gastos `3-2-0-0`
-- `forma_pago=banco` → Haber: Banco Macro `1-1-1-3-1`
+- `forma_pago=banco` → Haber: **Pagos a imputar `2-1-1-2`** (antes Banco Macro; el banco lo mueve el débito del extracto)
 - `forma_pago=efectivo` → Haber: Efectivo `1-1-1-2`
 
 ### Caja (`registrar_ingreso_efectivo`, módulo `caja_efectivo`)
 
-Reposición banco → caja: Efectivo D / Banco H. **Upsert** por arqueo (si ya existe, actualiza
-el monto en vez de duplicar).
+Reposición banco → caja: Efectivo D (Debe de la regla `carga_efectivo`) / **Pagos a imputar
+2-1-1-2** H (`cuenta_banco_transitoria`; hasta oct 2026, cuenta madre Banco `1-1-1-3`): el
+retiro lo registra el débito del extracto (2-1-1-2 D / Banco H). **Upsert** por arqueo (si ya
+existe, actualiza el monto en vez de duplicar); un asiento viejo contra `1-1-1-3` cambia de
+monto pero conserva su cuenta (no se corrige en silencio; lo lista `a_revisar` en §7bis).
 
 ### Cheques
 
 | Función | Módulos | Asiento |
 |---------|---------|---------|
 | `registrar_cheque` | `cheque_registro` | Cheques en cartera (1-1-2-1) D / Cheques depositados (2-1-3-1) H neto + Comisiones cheques (3-1-3-0) H |
-| `acreditar_cheque` | `cheque_acred_banco`, `cheque_acred_cliente` | A1: Banco D / Cheques en cartera H · A2: Cheques depositados D / Cliente H (neto) |
-| `rechazar_cheque` | `cheque_rechazo_banco`, `_cliente`, `_gasto` | A1: Cliente D / Banco H (reversión) · A2: Cliente D / Gastos rechazos H · A3: Gastos rechazos D / Banco H |
+| `acreditar_cheque` | `cheque_acred_banco`, `cheque_acred_cliente` | A1: **2-1-1-1** D / Cheques en cartera H · A2: Cheques depositados D / Cliente H (neto) |
+| `rechazar_cheque` | `cheque_rechazo_banco`, `_cliente`, `_gasto` | A1: Cliente D / **2-1-1-2** H (reversión) · A2: Cliente D / Gastos rechazos H · A3: Gastos rechazos D / **2-1-1-2** H |
+
+`banco_cuenta_id` (el banco que elige el usuario) se sigue validando y guardando en el cheque,
+pero ya no es la cuenta del asiento (TODO multi-banco).
 
 ### Liquidaciones de cliente (`registrar_liquidacion_aprobacion`, módulo `liquidacion_aprobacion`)
 
-Por cada detalle (cliente): Cliente `2-1-2-X` D conciliado / Banco Macro H neto + Comisiones
+Por cada detalle (cliente): Cliente `2-1-2-X` D conciliado / **2-1-1-2** H neto + Comisiones
 ganadas (3-1-1-0) H comisión. Exige la cuenta de comisiones si hay comisión (sino el asiento
 descuadraría: neto < conciliado).
 
 ### Liquidaciones de tarjeta (`registrar_liquidacion_tarjeta`, módulo `tarjeta_liq`)
 
-Asiento mensual multilínea por marca: Banco D neto + Aranceles (3-2-3-X por marca) D + IVA CF
+Asiento mensual multilínea por marca: **2-1-1-1** D neto + Aranceles (3-2-3-X por marca) D + IVA CF
 (1-1-2-4) D + Percepciones IIBB (1-1-2-5) D + Retenciones (1-1-2-6) D / Ingresos por tarjetas
 (3-1-4-0) H bruto. Cuenta de arancel según marca (`_ARANCEL_CUENTA_POR_MARCA`, fallback 3-2-3-0).
 
@@ -270,7 +335,11 @@ ambos en el libro):
 
 - `reversar_asientos(modulo, referencia_id, org)` → crea asientos `{modulo}_reverso` con
   `debe ↔ haber` invertidos. Idempotente: no duplica si ya hay un reverso para ese origen.
-  Se dispara cuando se da de baja el registro de origen.
+  Se dispara cuando se da de baja el registro de origen. Su núcleo sin commit es
+  `construir_reverso(orig, …, fecha=None)` (lo usa también la corrección de §7bis, con la fecha
+  del original); `esta_reversado(asiento)` dice si ya tiene reverso.
+- Purga de un extracto de la papelera: reversa el `extracto` viejo y los `extracto_banco` del
+  extracto (ubicados por `MovimientoBanco.asiento_id`) antes de borrar los movimientos.
 - `DELETE /contabilidad/asientos/{id}` solo admite reversar asientos de **`ajuste_manual`**
   (crea `ajuste_manual_reverso`); rechaza el resto.
 - Única excepción editable: la **fecha** de un asiento (`PATCH /asientos/{id}/fecha`,
@@ -293,17 +362,62 @@ asiento `*_reverso` como su original (detecta `Asiento.modulo.like("%_reverso")`
   para tapar los huecos de la baja física de la migración v3.9. Ese backfill se eliminó al vaciar
   el Libro Diario a cero — ya no hay huecos que tapar y evitaba que el primer asiento nuevo se
   numerara 521 en vez de 1. No reintroducir salvo que se restaure el histórico.
-- `POST /contabilidad/reset-y-rebuild` (solo superadmin, `dry_run` por defecto) **borra todos
-  los asientos de la org y los reconstruye** desde los datos reales: un `um_lote` por lote de
-  UM importado + un bucket de reclasificación por `(planilla, origen del movimiento)` — mismo
-  criterio dual que el flujo vivo (extracto principal → Pasivo Corriente, UM → No identificado),
-  neteando la comisión de la planilla en un asiento aparte cuando corresponde — luego renumera
-  correlativamente 1..N por `(fecha, id)`. Incluye self-heal de la columna `numero_asiento` por
-  si Render no corrió el safety net.
-  > **Ojo**: borra TODOS los asientos de la org, incluidos los de módulo `extracto` (Banco D /
-  > Pasivo Corriente H al importar el extracto bancario) — y **no los reconstruye** (este
-  > endpoint no toca ese módulo). Usarlo asume que se puede re-generar `extracto` de otra forma
-  > o que se acepta perderlo. Gap preexistente, no introducido por el cambio de ago 2026.
+- `POST /contabilidad/reset-y-rebuild` ("Empezar limpio", solo superadmin, `dry_run` por
+  defecto; lógica en `services/asientos_banco.py::reconstruir_asientos_banco`) borra y
+  reconstruye desde los datos reales **solo los módulos que sabe reconstruir**:
+  `extracto_banco` (un asiento por día de cada extracto no borrado), `um_lote` (uno por
+  `(extracto, lote)`, extractos no borrados) y la reclasificación por `(planilla, origen)`
+  (`reclass_planilla_principal` / `um_reclass_planilla` + `_comision`, siempre contra 2-1-1-1).
+  También borra las **versiones viejas** de esos mismos módulos, que el rebuild reemplaza
+  (`extracto`, `um_mov`, `um_lote_corregido`, `um_mov_corregido`, `um_reclass`, `cc_inicial`, `reclass_planilla_extracto[_comision]`,
+  `planilla[_comision]`), y los `_reverso` de todos. **Todo lo demás se conserva intacto**
+  (egresos y sus reversos, cheques, tarjetas, sueldos, liquidaciones, caja, ARCA, ajustes
+  manuales). Después renumera 1..N **todos** los asientos de la org por `(fecha, id)`, incluidos
+  los conservados. Una sola transacción (si algo falla, rollback: el libro no queda a medio
+  borrar); idempotente; deja auditoría `RESET_Y_REBUILD`. El dry_run devuelve
+  `a_borrar` / `a_conservar` (con conteo por módulo) y `a_crear`. Self-heal de las columnas
+  `asientos.numero_asiento` y `movimientos_banco.asiento_id` por si Render no corrió el safety net.
+
+### 7bis. Corrección explícita del histórico (`POST /contabilidad/corregir-asientos-banco`)
+
+En la UI: **Contabilidad → Cuentas corrientes → "🏦 Corregir asientos del banco"** (solo superadmin).
+Corre primero el `dry_run` y muestra en un confirm los asientos a anular/crear, los saldos antes →
+después de Banco Macro, cuenta madre, Pasivo Corriente y las dos transitorias, los conflictos y los
+"a revisar"; recién al confirmar ejecuta.
+
+Solo superadmin, `?dry_run=true` por defecto, `?org_id=` para elegir la org. Lógica en
+`services/asientos_banco.py::corregir_asientos_banco`. **Nunca corre sola** (el arranque ya no
+genera asientos: el backfill del paso 7 de `main.py` se eliminó en oct 2026).
+
+1. Cada asiento `extracto` viejo sin reversar → `extracto_reverso`.
+2. Cada `reclass_planilla_extracto[_comision]` sin reversar que debitó 2-1-0-0 → su reverso +
+   la misma reclasificación (mismos montos, fecha, descripción y cliente) en
+   `reclass_planilla_principal[_comision]` contra 2-1-1-1. Si esa planilla ya tiene una
+   reclasificación nueva, no se toca y se informa en `conflictos`.
+3. Cada `um_lote` / `um_mov` sin reversar cuyos egresos debitaron 2-1-1-1 → su reverso + el
+   mismo asiento rehecho con el armador actual (`construir_asiento_um_lote` /
+   `construir_asiento_um_mov`, egresos contra 2-1-1-2) en `um_lote_corregido` /
+   `um_mov_corregido` (el índice único no deja repetir `um_lote` para la misma referencia),
+   con la fecha del original. Solo si los movimientos del lote siguen sumando los mismos
+   importes de banco que el asiento viejo; si no (movimientos editados o borrados), va a
+   `conflictos` y no se toca. El saldo del banco no cambia: solo los egresos pasan de 2-1-1-1
+   a 2-1-1-2. La baja de un lote UM reversa también su `*_corregido`.
+4. Los movimientos del extracto principal sin asiento de los extractos no borrados → se
+   registran con `construir_asientos_extracto` (uno por día, fecha real).
+
+Los reversos llevan la **fecha del asiento original** (así los saldos por fecha del Mayor quedan
+coherentes con los asientos nuevos, que van con la fecha del movimiento). Los asientos nuevos se
+numeran a continuación del último: **no se renumera ni se edita ni se borra nada existente**.
+Idempotente (la segunda corrida devuelve `nada_que_corregir: true`). El dry_run arma todo dentro
+de la transacción, calcula los saldos resultantes y hace **rollback** — no persiste nada. La
+respuesta trae `a_reversar`, `a_crear` (+ `a_crear_por_modulo`), `conflictos`, `a_revisar`,
+`saldos_antes` / `saldos_despues` de Banco Macro, Banco madre, 2-1-0-0, 2-1-1-1 y 2-1-1-2, y
+`cuenta_pagos_a_imputar` (avisa si en esa org el código 2-1-1-2 ya lo usa otra cuenta). Al
+ejecutar deja auditoría `CORREGIR_ASIENTOS_BANCO` con los ids reversados y los saldos.
+**Fuera de alcance**: los asientos de módulos (egreso, cheques, tarjetas, liquidaciones, caja,
+ajustes…) que pegan directo contra Banco Macro o la cuenta madre y siguen vigentes **no se
+tocan**; se listan en `a_revisar` (`cantidad`, `total` = Σ debe + haber de sus líneas de banco,
+`por_modulo` y el detalle) para decidir con el contador.
 
 ---
 
@@ -321,6 +435,7 @@ Endpoints bajo el prefijo `/contabilidad`:
 | Cartera (todos los clientes) | `GET /cuentas-corrientes` | Saldo + último mov + estado (deudor/acreedor/equilibrado) por cliente. Cacheado 60s |
 | Cuenta corriente (un cliente) | `GET /cuenta-corriente?cliente_id=` | Línea de tiempo financiera del cliente con saldo, contraparte y origen de cada asiento; PDF en `/cuenta-corriente/exportar-pdf` |
 | Export contable | `GET /asientos/exportar-contable` | Libro diario en formato CSV / Tango / Holistor / Regisoft (`view_accounting`) |
+| Control del banco | `GET /control-banco` | Saldo de Banco Macro en libros vs. suma de los movimientos de los extractos no borrados y vs. saldo final del último extracto − saldo inicial del primero (no hay asiento de apertura); movimientos del extracto principal sin asiento; saldos de 2-1-1-1, 2-1-1-2, 2-1-0-0 y Banco madre (`view_accounting`). Sin pantalla en el frontend por ahora |
 
 Los caches de Sumas/Saldos, Balance y Cartera se **invalidan explícitamente** tras cada
 mutación de asientos (`_invalidar_reportes` en `ctb_libro.py`), con el TTL de 60s como respaldo.
@@ -335,7 +450,8 @@ mutación de asientos (`_invalidar_reportes` en `ctb_libro.py`), con el TTL de 6
 | Cuentas corrientes | `manage_finance` |
 | Export contable | `view_accounting` |
 | Asiento manual, editar fecha, vincular cuentas, backfill, fix-fechas | `admin_accounting` |
-| `reset-y-rebuild` (ejecutar) | `is_superadmin` |
+| `reset-y-rebuild`, `corregir-asientos-banco` (dry_run y ejecutar) | `is_superadmin` |
+| `control-banco` | `view_accounting` |
 
 Ver [../security/SECURITY_MODEL](../security/SECURITY_MODEL.md) para el modelo de permisos completo.
 
@@ -350,9 +466,22 @@ Ver [../security/SECURITY_MODEL](../security/SECURITY_MODEL.md) para el modelo d
   código en vez de por `ReglaContable`. Conviene confirmar si son reglas legacy o se mantienen
   por compatibilidad/configurabilidad.
 - **`_MODULO_TIPO` (ctb_common.py)** mapea módulos a etiquetas legibles, pero no incluye
-  `tarjeta_liq`, `sueldos_liquidacion`, `arca_factura`, `um_lote`, `extracto`, `caja_efectivo`
-  ni `ajuste_manual`; esos caen en el fallback `("ajustes", modulo)`. Revisar si falta agregar
-  etiquetas para que aparezcan con nombre legible en la cuenta corriente.
+  `tarjeta_liq`, `sueldos_liquidacion`, `arca_factura`, `um_lote`, `extracto`, `extracto_banco`,
+  `caja_efectivo` ni `ajuste_manual`; esos caen en el fallback `("ajustes", modulo)`. Revisar si
+  falta agregar etiquetas para que aparezcan con nombre legible en la cuenta corriente.
+- **Modelo de cuentas transitorias (oct 2026) — lo que quedó afuera**:
+  - **Multi-banco**: todo extracto pega contra Banco Macro `1-1-1-3-1` aunque sea de otro banco
+    (`ExtractoBancario.banco`), y el `banco_cuenta_id` del cheque ya no entra en el asiento.
+    Falta una cuenta hoja por banco y mapear extracto → cuenta (TODO en `cuenta_banco_extracto`).
+  - **Histórico que la corrección no toca**: egresos/cheques/tarjetas/liquidaciones/caja viejos
+    que pegaron contra el banco. Tras la corrección, el banco puede mostrar esos movimientos dos
+    veces; los lista `a_revisar` del endpoint y se ven en `GET /control-banco` (diferencia libro
+    vs. movimientos). Se ajustan a mano o con una extensión del endpoint, a decidir con el contador.
+  - **Editar o borrar un movimiento suelto** del extracto no reversa su asiento `extracto_banco`
+    (igual que pasa con `um_lote`): el asiento queda con el monto original. Purgar el extracto sí
+    lo reversa. Al purgar tampoco se reversan los `um_lote` del extracto (gap preexistente).
+  - Las **reglas sembradas** de orgs existentes siguen mostrando la cuenta madre Banco en
+    `pago_cliente_banco` / `asig_gasto_banco` / `carga_extracto` (no se editan filas existentes).
 - **Comentario en `models/contabilidad.py`** (`Asiento.modulo`) lista solo
   `extracto|planilla|caja|cheque` como ejemplos; el conjunto real de módulos es mucho mayor
   (ver §5). Es solo un comentario ilustrativo, no afecta comportamiento.

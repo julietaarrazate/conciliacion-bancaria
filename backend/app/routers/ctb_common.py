@@ -17,6 +17,8 @@ _STATUS_CONCILIADO = ("ok", "OK", "PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA")
 _MODULO_TIPO = {
     "um_reclass":             ("banco",   "Conciliación (TT)"),
     "um_reclass_planilla":    ("banco",   "Transferencia (TT)"),
+    "reclass_planilla_principal": ("banco", "Transferencia (TT)"),
+    "reclass_planilla_extracto":  ("banco", "Transferencia (TT)"),
     "cc_inicial":             ("banco",   "Acreditación (histórico)"),
     "planilla":               ("banco",   "Planilla (legacy)"),
     "planilla_comision":      ("banco",   "Comisión planilla (legacy)"),

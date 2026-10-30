@@ -5,6 +5,29 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Contabilidad (oct 2026) — modelo de cuentas transitorias estilo Odoo (reemplaza #217)
+
+El asiento del extracto sumaba los egresos al Debe del Banco (cuenta madre, contra el rubro Pasivo
+Corriente y con fecha del arranque): en Org A el Banco quedaba inflado en ~570 M. Además los pagos
+"por banco" tocaban el Banco y el mismo débito volvía a entrar con el extracto.
+
+- **El Banco (Banco Macro 1-1-1-3-1) lo mueven solo el extracto y los UM**: un asiento por día con la
+  fecha real (`extracto_banco`); ingresos contra **2-1-1-1 No identificado**, egresos contra
+  **2-1-1-2 Pagos a imputar** (cuenta nueva, se agrega a todas las orgs). `registrar_extracto` y el
+  backfill de arranque (Org A) se eliminan. Migración 037: `movimientos_banco.asiento_id`.
+- Pagos/gastos por banco, cheques, tarjetas, liquidaciones, cuenta corriente inicial y carga de caja
+  desde el banco van contra la transitoria (helper único `cuenta_banco_transitoria`). Las
+  reclasificaciones de planillas debitan siempre 2-1-1-1 (`reclass_planilla_principal`).
+- **"Empezar limpio"** solo borra y rehace lo que sabe reconstruir: conserva pagos, ajustes manuales y
+  el resto de los módulos, y renumera 1..N con todos.
+- **`POST /contabilidad/corregir-asientos-banco`** (superadmin, `dry_run` por defecto): corrige el
+  histórico con contra-asientos (nunca borra ni edita), muestra saldos antes/después, lista
+  conflictos y asientos "a revisar". Idempotente y auditado.
+- **`GET /contabilidad/control-banco`**: saldo del Banco en libros vs extracto + saldo de las transitorias.
+- ADR-015, `ACCOUNTING_ENGINE.md` §2bis/§7bis, `BUSINESS_RULES.md`. 24 tests nuevos.
+
+---
+
 ### Seguridad (oct 2026) — tercer lote de la revisión: sesiones, permisos, auditoría y archivos
 
 - **Sesiones**: cambiar o restablecer la contraseña cierra las sesiones abiertas
