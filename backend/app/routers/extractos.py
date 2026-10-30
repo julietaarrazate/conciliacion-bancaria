@@ -9,7 +9,7 @@ from app.services.limites import ip_cliente, leer_planilla
 from app.services.excel_safe import sanear_workbook
 _ARG = _ZI('America/Argentina/Buenos_Aires')
 from typing import Optional
-import tempfile, os, io
+import tempfile, os, io, json
 
 from app.database import get_db
 from app.models.extracto import ExtractoBancario, MovimientoBanco
@@ -20,6 +20,8 @@ from app.schemas.extracto import (
     MergeUMResponse, MovimientosFiltradosResponse
 )
 from app.services.excel_parser import parsear_extracto_bancario
+from app.services.extracto_mapper import MapeoInvalido, analizar_extracto, serializar_analisis
+from app.services.extracto_plantillas import guardar_plantilla, marcar_uso, plantillas_de_org
 from app.services.extracto_merger import mergear_movimientos
 # Helpers de persistencia compartidos con el importador de PDF (mismos nombres que
 # tenían acá antes de moverse a extracto_import).
@@ -87,8 +89,103 @@ def list_extractos(skip: int = 0, limit: int = 50,
     items = [{"id": e.id, "nombre_archivo": e.nombre_archivo,
               "fecha_creacion": e.fecha_creacion, "total_movimientos": conteos.get(e.id, 0),
               "banco": e.banco or "Banco Macro",
-              "archivado": e.archivado_at is not None} for e in rows]
+              "archivado": e.archivado_at is not None,
+              "aviso_saldos": e.aviso_saldos} for e in rows]
     return {"total": total, "items": items}
+
+
+EXTENSIONES_EXTRACTO = ('.xlsx', '.xls', '.csv', '.tsv', '.txt')
+_MSG_EXTENSIONES = "Formatos aceptados: .xlsx, .xls, .csv, .tsv, .txt"
+
+
+async def _archivo_temporal(file: UploadFile) -> str:
+    """Valida extensión + tamaño (+ zip bomb) + magic bytes y deja el archivo en un
+    temporal. Quien llama lo borra."""
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext not in EXTENSIONES_EXTRACTO:
+        raise HTTPException(400, _MSG_EXTENSIONES)
+    # Tope de tamaño leyendo como mucho max_file_size + 1 bytes, y chequeo de zip bomb.
+    content = await leer_planilla(file, settings.max_file_size)
+    # Validación de magic bytes: evita que archivos renombrados pasen la validación de extensión
+    _XLSX_MAGIC = b'PK\x03\x04'       # ZIP (XLSX internamente es ZIP)
+    _XLS_MAGIC  = b'\xd0\xcf\x11\xe0'  # OLE2 (formato binario .xls)
+    header = content[:8]
+    if ext == '.xlsx' and not header.startswith(_XLSX_MAGIC):
+        raise HTTPException(400, "El archivo no es un Excel válido (.xlsx debe ser un archivo ZIP/OOXML)")
+    if ext == '.xls' and not header.startswith(_XLS_MAGIC):
+        raise HTTPException(400, "El archivo no es un Excel válido (.xls debe ser formato OLE2)")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+        tmp.write(content)
+        return tmp.name
+
+
+def _leer_mapeo(mapeo: Optional[str]) -> Optional[dict]:
+    if not mapeo:
+        return None
+    try:
+        valor = json.loads(mapeo)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "El mapeo de columnas no es un JSON válido.")
+    if not isinstance(valor, dict):
+        raise HTTPException(400, "El mapeo de columnas no tiene el formato esperado.")
+    return valor
+
+
+def _exigir_mapeo(analisis: dict) -> None:
+    """Sin columnas reconocidas no se adivina: se le pide el mapeo a la persona (422)."""
+    if analisis["origen"] in ("ninguno", "sugerencia"):
+        raise HTTPException(422, {
+            "codigo": "necesita_mapeo",
+            "mensaje": "No reconocimos las columnas de este extracto. "
+                       "Indicá cuál es la fecha, el detalle y el importe para poder importarlo.",
+        })
+
+
+def _aprender_plantilla(db: Session, analisis: dict, org_id: int, usuario_id: int) -> None:
+    """Después de importar: guarda el mapeo confirmado (o suma un uso a la plantilla
+    que se aplicó sola). Nunca frena la importación."""
+    try:
+        if analisis["origen"] == "manual":
+            guardar_plantilla(
+                db, org_id=org_id, firma=analisis["firma"], banco_clave=analisis["banco_clave"],
+                mapeo=analisis["mapeo"], encabezados=analisis["encabezados"], usuario_id=usuario_id,
+            )
+        elif analisis["origen"] == "plantilla":
+            marcar_uso(db, analisis["plantilla_id"], org_id)
+    except Exception as e:  # pragma: no cover - defensivo
+        db.rollback()
+        logger.error("no se pudo guardar la plantilla del extracto: %s", e)
+
+
+@router.post("/preview")
+@limiter.limit("30/minute")
+async def preview_extracto(request: Request,
+                           file: UploadFile = File(...),
+                           org_id: Optional[int] = Query(None),
+                           mapeo: Optional[str] = Form(None),
+                           db: Session = Depends(get_db),
+                           current_user: User = Depends(require_permission("upload_files"))):
+    """Lee el extracto SIN guardar nada: grilla de las primeras filas, columnas
+    detectadas (o las del `mapeo` que mandó la persona), banco, muestra de
+    movimientos y control de saldos. `necesita_mapeo` dice si hay que mostrarle
+    la pantalla de columnas antes de importar."""
+    org_destino = org_id if (org_id and can_switch_org(current_user, org_id)) else (current_user.organizacion_id or 1)
+    mapeo_dict = _leer_mapeo(mapeo)
+    tmp_path = await _archivo_temporal(file)
+    try:
+        plantillas = None if mapeo_dict else plantillas_de_org(db, org_destino)
+        res = analizar_extracto(tmp_path, plantillas=plantillas, mapeo=mapeo_dict)
+    except MapeoInvalido as e:
+        raise HTTPException(400, str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("preview extracto: %s", e)
+        raise HTTPException(400, "No se pudo leer el archivo. Verificá el formato y volvé a intentar.")
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+    return serializar_analisis(res)
 
 
 @router.post("/upload", response_model=ExtractoBancarioResponse)
@@ -97,6 +194,7 @@ async def upload_extracto(request: Request,
                           file: UploadFile = File(...),
                           banco: str = Query("Banco Macro"),
                           org_id: Optional[int] = Query(None),
+                          mapeo: Optional[str] = Form(None),
                           db: Session = Depends(get_db),
                           current_user: User = Depends(require_permission("upload_files"))):
     # Org destino: la activa seleccionada por el usuario (si tiene permiso para
@@ -106,31 +204,27 @@ async def upload_extracto(request: Request,
     # segundo intento podía pisar el unique index (fingerprint, organizacion_id)
     # de un upload previo y tirar un error genérico de "procesar el archivo".
     org_destino = org_id if (org_id and can_switch_org(current_user, org_id)) else (current_user.organizacion_id or 1)
-    ext = os.path.splitext(file.filename or '')[1].lower()
-    if ext not in ('.xlsx', '.xls', '.csv'):
-        raise HTTPException(400, "Formatos aceptados: .xlsx, .xls, .csv")
+    mapeo_dict = _leer_mapeo(mapeo)
     tmp_path = None
     try:
-        # Tope de tamaño leyendo como mucho max_file_size + 1 bytes, y chequeo de zip bomb.
-        content = await leer_planilla(file, settings.max_file_size)
-        # Validación de magic bytes: evita que archivos renombrados pasen la validación de extensión
-        _XLSX_MAGIC = b'PK\x03\x04'       # ZIP (XLSX internamente es ZIP)
-        _XLS_MAGIC  = b'\xd0\xcf\x11\xe0'  # OLE2 (formato binario .xls)
-        header = content[:8]
-        if ext == '.xlsx' and not header.startswith(_XLSX_MAGIC):
-            raise HTTPException(400, "El archivo no es un Excel válido (.xlsx debe ser un archivo ZIP/OOXML)")
-        if ext == '.xls' and not header.startswith(_XLS_MAGIC):
-            raise HTTPException(400, "El archivo no es un Excel válido (.xls debe ser formato OLE2)")
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-
-        parsed = parsear_extracto_bancario(tmp_path)
+        tmp_path = await _archivo_temporal(file)
+        # Mapeo confirmado por la persona → si no, plantilla guardada de la org →
+        # si no, detección automática. Sin nada reconocible: 422 (pedir el mapeo).
+        try:
+            parsed = parsear_extracto_bancario(
+                tmp_path,
+                plantillas=None if mapeo_dict else plantillas_de_org(db, org_destino),
+                mapeo=mapeo_dict,
+            )
+        except MapeoInvalido as e:
+            raise HTTPException(400, str(e))
+        analisis = parsed["analisis"]
+        _exigir_mapeo(analisis)
         movs = parsed["movimientos"]
         if len(movs) == 0:
             raise HTTPException(400,
                 "El archivo no contiene movimientos reconocibles. "
-                "Verificá que sea un extracto bancario en formato .xlsx (Macro, BBVA, Santander, Galicia)."
+                "Verificá que sea un extracto bancario en Excel o CSV, o indicá las columnas a mano."
             )
         suma_abs = sum(abs(float(m.get("monto") or 0)) for m in movs)
         if suma_abs == 0:
@@ -181,18 +275,26 @@ async def upload_extracto(request: Request,
             # Actualizar banco si el detectado es más específico que el guardado
             if banco_final and banco_final != "Banco Macro" and not existente.banco:
                 existente.banco = banco_final
+            existente.aviso_saldos = analisis["aviso_saldos"]
             db.commit()
             db.refresh(existente)
             registrar_log(db, current_user.id, "extractos_bancarios", existente.id, "UPSERT_ACRED",
                           {"archivo": file.filename, "actualizados": actualizados})
+            _aprender_plantilla(db, analisis, org_destino, current_user.id)
+            db.refresh(existente)
             return existente
 
         extracto = crear_extracto_con_movimientos(
             db, movs=movs, nombre_archivo=file.filename, banco=banco_final,
             huella=fp, org_id=org_destino, usuario_id=current_user.id,
         )
+        if analisis["aviso_saldos"]:
+            extracto.aviso_saldos = analisis["aviso_saldos"]
+            db.commit()
         registrar_log(db, current_user.id, "extractos_bancarios", extracto.id, "INSERT",
-                      {"nombre_archivo": file.filename, "movimientos": len(movs)})
+                      {"nombre_archivo": file.filename, "movimientos": len(movs),
+                       "lectura": analisis["origen"], "aviso_saldos": analisis["aviso_saldos"]})
+        _aprender_plantilla(db, analisis, org_destino, current_user.id)
         # Asiento del extracto principal: uno por día de movimientos (Banco Macro
         # contra las transitorias 2-1-1-1 / 2-1-1-2). Los UM que se agreguen
         # después los registra um_lote, así que no se duplican. Tolerante a
@@ -407,31 +509,27 @@ async def agregar_ultimos_movimientos(
     file: UploadFile = File(...),
     corte_saldo: Optional[float] = Form(None),
     modo_asiento: Optional[str] = Form(None),
+    mapeo: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("upload_files")),
 ):
     extracto = _extracto_for_user(db, extracto_id, current_user)
     if extracto.archivado_at is not None:
         raise HTTPException(409, "El extracto está archivado (período cerrado) — desarchivalo o subí un extracto nuevo.")
-    ext = os.path.splitext(file.filename or '')[1].lower()
-    if ext not in ('.xlsx', '.xls', '.csv'):
-        raise HTTPException(400, "Formatos aceptados: .xlsx, .xls, .csv")
+    mapeo_dict = _leer_mapeo(mapeo)
     tmp_path = None
     try:
-        # Tope de tamaño leyendo como mucho max_file_size + 1 bytes, y chequeo de zip bomb.
-        content = await leer_planilla(file, settings.max_file_size)
-        # Validación de magic bytes
-        _XLSX_MAGIC = b'PK\x03\x04'
-        _XLS_MAGIC  = b'\xd0\xcf\x11\xe0'
-        header = content[:8]
-        if ext == '.xlsx' and not header.startswith(_XLSX_MAGIC):
-            raise HTTPException(400, "El archivo no es un Excel válido (.xlsx debe ser un archivo ZIP/OOXML)")
-        if ext == '.xls' and not header.startswith(_XLS_MAGIC):
-            raise HTTPException(400, "El archivo no es un Excel válido (.xls debe ser formato OLE2)")
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-        parsed = parsear_extracto_bancario(tmp_path)
+        tmp_path = await _archivo_temporal(file)
+        org_extracto = extracto.organizacion_id or 1
+        try:
+            parsed = parsear_extracto_bancario(
+                tmp_path,
+                plantillas=None if mapeo_dict else plantillas_de_org(db, org_extracto),
+                mapeo=mapeo_dict,
+            )
+        except MapeoInvalido as e:
+            raise HTTPException(400, str(e))
+        _exigir_mapeo(parsed["analisis"])
         stats = mergear_movimientos(db, extracto_id, parsed["movimientos"], corte_saldo=corte_saldo)
         registrar_log(db, current_user.id, "extractos_bancarios", extracto_id, "APPEND_UM",
                       {"archivo": file.filename, **stats})

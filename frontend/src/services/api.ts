@@ -69,11 +69,14 @@ import {
   ComprobanteArcaPayload,
   ResultadoMapeoPlanilla,
   MapeoColumnas,
+  MapeoExtracto,
+  PreviewExtracto,
   BorradorExtractoPdf,
   BorradorExtractoPdfResumen,
   ConfirmarExtractoPdfPayload,
   ConfirmarExtractoPdfResult,
   MoldeExtractoPdf,
+  GrupoConciliacion,
 } from '@/types'
 import { useLockStore } from '@/store/lock'
 
@@ -471,9 +474,30 @@ class ApiClient {
   }
 
   // Extractos endpoints
-  async uploadExtraco(file: File, banco: string = 'Banco Macro', orgId?: number | null): Promise<ExtractoBancario> {
+  // Lee un extracto Excel/CSV sin guardar nada: columnas detectadas, muestra y
+  // control de saldos. Con `mapeo` recalcula con las columnas que eligió la persona.
+  async previewExtracto(file: File, orgId?: number | null, mapeo?: MapeoExtracto): Promise<PreviewExtracto> {
     const formData = new FormData()
     formData.append('file', file)
+    if (mapeo) formData.append('mapeo', JSON.stringify(mapeo))
+    const params: any = {}
+    if (orgId) params.org_id = orgId
+    const res = await this.client.post('/extractos/preview', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params
+    })
+    return res.data
+  }
+
+  async uploadExtraco(
+    file: File,
+    banco: string = 'Banco Macro',
+    orgId?: number | null,
+    mapeo?: MapeoExtracto
+  ): Promise<ExtractoBancario> {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (mapeo) formData.append('mapeo', JSON.stringify(mapeo))
 
     const params: any = { banco }
     if (orgId) params.org_id = orgId
@@ -753,6 +777,33 @@ class ApiClient {
 
   async asignarMovimiento(rowId: number, movimientoId: number): Promise<{ ok: boolean; row_id: number; movimiento_id: number; status: string }> {
     const { data } = await this.client.post(`/planillas/rows/${rowId}/asignar-movimiento`, { movimiento_id: movimientoId })
+    return data
+  }
+
+  // ── Grupos de conciliación (varias filas ↔ un movimiento, o al revés) ──
+  async movimientosLibres(planillaId: number, q?: string): Promise<{
+    planilla_id: number
+    tolerancia: number
+    movimientos: { id: number; orden: number | null; fecha: string | null; titular: string | null; monto: number; source: string }[]
+  }> {
+    const { data } = await this.client.get(`/planillas/${planillaId}/movimientos-libres`, { params: q ? { q } : {} })
+    return data
+  }
+
+  async crearGrupo(planillaId: number, rowIds: number[], movimientoIds: number[], conDiferencia = false): Promise<GrupoConciliacion> {
+    const { data } = await this.client.post(`/planillas/${planillaId}/grupos`, {
+      row_ids: rowIds, movimiento_ids: movimientoIds, con_diferencia: conDiferencia,
+    })
+    return data
+  }
+
+  async confirmarGrupo(grupoId: number): Promise<GrupoConciliacion> {
+    const { data } = await this.client.post(`/planillas/grupos/${grupoId}/confirmar`)
+    return data
+  }
+
+  async deshacerGrupo(grupoId: number): Promise<{ ok: boolean; grupo_id: number; estado: string }> {
+    const { data } = await this.client.post(`/planillas/grupos/${grupoId}/deshacer`)
     return data
   }
 

@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FileUpload } from '@/components/FileUpload'
 import { PlanillaPanel } from '@/components/PlanillaPanel'
 import { ColumnMapperModal } from '@/components/ColumnMapperModal'
 import { DiagnosticoPanel } from '@/components/DiagnosticoPanel'
 import { ImportarExtractoPdfModal } from '@/components/extractos/ImportarExtractoPdfModal'
+import { ExtractoMapperModal } from '@/components/extractos/ExtractoMapperModal'
 import { apiClient } from '@/services/api'
 import { useOrgStore } from '@/store/org'
 import { confirmDialog } from '@/store/confirm'
@@ -15,6 +16,8 @@ import {
   ConfirmarExtractoPdfResult,
   DeteccionInfo,
   ExtractoListItem,
+  MapeoExtracto,
+  PreviewExtracto,
   PlanillaHistorialItem,
   ResultadoMapeoPlanilla,
   MapeoColumnas
@@ -213,6 +216,16 @@ function leerBancosCustom(): string[] {
   try { return JSON.parse(localStorage.getItem('bancos_personalizados') || '[]') } catch { return [] }
 }
 
+// El backend a veces manda `detail` como objeto ({ codigo, mensaje } o { message }).
+function mensajeError(detail: unknown): string {
+  if (typeof detail === 'string') return detail
+  if (detail && typeof detail === 'object') {
+    const d = detail as { mensaje?: string; message?: string }
+    return d.mensaje || d.message || ''
+  }
+  return ''
+}
+
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate()
   const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
@@ -238,6 +251,8 @@ export const Dashboard: React.FC = () => {
   const [accionCarga, setAccionCarga] = useState<null | 'extracto' | 'um' | 'planilla'>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  // Aviso que no frena la carga (p. ej. "Los saldos no cuadran desde la fila N…")
+  const [aviso, setAviso] = useState('')
   const [resultado, setResultado] = useState<ConciliacionResultado | null>(null)
   const [deteccionCuadre, setDeteccionCuadre] = useState<DeteccionInfo | null>(null)
   const [panelId, setPanelId] = useState<number | null>(null)
@@ -264,6 +279,9 @@ export const Dashboard: React.FC = () => {
 
   // ── Extracto en PDF: se lee, se revisa en una ventana y recién ahí se guarda ──
   const [pdfPendiente, setPdfPendiente] = useState<File | null>(null)
+
+  // ── Extracto Excel/CSV cuyas columnas hay que confirmar (pantalla de mapeo) ──
+  const [extractoPendiente, setExtractoPendiente] = useState<{ file: File; preview: PreviewExtracto } | null>(null)
 
   // ── Preview / mapeo de columnas de la planilla individual ────
   const [mapeoPendiente, setMapeoPendiente] = useState<ResultadoMapeoPlanilla | null>(null)
@@ -419,8 +437,41 @@ export const Dashboard: React.FC = () => {
     setAccionCarga('extracto')
     setError('')
     setSuccess('')
+    // Primero se lee sin guardar: si el formato se reconoce bien (o hay uno
+    // guardado) y los saldos cuadran, se importa directo; si no, se muestra la
+    // pantalla para confirmar las columnas.
+    let preview: PreviewExtracto | null = null
     try {
-      const data = await apiClient.uploadExtraco(file, banco, activeOrgId)
+      preview = await apiClient.previewExtracto(file, activeOrgId)
+    } catch (err: any) {
+      // Archivo inválido (400/413): mostrar el motivo. Si el preview falla por otra
+      // cosa (red, arranque en frío), se sigue con la subida de siempre.
+      const status = err.response?.status
+      if (status === 400 || status === 413 || status === 403) {
+        setError(mensajeError(err.response?.data?.detail) || 'No se pudo leer el archivo')
+        setLoading(false)
+        setAccionCarga(null)
+        return
+      }
+    }
+    if (preview?.necesita_mapeo) {
+      setLoading(false)
+      setAccionCarga(null)
+      setExtractoPendiente({ file, preview })
+      return
+    }
+    await subirExtracto(file)
+  }
+
+  const subirExtracto = async (file: File, mapeo?: MapeoExtracto) => {
+    setLoading(true)
+    setAccionCarga('extracto')
+    setError('')
+    setSuccess('')
+    setAviso('')
+    try {
+      const data = await apiClient.uploadExtraco(file, banco, activeOrgId, mapeo)
+      setAviso(data.aviso_saldos || '')
       setExtractoId(data.id)
       setExtractoNombre(data.nombre_archivo)
       setSuccess(`Extracto cargado: ${data.movimientos.length} movimientos`)
@@ -435,13 +486,27 @@ export const Dashboard: React.FC = () => {
         setError(msg || 'Extracto duplicado')
         if (existId) { setExtractoId(existId); await refreshExtractos() }
       } else {
-        setError(err.response?.data?.detail || 'Error al cargar extracto')
+        setError(mensajeError(err.response?.data?.detail) || 'Error al cargar extracto')
       }
     } finally {
       setLoading(false)
       setAccionCarga(null)
     }
   }
+
+  const handleConfirmarMapeoExtracto = async (mapeo: MapeoExtracto) => {
+    const pendiente = extractoPendiente
+    setExtractoPendiente(null)
+    if (pendiente) await subirExtracto(pendiente.file, mapeo)
+  }
+
+  const revisarMapeoExtracto = useCallback(
+    (mapeo: MapeoExtracto) => {
+      if (!extractoPendiente) return Promise.reject(new Error('sin archivo'))
+      return apiClient.previewExtracto(extractoPendiente.file, activeOrgId, mapeo)
+    },
+    [extractoPendiente, activeOrgId]
+  )
 
   const handleUploadUM = async (file: File, corteSaldoOverride?: number) => {
     if (!extractoId) {
@@ -685,6 +750,12 @@ export const Dashboard: React.FC = () => {
           {success}
         </div>
       )}
+      {aviso && (
+        <div role="status" className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-800 text-sm dark:bg-amber-900/20 dark:border-amber-800/50 dark:text-amber-300 flex items-start justify-between gap-3">
+          <span>⚠ {aviso}</span>
+          <button onClick={() => setAviso('')} className="text-xs opacity-70 hover:opacity-100 shrink-0" aria-label="Cerrar aviso">✕</button>
+        </div>
+      )}
 
       {tab === 'individual' && (<>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -723,6 +794,12 @@ export const Dashboard: React.FC = () => {
                   >🗑️</button>
                 )}
               </div>
+              {(() => {
+                const avisoActivo = extractos.find(x => x.id === extractoId)?.aviso_saldos
+                return avisoActivo ? (
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">⚠ {avisoActivo}</p>
+                ) : null
+              })()}
               {extractos.length > 1 && canDelete && (
                 <details className="mt-2">
                   <summary className="text-xs text-gray-400 dark:text-zinc-600 cursor-pointer select-none">
@@ -774,8 +851,8 @@ export const Dashboard: React.FC = () => {
           {canUpload ? (
             <FileUpload
               onFileSelected={handleUploadExtraco}
-              accept=".xlsx,.xls,.csv,.pdf,application/pdf"
-              label="Subir extracto (.xlsx, .xls, .csv o PDF)"
+              accept=".xlsx,.xls,.csv,.tsv,.txt,.pdf,application/pdf"
+              label="Subir extracto (Excel, CSV o PDF)"
               loading={accionCarga === 'extracto'}
               loadingLabel="Subiendo extracto..."
             />
@@ -1225,6 +1302,15 @@ export const Dashboard: React.FC = () => {
           resultado={mapeoPendiente}
           onConfirm={handleConfirmarMapeo}
           onCancel={handleCancelarMapeo}
+        />
+      )}
+
+      {extractoPendiente && (
+        <ExtractoMapperModal
+          preview={extractoPendiente.preview}
+          onRevisar={revisarMapeoExtracto}
+          onConfirm={handleConfirmarMapeoExtracto}
+          onCancel={() => setExtractoPendiente(null)}
         />
       )}
 

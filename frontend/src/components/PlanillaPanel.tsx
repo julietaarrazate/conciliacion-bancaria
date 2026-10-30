@@ -2,8 +2,10 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { apiClient } from '@/services/api'
 import { confirmDialog } from '@/store/confirm'
 import { useAuthStore } from '@/store/auth'
-import { statusLabel, motivoMatchLabel } from '@/utils/status'
+import { statusLabel, motivoMatchLabel, avisoCoincidencia } from '@/utils/status'
 import { fmtARS, fmtFechaCorta as fmtDate } from '@/utils/formato'
+import { AgruparModal, FilaAgrupar } from '@/components/AgruparModal'
+import type { GrupoConciliacion } from '@/types'
 
 interface Row {
   id: number
@@ -16,6 +18,8 @@ interface Row {
   mov_fecha?: string
   mov_fecha_acred?: string
   motivo_match?: string | null
+  coincidencia?: string | null
+  grupo?: GrupoConciliacion | null
 }
 
 interface Candidato {
@@ -40,6 +44,8 @@ interface MetaDetalle {
   no_encontradas: number
   duplicadas: number
   sin_datos: number
+  sugeridas_grupo?: number
+  con_diferencia?: number
 }
 
 interface Filters {
@@ -63,6 +69,8 @@ const statusStyle = (s: string) => {
   if (s === 'faltan datos') return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
   if (s === 'duplicado' || s.startsWith('acreditado'))
     return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
+  if (s === 'SUGERIDO_GRUPO') return 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'
+  if (s === 'CONCILIADO_CON_DIFERENCIA') return 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
   return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
 }
 
@@ -80,6 +88,10 @@ const ESTADOS_DISPONIBLES = [
   'ok', 'no está', 'duplicado', 'faltan datos', 'pendiente',
   'PAGO_PARCIAL', 'CONCILIADO_CON_DIFERENCIA', 'VENCIDO', 'EN_REVISION'
 ]
+// Para filtrar también se puede pedir lo que sugirió el motor en grupo (no se asigna a mano).
+const ESTADOS_FILTRO = [...ESTADOS_DISPONIBLES, 'SUGERIDO_GRUPO']
+
+const enGrupo = (r: Row) => !!r.grupo
 
 export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }) => {
   // Editar estado y asignar movimiento piden `reconcile`; borrar filas, `delete_records`.
@@ -106,6 +118,9 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
   const [loadingCandidatos, setLoadingCandidatos] = useState(false)
   const [asignandoMovId, setAsignandoMovId] = useState<number | null>(null)
   const [asignarError, setAsignarError] = useState('')
+  const [agrupar, setAgrupar] = useState<FilaAgrupar[] | null>(null)
+  const [grupoOcupado, setGrupoOcupado] = useState<number | null>(null)
+  const [grupoError, setGrupoError] = useState('')
 
   // Debounce text filter inputs → apply after 350ms of no changes
   useEffect(() => {
@@ -301,6 +316,45 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
     }
   }
 
+  // ── Grupos: varias filas ↔ un movimiento, o una fila ↔ varios movimientos ──
+  const filasParaAgrupar = useMemo(
+    () => rows.filter(r => selectedRows.has(r.id) && !enGrupo(r) && r.status !== 'ok' && !r.orden_movimiento_acreditado),
+    [rows, selectedRows]
+  )
+
+  const abrirAgrupar = () => {
+    if (filasParaAgrupar.length === 0) return
+    setGrupoError('')
+    setAgrupar(filasParaAgrupar.map(r => ({ id: r.id, monto: Number(r.monto), titular: r.titular })))
+  }
+
+  const accionGrupo = async (grupo: GrupoConciliacion, accion: 'confirmar' | 'deshacer') => {
+    if (accion === 'deshacer') {
+      const confirmado = grupo.estado === 'confirmado'
+      const ok = await confirmDialog({
+        title: confirmado ? 'Deshacer grupo' : 'Descartar sugerencia',
+        message: confirmado
+          ? 'Las filas vuelven a pendiente y los movimientos quedan libres. ¿Seguir?'
+          : 'El sistema no va a volver a sugerir esta combinación. ¿Seguir?',
+        confirmLabel: confirmado ? 'Deshacer' : 'Descartar',
+        danger: true,
+      })
+      if (!ok) return
+    }
+    setGrupoOcupado(grupo.id)
+    setGrupoError('')
+    try {
+      if (accion === 'confirmar') await apiClient.confirmarGrupo(grupo.id)
+      else await apiClient.deshacerGrupo(grupo.id)
+      reload()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setGrupoError(msg || 'No se pudo actualizar el grupo')
+    } finally {
+      setGrupoOcupado(null)
+    }
+  }
+
   // Derived values
   const allPageSelected = useMemo(
     () => rows.length > 0 && selectedRows.size === rows.length,
@@ -389,9 +443,25 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
               }
             </span>
 
+            {!!meta.sugeridas_grupo && (
+              <button
+                onClick={() => applyStatusFilter('SUGERIDO_GRUPO')}
+                className="px-1.5 py-0.5 rounded-sm bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 font-medium"
+                title="Filas que el sistema propone conciliar juntas: revisalas y confirmalas"
+              >{meta.sugeridas_grupo} sugeridas en grupo</button>
+            )}
+            {grupoError && <span className="text-red-500">{grupoError}</span>}
+
             {selectedRows.size > 0 && (
               <div className="flex items-center gap-1 ml-auto">
                 <span className="text-ml-blue font-semibold">{selectedRows.size} sel.</span>
+                {canReconcile && filasParaAgrupar.length > 0 && (
+                  <button
+                    onClick={abrirAgrupar}
+                    className="bg-violet-600 text-white text-[10px] rounded-sm px-2 py-0.5"
+                    title="Conciliar estas filas juntas contra un movimiento (o una fila contra varios movimientos)"
+                  >Agrupar</button>
+                )}
                 {canReconcile && <select
                   className="text-[10px] border border-gray-300 dark:border-slate-600 rounded-sm px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white"
                   value={bulkStatus}
@@ -471,7 +541,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                           setPage(0)
                         }}>
                         <option value="">Todos</option>
-                        {ESTADOS_DISPONIBLES.map(s => <option key={s} value={s}>{s}</option>)}
+                        {ESTADOS_FILTRO.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </td>
                     <td className="px-1 py-1"></td>
@@ -537,16 +607,30 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                           </div>
                         ) : (
                           <button
-                            onClick={canReconcile ? () => startEdit(row) : undefined}
-                            disabled={!canReconcile}
-                            className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${canReconcile ? 'cursor-pointer active:scale-95' : 'cursor-default'} transition-transform`}
+                            onClick={canReconcile && !enGrupo(row) ? () => startEdit(row) : undefined}
+                            disabled={!canReconcile || enGrupo(row)}
+                            className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${canReconcile && !enGrupo(row) ? 'cursor-pointer active:scale-95' : 'cursor-default'} transition-transform`}
                           >
                             <span className={`inline-flex px-2 py-0.5 rounded-full ${statusStyle(row.status)}`} title={row.status}>
                               {statusLabel(row.status)}
                             </span>
                           </button>
                         )}
-                        {editingRowId !== row.id && row.status === 'ok' && motivoMatchLabel(row.motivo_match) && (
+                        {editingRowId !== row.id && avisoCoincidencia(row.coincidencia) && (
+                          <span
+                            className={`inline-flex ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${avisoCoincidencia(row.coincidencia)!.grave ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}
+                            title={avisoCoincidencia(row.coincidencia)!.title}
+                          >⚠ {avisoCoincidencia(row.coincidencia)!.label}</span>
+                        )}
+                        {editingRowId !== row.id && row.grupo && (
+                          <GrupoInfo
+                            grupo={row.grupo}
+                            canReconcile={canReconcile}
+                            ocupado={grupoOcupado === row.grupo.id}
+                            onAccion={accion => accionGrupo(row.grupo!, accion)}
+                          />
+                        )}
+                        {editingRowId !== row.id && row.status === 'ok' && !avisoCoincidencia(row.coincidencia) && motivoMatchLabel(row.motivo_match) && (
                           <span
                             className={`block pl-2 text-[9px] leading-tight ${row.motivo_match === 'monto' ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}
                             title="Qué dato coincide entre la fila de la planilla y el movimiento del banco"
@@ -556,7 +640,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                         )}
                       </td>
                       <td className="px-1 py-px text-center whitespace-nowrap">
-                        {canReconcile && row.status !== 'ok' && (
+                        {canReconcile && row.status !== 'ok' && !enGrupo(row) && (
                           <button
                             onClick={() => openAsignar(row)}
                             className="text-gray-300 hover:text-ml-blue dark:text-gray-600 dark:hover:text-ml-blue text-[10px] transition-colors mr-2"
@@ -593,6 +677,15 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
           </div>
         )}
       </div>
+
+      {agrupar && planillaId && (
+        <AgruparModal
+          planillaId={planillaId}
+          filas={agrupar}
+          onClose={() => setAgrupar(null)}
+          onHecho={() => { setAgrupar(null); setSelectedRows(new Set()); reload() }}
+        />
+      )}
 
       {asignarRowId !== null && (
         <div className="fixed inset-0 z-150 flex items-center justify-center p-4">
@@ -651,5 +744,38 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
         </div>
       )}
     </>
+  )
+}
+
+// Resumen del grupo de una fila: con qué movimiento(s) va y las acciones posibles.
+const GrupoInfo: React.FC<{
+  grupo: GrupoConciliacion
+  canReconcile: boolean
+  ocupado: boolean
+  onAccion: (accion: 'confirmar' | 'deshacer') => void
+}> = ({ grupo, canReconcile, ocupado, onAccion }) => {
+  const nMovs = grupo.movimientos.length
+  const detalle = nMovs === 1
+    ? `${grupo.n_filas} filas → 1 movimiento`
+    : `1 fila → ${nMovs} movimientos`
+  const dif = Number(grupo.diferencia)
+  return (
+    <span className="block pl-2 text-[9px] leading-tight text-violet-700 dark:text-violet-300" title={grupo.movimientos.map(m => `${m.titular || '—'} ${fmtARS(Number(m.monto))}`).join('\n')}>
+      Grupo #{grupo.id}: {detalle}
+      {dif !== 0 && <span className="text-amber-600 dark:text-amber-400"> · dif. {fmtARS(dif)}</span>}
+      {grupo.ambiguo && <span className="text-amber-600 dark:text-amber-400"> · hay otra combinación posible</span>}
+      {canReconcile && (
+        <span className="inline-flex gap-1 ml-1">
+          {grupo.estado === 'sugerido' && (
+            <button disabled={ocupado} onClick={() => onAccion('confirmar')}
+              className="px-1.5 rounded-sm bg-green-600 text-white disabled:opacity-50">Confirmar</button>
+          )}
+          <button disabled={ocupado} onClick={() => onAccion('deshacer')}
+            className="px-1.5 rounded-sm bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-white disabled:opacity-50">
+            {grupo.estado === 'sugerido' ? 'Descartar' : 'Deshacer'}
+          </button>
+        </span>
+      )}
+    </span>
   )
 }

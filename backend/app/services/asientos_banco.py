@@ -175,8 +175,40 @@ def _buckets_reclass(db: Session, oid: int, ids_extractos: list) -> dict:
             continue
         key = (planilla.id, origen)
         if key not in buckets:
-            buckets[key] = {"planilla": planilla, "cliente": cliente, "rows": []}
+            buckets[key] = {"planilla": planilla, "cliente": cliente, "rows": [], "grupos": _CERO, "fecha_grupos": None}
         buckets[key]["rows"].append(row)
+
+    # Grupos confirmados (N filas ↔ M movimientos): sus filas no tienen
+    # orden_movimiento_acreditado; suman por el monto de sus movimientos, cada uno
+    # en el bucket de su origen (mismo criterio que el flujo vivo,
+    # conciliacion.recalcular_reclasificacion_planilla).
+    from app.models.conciliacion_grupo import GRUPO_CONFIRMADO, ConciliacionGrupo, ConciliacionGrupoItem
+    if ids_extractos:
+        movs_grupo = (
+            db.query(ConciliacionGrupo.planilla_id, MovimientoBanco.monto, MovimientoBanco.source,
+                     MovimientoBanco.fecha_acred, MovimientoBanco.fecha)
+            .join(ConciliacionGrupoItem, ConciliacionGrupoItem.grupo_id == ConciliacionGrupo.id)
+            .join(MovimientoBanco, ConciliacionGrupoItem.movimiento_id == MovimientoBanco.id)
+            .join(Planilla, ConciliacionGrupo.planilla_id == Planilla.id)
+            .filter(
+                ConciliacionGrupo.organizacion_id == oid,
+                ConciliacionGrupo.estado == GRUPO_CONFIRMADO,
+                Planilla.deleted_at.is_(None),
+                MovimientoBanco.extracto_id.in_(ids_extractos),
+            )
+            .all()
+        )
+        for planilla_id, monto, source, f_acred, f_mov in movs_grupo:
+            key = (planilla_id, "um" if source == "um" else "extracto")
+            if key not in buckets:
+                planilla = db.query(Planilla).get(planilla_id)
+                cliente = db.query(Cliente).get(planilla.cliente_id)
+                buckets[key] = {"planilla": planilla, "cliente": cliente, "rows": [], "grupos": _CERO, "fecha_grupos": None}
+            b = buckets[key]
+            b["grupos"] += abs(mc._monto(monto))
+            f = f_acred or f_mov
+            if f and (b["fecha_grupos"] is None or f > b["fecha_grupos"]):
+                b["fecha_grupos"] = f
     return buckets
 
 
@@ -302,13 +334,15 @@ def reconstruir_asientos_banco(db: Session, oid: int, usuario_id: Optional[int])
         cuenta_cli = cuentas_cliente[cliente.id]
         if not cuenta_cli:
             continue
-        total = sum((abs(mc._monto(r.monto)) for r in rows), _CERO)
+        total = sum((abs(mc._monto(r.monto)) for r in rows), _CERO) + grupo.get("grupos", _CERO)
         if total <= 0:
             continue
         pct = Decimal(str(planilla.porcentaje_comision or 0))
         comision = round(total * pct / Decimal("100"), 2) if pct > 0 else _CERO
         neto = total - comision
         fechas = [r.fecha_acred for r in rows if r.fecha_acred]
+        if grupo.get("fecha_grupos"):
+            fechas.append(grupo["fecha_grupos"])
         fecha = max(fechas) if fechas else planilla.fecha_carga or hoy_art()
         if isinstance(fecha, datetime):
             fecha = fecha.date()

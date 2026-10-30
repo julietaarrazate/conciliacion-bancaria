@@ -5,6 +5,63 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Extractos (oct 2026) — leer cualquier Excel/CSV de banco
+
+Antes el extracto en Excel se leía por palabras clave y, si no encontraba los títulos, asumía en
+silencio las columnas de Banco Macro. Ahora:
+- `POST /extractos/preview` lee el archivo sin guardar: grilla de las primeras 30 filas, columnas
+  detectadas, banco, confianza, muestra de movimientos y control de saldos.
+- Si el formato no se reconoce, o se reconoce con dudas, o los saldos no cuadran, se abre una
+  pantalla para elegir qué es cada columna (fecha, detalle, importe o débito/crédito, D/C, saldo,
+  orden, CUIT…), la fila de títulos, el formato de fecha y los decimales, con "✓ Los saldos
+  cuadran" / "⚠ No cuadra en la fila N" y una muestra de movimientos que se actualiza al cambiar.
+- El mapeo confirmado se guarda como **plantilla de la organización** (migración 038,
+  `plantillas_extracto_excel`); el próximo archivo con los mismos títulos se importa en un clic.
+  `/upload` y `/agregar-um` aceptan `mapeo` y aplican la plantilla; sin nada reconocible → 422.
+- Con plantilla guardada, si los saldos no cuadran se importa igual en un clic y queda un aviso
+  ("Los saldos no cuadran desde la fila N: puede que falten movimientos en este archivo") guardado
+  en el extracto (`aviso_saldos`) y mostrado en el Dashboard.
+- Control de saldos fila por fila (misma regla que el PDF) detectando solo si el archivo va del
+  más nuevo al más viejo.
+- Más formatos: fechas `d/m/aaaa`, `aaaammdd`, serie de Excel, `19-may-26`; importes `1.234,56-`,
+  `(1.234,56)`, `$ 1.234,56`; CSV con `;` `,` tab o `|`, `.tsv` y `.txt`.
+- Fix: la fila **TOTAL** al pie de un extracto se importaba como un movimiento más (con el importe
+  de la suma). Ahora las filas de total/saldo sin fecha se saltean.
+- Montos en Decimal desde el lector (la huella de deduplicación no cambia).
+- Extractos "del más viejo al más nuevo": se dan vuelta al importar para que queden numerados como
+  Macro (el más nuevo con el `orden` más alto); el UM y la detección de duplicados funcionan igual.
+
+Detalle en `docs/business/BUSINESS_RULES.md` §2ter.
+
+---
+
+### Conciliación (oct 2026) — un movimiento contra varias filas
+
+- **Grupos de conciliación** (BUSINESS_RULES §1.10, migración 039): además del 1:1, una
+  transferencia que paga varias filas de la planilla (A) o una fila pagada en varias
+  transferencias (B). Tablas `conciliacion_grupos` + `conciliacion_grupo_items`; el 1:1 sigue en
+  `orden_movimiento_acreditado` sin cambios.
+- **Sugerencias automáticas** después de la pasada 1:1, solo sobre lo que quedó libre: suma exacta
+  (tolerancia de la org) con apoyo de identidad o fecha cercana, hasta 6 items por grupo, búsqueda
+  acotada. Quedan "Sugerido en grupo" y se confirman a mano; un empate no se sugiere y uno ambiguo
+  nunca se confirma solo. Auto-confirmación opcional por org (`auto_confirmar_grupos`, default
+  apagado) solo con combinación única y el mismo CUIT en todo el grupo. Lo descartado no se vuelve
+  a sugerir.
+- **Agrupar a mano** en el panel de la planilla: seleccionar filas → "Agrupar" → elegir el/los
+  movimiento(s) con subtotal en vivo (verde si cuadra, rojo con la diferencia). Con diferencia,
+  solo marcándolo → "Conciliado con diferencia". Confirmar / descartar / deshacer desde la fila.
+- **Contabilidad**: un grupo confirmado es plata conciliada como un 1:1. Suma por el monto de sus
+  movimientos, cada uno en el bucket de su origen (extracto principal / UM); deshacer un grupo
+  recalcula el asiento y lo anula si el bucket queda en 0. "Empezar limpio" incluye los grupos.
+- **Calidad del match** (§1.11): cada fila conciliada trae `coincidencia` (`cuit`, `titular`,
+  `otro_dato`, `solo_monto`, `cuit_distinto`), en el detalle y en los datos del export (sin cambiar
+  su formato). Aviso "⚠ CUIT distinto" / "⚠ Solo monto" en la fila. Caso real: CUIT 20123456786 en
+  la planilla contra 20123456794 en el banco, conciliado solo por monto único — ahora se ve.
+- Tests: `backend/tests/test_conciliacion_grupos.py` (38), `AgruparModal.test.tsx`,
+  `grupoSubtotal.test.ts`.
+
+---
+
 ### Fix (oct 2026) — Control del banco: los huecos entre extractos no son un descuadre
 
 La tarjeta mostraba en rojo "no coincide con el extracto" en Org A (−180.133.367,02). La

@@ -116,6 +116,7 @@ Estados base que produce el motor (`buscar_match` + `conciliar_planilla`):
 | `sin datos (N mov. …)` | Monto repetido sin ningún identificador | `conciliacion.py:356` |
 | `no coincide (N mov. …)` | Hay identificadores pero ninguno matchea | `conciliacion.py:357` |
 | `ok` (vía aprendizaje) | Resuelto por patrón aprendido — internamente `"ok (aprendido)"` y luego se guarda como `ok` | `conciliacion.py:452-464` |
+| `SUGERIDO_GRUPO` | El motor propone conciliarla junto con otras filas o movimientos (grupo); la confirma una persona | §1.10 |
 
 **Estados ricos** (opt-in por org, lista en `models/planilla.py:10`
 `ESTADOS_RICOS = ["PAGO_PARCIAL", "CONCILIADO_CON_DIFERENCIA", "VENCIDO", "EN_REVISION"]`):
@@ -161,6 +162,8 @@ intercambiables:
   "requiere_cierre_periodo": False,
 }
 ```
+- `auto_confirmar_grupos` (opcional, default `false`): si es `true`, un grupo (§1.10) único y con
+  el CUIT del movimiento en todas las filas se confirma solo; si no, queda sugerido.
 - `match_rules` con `"referencia"` habilita el match por referencia exacta antes
   del scoring (`conciliacion.py:275-278`, `buscar_match_referencia`
   `conciliacion.py:235-252`).
@@ -277,6 +280,104 @@ sequenceDiagram
   P-->>M: egreso.id → la fila muestra "✓ Pago #id"
 ```
 
+### 1.10. Conciliación en grupos — un movimiento contra varias filas (oct 2026)
+
+Archivos: `backend/app/services/conciliacion_grupos.py`, `models/conciliacion_grupo.py`,
+`routers/planillas.py` (endpoints de grupos), `frontend/src/components/AgruparModal.tsx`.
+Migración 039.
+
+El 1:1 (§1.1–1.5) exige una fila y un movimiento del **mismo monto**. Dos casos reales no entran:
+
+- **A — un movimiento ↔ varias filas**: el cliente pagó varias filas de su planilla con una sola
+  transferencia.
+- **B — varios movimientos ↔ una fila**: pagó una fila en dos o más transferencias.
+
+**Modelo.** `conciliacion_grupos` (cabecera: planilla, estado, origen auto/manual, totales,
+diferencia, `ambiguo`) + `conciliacion_grupo_items` (un item por fila o por movimiento, con su
+monto). El 1:1 sigue en `PlanillaRow.orden_movimiento_acreditado`, sin cambios; las filas de un
+grupo dejan ese campo en **NULL** a propósito (liquidaciones suma `mov.monto` por fila y la
+reclasificación suma filas `ok` con movimiento: con el campo lleno, un movimiento de un grupo A se
+contaría N veces). Una fila está a lo sumo en un grupo activo; un movimiento también.
+
+**Estados del grupo**: `sugerido` (lo encontró el motor; filas en `SUGERIDO_GRUPO`, el movimiento
+**no** se acredita) → `confirmado` (filas en `ok`, o `CONCILIADO_CON_DIFERENCIA` si no cuadra;
+movimientos con `cliente_acreditado`) → `descartado` (sugerencia descartada o grupo deshecho; se
+guarda para no volver a sugerir esa misma combinación y por trazabilidad).
+
+**Sugerencias automáticas** (`sugerir_grupos`, al final de `conciliar_planilla`, después de la
+pasada 1:1 y solo sobre lo que quedó libre):
+
+- Filas candidatas: de la **misma planilla**, sin movimiento, sin grupo, monto > 0 y en un estado
+  "sin conciliar" (`no está`, `no coincide…`, `ambiguo…`, `sin datos…`, `pendiente`,
+  `EN_REVISION`). Movimientos candidatos: créditos libres (`es_libre`), no usados en la corrida, en
+  ningún grupo activo.
+- **Apoyo** por par fila↔movimiento: identidad (mismo `_score_identidad` del 1:1, sin bonus de
+  fecha: CUIT, DNI, CBU, números, titular) o fecha cercana. Ventana = `max(dias_tolerancia_fecha,
+  5)` días; si las dos fechas existen y están fuera de la ventana, **no** es candidato aunque
+  coincida la identidad. Sin identidad ni fechas → no es candidato.
+- **Búsqueda acotada** (subset-sum con poda por suma restante): 2 a **6** items por grupo, los
+  **20** candidatos de más apoyo por objetivo, hasta 10 combinaciones por objetivo y un
+  presupuesto de **200.000** nodos por corrida. Suma cuadra = `|suma − objetivo| <` tolerancia de
+  la org (igual que `montos_iguales`), en Decimal.
+- Primero A (por movimiento, en orden de fecha), después B (por fila). Lo que entra en un grupo ya
+  no participa de otro.
+- **Ambigüedad**: si hay una sola combinación (y la búsqueda no se cortó), es única. Si hay
+  varias, se sugiere la de más apoyo marcada `ambiguo` ("hay otra combinación posible"); si las dos
+  mejores empatan, **no se sugiere nada** (no se adivina).
+- **Auto-confirmación** solo si la org tiene `auto_confirmar_grupos: true` (default **false** =
+  solo sugerir), la combinación es **única** y **todas** las filas comparten el CUIT del movimiento
+  (B: todos los movimientos traen el CUIT de la fila). Un grupo ambiguo nunca se confirma solo.
+- Re-conciliar borra y recalcula los grupos `sugerido`; los `confirmado` se respetan como una
+  decisión manual (sus filas no se re-matchean y sus movimientos no se reusan); una combinación
+  `descartado` no se vuelve a sugerir.
+
+**Manual** (`PlanillaPanel` → seleccionar filas → "Agrupar"): varias filas contra **un**
+movimiento, o **una** fila contra varios; 1 contra 1 se resuelve con "Asignar movimiento" (🔗,
+§1.5bis). El modal lista los créditos libres del extracto de la planilla
+(`GET /planillas/{id}/movimientos-libres`) y muestra el subtotal en vivo: verde si cuadra, rojo con
+la diferencia (movimientos − filas) si no. Con diferencia solo se confirma marcando "conciliar
+igual" → filas `CONCILIADO_CON_DIFERENCIA` (mismo estado rico de §1.5).
+
+| Acción | Endpoint | Permiso |
+|---|---|---|
+| Movimientos libres para agrupar | `GET /planillas/{id}/movimientos-libres` | autenticado (org) |
+| Armar y confirmar a mano | `POST /planillas/{id}/grupos` `{row_ids, movimiento_ids, con_diferencia}` | `reconcile` |
+| Confirmar una sugerencia | `POST /planillas/grupos/{id}/confirmar` | `reconcile` |
+| Deshacer / descartar | `POST /planillas/grupos/{id}/deshacer` | `reconcile` |
+
+- Validaciones (400/404/409): forma del grupo, filas de la misma planilla y sin conciliar,
+  movimientos del extracto de la planilla y de la misma org, créditos libres, fuera de otros grupos
+  y sin fila 1:1; período cerrado → 409. Todo queda en auditoría (`CREAR_GRUPO_MANUAL`,
+  `CONFIRMAR_GRUPO`, `DESHACER_GRUPO`).
+- Una fila en un grupo no se edita suelta: `PATCH /rows/{id}`, `DELETE /rows/{id}` y
+  `asignar-movimiento` devuelven 409 ("confirmalo o deshacelo primero").
+- Deshacer: filas a `pendiente`, movimientos liberados (solo si seguían acreditados a este
+  cliente), grupo `descartado`.
+- `GET /planillas/{id}/detalle` devuelve en cada fila `grupo` (estado, totales, diferencia,
+  `ambiguo`, movimientos) y los contadores `sugeridas_grupo` / `con_diferencia`;
+  `POST /conciliar` devuelve `grupos_sugeridos` / `grupos_confirmados`.
+- Contabilidad: ver §4.1bis y [ACCOUNTING_ENGINE](../architecture/ACCOUNTING_ENGINE.md) §5.
+
+### 1.11. Calidad del match ("coincidencia") — oct 2026
+
+Caso real: una fila con CUIT 20123456786 quedó `ok` contra un movimiento cuyo texto trae CUIT
+20123456794 — otro CUIT, cerró solo porque el monto era único (§1.4). Para que se vea sin cambiar
+ninguna decisión del motor, `coincidencia_match()` (`services/conciliacion.py`, read-only)
+calcula para cada fila conciliada (`ok`, `CONCILIADO_CON_DIFERENCIA`, `SUGERIDO_GRUPO`):
+
+| Valor | Cuándo |
+|---|---|
+| `cuit` | el CUIT de la fila está en el texto del movimiento |
+| `cuit_distinto` | los dos traen CUIT (11 dígitos, con o sin guiones) y no coinciden. Gana sobre todo lo demás |
+| `titular` | coincide el nombre |
+| `otro_dato` | coincide DNI, CBU/CVU, n° de cuenta/operación o referencia |
+| `solo_monto` | no coincide ningún dato, solo el importe |
+
+En un grupo se compara la fila contra todos sus movimientos: si alguno trae otro CUIT, gana
+`cuit_distinto`. Se expone en `/planillas/{id}/detalle` (`coincidencia`) y en el dict de filas que
+recibe `export_planilla_conciliada` / el PDF (claves `coincidencia` y `grupo_id`; el layout del
+export no cambia). La UI muestra un aviso: "⚠ CUIT distinto" (rojo) y "⚠ Solo monto" (ámbar).
+
 ## 2. Deduplicación de Últimos Movimientos (UM)
 
 Archivo: `backend/app/services/extracto_merger.py`,
@@ -304,6 +405,75 @@ Solo se agregan los movimientos **anteriores al corte** (`extracto_merger.py:158
 y, como red de seguridad, se descartan los que ya existen
 (`extracto_merger.py:161`). Los nuevos se marcan `source='um'` con un `um_lote`
 incremental (`extracto_merger.py:184-188`).
+
+### 2ter. Importar extractos Excel/CSV de cualquier banco (oct 2026)
+
+Archivos: `backend/app/services/extracto_mapper.py` (lectura, puro),
+`extracto_plantillas.py` (plantillas por org), `routers/extractos.py` (`/preview`, `/upload`,
+`/agregar-um`), frontend `components/extractos/ExtractoMapperModal.tsx` + `Dashboard.tsx`.
+
+Formatos: `.xlsx` (con `data_only=True`: una columna con fórmulas trae el último valor calculado),
+`.xls`, `.csv`, `.tsv`, `.txt` (separador `;` `,` tabulador o `|`, detectado solo; UTF-8 o Latin-1).
+
+Qué columna es cada cosa, en este orden:
+1. **Mapeo confirmado por la persona** (form `mapeo` en `/upload`, `/agregar-um` y `/preview`).
+2. **Plantilla guardada de la organización** (`plantillas_extracto_excel`): clave = huella del
+   renglón de títulos normalizado + banco detectado (`firma_encabezado`). Se busca en las primeras
+   30 filas de cada hoja, así que la plantilla sigue sirviendo si el título se corre unas filas.
+3. **Detección automática**: palabras clave del encabezado (`excel_parser.rol_por_encabezado`,
+   única fuente) validadas con el contenido de hasta 20 filas siguientes (≥ 60 % de las celdas
+   tienen que ser importes / fechas). Una columna con título conocido y contenido de otro tipo se
+   descarta (y se avisa).
+4. **Sugerencia por contenido** cuando no hay títulos reconocibles: propone fecha, importe, saldo y
+   detalle, pero **nunca se importa sin confirmación** (`/upload` sin mapeo responde 422
+   `{codigo: "necesita_mapeo"}`). **Ya no se asumen en silencio las columnas de Banco Macro.**
+
+Roles: fecha, titular (detalle), monto, débito, crédito, indicador (D/C), saldo, orden/referencia,
+CUIT (se agrega al texto del titular porque el motor busca el CUIT ahí), mes, cliente acreditado,
+fecha de acreditación. Convención de signo: una columna con signo / columnas Débito y Crédito
+(crédito − débito) / importe + columna que dice débito o crédito.
+
+Lectura de celdas (Decimal punta a punta, `decimal_utils.parse_importe_ar`): `1.234,56`,
+`-1.234,56`, `1.234,56-`, `(1.234,56)`, `$ 1.234,56`, `1,234.56`; separador decimal detectado por
+columna o forzado en el mapeo. Fechas: `dd/mm/aaaa`, `d/m/aaaa`, `dd/mm/aa`, `aaaa-mm-dd`,
+`aaaammdd`, número de serie de Excel, `19-may-26`, con o sin hora; `mm/dd/aaaa` si la columna lo
+delata (algún "día" > 12 en el segundo lugar) o si se elige en el mapeo.
+
+Filas que no son movimientos: vacías; de **total o saldo** ("TOTAL", "Subtotal", "Saldo anterior",
+"Saldo final", "Transporte"…) **sin fecha o sin importe** — una empresa "TOTAL ENERGIES" con fecha e
+importe sí es un movimiento —; sin importe; con columna de fecha pero fecha ilegible (se cuentan y
+se avisa). "Saldo anterior/inicial" y "Saldo final/al" aportan el saldo de apertura/cierre.
+
+**Control de saldos** (misma regla que el PDF, `extracto_pdf.saldos.validar_saldos`):
+saldo anterior + importe = saldo, fila por fila, más apertura + créditos − débitos = cierre. El
+sentido del archivo (más viejo primero o más nuevo primero, como Macro) se detecta solo: se prueban
+los dos y gana el que corta menos veces el saldo corrido; si empatan, las fechas y después el orden.
+Se informa la **primera fila (en orden cronológico) donde no cuadra**, con su número de fila de Excel.
+Si el saldo no encadena en ningún sentido y las fechas dicen otro, mandan las fechas.
+
+**Sentido normalizado al importar**: `parsear_extracto_bancario` entrega siempre los movimientos
+**del más nuevo al más viejo** (como Macro), que es lo que esperan la numeración de `orden` de
+`crear_extracto_con_movimientos`, el corte del merge de UM y la huella. Un archivo "del más viejo
+al más nuevo" se da vuelta; así un banco ascendente se comporta igual que Macro (mismo `orden`,
+UM que agrega solo lo nuevo, re-subida reconocida como duplicada). Si el sentido no se puede
+detectar (sin saldo y con todas las fechas y órdenes iguales, `orden_detectado = false`) se
+deja el orden del archivo. La pantalla de columnas muestra la muestra en el orden del archivo.
+
+Cuándo se muestra la pantalla de columnas (`necesita_mapeo`): sin detección o solo sugerencia, 0
+movimientos, saldos que no cuadran **sin plantilla guardada**, o detección automática con confianza
+< 0,8 (p. ej. sin columna de fecha). Con plantilla guardada o detección segura → un clic, como antes.
+
+**Saldos que no cuadran con plantilla guardada**: no frena la carga (suele ser un archivo al que le
+faltan movimientos). Se importa y queda un aviso no bloqueante "Los saldos no cuadran desde la fila
+N: puede que falten movimientos en este archivo" en `extractos_bancarios.aviso_saldos` (migración
+038): lo devuelven `/upload` y el listado `GET /extractos`, y el Dashboard lo muestra en un cartel
+ámbar al subir y debajo del extracto seleccionado. Re-subir el mismo archivo actualiza el aviso.
+Al importar con un mapeo confirmado se guarda/actualiza la plantilla (auditoría
+`plantillas_extracto_excel`); cuando una plantilla se aplica sola suma un uso. Las plantillas son
+de cada organización (aislamiento por `organizacion_id`).
+
+Nota: la huella (`extracto_import.fingerprint`) suma los importes en float a propósito, para que
+siga dando igual que cuando el parser devolvía float (re-subir un extracto ya cargado lo reconoce).
 
 ### 2bis. Extractos en PDF (v3.31)
 
@@ -424,6 +594,14 @@ no se tocan y se corrigen con `POST /contabilidad/corregir-asientos-banco`
   si es `> 0`, o si no vino, el que ya tenía guardado `Planilla.porcentaje_comision`
   (re-conciliar sin re-tipear el % no lo pierde) — resuelto en el router
   (`planillas.py::conciliar`), no en `conciliar_planilla`.
+- **Grupos (§1.10)**: un grupo confirmado es plata conciliada igual que un 1:1. Suma al bucket por
+  el monto de **sus movimientos** (lo que entró al banco y quedó en 2-1-1-1; en un grupo con
+  diferencia el cliente queda acreditado por lo recibido, no por lo declarado), y **cada
+  movimiento va al bucket de su origen** — un grupo que mezcla extracto y UM reparte entre los dos
+  asientos. Las filas 1:1 siguen sumando por el monto de la fila. Confirmar, armar o deshacer un
+  grupo recalcula la reclasificación sin re-matchear (`recalcular_reclasificacion_planilla`); si
+  un bucket queda en 0, su asiento vigente se borra (`anular_reclasificacion_planilla`, mismo
+  criterio que la comisión que pasa a 0).
 - **Upsert por `(modulo, planilla_id, organizacion_id)`**: re-conciliar
   recalcula sobre TODAS las filas `ok` (no solo las de esa pasada) y actualiza
   los asientos existentes — idempotente. Si el % de comisión baja a 0, el
@@ -594,3 +772,15 @@ Archivo: `backend/app/services/cierre_periodo.py`.
 4. **Conteo de bancos soportados**: discrepancia entre landing ("10+"),
    README (lista 9) y CLAUDE.md ("16 bancos"). Verificar contra
    `backend/app/services/excel_parser.py`.
+5. **Grupos de conciliación (§1.10), lo que quedó afuera** (oct 2026):
+   - Borrar un movimiento (purga de extracto, `routers/extractos.py`) borra en cascada su item de
+     grupo, pero las filas del grupo siguen en `ok`; el 1:1 tiene el mismo comportamiento
+     (`orden_movimiento_acreditado` → NULL). Falta que el borrado de movimientos deshaga el grupo.
+   - "Guardar en Desktop" (`routers/clientes_dir.py`) arma su propio dict de export (duplica a
+     `planillas._build_planilla_export_data`) y no conoce los grupos: las filas de un grupo pueden
+     caer en el fallback por monto. Unificar con el builder de planillas.
+   - El recálculo general (`conciliar_planilla`) no anula un bucket que quedó en 0 (solo lo hacen
+     los endpoints de grupos con `anular_vacios=True`): p. ej. pasar a mano la única fila `ok` de un
+     origen a "pendiente" deja su asiento de reclasificación como estaba.
+   - Liquidaciones suma las filas de un grupo por el monto de la fila (no tienen movimiento 1:1): en
+     un grupo con diferencia, el total de la liquidación es lo declarado, no lo recibido.

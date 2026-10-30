@@ -515,4 +515,46 @@ SAFETY_NET_DDL = [
     # migración 037 — asiento contable que registró cada movimiento del extracto principal
     # (FK lógica, sin constraint; ver motor_contable.registrar_asientos_extracto)
     "ALTER TABLE movimientos_banco ADD COLUMN IF NOT EXISTS asiento_id INTEGER",
+    # migración 038 — plantillas de lectura de extractos Excel/CSV (mapeo de columnas por org)
+    "CREATE TABLE IF NOT EXISTS plantillas_extracto_excel ("
+    "id SERIAL PRIMARY KEY, "
+    "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+    "banco_clave VARCHAR(40), "
+    "firma VARCHAR(64) NOT NULL, "
+    "encabezados JSON, "
+    "mapeo JSON NOT NULL, "
+    "usos INTEGER NOT NULL DEFAULT 0, "
+    "creado_at TIMESTAMP DEFAULT NOW(), "
+    "actualizado_at TIMESTAMP DEFAULT NOW(), "
+    "ultimo_uso_at TIMESTAMP, "
+    "creado_por INTEGER REFERENCES users(id) ON DELETE SET NULL, "
+    "CONSTRAINT uq_plantilla_extracto_excel_org_firma UNIQUE (organizacion_id, firma))",
+    # migración 038 — aviso no bloqueante del extracto (saldos que no cuadran)
+    "ALTER TABLE extractos_bancarios ADD COLUMN IF NOT EXISTS aviso_saldos VARCHAR(300)",
+    # migración 039 — grupos de conciliación (N filas ↔ M movimientos; ver models/conciliacion_grupo.py)
+    "CREATE TABLE IF NOT EXISTS conciliacion_grupos ("
+    "id SERIAL PRIMARY KEY, "
+    "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+    "planilla_id INTEGER NOT NULL REFERENCES planillas(id) ON DELETE CASCADE, "
+    "estado VARCHAR(20) NOT NULL DEFAULT 'sugerido', "
+    "origen VARCHAR(10) NOT NULL DEFAULT 'auto', "
+    "total_filas NUMERIC(14,2) NOT NULL, "
+    "total_movimientos NUMERIC(14,2) NOT NULL, "
+    "diferencia NUMERIC(14,2) NOT NULL DEFAULT 0, "
+    "ambiguo BOOLEAN NOT NULL DEFAULT FALSE, "
+    "creado_por INTEGER REFERENCES users(id) ON DELETE SET NULL, "
+    "created_at TIMESTAMP DEFAULT NOW(), "
+    "confirmado_at TIMESTAMP)",
+    "CREATE INDEX IF NOT EXISTS ix_conciliacion_grupos_organizacion_id ON conciliacion_grupos (organizacion_id)",
+    "CREATE INDEX IF NOT EXISTS ix_conciliacion_grupos_planilla_id ON conciliacion_grupos (planilla_id)",
+    "CREATE TABLE IF NOT EXISTS conciliacion_grupo_items ("
+    "id SERIAL PRIMARY KEY, "
+    "grupo_id INTEGER NOT NULL REFERENCES conciliacion_grupos(id) ON DELETE CASCADE, "
+    "organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id), "
+    "planilla_row_id INTEGER REFERENCES planilla_rows(id) ON DELETE CASCADE, "
+    "movimiento_id INTEGER REFERENCES movimientos_banco(id) ON DELETE CASCADE, "
+    "monto NUMERIC(12,2) NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS ix_conciliacion_grupo_items_grupo_id ON conciliacion_grupo_items (grupo_id)",
+    "CREATE INDEX IF NOT EXISTS ix_conciliacion_grupo_items_planilla_row_id ON conciliacion_grupo_items (planilla_row_id)",
+    "CREATE INDEX IF NOT EXISTS ix_conciliacion_grupo_items_movimiento_id ON conciliacion_grupo_items (movimiento_id)",
 ]

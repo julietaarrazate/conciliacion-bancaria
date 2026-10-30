@@ -30,6 +30,8 @@ class ExtractoBancarioResponse(BaseModel):
     fecha_creacion: datetime
     fecha_extracto: Optional[date] = None
     movimientos: List[MovimientoBancoResponse]
+    # Aviso no bloqueante de la importación (saldos que no cuadran, etc.).
+    aviso_saldos: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -49,6 +51,7 @@ class ExtractoListItem(BaseModel):
     # los recibía (banco era un bug preexistente silencioso del listado)
     banco: Optional[str] = None
     archivado: bool = False
+    aviso_saldos: Optional[str] = None
 
     class Config:
         from_attributes = True

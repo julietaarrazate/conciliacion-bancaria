@@ -76,6 +76,13 @@ def test_parse_fecha_none_retorna_none():
     assert _parse_fecha(None) is None
 
 
+
+def _en_orden_del_archivo(movs):
+    """El parser devuelve los movimientos del más nuevo al más viejo (da vuelta los
+    archivos ascendentes). Estos tests miran el parseo de cada campo fila por
+    fila, así que los ponen de nuevo en el orden en que están en el archivo."""
+    return sorted(movs, key=lambda m: m["fila"])
+
 # ── Formato Banco Macro (fallback hardcodeado) ────────────────────────────────
 
 def _wb_macro():
@@ -132,7 +139,7 @@ def test_macro_monto_correcto():
     wb = _wb_macro()
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         assert movs[0]["monto"] == 15000.0
         assert movs[1]["monto"] == 8500.50
     finally:
@@ -143,7 +150,7 @@ def test_macro_titular_correcto():
     wb = _wb_macro()
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         assert movs[0]["titular"] == "EMPRESA SA 20123456789"
         assert movs[1]["titular"] == "CLIENTE NORTE SRL 30987654321"
     finally:
@@ -154,7 +161,7 @@ def test_macro_saldo_correcto():
     wb = _wb_macro()
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         assert movs[0]["saldo"] == 200000.0
         assert movs[1]["saldo"] == 208500.50
     finally:
@@ -165,7 +172,7 @@ def test_macro_fecha_correcta():
     wb = _wb_macro()
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         assert movs[0]["fecha"] == date(2026, 5, 10)
         assert movs[1]["fecha"] == date(2026, 5, 11)
     finally:
@@ -176,7 +183,7 @@ def test_macro_orden_correcto():
     wb = _wb_macro()
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         assert movs[0]["orden"] == 1001
         assert movs[1]["orden"] == 1002
     finally:
@@ -188,7 +195,7 @@ def test_macro_mes_normalizado_a_numero():
     wb = _wb_macro()
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         assert movs[0]["mes"] == "5"
     finally:
         _cleanup(path)
@@ -222,7 +229,7 @@ def test_generico_parsea_movimientos():
     try:
         result = parsear_extracto_bancario(path)
         assert result["total"] == 2
-        movs = result["movimientos"]
+        movs = _en_orden_del_archivo(result["movimientos"])
         assert movs[0]["monto"] == 3000.0
         assert movs[0]["titular"] == "PAGO CLIENTE"
         assert movs[1]["monto"] == 1500.0
@@ -273,7 +280,7 @@ def test_creditos_debitos_credito_positivo():
     wb = _wb_creditos_debitos()
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         credito_row = next(m for m in movs if m["titular"] == "TRANSFERENCIA RECIBIDA")
         assert credito_row["monto"] == 12000.0
     finally:
@@ -285,7 +292,7 @@ def test_creditos_debitos_debito_negativo():
     wb = _wb_creditos_debitos()
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         debito_row = next(m for m in movs if m["titular"] == "PAGO SERVICIO")
         assert debito_row["monto"] == -1500.0
     finally:
@@ -297,7 +304,7 @@ def test_creditos_debitos_neto_correcto():
     wb = _wb_creditos_debitos()
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         ajuste_row = next(m for m in movs if m["titular"] == "AJUSTE")
         assert ajuste_row["monto"] == round(500.0 - 200.0, 2)
     finally:
@@ -324,7 +331,7 @@ def test_macro_no_se_ve_afectado_por_deteccion_credito_debito():
     wb = _wb_macro()
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         assert all(m["monto"] > 0 for m in movs), "Macro: todos los montos deben ser positivos"
         assert movs[0]["monto"] == 15000.0
         assert movs[1]["monto"] == 8500.50
@@ -377,7 +384,7 @@ def test_mp_detecta_banco_por_headers_sin_texto():
 def test_mp_parsea_tres_movimientos_con_signo():
     path = _csv_tmp(_csv_mp_settlement())
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         assert len(movs) == 3
         montos = {m["monto"] for m in movs}
         assert 15000.00 in montos
@@ -409,7 +416,7 @@ def test_mp_texto_literal_tambien_detecta():
         result = parsear_extracto_bancario(path)
         assert result["banco_detectado"] == "mercadopago"
         assert result["total"] == 2
-        assert result["movimientos"][0]["monto"] == 3200.0
+        assert _en_orden_del_archivo(result["movimientos"])[0]["monto"] == 3200.0
     finally:
         _cleanup(path)
 
@@ -474,7 +481,7 @@ def test_bancos_regionales_credito_debito(nombre, esperado):
         result = parsear_extracto_bancario(path)
         assert result["banco_detectado"] == esperado, f"esperaba {esperado}"
         assert result["total"] == 2
-        movs = result["movimientos"]
+        movs = _en_orden_del_archivo(result["movimientos"])
         credito = next(m for m in movs if "RECIBIDA" in (m["titular"] or ""))
         debito  = next(m for m in movs if "PROVEEDOR" in (m["titular"] or ""))
         assert credito["monto"] == 25000.0
@@ -490,7 +497,7 @@ def test_patagonia_importe_unico_con_signo():
         result = parsear_extracto_bancario(path)
         assert result["banco_detectado"] == "patagonia"
         assert result["total"] == 2
-        movs = result["movimientos"]
+        movs = _en_orden_del_archivo(result["movimientos"])
         assert movs[0]["monto"] == 18000.0
         assert movs[1]["monto"] == -250.0
     finally:
@@ -503,7 +510,7 @@ def test_montos_son_decimal_compatibles():
     wb = _wb_banco_regional("Banco Credicoop")
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         for m in movs:
             d = Decimal(str(m["monto"]))
             assert d == d.quantize(Decimal("0.01")) or d == d  # sin excepción
@@ -596,7 +603,7 @@ def test_columna_indicador_debito_credito_define_signo():
     wb = _wb_resumen_antes_de_header()
     path = _xlsx_tmp(wb)
     try:
-        movs = parsear_extracto_bancario(path)["movimientos"]
+        movs = _en_orden_del_archivo(parsear_extracto_bancario(path)["movimientos"])
         assert len(movs) == 2
         debito = next(m for m in movs if m["titular"] == "SIRCREB")
         credito = next(m for m in movs if "TRANSFERENCIA" in m["titular"])

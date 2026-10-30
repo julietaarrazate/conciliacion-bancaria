@@ -27,6 +27,7 @@ from app.models.auditoria import AuditoriaLog
 from app.services.auditoria import filtro_auditoria_de_orgs
 from app.models.patron_aprendido import PatronAprendido
 from app.models.extracto_pdf import MoldeExtractoPdf
+from app.models.extracto_plantilla import PlantillaExtractoExcel
 from app.models.liquidacion import Liquidacion, CierrePeriodo
 from app.models.cheque import Cheque
 from app.models.egreso import Egreso, CategoriaEgreso
@@ -152,6 +153,11 @@ def export_org_backup(db: Session, org_id: int) -> Dict[str, Any]:
     backup["moldes_extracto_pdf"] = [
         _row_to_dict(m) for m in db.query(MoldeExtractoPdf).filter(MoldeExtractoPdf.organizacion_id == org_id).all()
     ]
+    # Plantillas de lectura de extractos Excel/CSV (mapeo de columnas confirmado).
+    backup["plantillas_extracto_excel"] = [
+        _row_to_dict(p) for p in db.query(PlantillaExtractoExcel)
+        .filter(PlantillaExtractoExcel.organizacion_id == org_id).all()
+    ]
 
     # Auditoría — limitar a último año para no inflar el backup. Por la org del log
     # (no por la del usuario): lo que hizo el superadmin en otra org no entra acá.
@@ -185,6 +191,7 @@ def export_org_backup(db: Session, org_id: int) -> Dict[str, Any]:
         "asientos":              len(backup["asientos"]),
         "patrones_aprendidos":   len(backup["patrones_aprendidos"]),
         "moldes_extracto_pdf":   len(backup["moldes_extracto_pdf"]),
+        "plantillas_extracto_excel": len(backup["plantillas_extracto_excel"]),
         "auditoria_logs":        len(backup["auditoria"]),
     }
 

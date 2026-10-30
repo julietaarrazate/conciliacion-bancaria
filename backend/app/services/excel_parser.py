@@ -62,7 +62,7 @@ def _convertir_csv_a_xlsx(filepath: str) -> str:
         with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
             content = f.read()
 
-    delimiter = ';' if content.count(';') > content.count(',') else ','
+    delimiter = detectar_delimitador(content)
     # Patrón para montos argentinos: "1.234,56" o "-1.234,56"
     _ARG_MONTO_RE = re.compile(r'^-?\d{1,3}(\.\d{3})*(,\d+)?$')
 
@@ -88,6 +88,24 @@ def _convertir_csv_a_xlsx(filepath: str) -> str:
     return tmp.name
 
 
+def detectar_delimitador(content: str) -> str:
+    """Separador de un CSV/TXT: `;`, `,`, tabulador o `|`. Gana el que aparece
+    la misma cantidad de veces (y al menos una) en más renglones de los primeros
+    30 no vacíos; ante empate, el que más aparece. Por defecto `,`."""
+    lineas = [ln for ln in content.splitlines() if ln.strip()][:30]
+    mejor, mejor_puntaje = ',', (0, 0)
+    for d in (';', '\t', ',', '|'):
+        cuentas = [ln.count(d) for ln in lineas]
+        con = [c for c in cuentas if c > 0]
+        if not con:
+            continue
+        moda = max(set(con), key=con.count)
+        puntaje = (con.count(moda), sum(con))
+        if puntaje > mejor_puntaje:
+            mejor, mejor_puntaje = d, puntaje
+    return mejor
+
+
 def preparar_archivo(filepath: str) -> Tuple[str, bool]:
     """
     Si el archivo es .xls o .csv, lo convierte a .xlsx.
@@ -96,7 +114,7 @@ def preparar_archivo(filepath: str) -> Tuple[str, bool]:
     ext = os.path.splitext(filepath)[1].lower()
     if ext == '.xls':
         return _convertir_xls_a_xlsx(filepath), True
-    if ext in ('.csv', '.tsv'):
+    if ext in ('.csv', '.tsv', '.txt'):
         return _convertir_csv_a_xlsx(filepath), True
     return filepath, False
 
@@ -130,12 +148,22 @@ def _kw_en_texto(keyword: str, texto: str) -> bool:
     return re.search(r'\b' + re.escape(keyword) + r'\b', texto) is not None
 
 def detectar_banco(ws) -> str:
+    """Banco de una hoja de openpyxl (ver `detectar_banco_filas`)."""
+    filas = [
+        [ws.cell(r, c).value for c in range(1, min(40, ws.max_column) + 1)]
+        for r in range(1, min(10, ws.max_row) + 1)
+    ]
+    return detectar_banco_filas(filas)
+
+
+def detectar_banco_filas(filas) -> str:
+    """Banco a partir de las primeras filas de la planilla (lista de listas de
+    valores). Lo usan el parser de Excel y el lector de extractos con mapeo."""
     texto = ""
     # Escanea más filas/columnas: algunos formatos (Credicoop, Supervielle,
     # Patagonia) ponen el nombre del banco recién en la fila 3-8.
-    for r in range(1, min(10, ws.max_row + 1)):
-        for c in range(1, min(12, ws.max_column + 1)):
-            v = ws.cell(r, c).value
+    for fila in list(filas)[:9]:
+        for v in list(fila)[:11]:
             if v:
                 texto += " " + str(v).lower()
     texto = _normalizar(texto)
@@ -152,17 +180,16 @@ def detectar_banco(ws) -> str:
             return banco
     # Mercado Pago por estructura: el CSV de liberaciones no siempre
     # contiene el texto "Mercado Pago", pero sí columnas características.
-    if _es_mercadopago_por_headers(ws):
+    if _es_mercadopago_por_headers(filas):
         return "mercadopago"
     return "generico"
 
 
-def _es_mercadopago_por_headers(ws) -> bool:
+def _es_mercadopago_por_headers(filas) -> bool:
     """True si la planilla tiene 2+ cabeceras típicas del reporte MP."""
     hits = set()
-    for r in range(1, min(6, ws.max_row + 1)):
-        for c in range(1, min(40, ws.max_column + 1)):
-            v = ws.cell(r, c).value
+    for fila in list(filas)[:5]:
+        for v in list(fila)[:39]:
             if not v:
                 continue
             h = _normalizar(str(v).lower().strip())
@@ -217,6 +244,7 @@ KEYWORDS_ORDEN   = ["orden","nro. de referencia","nro","numero","secuencia","ref
                     "operation_id","source_id","external_reference","payment_id"]
 KEYWORDS_SALDO   = ["saldo","balance","balance_amount"]
 KEYWORDS_MES     = ["mes","period","periodo"]
+KEYWORDS_CUIT    = ["cuit","cuil","cdi"]
 
 # Cabeceras características del CSV de liberaciones/settlement de Mercado Pago.
 # Si aparecen 2+ de estas, es un reporte MP aunque no diga "Mercado Pago".
@@ -272,46 +300,68 @@ def _fila_valida_como_header(ws, row, encontrados):
             return False
     return True
 
+# Encabezados cortos de la columna que dice si la fila es débito o crédito.
+ENCABEZADOS_INDICADOR = {"d/c", "db/cr", "deb/cred", "d-c", "dc", "debe/haber", "tipo d/c", "signo"}
+
+
+def rol_por_encabezado(header) -> "str | None":
+    """Rol de una columna según el texto de su encabezado (por palabras clave).
+
+    Devuelve una de: cliente_acred, fecha_acred, indicador_dc, monto, credito,
+    debito, fecha, cuit, titular, orden, saldo, mes — o None. Única fuente de la
+    detección por palabras: la usan `detectar_columnas` y el lector de extractos
+    con mapeo (`extracto_mapper`)."""
+    h = str(header or "").lower().strip()
+    if not h:
+        return None
+    # Cliente acreditado / Fecha acred (columnas propias del extracto exportado)
+    if _match_kw_raw(h, KEYWORDS_CLIENTE_ACRED):
+        return "cliente_acred"
+    if _match_kw_raw(h, KEYWORDS_FECHA_ACRED):
+        return "fecha_acred"
+    h_norm = _normalizar(h)
+    # Columna indicadora de texto "Débito/Crédito" por fila (no son dos
+    # columnas de monto separadas, sino una sola columna clasificadora
+    # que acompaña a una columna "Monto" única siempre positiva).
+    if ("debito" in h_norm and "credito" in h_norm) or h_norm in ENCABEZADOS_INDICADOR:
+        return "indicador_dc"
+    if _match_kw(h, KEYWORDS_MONTO):
+        return "monto"
+    if _match_kw(h, KEYWORDS_CREDITO):
+        return "credito"
+    if _match_kw(h, KEYWORDS_DEBITO):
+        return "debito"
+    if _match_kw(h, KEYWORDS_FECHA):
+        return "fecha"
+    if _match_kw_raw(h, KEYWORDS_CUIT):
+        return "cuit"
+    if _match_kw(h, KEYWORDS_TITULAR):
+        return "titular"
+    if _match_kw(h, KEYWORDS_ORDEN):
+        return "orden"
+    if _match_kw(h, KEYWORDS_SALDO):
+        return "saldo"
+    if _match_kw(h, KEYWORDS_MES):
+        return "mes"
+    return None
+
+
 def detectar_columnas(ws):
+    """Columnas de un extracto por palabras clave del encabezado.
+
+    Si ninguna fila parece encabezado devuelve todo en None (sin `monto` ni
+    `credito`/`debito`): antes se asumían en silencio las posiciones fijas de
+    Banco Macro, y un archivo de otro banco se leía mal sin avisar. Ahora quien
+    llama tiene que pedirle el mapeo a la persona (ver `extracto_mapper`)."""
     cols = {"hdr_row":1,"monto":None,"credito":None,"debito":None,"fecha":None,
             "titular":None,"orden":None,"saldo":None,"mes":None,
             "cliente_acred":None,"fecha_acred":None,"indicador_dc":None}
     for r in range(1, min(13, ws.max_row + 1)):
         encontrados = {}
         for c in range(1, ws.max_column + 1):
-            h = str(ws.cell(r, c).value or "").lower().strip()
-            if not h:
-                continue
-            # Cliente acreditado / Fecha acred (columnas propias del extracto exportado)
-            if _match_kw_raw(h, KEYWORDS_CLIENTE_ACRED):
-                encontrados.setdefault("cliente_acred", c)
-                continue
-            if _match_kw_raw(h, KEYWORDS_FECHA_ACRED):
-                encontrados.setdefault("fecha_acred", c)
-                continue
-            h_norm = _normalizar(h)
-            # Columna indicadora de texto "Débito/Crédito" por fila (no son dos
-            # columnas de monto separadas, sino una sola columna clasificadora
-            # que acompaña a una columna "Monto" única siempre positiva).
-            if "debito" in h_norm and "credito" in h_norm:
-                encontrados.setdefault("indicador_dc", c)
-                continue
-            if _match_kw(h, KEYWORDS_MONTO):
-                encontrados.setdefault("monto", c)
-            elif _match_kw(h, KEYWORDS_CREDITO):
-                encontrados.setdefault("credito", c)
-            elif _match_kw(h, KEYWORDS_DEBITO):
-                encontrados.setdefault("debito", c)
-            elif _match_kw(h, KEYWORDS_FECHA):
-                encontrados.setdefault("fecha", c)
-            elif _match_kw(h, KEYWORDS_TITULAR):
-                encontrados.setdefault("titular", c)
-            elif _match_kw(h, KEYWORDS_ORDEN):
-                encontrados.setdefault("orden", c)
-            elif _match_kw(h, KEYWORDS_SALDO):
-                encontrados.setdefault("saldo", c)
-            elif _match_kw(h, KEYWORDS_MES):
-                encontrados.setdefault("mes", c)
+            rol = rol_por_encabezado(ws.cell(r, c).value)
+            if rol and rol != "cuit":
+                encontrados.setdefault(rol, c)
         # Fila de headers válida si tiene monto unitario O par crédito/débito,
         # y además los datos de la fila siguiente confirman que es un header real.
         if ("monto" in encontrados or "credito" in encontrados or "debito" in encontrados) \
@@ -319,14 +369,6 @@ def detectar_columnas(ws):
             cols["hdr_row"] = r
             cols.update(encontrados)
             return cols
-    # Fallback Banco Macro extracto
-    cols["hdr_row"] = 2
-    cols["orden"]   = 2
-    cols["fecha"]   = 3
-    cols["mes"]     = 4
-    cols["titular"] = 5
-    cols["monto"]   = 6
-    cols["saldo"]   = 7
     return cols
 
 def parsear_generico(ws, cols):
@@ -403,32 +445,39 @@ def parsear_generico(ws, cols):
         })
     return movimientos
 
-def parsear_extracto_bancario(filepath: str) -> dict:
+def parsear_extracto_bancario(filepath: str, *, plantillas: "dict | None" = None,
+                              mapeo: "dict | None" = None) -> dict:
     """
-    Parsea un extracto bancario detectando automaticamente el banco y formato.
-    Soporta .xlsx, .xls y .csv.
-    Prueba todas las hojas del archivo y devuelve la que tiene mas movimientos.
+    Parsea un extracto bancario (.xlsx, .xls, .csv, .tsv, .txt) de cualquier banco.
+
+    Delegado en `extracto_mapper.analizar_extracto`: mapeo confirmado por la
+    persona → plantilla guardada de la org → detección por encabezado →
+    sugerencia por contenido. Montos en Decimal. Los movimientos salen siempre
+    del más nuevo al más viejo (un archivo ascendente se da vuelta). Si no se reconoce nada devuelve
+    0 movimientos y `analisis["necesita_mapeo"] = True` (antes se asumían en
+    silencio las columnas de Banco Macro).
     """
-    xlsx_path, necesita_cleanup = preparar_archivo(filepath)
-    try:
-        wb = openpyxl.load_workbook(xlsx_path, data_only=True)
-        mejor_movs = []
-        banco_detectado = "generico"
-        for sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
-            if ws.max_row < 3:
-                continue
-            banco = detectar_banco(ws)
-            cols  = detectar_columnas(ws)
-            movs  = parsear_generico(ws, cols)
-            if len(movs) > len(mejor_movs):
-                mejor_movs = movs
-                banco_detectado = banco
-        wb.close()
-        return {"movimientos": mejor_movs, "total": len(mejor_movs), "banco_detectado": banco_detectado}
-    finally:
-        if necesita_cleanup and os.path.exists(xlsx_path):
-            os.remove(xlsx_path)
+    from app.services.extracto_mapper import analizar_extracto
+
+    res = analizar_extracto(filepath, plantillas=plantillas, mapeo=mapeo)
+    movs = res["movimientos"]
+    # Una sugerencia por contenido nunca se importa sin confirmación.
+    if res["origen"] in ("sugerencia", "ninguno"):
+        movs = []
+    # Todo el resto del sistema (numeración de `orden` en
+    # `crear_extracto_con_movimientos`, corte del merge de UM, huella) espera los
+    # movimientos del MÁS NUEVO al más viejo, como los exporta Macro. Si el
+    # archivo viene del más viejo al más nuevo (y el sentido se pudo detectar),
+    # se da vuelta acá: así un banco "ascendente" se comporta igual que Macro.
+    cuadre = res["cuadre"]
+    if movs and cuadre.get("orden") == "asc" and cuadre.get("orden_detectado"):
+        movs = list(reversed(movs))
+    return {
+        "movimientos": movs,
+        "total": len(movs),
+        "banco_detectado": res["banco_clave"] or "generico",
+        "analisis": res,
+    }
 
 def detectar_header(ws):
     for r in range(1, 6):

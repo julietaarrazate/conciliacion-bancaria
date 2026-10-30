@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { statusLabel, motivoMatchLabel } from './status'
+import { statusLabel, motivoMatchLabel, avisoCoincidencia } from './status'
 
 describe('statusLabel', () => {
   it('traduce los estados base', () => {
@@ -38,5 +38,22 @@ describe('motivoMatchLabel', () => {
     expect(motivoMatchLabel(null)).toBeNull()
     expect(motivoMatchLabel(undefined)).toBeNull()
     expect(motivoMatchLabel('otro')).toBeNull()
+  })
+})
+
+describe('avisoCoincidencia y estado de grupo', () => {
+  it('avisa CUIT distinto (grave) y solo monto', () => {
+    expect(avisoCoincidencia('cuit_distinto')).toMatchObject({ label: 'CUIT distinto', grave: true })
+    expect(avisoCoincidencia('solo_monto')).toMatchObject({ label: 'Solo monto', grave: false })
+  })
+
+  it('sin aviso cuando coincide un dato', () => {
+    expect(avisoCoincidencia('cuit')).toBeNull()
+    expect(avisoCoincidencia('titular')).toBeNull()
+    expect(avisoCoincidencia(null)).toBeNull()
+  })
+
+  it('traduce el estado sugerido en grupo', () => {
+    expect(statusLabel('SUGERIDO_GRUPO')).toBe('Sugerido en grupo')
   })
 })
