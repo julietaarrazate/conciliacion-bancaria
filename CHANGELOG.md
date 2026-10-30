@@ -5,6 +5,18 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Fix (oct 2026) — Control del banco: los huecos entre extractos no son un descuadre
+
+La tarjeta mostraba en rojo "no coincide con el extracto" en Org A (−180.133.367,02). La
+contabilidad estaba bien (Banco en libros = suma de los movimientos cargados): la diferencia es
+exactamente la suma de dos tramos sin cargar — el 20/08 entre el corte del Excel Macro y los
+primeros UM (+4.587.250,17) y del 24/08 al 13/10 sin ningún extracto (−184.720.617,19).
+`GET /contabilidad/control-banco` devuelve ahora `tramos` (cada bloque continuo de saldo, con
+`cuadra`) y `huecos` (dónde no encadena y por cuánto); la tarjeta los muestra en ámbar con fechas y
+el saldo real del banco a la última fecha.
+
+---
+
 ### Frontend (oct 2026) — Vite 8, React 19, Tailwind 4, Vitest 5
 
 - Saltos mayores aprobados por la operadora. Diff visual de 28 capturas (landing, login, dashboard,

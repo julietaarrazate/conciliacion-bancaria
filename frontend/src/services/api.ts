@@ -155,6 +155,11 @@ export interface ControlBanco {
   saldo_ultimo_extracto: string | null
   saldo_inicial_primer_extracto: string | null
   diferencia_libro_vs_extracto: string | null
+  tramos: { extracto_id: number; origen: 'principal' | 'um'; desde: string; hasta: string; saldo_inicial: string; saldo_final: string; neto: string; cuadra: boolean }[]
+  huecos: { desde: string; hasta: string; saldo_antes: string; saldo_despues: string; monto_faltante: string }[]
+  tramos_que_no_cuadran: number
+  saldo_real_banco: string | null
+  fecha_saldo_real_banco: string | null
   movimientos_extracto_sin_asiento: number
   saldos: Record<'banco' | 'banco_cuenta_madre' | 'pasivo_corriente' | 'cobros_a_imputar' | 'pagos_a_imputar', { codigo: string; saldo: string }>
   ok: boolean

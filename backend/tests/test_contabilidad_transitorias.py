@@ -482,9 +482,29 @@ def test_control_banco_cuadra_con_los_extractos(client, db, superadmin):
     assert d["diferencia_libro_vs_movimientos"] == "0.00"
     assert d["saldo_ultimo_extracto"] == "9550.00" and d["saldo_inicial_primer_extracto"] == "0.00"
     assert d["diferencia_libro_vs_extracto"] == "0.00"
+    assert d["huecos"] == [] and d["saldo_real_banco"] == "9550.00"
     assert d["movimientos_extracto_sin_asiento"] == 0 and d["ok"] is True
     assert d["saldos"]["cobros_a_imputar"]["saldo"] == "-10000.00"
     assert d["saldos"]["pagos_a_imputar"]["saldo"] == "450.00"
+
+
+def test_control_banco_muestra_huecos_entre_extractos(client, db, superadmin):
+    """Dos extractos no continuos (como Org A: agosto y octubre): cada uno cuadra por
+    dentro y la diferencia contra el banco es un hueco de movimientos sin cargar, no un
+    error contable. El archivo puede venir con lo más nuevo arriba."""
+    _subir(client, superadmin, [("2026-09-02", "Luz", -450, 9550), ("2026-09-01", "Cobro", 10000, 10000)])
+    _subir(client, superadmin, [("2026-10-13", "Cobro", 1000, 6000), ("2026-10-14", "Gasto", -200, 5800)])
+    d = client.get("/contabilidad/control-banco", headers=_auth(_token(db, "admin@ctb.test"))).json()
+    assert d["diferencia_libro_vs_movimientos"] == "0.00"
+    assert [t["cuadra"] for t in d["tramos"]] == [True, True] and d["tramos_que_no_cuadran"] == 0
+    assert d["tramos"][0]["desde"] == "2026-09-01" and d["tramos"][0]["saldo_final"] == "9550.00"
+    assert d["huecos"] == [{
+        "desde": "2026-09-02", "hasta": "2026-10-13",
+        "saldo_antes": "9550.00", "saldo_despues": "5000.00", "monto_faltante": "-4550.00",
+    }]
+    # La diferencia contra el saldo del banco es exactamente el hueco
+    assert d["diferencia_libro_vs_extracto"] == "-4550.00"
+    assert d["saldo_real_banco"] == "5800.00" and d["fecha_saldo_real_banco"] == "2026-10-14"
 
 
 def test_control_banco_detecta_movimientos_sin_asiento(db, client):
