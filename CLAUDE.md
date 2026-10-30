@@ -24,7 +24,10 @@ Lee el CLAUDE.md del repo julietaarrazate/conciliacion-bancaria para entender el
 - Keep-alive: UptimeRobot pinguea /health cada 5 min (mantiene despierto a Render). Neon lo
   mantiene despierto un job interno `db_keepalive` (SELECT 1 cada 4 min) — ver "Schedulers".
 
-Credenciales: la contraseña del superadmin sale de `SUPERADMIN_PASSWORD` (env var del backend).
+Credenciales: la contraseña del superadmin sale de `SUPERADMIN_PASSWORD` (env var del backend)
+**solo cuando se crea el usuario**; después manda la que se cambie desde `/perfil`. Emergencia:
+`SUPERADMIN_PASSWORD_RESET=1` la pisa con la del env en el próximo arranque (WARNING en el log;
+sacar la variable después).
 
 Deploy manual Render:
   curl -X POST https://api.render.com/v1/services/<RENDER_SERVICE_ID>/deploys \
@@ -271,12 +274,14 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
 - **📒 Contabilidad — modelo de cuentas transitorias estilo Odoo (oct 2026)**: el Banco lo mueve solo
   el extracto/UM; ingresos contra 2-1-1-1 "No identificado", egresos contra 2-1-1-2 "Pagos a
   imputar"; todo lo que se paga o cobra "por banco" va a la transitoria (decisión de la operadora:
-  dos transitorias). Ver ADR-015 y `ACCOUNTING_ENGINE.md` §2bis. **Pendiente**: correr
-  `POST /contabilidad/corregir-asientos-banco` en prod para Org A (botón "🏦 Corregir asientos del banco" en Contabilidad → Cuentas corrientes) — primero el `dry_run` (también
-  sobre una branch de Neon) y **solo con OK explícito de la operadora** tras ver los saldos; después
-  revisar con `GET /contabilidad/control-banco` y la lista "a revisar". Deuda: multi-banco (D-12).
+  dos transitorias). Ver ADR-015 y `ACCOUNTING_ENGINE.md` §2bis. **Corrección de Org A ejecutada
+  (30/oct/2026)**: Banco Macro en libros = neto de los extractos; quedan en las transitorias los
+  cobros sin conciliar (~370,8 M) y los egresos sin pago cargado (~297,1 M) — es el trabajo de
+  conciliación pendiente, visible en la tarjeta "Control del banco" (Contabilidad → Cuentas
+  corrientes). Deuda: multi-banco (D-12).
 - **Frontend — saltos mayores** (Vite 8, React 19, Tailwind 4, Vitest 5): armados y verificados con
-  diff visual, sin subir. Falta decidir si se acepta que Tailwind 4 exige iOS 16.4+ / Chrome 111+.
+  diff visual; **aprobados por la operadora (30/oct)**, aceptando que Tailwind 4 exige iOS 16.4+ /
+  Chrome 111+ (iPhone 7 y anteriores dejan de verse bien). Van en un PR propio.
 
 - **📅 TODOS LOS MESES — cargar el calendario de vencimientos (v3.35)**: en `/vencimientos` →
   "Cargar calendario" (superadmin), copiar de argentina.gob.ar/arca/vencimientos las fechas del

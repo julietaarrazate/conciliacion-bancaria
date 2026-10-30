@@ -175,9 +175,81 @@ def _run_alembic():
         logger.warning("Safety net columnas: %s", ex)
 
 
+SUPERADMIN_EMAIL = "julietaarrazate@gmail.com"
+
+
+def seed_superadmin(db) -> str:
+    """Crea la superadmin si no existe; si ya existe, NO le pisa la contraseña.
+
+    `SUPERADMIN_PASSWORD` se usa solo para crear el usuario. Antes se re-hasheaba en
+    cada arranque, así que un cambio de contraseña desde /perfil no duraba (y la
+    contraseña real quedaba atada a la env var). Si ya existe, solo se aseguran los
+    flags (superadmin, activa, rol admin).
+
+    Salida de emergencia: con `SUPERADMIN_PASSWORD_RESET=1` se pisa la contraseña con
+    la de la env var (y se invalidan las sesiones abiertas). Queda un WARNING en el log.
+    Si la contraseña ya coincide no se vuelve a tocar, pero hay que sacar la variable
+    después del deploy: si no, el próximo cambio desde /perfil se pisaría al arrancar.
+
+    Devuelve qué hizo: "creada" | "reseteada" | "actualizada" | "sin_password".
+    """
+    import os
+    from app.models.user import User as U, RoleEnum
+    from app.services.auth import get_password_hash, marcar_cambio_password, verify_password
+
+    pwd = os.environ.get("SUPERADMIN_PASSWORD", "")
+    reset = os.environ.get("SUPERADMIN_PASSWORD_RESET", "").strip() == "1"
+    julieta = db.query(U).filter(U.email == SUPERADMIN_EMAIL).first()
+
+    if not julieta:
+        if not pwd:
+            logger.warning("SUPERADMIN_PASSWORD no definida — superadmin no creado")
+            return "sin_password"
+        db.add(U(
+            email=SUPERADMIN_EMAIL,
+            full_name="Julieta Arrazate",
+            hashed_password=get_password_hash(pwd),
+            role=RoleEnum.ADMIN.value,
+            is_active=True,
+            is_superadmin=True,
+            organizacion_id=1
+        ))
+        db.commit()
+        logger.info("Superadmin %s creado", SUPERADMIN_EMAIL)
+        return "creada"
+
+    # Ya existe: los flags siempre; la contraseña solo con el reset explícito
+    julieta.is_superadmin = True
+    julieta.is_active = True
+    julieta.role = RoleEnum.ADMIN.value
+    resultado = "actualizada"
+    if reset:
+        if pwd and verify_password(pwd, julieta.hashed_password):
+            # Ya tiene esa contraseña (p. ej. un arranque posterior con la variable
+            # todavía puesta): no se re-hashea ni se cortan las sesiones otra vez.
+            logger.warning(
+                "SUPERADMIN_PASSWORD_RESET=1 sigue seteada pero la contraseña ya coincide — "
+                "sacar la variable de Render"
+            )
+        elif pwd:
+            julieta.hashed_password = get_password_hash(pwd)
+            marcar_cambio_password(julieta)
+            resultado = "reseteada"
+            logger.warning(
+                "SUPERADMIN_PASSWORD_RESET=1: contraseña de %s pisada con SUPERADMIN_PASSWORD. "
+                "Sacar la variable de Render para que no se repita en el próximo arranque.",
+                SUPERADMIN_EMAIL,
+            )
+        else:
+            logger.warning("SUPERADMIN_PASSWORD_RESET=1 pero SUPERADMIN_PASSWORD vacía — no se resetea")
+    db.commit()
+    logger.info("Superadmin %s actualizado (%s)", SUPERADMIN_EMAIL, resultado)
+    return resultado
+
+
 def _init_db():
     """Crea tablas, migraciones y seed en background — no bloquea el arranque."""
-    import hashlib, os
+    import hashlib
     from app.database import SessionLocal
     from app.models.extracto import ExtractoBancario as Extracto
 
@@ -485,32 +557,8 @@ def _init_db():
         from app.services.auth import get_password_hash
         db = SL()
 
-        # Superadmin Julieta — password desde variable de entorno SUPERADMIN_PASSWORD
-        julieta_email = "julietaarrazate@gmail.com"
-        julieta_pwd = os.environ.get("SUPERADMIN_PASSWORD", "")
-        if julieta_pwd:
-            julieta = db.query(U).filter(U.email == julieta_email).first()
-            if not julieta:
-                db.add(U(
-                    email=julieta_email,
-                    full_name="Julieta Arrazate",
-                    hashed_password=get_password_hash(julieta_pwd),
-                    role=RoleEnum.ADMIN.value,
-                    is_active=True,
-                    is_superadmin=True,
-                    organizacion_id=1
-                ))
-                logger.info("Superadmin %s creado", julieta_email)
-            else:
-                # Siempre actualizar password y flags desde el env var
-                julieta.hashed_password = get_password_hash(julieta_pwd)
-                julieta.is_superadmin = True
-                julieta.is_active = True
-                julieta.role = RoleEnum.ADMIN.value
-                logger.info("Superadmin %s actualizado", julieta_email)
-            db.commit()
-        else:
-            logger.warning("SUPERADMIN_PASSWORD no definida — superadmin no creado")
+        # Superadmin Julieta — password desde SUPERADMIN_PASSWORD solo al crearla
+        seed_superadmin(db)
 
         # Usuarios demo — solo en entorno de desarrollo
         if settings.debug:

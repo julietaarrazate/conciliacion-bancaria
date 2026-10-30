@@ -39,6 +39,7 @@ from sqlalchemy.orm import Session
 
 from app.models.arca import ComprobanteArca
 from app.models.auditoria import AuditoriaLog
+from app.services.auditoria import filtro_auditoria_de_orgs
 from app.models.caja import ArqueoDiario
 from app.models.cheque import Cheque
 from app.models.contabilidad import Asiento, AsientoDetalle
@@ -54,7 +55,6 @@ from app.models.patron_aprendido import PatronAprendido
 from app.models.planilla import Planilla, PlanillaRow
 from app.models.proyeccion_iva import ProyeccionIva
 from app.models.sueldos import DetalleLiquidacionEmpleado, LiquidacionSueldoPeriodo
-from app.models.user import User
 
 # Tablas legacy sin modelo ORM (reemplazadas por el módulo unificado Egreso).
 # Se limpian con SQL crudo sólo si la tabla existe.
@@ -103,7 +103,6 @@ def reset_datos_operativos(
     liquid_sueldo_de_org = db.query(LiquidacionSueldoPeriodo.id).filter(
         LiquidacionSueldoPeriodo.organizacion_id.in_(orgs)
     )
-    users_de_org = db.query(User.id).filter(User.organizacion_id.in_(orgs))
 
     # (etiqueta, query filtrada) en orden seguro de FKs: hijos antes que padres.
     plan: list[tuple[str, object]] = [
@@ -155,8 +154,10 @@ def reset_datos_operativos(
     ]
 
     if incluir_auditoria:
+        # Por la org del log (los viejos sin org, por la del usuario): así no se borra lo
+        # que un usuario de estas orgs hizo en otra (p. ej. el superadmin).
         plan.append(("auditoria", db.query(AuditoriaLog).filter(
-            AuditoriaLog.usuario_id.in_(users_de_org))))
+            filtro_auditoria_de_orgs(orgs))))
 
     resultado: dict[str, int] = {}
 

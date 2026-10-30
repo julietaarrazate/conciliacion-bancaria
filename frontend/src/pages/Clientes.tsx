@@ -94,6 +94,10 @@ export const Clientes: React.FC = () => {
   const navigate = useNavigate()
   const puedeVerCtaCte = useAuthStore(s => s.hasPermission('view_accounting'))
   const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
+  // Crear, renombrar, comisión y acreditar piden `reconcile` (el revisor es de solo
+  // lectura). Fusionar borra el cliente origen: pide además `delete_records`.
+  const canReconcile = useAuthStore(s => s.hasPermission('reconcile'))
+  const canFusionar = canReconcile && canDelete
   const [orgs, setOrgs] = useState<OrgData[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -447,7 +451,7 @@ export const Clientes: React.FC = () => {
                 {orgOpen && (
                   <div className="border-t dark:border-slate-700">
                     {/* Botón crear cliente */}
-                    <div className="px-3 md:px-4 py-2 bg-gray-50/50 dark:bg-slate-900/30 border-b dark:border-slate-700/50">
+                    {canReconcile && <div className="px-3 md:px-4 py-2 bg-gray-50/50 dark:bg-slate-900/30 border-b dark:border-slate-700/50">
                       {creando === org.id ? (
                         <div className="flex flex-wrap items-center gap-1.5">
                           <input className="input-field text-xs flex-1 min-w-[120px]" placeholder="Nombre del cliente"
@@ -469,7 +473,7 @@ export const Clientes: React.FC = () => {
                           <span className="text-base leading-none">+</span> Nuevo cliente
                         </button>
                       )}
-                    </div>
+                    </div>}
 
                     {/* Nivel 2: Clientes */}
                     {org.clientes.length === 0 ? (
@@ -537,9 +541,10 @@ export const Clientes: React.FC = () => {
                             {/* Chip comisión (% general / Local / Interior) */}
                             <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
                               <button
+                                disabled={!canReconcile}
                                 onClick={() => editComisionId === cliente.id ? setEditComisionId(null) : abrirEditorComision(cliente)}
                                 className={`px-2 py-1 text-[11px] rounded font-medium transition-colors ${cliente.porcentaje_comision != null || cliente.porcentaje_comision_local != null || cliente.porcentaje_comision_interior != null ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60' : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-600'}`}
-                                title="% comisiones (general / local / interior) — click para editar"
+                                title={canReconcile ? '% comisiones (general / local / interior) — click para editar' : '% comisiones (general / local / interior)'}
                               >
                                 {cliente.porcentaje_comision != null ? `${cliente.porcentaje_comision}%` : '%'}&nbsp;
                                 <svg className="inline w-3 h-3 -mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
@@ -622,21 +627,21 @@ export const Clientes: React.FC = () => {
                                 <span className="hidden md:inline">Cta. cte.</span>
                               </button>
                             )}
-                            <button
+                            {canReconcile && <button
                               onClick={(e) => { e.stopPropagation(); abrirAcreditar({ id: cliente.id, nombre: cliente.nombre }) }}
                               className="px-2 py-1 text-[11px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded hover:bg-emerald-200 dark:hover:bg-emerald-900/60 font-medium flex-shrink-0"
                               title="Acreditar transferencia desde comprobante"
                             >
                               💸<span className="hidden md:inline"> Acreditar</span>
-                            </button>
-                            <button
+                            </button>}
+                            {canReconcile && <button
                               onClick={(e) => { e.stopPropagation(); setRenombrando(cliente.id); setRenombreVal(cliente.nombre) }}
                               className="hidden md:inline-flex p-1 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded flex-shrink-0"
                               title="Renombrar cliente"
                             >
                               ✏️
-                            </button>
-                            {otrosClientes.length > 0 && (
+                            </button>}
+                            {canFusionar && otrosClientes.length > 0 && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); setFusionandoId(cliente.id); setFusionTargetId('') }}
                                 className="hidden md:inline-flex p-1 text-purple-500 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded flex-shrink-0"

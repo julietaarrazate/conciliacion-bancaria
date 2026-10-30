@@ -4,7 +4,7 @@ Qué se revisó, qué se corrigió (con su PR) y qué falta. **Se actualiza al c
 que toque seguridad, dependencias o infraestructura**; el modelo técnico (cómo funciona cada
 control) vive en [`SECURITY_MODEL.md`](SECURITY_MODEL.md).
 
-Última actualización: **23/oct/2026**.
+Última actualización: **30/oct/2026**.
 
 ---
 
@@ -27,13 +27,20 @@ en producción para verificar que no hubo aprovechamiento.
 | Auditoría separada por organización | ✅ | PR #261 (migración 035) |
 | Excel/CSV sin fórmulas inyectadas, subidas con tope y anti zip-bomb, PDFs escapados, sin `document.write` | ✅ | PR #261 · `tests/test_seguridad_entradas.py` |
 | Claves que estuvieron en el historial (Render, Vercel, GitHub) | ✅ Verificado: ya no existen en las cuentas | — |
+| Contraseña del superadmin: `SUPERADMIN_PASSWORD` solo al crearla; un cambio desde `/perfil` dura. Emergencia: `SUPERADMIN_PASSWORD_RESET=1` (pisa una vez, WARNING en el log) | ✅ | PR #266 (lote 4) · `tests/test_seguridad_lote4.py` |
+| Fusionar clientes (borra el origen) pide `delete_records` además de `reconcile`: solo admin y superadmin; operador y contador lo pierden a propósito | ✅ | PR #266 (lote 4) |
+| `POST /push/subscribe` reasigna al usuario actual un endpoint que era de otro usuario | ✅ | PR #266 (lote 4) |
+| `GET /caja/arqueo/hoy` sin escritura: devuelve el borrador; lo crean el `PUT` o un pago en efectivo (los dos con el saldo arrastrado) | ✅ | PR #266 (lote 4) |
+| Backup diario y reset operativo filtran la auditoría por la org del log (mismo criterio que `/auditoria`) | ✅ | PR #266 (lote 4) |
+| Frontend oculta al revisor las acciones que el backend le rechaza (extractos, movimientos, planillas, clientes, estado de cuenta) | ✅ | PR #266 (lote 4) · `Movimientos.test.tsx` |
+| `react-router-dom` 6 (open redirect con `\`) → 7.18.5; `npm audit --omit=dev` sin avisos | ✅ | PR #266 (lote 4) |
 
 ## 2. Pendiente
 
 ### Decisiones abiertas (de la operadora)
-- **Contraseña del superadmin**: se re-hashea desde `SUPERADMIN_PASSWORD` en cada arranque, así
-  que un cambio desde `/perfil` no dura. Opción: setearla solo si el usuario no existe.
-- **Fusionar clientes** pide `reconcile`; borra el cliente origen. ¿Pasar a `delete_records`?
+- **Fusionar clientes**: quedó en `delete_records` (lote 4), así que operador y contador ya no
+  fusionan. Si la operadora prefiere que el contador sí pueda, habría que darle un permiso
+  propio (no `delete_records`, que le abriría todos los borrados).
 - **Exports TXT Tango/Holistor** sin sanear fórmulas (formato fijo; el apóstrofo se vería en la
   descripción importada).
 - **Neon**: limitar conexiones por IP (si el plan lo permite) y habilitar `pg_stat_statements`.
@@ -41,13 +48,12 @@ en producción para verificar que no hubo aprovechamiento.
 ### Técnico (bajo riesgo, para un próximo lote)
 - CORS: la regex de previews de Vercel acepta un hostname que otra cuenta podría reproducir
   (sin credenciales, riesgo bajo). Cierre total: listar previews en `EXTRA_CORS_ORIGINS`.
-- `POST /push/subscribe` no reasigna un endpoint que ya es de otro usuario.
-- `GET /caja/arqueo/hoy` crea el arqueo del día si falta (escritura en un GET).
-- `backup_service.py` y `reset_operativo.py` siguen filtrando auditoría por la org del usuario.
-- Revisar que el frontend oculte las acciones que el revisor ya no puede hacer.
-- Frontend: `react-router-dom` 6 (aviso moderado) → react-router 7 en un PR aparte.
-- Frontend: saltos mayores (Vite 8, React 19, Tailwind 4, Vitest 5) **armados y verificados, sin
-  subir**: falta decidir el soporte de navegadores viejos (Tailwind 4 exige iOS 16.4+).
+- El auditor tiene `manage_finance` en el backend (cheques, caja) pero las rutas `/cheques`,
+  `/caja` y `/pagos` del frontend piden `reconcile`, así que no las ve. Decidir si se le abren o
+  si se le saca el permiso en el backend.
+- Frontend: saltos mayores (Vite 8, React 19, Tailwind 4, Vitest 5) **aprobados por la operadora
+  (30/oct)**, van en el PR siguiente. Tailwind 4 exige iOS 16.4+ / Chrome 111+: dejan de verse bien
+  iPhone 7 y anteriores (aceptado).
 
 ### Tareas de la operadora
 - **GitGuardian**: marcar el incidente 38908774 (PR #261, `Perfil.tsx`) como falso positivo.

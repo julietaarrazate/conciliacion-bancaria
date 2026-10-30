@@ -105,7 +105,13 @@ permissions = {
 Notas (del propio código):
 - **superadmin** (`is_superadmin=True`): `require_permission` retorna el usuario antes de mirar la
   matriz → tiene **todos** los permisos, en **todas** las organizaciones. Es la cuenta de la
-  autora del sistema, sembrada en el arranque (`main.py`) con la password de `SUPERADMIN_PASSWORD`.
+  autora del sistema, sembrada en el arranque (`main.py`, `seed_superadmin`). `SUPERADMIN_PASSWORD`
+  se usa **solo al crearla** (si el usuario no existe); si ya existe, el arranque solo le asegura
+  los flags (superadmin, activa, rol admin) y respeta la contraseña cambiada desde `/perfil` (oct
+  2026; antes se re-hasheaba en cada deploy). Salida de emergencia: `SUPERADMIN_PASSWORD_RESET=1`
+  pisa la contraseña con la del env en el próximo arranque, marca `password_changed_at` (corta las
+  sesiones abiertas) y deja un WARNING en el log; si la contraseña ya coincide no la vuelve a
+  tocar. Sacar la variable después de usarla. Tests: `tests/test_seguridad_lote4.py`.
 - **contador**: opera (sube, concilia, finanzas, liquidaciones) y ve contabilidad + auditoría/
   actividad en solo lectura. **NO** tiene `delete_records` (no borra nada) ni `manage_users` (no
   ve Usuarios/Orgs/Papelera). Login directo, sin aprobación (desde ago 2026 — ver §6); la cuenta
@@ -121,11 +127,25 @@ cheques, caja, clientes incluido fusionar). Ahora piden el permiso que ya tiene 
 |-----------|---------|
 | `POST /extractos/upload`, `PATCH /extractos/{id}/renombrar`, `POST /extractos/{id}/agregar-um` | `upload_files` |
 | `PATCH /extractos/{id}/movimientos/{mov_id}`, `POST /planillas/{id}/revision/{row_id}/resolver`, `PATCH /planillas/rows/{id}`, `PUT /planillas/{id}/comision`, `POST /auditoria/patrones/importar-historico` | `reconcile` |
-| Clientes: `POST /clientes`, `PUT /clientes/{id}/renombrar`, `POST /clientes/{id}/fusionar`, `PUT /clientes/{id}/comision`, `POST /clientes/movimientos/{id}/acreditar`, `POST /clientes/{id}/share-link`; `POST /pagos/{id}/compartir` | `reconcile` |
-| Cheques (`POST /cheques`, `bulk-crear`, `portadores`, `PATCH /cheques/{id}`, `foto`, `importar`, `acreditar` uno y masivo, `rechazar`) y `PUT /caja/arqueo/hoy` | `manage_finance` |
+| Clientes: `POST /clientes`, `PUT /clientes/{id}/renombrar`, `PUT /clientes/{id}/comision`, `POST /clientes/movimientos/{id}/acreditar`, `POST /clientes/{id}/share-link`; `POST /pagos/{id}/compartir` | `reconcile` |
+| `POST /clientes/{id}/fusionar` (borra el cliente origen) | `reconcile` **y** `delete_records` |
+| Cheques (`POST /cheques`, `bulk-crear`, `portadores`, `PATCH /cheques/{id}`, `foto`, `importar`, `acreditar` uno y masivo, `rechazar`) y `PUT /caja/arqueo/hoy` (crea el arqueo del día si falta; el `GET` ya no escribe: devuelve el borrador con `id: null`, `guardado: false`) | `manage_finance` |
 | `DELETE /extractos` (limpieza masiva), `POST /contabilidad/reset-y-rebuild`, `POST /push/test`, `POST /push/setup` | `require_superadmin` (antes chequeo inline) |
 
-Efecto por rol: admin, operador y contador siguen pudiendo todo lo de antes. El auditor conserva
+Efecto por rol: admin, operador y contador siguen pudiendo todo lo de antes, salvo **fusionar
+clientes**: borra el cliente origen, así que desde el lote 4 (oct 2026) pide además
+`delete_records` y queda solo para admin y superadmin. Operador y contador lo pierden a propósito
+(acción destructiva; el contador "no borra nada").
+
+Frontend (lote 4, oct 2026): las páginas a las que el revisor llega (Conciliar/Dashboard,
+Extractos, Movimientos, Clientes, Estado de cuenta, Historial y el panel de planilla) ocultan o
+deshabilitan con `useAuthStore().hasPermission` las acciones que el backend le rechaza: subir
+extracto/planilla y agregar UM (`upload_files`), renombrar extracto (`upload_files`), archivar
+(`delete_records`), editar/acreditar movimientos, editar estado o asignar fila de planilla,
+re-conciliar, comisiones, crear/renombrar/acreditar cliente y compartir estado de cuenta
+(`reconcile`), fusionar (`reconcile` + `delete_records`) y borrar filas (`delete_records`).
+Cheques, Caja y Pagos ya estaban cerradas al revisor por ruta (`ProtectedRoute permission="reconcile"`).
+Test: `src/pages/__tests__/Movimientos.test.tsx`. El auditor conserva
 cheques y caja (`manage_finance`) pero ya no sube extractos ni edita clientes/planillas/movimientos.
 
 Sin permiso a propósito (lista `SIN_PERMISO_A_PROPOSITO` en `tests/test_seguridad_permisos.py`):
@@ -171,7 +191,12 @@ tabla con `organizacion_id` (la de una organización es su id), (3) la org activ
 contextvar `org_activa` que setea `get_current_user` después del override de `?org_id=`. Fuera de
 un request (schedulers) queda NULL. El listado y `/auditoria/insights` filtran por esa org; las
 filas NULL (las viejas, sin backfill) siguen filtrándose por la org del usuario, así el historial
-no desaparece. Tests: `tests/test_seguridad_permisos.py`.
+no desaparece. Tests: `tests/test_seguridad_permisos.py`. El criterio vive en un solo lugar,
+`services/auditoria.filtro_auditoria_de_orgs` (condición sin JOIN, sirve para listar y para
+borrar), y lo usan también el backup diario (`backup_service.export_org_backup`) y el reset
+operativo (`reset_operativo.reset_datos_operativos`): el backup de la org 1 ya no incluye lo que
+el superadmin hizo en la org 2, y resetear la org 2 borra esos logs (lote 4, oct 2026; tests en
+`tests/test_seguridad_lote4.py`).
 
 ---
 
@@ -317,7 +342,10 @@ escribe el usuario: se tratan como no confiables al generar o leer archivos.
 - **Frontend**: la foto compartida en `Clientes.tsx` se abre armando el `<img>` con la API del DOM,
   no con `document.write` de HTML interpolado.
 - **Push**: `DELETE /push/subscribe` borra solo la suscripción del usuario actual (antes cualquiera
-  que supiera el endpoint de otro dispositivo le cortaba las notificaciones).
+  que supiera el endpoint de otro dispositivo le cortaba las notificaciones). `POST /push/subscribe`
+  con un endpoint que ya es de **otro** usuario lo reasigna al usuario actual (status
+  `reassigned`): el endpoint es del navegador, y si ahora hay otra persona logueada ahí, el usuario
+  anterior no debe seguir recibiendo en ese dispositivo los avisos de su cuenta (lote 4, oct 2026).
 
 Tests: `tests/test_seguridad_entradas.py`.
 
@@ -402,10 +430,6 @@ Observabilidad: requests por encima de `SLOW_REQUEST_MS` (default 1500) se logue
   `PATCH /me` con email nuevo el token viejo deja de encontrar al usuario (401) y hay que volver a
   entrar. No es un agujero, pero es una molestia; se podría devolver un token nuevo como en
   `change-password`.
-- **Superadmin con contraseña del env**: el arranque (`main.py`, paso 8) re-hashea en cada deploy la
-  contraseña del superadmin desde `SUPERADMIN_PASSWORD` (pisa cualquier cambio hecho desde
-  `/perfil`) y no setea `password_changed_at`, así que un deploy no cierra sesiones. Se dejó así a
-  propósito.
 - **2FA solo para admin/superadmin**: `contador` y `operador` no tienen 2FA — login directo con
   email + contraseña únicamente. Es intencional según el código (contador ya no tiene tampoco el
   gate de aprobación que tuvo hasta ago 2026, ver §6), pero documentado aquí por las dudas: si se

@@ -86,7 +86,7 @@ const MovimientoRow = React.memo(function MovimientoRow({ m, canReconcile, canDe
       <td className="px-2 text-right font-mono text-gray-400 dark:text-gray-500">
         {m.saldo != null ? fmtARS(m.saldo) : '—'}
       </td>
-      <td className="px-2 cursor-pointer group/cliente" onClick={() => onAcreditar(m)} title="Clic para acreditar o editar">
+      <td className={`px-2 ${canReconcile ? 'cursor-pointer' : ''} group/cliente`} onClick={canReconcile ? () => onAcreditar(m) : undefined} title={canReconcile ? 'Clic para acreditar o editar' : undefined}>
         {m.monto < 0 && !(m.cliente_acreditado && m.cliente_acreditado.toLowerCase() !== 'no identificado')
           ? (m.egreso_id
               ? <span className="pill bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded-full text-[10px] font-medium"
@@ -107,14 +107,16 @@ const MovimientoRow = React.memo(function MovimientoRow({ m, canReconcile, canDe
               {m.cliente_acreditado}
               <span className="opacity-0 group-hover/cliente:opacity-50 text-[9px]">✏</span>
             </span>
-          : <span className="text-ml-blue dark:text-blue-400 text-[10px] font-medium group-hover/cliente:underline">＋ Acreditar</span>}
+          : canReconcile
+            ? <span className="text-ml-blue dark:text-blue-400 text-[10px] font-medium group-hover/cliente:underline">＋ Acreditar</span>
+            : <span className="text-gray-400 text-[10px]">—</span>}
       </td>
-      <td className="px-2 whitespace-nowrap text-gray-500 dark:text-gray-400 cursor-pointer hover:text-ml-blue dark:hover:text-blue-400 transition-colors" onClick={() => onAcreditar(m)} title="Clic para editar acreditación">
+      <td className={`px-2 whitespace-nowrap text-gray-500 dark:text-gray-400 ${canReconcile ? 'cursor-pointer hover:text-ml-blue dark:hover:text-blue-400' : ''} transition-colors`} onClick={canReconcile ? () => onAcreditar(m) : undefined} title={canReconcile ? 'Clic para editar acreditación' : undefined}>
         {fmtDate(m.fecha_acred)}
       </td>
       <td className="px-1 text-center">
         <div className="flex gap-1 justify-center">
-          <button onClick={() => onEditar(m)} title="Editar datos (titular, importe, fecha)" className="text-gray-400 hover:text-ml-blue dark:hover:text-blue-400 transition-colors">✏️</button>
+          {canReconcile && <button onClick={() => onEditar(m)} title="Editar datos (titular, importe, fecha)" className="text-gray-400 hover:text-ml-blue dark:hover:text-blue-400 transition-colors">✏️</button>}
           {canDelete && <button onClick={() => onBorrar(m)} title="Borrar movimiento" className="text-gray-400 hover:text-red-500 transition-colors">🗑</button>}
         </div>
       </td>
@@ -140,6 +142,8 @@ export const Movimientos: React.FC = () => {
   const [searchParams] = useSearchParams()
   const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
   const canReconcile = useAuthStore(s => s.hasPermission('reconcile'))
+  // El revisor es de solo lectura: el backend le devuelve 403 al agregar UM o editar.
+  const canUpload = useAuthStore(s => s.hasPermission('upload_files'))
   const { activeOrgId } = useOrgStore()
   const [extractos, setExtractos] = useState<ExtractoListItem[]>([])
   const [extractoId, setExtractoId] = useState<number | null>(null)
@@ -405,7 +409,7 @@ export const Movimientos: React.FC = () => {
             ))}
           </select>
         </div>
-        <div className="flex items-center gap-1">
+        {canUpload && <div className="flex items-center gap-1">
           <select
             value={modoAsiento}
             onChange={e => setModoAsiento(e.target.value as 'agrupado' | 'individual')}
@@ -420,7 +424,7 @@ export const Movimientos: React.FC = () => {
             {umLoading ? '⏳' : '📎'} {umLoading ? 'Procesando...' : 'Agregar UM'}
             <input ref={umRef} type="file" accept="*/*" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
           </label>
-        </div>
+        </div>}
         {extractoId && umCount > 0 && canDelete && (
           <button
             onClick={async () => {

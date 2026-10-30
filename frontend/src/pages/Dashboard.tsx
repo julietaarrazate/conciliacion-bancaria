@@ -771,13 +771,19 @@ export const Dashboard: React.FC = () => {
             </p>
           </div>
 
-          <FileUpload
-            onFileSelected={handleUploadExtraco}
-            accept=".xlsx,.xls,.csv,.pdf,application/pdf"
-            label="Subir extracto (.xlsx, .xls, .csv o PDF)"
-            loading={accionCarga === 'extracto'}
-            loadingLabel="Subiendo extracto..."
-          />
+          {canUpload ? (
+            <FileUpload
+              onFileSelected={handleUploadExtraco}
+              accept=".xlsx,.xls,.csv,.pdf,application/pdf"
+              label="Subir extracto (.xlsx, .xls, .csv o PDF)"
+              loading={accionCarga === 'extracto'}
+              loadingLabel="Subiendo extracto..."
+            />
+          ) : (
+            <p className="text-xs text-ml-text-soft dark:text-gray-400">
+              Tu usuario es de solo lectura: no puede subir extractos ni planillas.
+            </p>
+          )}
 
           {extractoId && (
             <>
@@ -808,7 +814,7 @@ export const Dashboard: React.FC = () => {
                 </p>
                 <div className="flex gap-2 items-center">
                   <div className="flex-1">
-                    <FileUpload onFileSelected={(f) => handleUploadUM(f)} label="+ Agregar UM" loading={accionCarga === 'um'} loadingLabel="Agregando UM..." />
+                    {canUpload && <FileUpload onFileSelected={(f) => handleUploadUM(f)} label="+ Agregar UM" loading={accionCarga === 'um'} loadingLabel="Agregando UM..." />}
                   </div>
                   <button
                     onClick={async () => {
@@ -925,12 +931,12 @@ export const Dashboard: React.FC = () => {
             </p>
           </div>
 
-          <FileUpload
+          {canUpload && <FileUpload
             onFileSelected={handleFileSelected}
             label={!extractoId ? 'Cargá primero un extracto (Paso 1)' : 'Subir planilla (.xlsx, .xls, .csv)'}
             loading={accionCarga === 'planilla'}
             loadingLabel="Subiendo y conciliando... no vuelvas a cargar el archivo"
-          />
+          />}
           {!clienteNombre.trim() && extractoId && (
             <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
               ⚠ Completá el nombre del cliente antes de subir
@@ -1121,11 +1127,11 @@ export const Dashboard: React.FC = () => {
               <p className="text-xs text-gray-400 dark:text-zinc-600 pb-2">Todas las planillas se acreditarán con esta fecha</p>
             </div>
             <div className="flex flex-col gap-2">
-              <FileUpload
+              {canUpload && <FileUpload
                 multiple
                 onFilesSelected={handleBulkFilesArray}
                 label="Seleccionar planillas (múltiples)"
-              />
+              />}
               <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
                 <input
                   type="checkbox"

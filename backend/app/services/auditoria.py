@@ -17,6 +17,28 @@ org_activa: ContextVar[Optional[int]] = ContextVar("auditoria_org_activa", defau
 _MODELOS_POR_TABLA: dict = {}
 
 
+def filtro_auditoria_de_orgs(org_ids):
+    """Condición SQL para los logs de auditoría de las orgs `org_ids` (un id o una lista).
+
+    Los logs marcados con una de esas orgs y, de los viejos sin org (NULL, antes de la
+    migración 035), los hechos por usuarios de esas orgs — el criterio de siempre, para que
+    el historial no desaparezca. Un log marcado con otra org no entra aunque lo haya hecho
+    un usuario de estas (p. ej. el superadmin trabajando en otra organización).
+
+    Es una condición sin JOIN (subconsulta de usuarios), así sirve igual para listar,
+    contar y para `query.delete()` (backup, reset operativo, /auditoria).
+    """
+    from sqlalchemy import and_, or_, select
+    from app.models.user import User
+
+    orgs = [org_ids] if isinstance(org_ids, int) else list(org_ids)
+    usuarios_de_orgs = select(User.id).where(User.organizacion_id.in_(orgs))
+    return or_(
+        AuditoriaLog.organizacion_id.in_(orgs),
+        and_(AuditoriaLog.organizacion_id.is_(None), AuditoriaLog.usuario_id.in_(usuarios_de_orgs)),
+    )
+
+
 def _modelo_de_tabla(tabla: str):
     """Clase del modelo cuyo __tablename__ es `tabla` (None si `tabla` es un nombre propio)."""
     if not _MODELOS_POR_TABLA:

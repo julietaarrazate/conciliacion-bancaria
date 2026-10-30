@@ -11,9 +11,13 @@ const api = vi.hoisted(() => ({
   updateMovimiento: vi.fn(),
 }))
 
+// Permisos del usuario del test: null = todos (admin); una lista = solo esos.
+const auth = vi.hoisted(() => ({ permisos: null as string[] | null }))
+
 vi.mock('@/services/api', () => ({ apiClient: api }))
 vi.mock('@/store/auth', () => ({
-  useAuthStore: (sel: (s: { hasPermission: () => boolean }) => unknown) => sel({ hasPermission: () => true }),
+  useAuthStore: (sel: (s: { hasPermission: (p: string) => boolean }) => unknown) =>
+    sel({ hasPermission: (p: string) => auth.permisos === null || auth.permisos.includes(p) }),
 }))
 vi.mock('@/store/org', () => ({ useOrgStore: () => ({ activeOrgId: null }) }))
 vi.mock('@/store/confirm', () => ({ confirmDialog: () => Promise.resolve(true) }))
@@ -30,6 +34,7 @@ const renderPage = () => render(<MemoryRouter><Movimientos /></MemoryRouter>)
 describe('Movimientos', () => {
   beforeEach(() => {
     Object.values(api).forEach(f => f.mockReset())
+    auth.permisos = null
     api.listExtractos.mockResolvedValue({ total: 1, items: [{ id: 7, nombre_archivo: 'ext.xlsx', total_movimientos: 2 }] })
     api.getMovimientos.mockResolvedValue({ extracto_id: 7, total: 2, items: movs })
     api.getResumenExtracto.mockResolvedValue(null)
@@ -51,5 +56,25 @@ describe('Movimientos', () => {
     await waitFor(() => expect(api.deleteMovimiento).toHaveBeenCalledWith(7, 1))
     await waitFor(() => expect(screen.queryByText('GARCIA LOPEZ')).not.toBeInTheDocument())
     expect(api.getResumenExtracto).toHaveBeenCalledTimes(2)
+  })
+
+  it('al revisor (solo lectura) no le muestra editar, borrar, acreditar ni agregar UM', async () => {
+    auth.permisos = ['view_results', 'view_accounting']
+    renderPage()
+    expect(await screen.findByText('GARCIA LOPEZ')).toBeInTheDocument()
+    expect(screen.queryByTitle('Editar datos (titular, importe, fecha)')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Borrar movimiento')).not.toBeInTheDocument()
+    expect(screen.queryByText('＋ Acreditar')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Agregar UM/)).not.toBeInTheDocument()
+  })
+
+  it('al operador le muestra editar, acreditar y agregar UM (sin borrar)', async () => {
+    auth.permisos = ['upload_files', 'reconcile', 'manage_finance', 'view_accounting']
+    renderPage()
+    await screen.findByText('GARCIA LOPEZ')
+    expect(screen.getAllByTitle('Editar datos (titular, importe, fecha)')).toHaveLength(2)
+    expect(screen.getAllByText('＋ Acreditar')).toHaveLength(2)
+    expect(screen.getByText(/Agregar UM/)).toBeInTheDocument()
+    expect(screen.queryByTitle('Borrar movimiento')).not.toBeInTheDocument()
   })
 })

@@ -24,6 +24,7 @@ from app.models.cliente import Cliente
 from app.models.extracto import ExtractoBancario
 from app.models.planilla import Planilla
 from app.models.auditoria import AuditoriaLog
+from app.services.auditoria import filtro_auditoria_de_orgs
 from app.models.patron_aprendido import PatronAprendido
 from app.models.extracto_pdf import MoldeExtractoPdf
 from app.models.liquidacion import Liquidacion, CierrePeriodo
@@ -152,11 +153,11 @@ def export_org_backup(db: Session, org_id: int) -> Dict[str, Any]:
         _row_to_dict(m) for m in db.query(MoldeExtractoPdf).filter(MoldeExtractoPdf.organizacion_id == org_id).all()
     ]
 
-    # Auditoría — limitar a último año para no inflar el backup
+    # Auditoría — limitar a último año para no inflar el backup. Por la org del log
+    # (no por la del usuario): lo que hizo el superadmin en otra org no entra acá.
     auditoria = (
         db.query(AuditoriaLog)
-        .join(User, AuditoriaLog.usuario_id == User.id)
-        .filter(User.organizacion_id == org_id)
+        .filter(filtro_auditoria_de_orgs(org_id))
         .order_by(AuditoriaLog.timestamp.desc())
         .limit(50000)
         .all()

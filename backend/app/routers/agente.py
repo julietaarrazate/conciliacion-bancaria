@@ -171,7 +171,7 @@ def _consultar_saldo_caja(db, org_id):
         ArqueoDiario.fecha == hoy_art()
     ).first()
     if not arqueo:
-        return {"error": "No hay arqueo del día de hoy. Abrí la Caja para crearlo."}
+        return {"error": "Todavía no se guardó el arqueo de hoy. Se crea al cargarlo en la Caja o al registrar un pago en efectivo."}
     return {
         "fecha": str(arqueo.fecha),
         "saldo_inicial": float(arqueo.saldo_inicial or 0),

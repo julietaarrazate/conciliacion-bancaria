@@ -12,6 +12,8 @@ import { localIsoDate, isoHaceNDias } from '@/utils/fecha'
 export const Historial: React.FC = () => {
   const { activeOrgId } = useOrgStore()
   const canDelete = useAuthStore(s => s.hasPermission('delete_records'))
+  // Comisión y re-conciliar piden `reconcile`: el revisor solo mira.
+  const canReconcile = useAuthStore(s => s.hasPermission('reconcile'))
   const [items, setItems] = useState<PlanillaHistorialItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
@@ -203,9 +205,10 @@ export const Historial: React.FC = () => {
                       </div>
                     ) : (
                       <button
+                        disabled={!canReconcile}
                         onClick={() => { setEditComId(it.id); setEditComVal(it.porcentaje_comision != null ? String(it.porcentaje_comision) : '') }}
                         className={`px-2 py-1 text-[11px] rounded font-medium transition-colors ${it.porcentaje_comision != null ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200' : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-200'}`}
-                        title="% comisión — click para editar"
+                        title={canReconcile ? '% comisión — click para editar' : '% comisión'}
                       >
                         {it.porcentaje_comision != null ? `${it.porcentaje_comision}% comi` : 'comi —'}
                       </button>
@@ -237,15 +240,15 @@ export const Historial: React.FC = () => {
                     onClick={() => setPanelId(it.id)}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium active:scale-95"
                   >
-                    👁️ Ver / Editar
+                    👁️ {canReconcile ? 'Ver / Editar' : 'Ver'}
                   </button>
-                  <button
+                  {canReconcile && <button
                     onClick={() => { setRecFecha(localIsoDate()); setRecError(''); setRecModal(it) }}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 font-medium active:scale-95"
                     title="Re-conciliar: busca movimientos nuevos para las filas que no estaban"
                   >
                     🔄 Re-conciliar
-                  </button>
+                  </button>}
                   <button
                     onClick={() => handleGuardar(it.id, it.cliente_nombre)}
                     disabled={savingId === it.id}
