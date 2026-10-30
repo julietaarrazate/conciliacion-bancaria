@@ -174,7 +174,13 @@ Reglas:
   Con saldo por fila, los renglones del final sin saldo se descartan como pie; en orden
   descendente, solo si todas las filas de arriba traen saldo.
 - Banco: el membrete (arriba de la página 1 y líneas repetidas en todas las hojas) gana a las
-  descripciones que nombran otros bancos.
+  descripciones que nombran otros bancos. Ese banco "por nombre" entra en la firma del molde.
+  El banco que se muestra y se guarda sale de `services/banco_identificacion.py` (misma regla
+  que el Excel, ver BUSINESS_RULES §2ter): CBU/CVU del membrete o del nombre del archivo (aunque
+  el PDF no nombre al banco) → CUIT del banco → conceptos típicos → banco del molde → nombre. Lo
+  devuelve el lector en `banco_deteccion` y la revisión muestra "Banco detectado: X (motivo)" con
+  un desplegable. El banco elegido al confirmar (`banco_clave` en el body) se guarda en el molde
+  (`banco_clave` + `layout.banco_confirmado`) y la próxima vez sale "confirmado antes".
 - Renglones con fecha e importes ilegibles (columnas pegadas): alerta y la lectura no cuenta
   como buena.
 
@@ -192,8 +198,6 @@ Reglas:
   `test_extracto_pdf_casos_dificiles.py`, con datos inventados que copian el formato (el PDF
   real nunca entra al repo). Probado hasta ahora con un resumen de movimientos de home banking
   real (columna Débito/Crédito, cuadro de saldos de otra fecha).
-- Un PDF de home banking que no nombra al banco en ninguna parte queda como genérico (se lee
-  igual; el banco no se puede deducir solo del CBU sin una tabla de códigos de entidad).
 - Listados monoespaciados con columnas a menos de un espacio entre sí (fecha pegada al número
   de comprobante): la fecha no se reconoce y la fila queda "Sin fecha" (cierra igual, se ve).
 - Columnas de importes que se superponen físicamente no se pueden separar: la lectura no cierra

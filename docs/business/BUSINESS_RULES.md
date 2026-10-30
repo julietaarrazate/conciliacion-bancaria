@@ -475,6 +475,39 @@ de cada organización (aislamiento por `organizacion_id`).
 Nota: la huella (`extracto_import.fingerprint`) suma los importes en float a propósito, para que
 siga dando igual que cuando el parser devolvía float (re-subir un extracto ya cargado lo reconoce).
 
+**Qué banco es** (oct 2026, `services/banco_identificacion.py`, la misma regla para Excel/CSV y PDF).
+Señales, de la más fuerte a la más débil:
+1. **CBU/CVU de la cuenta** en el encabezado (filas de arriba de la tabla), las propiedades del
+   libro (título, asunto, descripción) o el **nombre del archivo**. Se valida con los dos dígitos
+   verificadores (BCRA) y los 3 primeros dígitos son el código de entidad del BCRA
+   (`BANCOS_POR_CODIGO`, fuente: Com. "A" 8367 del 12/12/2025). Un CVU que empieza con `0000003`
+   es Mercado Pago. Motivo: "por el CBU de la cuenta" / "por el CVU de la cuenta".
+2. **CUIT del banco** en el encabezado (`CUIT_BANCOS`, verificados contra el BCRA).
+3. **Formato del archivo**: títulos de columnas y conceptos típicos (`ENCABEZADOS_TIPICOS`,
+   `CONCEPTOS_TIPICOS`; hoy Macro — Orden/Fecha/Mes/Titular/Importe/Saldo o 2+ conceptos
+   "ING TRANSF:" — y Mercado Pago por las columnas del reporte de liberaciones).
+4. **Archivo igual ya subido**: el banco guardado en la plantilla de ese formato.
+5. **Nombre** en el encabezado (el detector de siempre, ahora solo sobre el membrete y los
+   títulos, no sobre los movimientos) o en el nombre del archivo. Nunca le gana a un CBU.
+
+**Confirmado antes**: si la persona eligió el banco en la pantalla (lo cambió, o el sistema no
+estaba seguro), se guarda en la plantilla (`banco_clave` + `mapeo.banco_confirmado`, sin columna
+nueva) y la próxima vez **le gana a todo**, avisando si el archivo dice otra cosa. Aceptar un banco
+que salió con seguridad (CBU) no crea plantilla. Es por organización.
+
+Resultado `banco_deteccion` en `/preview`: `{banco_clave, nombre, confianza, motivo, origen,
+conflicto, pedir_confirmacion}`. Si las señales no coinciden gana la más fuerte y `conflicto` lo
+dice; sin nada → "generico", confianza 0 y la pantalla pide elegirlo. El Dashboard abre la pantalla
+de columnas también cuando `pedir_confirmacion` (y no se escribió un banco a mano arriba), con
+"Banco detectado: X (motivo)" y un desplegable (`GET /extractos/bancos`). `/upload` acepta
+`banco_clave` (form): manda sobre lo detectado; "generico" guarda "Otro banco" (o el nombre escrito
+a mano), nunca el "Banco Macro" por defecto. Las CBU/CUIT de los conceptos de los movimientos no
+cuentan (son de terceros).
+
+La **firma** de plantillas y moldes sigue usando el banco por nombre de siempre
+(`detectar_banco_filas` / `extracto_pdf.bancos`): así los formatos ya guardados se siguen
+reconociendo.
+
 ### 2bis. Extractos en PDF (v3.31)
 
 Detalle completo en [EXTRACTOS_PDF.md](./EXTRACTOS_PDF.md). Lo que toca a estas reglas:

@@ -100,7 +100,7 @@ class LectorFalso:
         self.error_ia: Exception | None = None
         self.usar_moldes = False
 
-    def __call__(self, contenido, *, moldes=(), usar_ia=True, forzar_ia=False, hoy=None):
+    def __call__(self, contenido, *, moldes=(), usar_ia=True, forzar_ia=False, hoy=None, nombre_archivo=None):
         self.llamadas.append({"usar_ia": usar_ia, "forzar_ia": forzar_ia, "moldes": list(moldes), "hoy": hoy})
         if self.error:
             raise self.error

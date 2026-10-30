@@ -23,10 +23,14 @@ from app.services.excel_parser import parsear_extracto_bancario
 from app.services.extracto_mapper import MapeoInvalido, analizar_extracto, serializar_analisis
 from app.services.extracto_plantillas import guardar_plantilla, marcar_uso, plantillas_de_org
 from app.services.extracto_merger import mergear_movimientos
+from app.services.banco_identificacion import (
+    GENERICO as _GENERICO, clave_valida as _clave_valida, eleccion_confirmada, lista_bancos,
+)
 # Helpers de persistencia compartidos con el importador de PDF (mismos nombres que
 # tenían acá antes de moverse a extracto_import).
 from app.services.extracto_import import (  # noqa: F401
     _BANCO_NOMBRE,
+    nombre_banco as _nombre_banco,
     resolver_banco as _resolver_banco,
     fingerprint as _fingerprint,
     crear_extracto_con_movimientos,
@@ -141,20 +145,47 @@ def _exigir_mapeo(analisis: dict) -> None:
         })
 
 
-def _aprender_plantilla(db: Session, analisis: dict, org_id: int, usuario_id: int) -> None:
+def _leer_banco_clave(banco_clave: Optional[str]) -> Optional[str]:
+    """Banco que eligió la persona en la pantalla (clave interna) o None."""
+    clave = (banco_clave or "").strip().lower()[:40]
+    if not clave:
+        return None
+    if not _clave_valida(clave):
+        raise HTTPException(400, "El banco elegido no es válido.")
+    return clave
+
+
+def _banco_confirmado(analisis: dict, elegido: Optional[str]) -> bool:
+    """La persona decidió el banco: lo cambió, o el sistema no estaba seguro y lo
+    eligió/aceptó en la pantalla. Solo ahí se recuerda como "confirmado antes"."""
+    return eleccion_confirmada(analisis.get("banco_deteccion"), analisis.get("banco_clave"), elegido)
+
+
+def _aprender_plantilla(db: Session, analisis: dict, org_id: int, usuario_id: int,
+                        banco_elegido: Optional[str] = None) -> None:
     """Después de importar: guarda el mapeo confirmado (o suma un uso a la plantilla
-    que se aplicó sola). Nunca frena la importación."""
+    que se aplicó sola) y, si la persona eligió el banco, lo recuerda para ese
+    formato. Nunca frena la importación."""
     try:
-        if analisis["origen"] == "manual":
+        confirmado = _banco_confirmado(analisis, banco_elegido)
+        banco = banco_elegido if confirmado else analisis["banco_clave"]
+        if analisis["origen"] == "manual" or (confirmado and analisis["origen"] in ("plantilla", "heuristica")):
             guardar_plantilla(
-                db, org_id=org_id, firma=analisis["firma"], banco_clave=analisis["banco_clave"],
+                db, org_id=org_id, firma=analisis["firma"], banco_clave=banco,
                 mapeo=analisis["mapeo"], encabezados=analisis["encabezados"], usuario_id=usuario_id,
+                banco_confirmado=confirmado,
             )
         elif analisis["origen"] == "plantilla":
             marcar_uso(db, analisis["plantilla_id"], org_id)
     except Exception as e:  # pragma: no cover - defensivo
         db.rollback()
         logger.error("no se pudo guardar la plantilla del extracto: %s", e)
+
+
+@router.get("/bancos")
+def bancos_para_elegir(current_user: User = Depends(get_current_user)):
+    """Bancos que reconoce Cuadra (para el desplegable "Banco detectado")."""
+    return {"items": lista_bancos()}
 
 
 @router.post("/preview")
@@ -174,7 +205,8 @@ async def preview_extracto(request: Request,
     tmp_path = await _archivo_temporal(file)
     try:
         plantillas = None if mapeo_dict else plantillas_de_org(db, org_destino)
-        res = analizar_extracto(tmp_path, plantillas=plantillas, mapeo=mapeo_dict)
+        res = analizar_extracto(tmp_path, plantillas=plantillas, mapeo=mapeo_dict,
+                                nombre_archivo=file.filename)
     except MapeoInvalido as e:
         raise HTTPException(400, str(e))
     except HTTPException:
@@ -195,6 +227,7 @@ async def upload_extracto(request: Request,
                           banco: str = Query("Banco Macro"),
                           org_id: Optional[int] = Query(None),
                           mapeo: Optional[str] = Form(None),
+                          banco_clave: Optional[str] = Form(None),
                           db: Session = Depends(get_db),
                           current_user: User = Depends(require_permission("upload_files"))):
     # Org destino: la activa seleccionada por el usuario (si tiene permiso para
@@ -205,6 +238,7 @@ async def upload_extracto(request: Request,
     # de un upload previo y tirar un error genérico de "procesar el archivo".
     org_destino = org_id if (org_id and can_switch_org(current_user, org_id)) else (current_user.organizacion_id or 1)
     mapeo_dict = _leer_mapeo(mapeo)
+    banco_elegido = _leer_banco_clave(banco_clave)
     tmp_path = None
     try:
         tmp_path = await _archivo_temporal(file)
@@ -215,6 +249,7 @@ async def upload_extracto(request: Request,
                 tmp_path,
                 plantillas=None if mapeo_dict else plantillas_de_org(db, org_destino),
                 mapeo=mapeo_dict,
+                nombre_archivo=file.filename,
             )
         except MapeoInvalido as e:
             raise HTTPException(400, str(e))
@@ -233,7 +268,14 @@ async def upload_extracto(request: Request,
                 "El formato puede no coincidir con el esperado — intentá exportarlo nuevamente desde el banco."
             )
         banco_detectado = parsed.get("banco_detectado", "generico")
-        banco_final = _resolver_banco(banco, banco_detectado)
+        if banco_elegido and banco_elegido != _GENERICO:
+            # Lo eligió la persona en la pantalla de revisión: manda.
+            banco_final = _nombre_banco(banco_elegido)
+        elif banco_elegido == _GENERICO:
+            # "Otro banco": el nombre escrito a mano si hay uno, nunca el Macro por defecto.
+            banco_final = banco if banco.strip() and banco != "Banco Macro" else "Otro banco"
+        else:
+            banco_final = _resolver_banco(banco, banco_detectado)
         fp = _fingerprint(movs)
 
         # Si ya existe un extracto identico (fingerprint match) → upsert de acreditados:
@@ -272,15 +314,18 @@ async def upload_extracto(request: Request,
                     actualizados += 1
                 if fecha_nueva and not m.fecha_acred:
                     m.fecha_acred = fecha_nueva
-            # Actualizar banco si el detectado es más específico que el guardado
-            if banco_final and banco_final != "Banco Macro" and not existente.banco:
+            # Actualizar banco si el detectado es más específico que el guardado,
+            # o si la persona lo eligió en la pantalla.
+            if banco_elegido and banco_elegido != _GENERICO and banco_final:
+                existente.banco = banco_final
+            elif banco_final and banco_final != "Banco Macro" and not existente.banco:
                 existente.banco = banco_final
             existente.aviso_saldos = analisis["aviso_saldos"]
             db.commit()
             db.refresh(existente)
             registrar_log(db, current_user.id, "extractos_bancarios", existente.id, "UPSERT_ACRED",
                           {"archivo": file.filename, "actualizados": actualizados})
-            _aprender_plantilla(db, analisis, org_destino, current_user.id)
+            _aprender_plantilla(db, analisis, org_destino, current_user.id, banco_elegido)
             db.refresh(existente)
             return existente
 
@@ -293,8 +338,10 @@ async def upload_extracto(request: Request,
             db.commit()
         registrar_log(db, current_user.id, "extractos_bancarios", extracto.id, "INSERT",
                       {"nombre_archivo": file.filename, "movimientos": len(movs),
-                       "lectura": analisis["origen"], "aviso_saldos": analisis["aviso_saldos"]})
-        _aprender_plantilla(db, analisis, org_destino, current_user.id)
+                       "lectura": analisis["origen"], "aviso_saldos": analisis["aviso_saldos"],
+                       "banco": banco_final,
+                       "banco_motivo": (analisis.get("banco_deteccion") or {}).get("motivo")})
+        _aprender_plantilla(db, analisis, org_destino, current_user.id, banco_elegido)
         # Asiento del extracto principal: uno por día de movimientos (Banco Macro
         # contra las transitorias 2-1-1-1 / 2-1-1-2). Los UM que se agreguen
         # después los registra um_lote, así que no se duplican. Tolerante a

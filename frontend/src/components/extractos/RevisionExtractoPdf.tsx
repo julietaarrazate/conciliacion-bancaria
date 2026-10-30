@@ -15,6 +15,7 @@ import {
   type FilaForm,
 } from './filasExtracto'
 import { FilaMovimiento, GRILLA_FILA, type CampoFila } from './FilaMovimiento'
+import { BancoDetectado, OTRO_BANCO, bancoInicial } from './BancoDetectado'
 
 const PAGINA = 100
 
@@ -102,7 +103,10 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
     const c = cuadreServidor && !cuadreServidor.saldo_final_inferido ? aCentavos(cuadreServidor.saldo_final) : null
     return c == null ? '' : formatearSaldoInput(c)
   })
-  const [banco, setBanco] = useState(borrador.banco || bancoPorDefecto || '')
+  const deteccion = borrador.banco_deteccion
+  const [bancoClave, setBancoClave] = useState(() => bancoInicial(deteccion))
+  const [banco, setBanco] = useState(() =>
+    deteccion && bancoInicial(deteccion) === '' ? '' : (borrador.banco || bancoPorDefecto || ''))
   const [nombre, setNombre] = useState(() => sinExtension(borrador.nombre_archivo))
   const [nombreTocado, setNombreTocado] = useState(false)
   const [destino, setDestino] = useState<'nuevo' | 'existente'>(puedeAgregar ? 'existente' : 'nuevo')
@@ -243,6 +247,10 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
   }
 
   const enviar = async (sinCuadre: boolean): Promise<void> => {
+    if (deteccion && bancoClave === '') {
+      setErrorGuardar('Elegí de qué banco es el extracto (o "Otro banco").')
+      return
+    }
     setGuardando(true)
     setErrorGuardar('')
     let resultado: ConfirmarExtractoPdfResult | null = null
@@ -250,6 +258,7 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
       const destinoFinal = puedeAgregar ? destino : 'nuevo'
       const payload = armarPayload({
         filas, evaluacion, saldoInicial, saldoFinal, banco,
+        bancoClave: deteccion ? bancoClave : null,
         // El nombre solo cuenta si se crea un extracto nuevo (en uno existente no se renombra).
         nombre: nombreTocado && destinoFinal === 'nuevo' ? nombre : null,
         destino: destinoFinal,
@@ -371,13 +380,30 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls} htmlFor={`${uid}-banco`}>Banco</label>
-              <input
-                id={`${uid}-banco`} className="input-field" value={banco} placeholder="Ej: Banco Galicia"
-                onChange={e => { setBanco(e.target.value); onDirty() }}
-              />
-            </div>
+            {deteccion && (
+              <div className="sm:col-span-2">
+                <BancoDetectado
+                  deteccion={deteccion}
+                  value={bancoClave}
+                  onChange={(clave, nombreBanco) => {
+                    setBancoClave(clave)
+                    setBanco(clave === OTRO_BANCO ? '' : nombreBanco ?? '')
+                    onDirty()
+                  }}
+                />
+              </div>
+            )}
+            {(!deteccion || bancoClave === OTRO_BANCO) && (
+              <div>
+                <label className={labelCls} htmlFor={`${uid}-banco`}>
+                  {deteccion ? 'Nombre del banco' : 'Banco'}
+                </label>
+                <input
+                  id={`${uid}-banco`} className="input-field" value={banco} placeholder="Ej: Banco Galicia"
+                  onChange={e => { setBanco(e.target.value); onDirty() }}
+                />
+              </div>
+            )}
             <div>
               <label className={labelCls} htmlFor={`${uid}-nombre`}>Nombre del extracto</label>
               <input

@@ -168,6 +168,9 @@ Tolerancia fecha: 5 días · UM deduplicación: (orden, monto) o (fecha, monto, 
 Bancos soportados (16, `detectar_banco` en `excel_parser.py`): Macro, BBVA, Santander, Galicia,
 ICBC, Nación, Provincia, Ciudad, HSBC, Mercado Pago (por headers, no por texto), Credicoop,
 Supervielle, Patagonia, Bancor, Rioja, La Pampa — más genérico como fallback.
+**Qué banco es cada archivo** (Excel/CSV y PDF, oct 2026): `services/banco_identificacion.py` —
+CBU/CVU de la cuenta (tabla de códigos de entidad del BCRA, ~60 bancos) → CUIT del banco → formato
+→ banco confirmado antes por la org → nombre. Ver BUSINESS_RULES §2ter.
 
 **Extractos en PDF** (v3.31): además del Excel, el extracto se puede subir en PDF. Lo lee un lector
 propio sin IA (`services/extracto_pdf/`) con formatos aprendidos por organización; Gemini solo como
@@ -188,9 +191,9 @@ IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ con
 
 ## Multi-tenant
 
-- **Organización ≠ cliente.** Organización = empresa que usa Cuadra (ej. Caneland): sus impuestos
+- **Organización ≠ cliente.** Organización = empresa que usa Cuadra (ej. un estudio o una distribuidora): sus impuestos
   (IVA, IIBB, Monotributo, Sueldos) y vencimientos son de la organización. Clientes = los clientes
-  de esa organización (Tucu, Green, Griselda…), que le pagan y mandan planillas para conciliar;
+  de esa organización (las empresas y personas que le pagan), que le pagan y mandan planillas para conciliar;
   Cuadra no les calcula impuestos. Quien maneja varias organizaciones: el superadmin y contadores
   con `allowed_org_ids` (`utils/orgs.manejaVariasOrgs` en el frontend).
 - Organización A = `organizacion_id=1` (NUNCA modificar — solo cambios aditivos)

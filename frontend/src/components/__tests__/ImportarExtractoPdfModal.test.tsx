@@ -184,6 +184,7 @@ describe('ImportarExtractoPdfModal', () => {
       saldo_inicial: '1000.00',
       saldo_final: '1400.00',
       banco: 'Galicia',
+      banco_clave: null,
       nombre: null,
       destino: 'nuevo',
       extracto_id: null,

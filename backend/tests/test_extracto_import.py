@@ -48,7 +48,7 @@ def test_resolver_banco_y_nombre():
     assert ei.resolver_banco("Banco Macro", "galicia") == "Galicia"
     assert ei.resolver_banco("Mi banco", "galicia") == "Mi banco"
     assert ei.resolver_banco("Banco Macro", "generico") == "Banco Macro"
-    assert ei.resolver_banco("Banco Macro", "mercadopago") == "Mercadopago"
+    assert ei.resolver_banco("Banco Macro", "mercadopago") == "Mercado Pago"
     assert ei.nombre_banco("provincia") == "Bapro"
     assert ei.nombre_banco("generico") is None and ei.nombre_banco(None) is None
 

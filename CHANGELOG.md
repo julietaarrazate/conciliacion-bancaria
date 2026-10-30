@@ -5,6 +5,29 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Extractos (oct 2026) — reconocer el banco de cada archivo
+
+Antes el banco salía solo del nombre escrito en las primeras filas (o en el membrete del PDF): un
+archivo que no lo nombraba quedaba "genérico" y se guardaba como "Banco Macro". Ahora un servicio
+único (`services/banco_identificacion.py`) lo usa el Excel/CSV y el PDF:
+- **CBU/CVU** de la cuenta (encabezado, propiedades del Excel, nombre del archivo) validado con sus
+  dígitos verificadores; código de entidad → banco con una tabla del BCRA (Com. "A" 8367, 60
+  bancos). CVU `0000003…` = Mercado Pago. **Un PDF que no nombra al banco ya se reconoce por el
+  CBU.**
+- **CUIT del banco** (14 verificados contra el BCRA), **formato del archivo** (Macro, Mercado Pago),
+  **banco confirmado antes** para ese formato y, por último, el **nombre**.
+- El preview y la revisión del PDF muestran "Banco detectado: X (motivo)" con un desplegable; si
+  no se reconoce o las señales chocan, se pide elegirlo. Lo elegido se recuerda por organización
+  en la plantilla de Excel / molde de PDF (sin cambios de esquema).
+- `GET /extractos/bancos`; `/upload` acepta `banco_clave`; la confirmación del PDF también.
+- "Otro banco" ya no se guarda como "Banco Macro". Nombres visibles: Mercado Pago, Banco Rioja y
+  Banco La Pampa (antes "Mercadopago", "Rioja", "Lapampa").
+- El banco se ve en los selectores de extractos del Dashboard y de Movimientos.
+
+Detalle en `docs/business/BUSINESS_RULES.md` §2ter y `docs/business/EXTRACTOS_PDF.md`.
+
+---
+
 ### Extractos (oct 2026) — leer cualquier Excel/CSV de banco
 
 Antes el extracto en Excel se leía por palabras clave y, si no encontraba los títulos, asumía en

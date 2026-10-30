@@ -31,7 +31,7 @@ describe('ResolverMovimientoModal', () => {
     crearPagoDesdeMovimiento.mockReset().mockResolvedValue({ ok: true, egreso: { id: 42 } })
     pagosCandidatosMovimiento.mockReset().mockResolvedValue([])
     vincularPagoAMovimiento.mockReset().mockResolvedValue({ ok: true, egreso: { id: 31 } })
-    listarClientesOrg.mockReset().mockResolvedValue([{ id: 50, nombre: 'Green' }, { id: 51, nombre: 'Tucu' }])
+    listarClientesOrg.mockReset().mockResolvedValue([{ id: 50, nombre: 'Distribuidora del Sur' }, { id: 51, nombre: 'Ferretería Lima' }])
     listarProveedores.mockReset().mockResolvedValue([{ id: 9, razon_social: 'Papelera SA', cuit: '30712345671' }])
   })
 
@@ -104,12 +104,12 @@ describe('ResolverMovimientoModal', () => {
     fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'pago_cliente' } })
     await waitFor(() => expect(listarClientesOrg).toHaveBeenCalledWith(5))
     expect(screen.queryByLabelText('Categoría')).not.toBeInTheDocument()
-    fireEvent.change(await screen.findByLabelText('Cliente'), { target: { value: 'Green' } })
-    fireEvent.change(screen.getByLabelText(/A favor de/), { target: { value: 'Proveedor de Green SA' } })
+    fireEvent.change(await screen.findByLabelText('Cliente'), { target: { value: 'Distribuidora del Sur' } })
+    fireEvent.change(screen.getByLabelText(/A favor de/), { target: { value: 'Proveedor de Distribuidora del Sur' } })
     fireEvent.click(screen.getByRole('button', { name: /registrar pago/i }))
     await waitFor(() => expect(onResuelto).toHaveBeenCalledWith(42))
     expect(crearPagoDesdeMovimiento).toHaveBeenCalledWith(expect.objectContaining({
-      tipo: 'pago_cliente', cliente_nombre: 'Green', beneficiario: 'Proveedor de Green SA', movimiento_banco_id: 7,
+      tipo: 'pago_cliente', cliente_nombre: 'Distribuidora del Sur', beneficiario: 'Proveedor de Distribuidora del Sur', movimiento_banco_id: 7,
     }))
     expect(crearPagoDesdeMovimiento.mock.lastCall![0].categoria).toBeUndefined()
   })
@@ -153,7 +153,7 @@ describe('ResolverMovimientoModal', () => {
   it('una OP por cuenta de cliente no usa la ficha de proveedores', async () => {
     render(<ResolverMovimientoModal mov={debito} onClose={() => {}} onResuelto={() => {}} />)
     fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'pago_cliente' } })
-    fireEvent.change(await screen.findByLabelText('Cliente'), { target: { value: 'Green' } })
+    fireEvent.change(await screen.findByLabelText('Cliente'), { target: { value: 'Distribuidora del Sur' } })
     fireEvent.change(screen.getByLabelText(/A favor de/), { target: { value: 'Papelera SA' } })
     fireEvent.click(screen.getByRole('button', { name: /registrar pago/i }))
     await waitFor(() => expect(crearPagoDesdeMovimiento).toHaveBeenCalled())

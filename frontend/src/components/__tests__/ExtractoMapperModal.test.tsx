@@ -70,7 +70,7 @@ describe('ExtractoMapperModal', () => {
       fila_encabezado: 0,
       columnas: { fecha: 0, titular: 1, monto: 2, saldo: 3 },
       signo: 'columna_unica',
-    }))
+    }), null)
   })
 
   it('sin importe no deja importar', () => {

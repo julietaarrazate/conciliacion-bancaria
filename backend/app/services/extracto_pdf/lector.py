@@ -23,6 +23,8 @@ from typing import Optional, Sequence
 from app.services.tz import hoy_art
 
 from . import ia
+from app.services.banco_identificacion import banco_por_estructura, identificar_banco
+
 from .bancos import GENERICO, detectar_banco_texto, detectar_banco_zonas
 from .fechas import ContextoFechas, armar_contexto, detectar_periodo, fechas_completas_en
 from .molde import aprendizaje_de, firmas_del_documento, inducir_layout, layout_valido, mismas_filas
@@ -173,7 +175,21 @@ def _detectar_banco(doc: Documento, repetidas: set[int]) -> str:
     que se repiten en todas las páginas; el resto de la página 1 solo si ahí no
     aparece ningún banco. De la página 1 se mira solo lo que está antes del
     primer movimiento: las descripciones ("DESDE BANCO GALICIA CBU …") y sus
-    renglones de continuación nombran a otros bancos."""
+    renglones de continuación nombran a otros bancos.
+
+    Es el banco "por nombre": entra en la firma de los moldes (no cambiarlo).
+    El banco que se muestra y se guarda sale de `identificar_banco`."""
+    membrete, resto = _zonas_encabezado(doc, repetidas)
+    banco = detectar_banco_zonas(membrete)
+    return banco if banco != GENERICO else detectar_banco_zonas(resto)
+
+
+def _zonas_encabezado(
+    doc: Documento, repetidas: set[int]
+) -> tuple[list[tuple[str, float]], list[tuple[str, float]]]:
+    """(membrete, resto): líneas del encabezado (parte de arriba de la página 1 +
+    las que se repiten en todas las páginas) y el resto de la página 1 antes del
+    primer movimiento. Nunca las descripciones de los movimientos."""
     membrete: list[tuple[str, float]] = []
     resto: list[tuple[str, float]] = []
     vistas: set[str] = set()
@@ -191,8 +207,36 @@ def _detectar_banco(doc: Documento, repetidas: set[int]) -> str:
                 membrete.append((ln.texto, 3.0))
             else:
                 resto.append((ln.texto, 1.0))
-    banco = detectar_banco_zonas(membrete)
-    return banco if banco != GENERICO else detectar_banco_zonas(resto)
+    return membrete, resto
+
+
+def _molde_aprendido(doc: Documento, moldes: Sequence[dict], banco: str, molde_id: Optional[int]) -> Optional[dict]:
+    """El molde de la org que corresponde a este PDF (el que se usó o, si no, uno
+    cuya firma aparece): su banco es el "aprendido"."""
+    validos = [m for m in moldes if isinstance(m, dict)]
+    if molde_id is not None:
+        for m in validos:
+            if m.get("id") == molde_id:
+                return m
+    if not validos:
+        return None
+    firmas = firmas_del_documento(doc, banco)
+    return next((m for m in validos if m.get("firma") in firmas), None)
+
+
+def _identificar(doc: Documento, repetidas: set[int], banco_nombre: str, filas: list[dict],
+                 moldes: Sequence[dict], banco_firma: str, molde_id: Optional[int],
+                 nombre_archivo: Optional[str]) -> dict:
+    membrete, resto = _zonas_encabezado(doc, repetidas)
+    molde = _molde_aprendido(doc, moldes, banco_firma, molde_id)
+    return identificar_banco(
+        textos_encabezado=[t for t, _ in membrete + resto],
+        nombre_archivo=nombre_archivo,
+        por_nombre=banco_nombre,
+        por_estructura=banco_por_estructura(conceptos=[f.get("descripcion") or "" for f in filas[:300]]),
+        aprendido=(molde or {}).get("banco_clave"),
+        aprendido_confirmado=bool((molde or {}).get("banco_confirmado")),
+    )
 
 
 def _capa_moldes(
@@ -203,10 +247,9 @@ def _capa_moldes(
     firmas = firmas_del_documento(doc, banco)
     probo = False
     for molde in moldes:
+        # La firma ya incluye el banco por nombre: no se compara `banco_clave`
+        # (puede ser el que eligió la persona, distinto del nombre del membrete).
         if not isinstance(molde, dict) or molde.get("firma") not in firmas:
-            continue
-        clave = molde.get("banco_clave")
-        if clave and clave != banco and banco != GENERICO:
             continue
         layout = molde.get("layout")
         if not layout_valido(layout):
@@ -289,6 +332,7 @@ def leer_extracto_pdf(
     usar_ia: bool = True,
     forzar_ia: bool = False,
     hoy: Optional[date] = None,
+    nombre_archivo: Optional[str] = None,
 ) -> dict:
     """Lee un extracto bancario en PDF. Ver el contrato en el docstring del paquete.
 
@@ -350,7 +394,12 @@ def leer_extracto_pdf(
             + (" o cargalos uno por uno." if doc.escaneado else "."),
         ))
 
-    return _armar_salida(doc, elegido, banco, periodo, ctx, alertas, ia_usada, ia_disponible)
+    salida = _armar_salida(doc, elegido, banco, periodo, ctx, alertas, ia_usada, ia_disponible)
+    deteccion = _identificar(doc, repetidas, salida["banco_clave"], salida["movimientos"], moldes, banco,
+                             salida["molde_id"], nombre_archivo)
+    salida["banco_clave"] = deteccion["banco_clave"]
+    salida["banco_deteccion"] = deteccion
+    return salida
 
 
 def _armar_salida(

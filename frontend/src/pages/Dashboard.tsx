@@ -454,7 +454,10 @@ export const Dashboard: React.FC = () => {
         return
       }
     }
-    if (preview?.necesita_mapeo) {
+    // También se muestra la pantalla si no estamos seguros del banco (y la persona
+    // no escribió uno a mano arriba): ahí lo elige con el desplegable.
+    const bancoDudoso = !!preview?.banco_deteccion?.pedir_confirmacion && banco.trim() === 'Banco Macro'
+    if (preview && (preview.necesita_mapeo || bancoDudoso)) {
       setLoading(false)
       setAccionCarga(null)
       setExtractoPendiente({ file, preview })
@@ -463,14 +466,14 @@ export const Dashboard: React.FC = () => {
     await subirExtracto(file)
   }
 
-  const subirExtracto = async (file: File, mapeo?: MapeoExtracto) => {
+  const subirExtracto = async (file: File, mapeo?: MapeoExtracto, bancoClave?: string | null) => {
     setLoading(true)
     setAccionCarga('extracto')
     setError('')
     setSuccess('')
     setAviso('')
     try {
-      const data = await apiClient.uploadExtraco(file, banco, activeOrgId, mapeo)
+      const data = await apiClient.uploadExtraco(file, banco, activeOrgId, mapeo, bancoClave)
       setAviso(data.aviso_saldos || '')
       setExtractoId(data.id)
       setExtractoNombre(data.nombre_archivo)
@@ -494,10 +497,10 @@ export const Dashboard: React.FC = () => {
     }
   }
 
-  const handleConfirmarMapeoExtracto = async (mapeo: MapeoExtracto) => {
+  const handleConfirmarMapeoExtracto = async (mapeo: MapeoExtracto, bancoClave: string | null) => {
     const pendiente = extractoPendiente
     setExtractoPendiente(null)
-    if (pendiente) await subirExtracto(pendiente.file, mapeo)
+    if (pendiente) await subirExtracto(pendiente.file, mapeo, bancoClave)
   }
 
   const revisarMapeoExtracto = useCallback(
@@ -782,7 +785,7 @@ export const Dashboard: React.FC = () => {
                 >
                   {extractos.map((e) => (
                     <option key={e.id} value={e.id}>
-                      #{e.id} · {e.nombre_archivo} ({e.total_movimientos} movs)
+                      #{e.id} · {e.banco ? `${e.banco} · ` : ''}{e.nombre_archivo} ({e.total_movimientos} movs)
                     </option>
                   ))}
                 </select>
@@ -1186,7 +1189,7 @@ export const Dashboard: React.FC = () => {
                 }}
               >
                 {extractos.map(e => (
-                  <option key={e.id} value={e.id}>#{e.id} · {e.nombre_archivo} ({e.total_movimientos} movs)</option>
+                  <option key={e.id} value={e.id}>#{e.id} · {e.banco ? `${e.banco} · ` : ''}{e.nombre_archivo} ({e.total_movimientos} movs)</option>
                 ))}
               </select>
             ) : (

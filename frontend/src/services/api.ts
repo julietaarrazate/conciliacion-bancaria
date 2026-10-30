@@ -71,6 +71,7 @@ import {
   MapeoColumnas,
   MapeoExtracto,
   PreviewExtracto,
+  BancoOpcion,
   BorradorExtractoPdf,
   BorradorExtractoPdfResumen,
   ConfirmarExtractoPdfPayload,
@@ -493,11 +494,13 @@ class ApiClient {
     file: File,
     banco: string = 'Banco Macro',
     orgId?: number | null,
-    mapeo?: MapeoExtracto
+    mapeo?: MapeoExtracto,
+    bancoClave?: string | null
   ): Promise<ExtractoBancario> {
     const formData = new FormData()
     formData.append('file', file)
     if (mapeo) formData.append('mapeo', JSON.stringify(mapeo))
+    if (bancoClave) formData.append('banco_clave', bancoClave)
 
     const params: any = { banco }
     if (orgId) params.org_id = orgId
@@ -506,6 +509,14 @@ class ApiClient {
       params
     })
     return res.data
+  }
+
+  /** Bancos que reconoce Cuadra (desplegable "Banco detectado"). Cambia muy poco. */
+  async getBancosExtracto(): Promise<BancoOpcion[]> {
+    return this._cached('/extractos/bancos', 60 * 60 * 1000, async () => {
+      const res = await this.client.get('/extractos/bancos')
+      return res.data.items as BancoOpcion[]
+    })
   }
 
   async getExtraco(id: number): Promise<ExtractoBancario> {

@@ -35,13 +35,13 @@ def db():
                            poolclass=StaticPool)
     Base.metadata.create_all(bind=engine)
     s = sessionmaker(bind=engine)()
-    s.add_all([Organizacion(id=1, nombre="Caneland"), Organizacion(id=2, nombre="Otra")])
+    s.add_all([Organizacion(id=1, nombre="Empresa Demo"), Organizacion(id=2, nombre="Otra")])
     s.commit()
     for email, oid, rol in [("admin@p.test", 1, "admin"), ("revisor@p.test", 1, "revisor"),
                             ("otra@p.test", 2, "admin")]:
         s.add(User(email=email, full_name=email, hashed_password=get_password_hash("pw"),
                    organizacion_id=oid, is_active=True, role=rol, is_superadmin=False))
-    s.add(Cliente(id=10, nombre="Green", organizacion_id=1))
+    s.add(Cliente(id=10, nombre="Distribuidora del Sur", organizacion_id=1))
     s.commit()
     yield s
     s.close()
@@ -202,13 +202,13 @@ def test_op_por_cuenta_de_cliente_no_usa_la_ficha_de_proveedores(client, db):
     h = _auth(db, "admin@p.test")
     pid = client.post("/proveedores", json={"razon_social": "Papelera SA"}, headers=h).json()["id"]
     r = client.post("/pagos", json={"tipo": "pago_cliente", "cliente_id": 10, "monto": 500,
-                                    "beneficiario": "Proveedor de Green", "proveedor_id": pid},
+                                    "beneficiario": "Proveedor de Distribuidora del Sur", "proveedor_id": pid},
                     headers=h)
     assert r.status_code == 400
     assert "cliente" in r.json()["detail"].lower()
     # Y una OP por cuenta de cliente sin proveedor_id no crea nada en la ficha
     r = client.post("/pagos", json={"tipo": "pago_cliente", "cliente_id": 10, "monto": 500,
-                                    "beneficiario": "Proveedor de Green"}, headers=h)
+                                    "beneficiario": "Proveedor de Distribuidora del Sur"}, headers=h)
     assert r.status_code == 200
     assert db.query(Proveedor).count() == 1
 

@@ -344,13 +344,13 @@ def test_resolver_con_op_por_cuenta_de_cliente_va_a_su_cuenta_corriente(db):
     from app.services.seed_contable import seed_contabilidad_org
 
     seed_contabilidad_org(db, 1)
-    db.add(Cliente(id=50, nombre="Green", organizacion_id=1))
+    db.add(Cliente(id=50, nombre="Ferretería Lima", organizacion_id=1))
     db.commit()
     _, (mov,) = _extracto(db)
     res = crear_egreso(
         request=_request(),
         payload={"tipo": "pago_cliente", "forma_pago": "banco", "monto": "1500", "fecha": "2026-10-01",
-                 "cliente_nombre": "Green", "beneficiario": "Proveedor de Green SA",
+                 "cliente_nombre": "Ferretería Lima", "beneficiario": "Proveedor de Ferretería Lima",
                  "movimiento_banco_id": mov.id},
         db=db, current_user=_user(),
     )
@@ -362,4 +362,4 @@ def test_resolver_con_op_por_cuenta_de_cliente_va_a_su_cuenta_corriente(db):
     cuenta = db.get(PlanCuenta, debe.cuenta_id)
     assert cuenta.codigo.startswith("2-1-2-")          # cuenta corriente del cliente
     assert cuenta.codigo != "3-2-0-0"                 # no es Gastos de la organización
-    assert cuenta.nombre == "Green"
+    assert cuenta.nombre == "Ferretería Lima"
