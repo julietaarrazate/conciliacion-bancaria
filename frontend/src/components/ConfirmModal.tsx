@@ -23,8 +23,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 }) => {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
+    <div className="fixed inset-0 z-150 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={onCancel} />
       <div className="relative bg-white dark:bg-ml-dark-surface rounded-2xl shadow-xl border border-gray-200 dark:border-ml-dark-border p-6 w-full max-w-sm">
         <h3 className="text-base font-semibold text-ml-text dark:text-white mb-2">{title}</h3>
         {message && (

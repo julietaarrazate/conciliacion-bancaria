@@ -55,7 +55,7 @@ se editan `backend/requirements.in` / `requirements-dev.in` y se **regeneran** `
 ## Stack
 
 Backend: FastAPI + SQLAlchemy + PostgreSQL (Neon) + Python 3.11
-Frontend: React 18 + TypeScript + Vite + TailwindCSS + PWA instalable
+Frontend: React 19 + TypeScript + Vite 8 + Tailwind 4 + PWA instalable
 Auth: JWT 8h · pbkdf2_sha256 · Rate limiting (slowapi) · Headers de seguridad
 Diseño (app autenticada): minimalista · Inter font · dark mode (#0B0B0F)
 Diseño (landing pública `/`): estilo marketing con efectos — gradiente en el título, glow-orb,
@@ -279,10 +279,10 @@ Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) 
   cobros sin conciliar (~370,8 M) y los egresos sin pago cargado (~297,1 M) — es el trabajo de
   conciliación pendiente, visible en la tarjeta "Control del banco" (Contabilidad → Cuentas
   corrientes). Deuda: multi-banco (D-12).
-- **Frontend — saltos mayores** (Vite 8, React 19, Tailwind 4, Vitest 5): armados y verificados con
-  diff visual; **aprobados por la operadora (30/oct)**, aceptando que Tailwind 4 exige iOS 16.4+ /
-  Chrome 111+ (iPhone 7 y anteriores dejan de verse bien). Van en un PR propio.
-
+- **Frontend — saltos mayores** (Vite 8, React 19, Tailwind 4, Vitest 5): hechos (oct 2026, PR
+  aprobado por la operadora). Tailwind 4 exige iOS 16.4+ / Chrome 111+ (iPhone 7 y anteriores ya no
+  se ven bien, aceptado). Hay una capa de compatibilidad con v3 en `src/styles/index.css` y
+  `paleta-tailwind3.css` (ver `docs/ux/DESIGN_SYSTEM.md`): un valor nuevo de `space-y-*` se suma ahí.
 - **📅 TODOS LOS MESES — cargar el calendario de vencimientos (v3.35)**: en `/vencimientos` →
   "Cargar calendario" (superadmin), copiar de argentina.gob.ar/arca/vencimientos las fechas del
   mes por terminación de CUIT para IVA, F.931 y Convenio Multilateral (y Monotributo si hay

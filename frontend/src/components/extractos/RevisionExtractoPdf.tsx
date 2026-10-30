@@ -450,7 +450,7 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
                 </>
               ) : (
                 <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-sm text-amber-900 dark:text-amber-200 flex-1 min-w-[12rem]">
+                  <p className="text-sm text-amber-900 dark:text-amber-200 flex-1 min-w-48">
                     <strong>Ya está importado.</strong>{' '}
                     {dup.tipo === 'mismo_archivo'
                       ? `Este PDF ya se cargó como ${nombreDup}.`
@@ -473,7 +473,7 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
                 <label className={labelCls} htmlFor={`${uid}-si`}>Saldo inicial</label>
                 <input
                   id={`${uid}-si`} inputMode="text" autoComplete="off"
-                  className={`input-field text-right font-mono tabular-nums ${evaluacion.saldoInicialInvalido ? '!border-red-400' : ''}`}
+                  className={`input-field text-right font-mono tabular-nums ${evaluacion.saldoInicialInvalido ? 'border-red-400!' : ''}`}
                   value={saldoInicial} placeholder={cuadre.saldoInicialInferido ? 'Se deduce' : '0,00'}
                   onChange={e => { setSaldoInicial(e.target.value); onDirty() }}
                 />
@@ -488,7 +488,7 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
                 <label className={labelCls} htmlFor={`${uid}-sf`}>Saldo final</label>
                 <input
                   id={`${uid}-sf`} inputMode="text" autoComplete="off"
-                  className={`input-field text-right font-mono tabular-nums ${evaluacion.saldoFinalInvalido ? '!border-red-400' : ''}`}
+                  className={`input-field text-right font-mono tabular-nums ${evaluacion.saldoFinalInvalido ? 'border-red-400!' : ''}`}
                   value={saldoFinal} placeholder={cuadre.saldoFinalInferido ? 'Se deduce' : '0,00'}
                   onChange={e => { setSaldoFinal(e.target.value); onDirty() }}
                 />
@@ -564,7 +564,7 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-white/10">
-                <div className="md:min-w-[45rem]">
+                <div className="md:min-w-180">
                   <div
                     className={`${GRILLA_FILA} hidden md:grid px-3 py-1.5 border-l-4 border-l-transparent bg-gray-50 dark:bg-white/5 text-2xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400`}
                     aria-hidden="true"
@@ -655,7 +655,7 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
           )}
           <button
             type="button"
-            className={`btn-primary justify-center ${puedeLeerConIa ? 'col-span-2' : ''} order-first sm:order-none`}
+            className={`btn-primary justify-center ${puedeLeerConIa ? 'col-span-2' : ''} order-first sm:order-0`}
             onClick={guardar}
             disabled={!puedeGuardar}
           >

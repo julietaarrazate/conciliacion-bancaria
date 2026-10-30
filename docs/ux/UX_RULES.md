@@ -21,8 +21,8 @@ Store: `frontend/src/store/theme.ts` (Zustand).
   `app-theme`. Si no hay valor guardado, se respeta la preferencia del sistema
   vía `window.matchMedia('(prefers-color-scheme: dark)')`.
 - **Aplicación al DOM**: el tema se materializa agregando/quitando la clase
-  `dark` en `document.documentElement` (`darkMode: 'class'` en
-  `frontend/tailwind.config.js`). `toggle()` actualiza store + localStorage +
+  `dark` en `document.documentElement` (`@custom-variant dark` en
+  `frontend/src/styles/index.css`). `toggle()` actualiza store + localStorage +
   clase del `<html>`; `applyToDocument()` solo re-sincroniza la clase.
 - **Arranque**: `App.tsx` llama `applyToDocument()` en un `useEffect` inicial,
   para que el primer render ya tenga el tema correcto.

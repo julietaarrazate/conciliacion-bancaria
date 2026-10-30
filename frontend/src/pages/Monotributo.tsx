@@ -42,7 +42,7 @@ function semestresRecientes(): string[] {
 }
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ml-blue/40 text-sm'
+  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-ml-blue/40 text-sm'
 
 const ESTADO_BADGE: Record<string, string> = {
   pendiente: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
@@ -461,7 +461,7 @@ export const Monotributo: React.FC = () => {
                           </td></tr>
                         )}
                         {detalle.map((d, i) => (
-                          <tr key={d.mes} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                          <tr key={d.mes} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                             <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{d.mes}</td>
                             <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(d.ingresos)}</td>
                           </tr>
@@ -498,7 +498,7 @@ export const Monotributo: React.FC = () => {
                   <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Sin controles calculados.</td></tr>
                 )}
                 {!historialLoading && historial.map((c, i) => (
-                  <tr key={c.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                  <tr key={c.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                     <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{c.periodo}</td>
                     <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(c.ingresos_12m)}</td>
                     <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
@@ -552,7 +552,7 @@ export const Monotributo: React.FC = () => {
                 type="checkbox"
                 checked={configActivo}
                 onChange={e => setConfigActivo(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 dark:border-white/20"
+                className="w-4 h-4 rounded-sm border-gray-300 dark:border-white/20"
               />
               <label htmlFor="mono-activo" className="text-sm font-medium text-gray-800 dark:text-gray-200">
                 Activar módulo de Monotributo para esta organización
@@ -620,7 +620,7 @@ export const Monotributo: React.FC = () => {
                     <tr><td colSpan={3} className="px-3 py-4 text-center text-gray-400">Sin categorías.</td></tr>
                   )}
                   {!categoriasLoading && categoriasOrdenadas.map((c, i) => (
-                    <tr key={c.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                    <tr key={c.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{c.categoria}</td>
                       <td className="px-3 py-2">
                         <input

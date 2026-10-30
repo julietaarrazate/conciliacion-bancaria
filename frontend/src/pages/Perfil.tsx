@@ -215,7 +215,7 @@ export const Perfil: React.FC = () => {
       <div className="card mb-4">
         <h2 className="text-base font-semibold dark:text-white mb-4">Datos de acceso</h2>
         {profileMsg && (
-          <div className={`mb-3 px-3 py-2 rounded text-sm ${profileMsg.startsWith('✓') ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'}`}>
+          <div className={`mb-3 px-3 py-2 rounded-sm text-sm ${profileMsg.startsWith('✓') ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'}`}>
             {profileMsg}
           </div>
         )}
@@ -248,7 +248,7 @@ export const Perfil: React.FC = () => {
       <div className="card">
         <h2 className="text-base font-semibold dark:text-white mb-4">Cambiar contraseña</h2>
         {pwMsg && (
-          <div className={`mb-3 px-3 py-2 rounded text-sm ${pwMsg.startsWith('✓') ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'}`}>
+          <div className={`mb-3 px-3 py-2 rounded-sm text-sm ${pwMsg.startsWith('✓') ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'}`}>
             {pwMsg}
           </div>
         )}
@@ -390,7 +390,7 @@ export const Perfil: React.FC = () => {
             </div>
           ))}
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-            Se resetea a medianoche · Configurar con <code className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">OCR_DAILY_LIMIT</code> / <code className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">CHAT_DAILY_LIMIT</code> en Render
+            Se resetea a medianoche · Configurar con <code className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded-sm">OCR_DAILY_LIMIT</code> / <code className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded-sm">CHAT_DAILY_LIMIT</code> en Render
           </p>
         </div>
       )}
@@ -408,7 +408,7 @@ export const Perfil: React.FC = () => {
             )}
           </div>
           <p className="text-xs text-ml-text-soft dark:text-zinc-500 mb-3">
-            Generá las VAPID keys <strong>una sola vez</strong> y pegálas en Render como env vars <code className="font-mono text-[10px] bg-gray-100 dark:bg-white/10 px-1 rounded">VAPID_PUBLIC_KEY</code> y <code className="font-mono text-[10px] bg-gray-100 dark:bg-white/10 px-1 rounded">VAPID_PRIVATE_KEY</code>. Si ya lo hiciste y el badge dice "Configuradas", no regeneres.
+            Generá las VAPID keys <strong>una sola vez</strong> y pegálas en Render como env vars <code className="font-mono text-[10px] bg-gray-100 dark:bg-white/10 px-1 rounded-sm">VAPID_PUBLIC_KEY</code> y <code className="font-mono text-[10px] bg-gray-100 dark:bg-white/10 px-1 rounded-sm">VAPID_PRIVATE_KEY</code>. Si ya lo hiciste y el badge dice "Configuradas", no regeneres.
           </p>
 
           {/* Ya configuradas y no se está mostrando un set nuevo */}
@@ -496,7 +496,7 @@ export const Perfil: React.FC = () => {
 
       {/* Modal PIN */}
       {pinModal && (
-        <div className="fixed inset-0 bg-black/50 z-[150] flex items-center justify-center p-3" onClick={() => setPinModal(null)}>
+        <div className="fixed inset-0 bg-black/50 z-150 flex items-center justify-center p-3" onClick={() => setPinModal(null)}>
           <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-ml-dark-surface rounded-2xl p-5 w-full max-w-sm">
             <h3 className="text-lg font-bold dark:text-white mb-1">
               {pinModal === 'activar' ? 'Configurar PIN' : 'Desactivar PIN'}

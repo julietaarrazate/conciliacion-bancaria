@@ -98,7 +98,7 @@ export const emptyForm = () => ({
 
 export type FormState = ReturnType<typeof emptyForm>
 
-export const inputClass = "w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-[#ffffff1a] rounded px-3 py-1.5 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-indigo-500"
+export const inputClass = "w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-[#ffffff1a] rounded-sm px-3 py-1.5 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:border-indigo-500"
 
 export const computeLI = (cp: string): string => {
   if (!cp) return ''
@@ -237,7 +237,7 @@ export const PortadorSelector: React.FC<{
           </select>
           <button type="button"
             onClick={() => { setAdding(true); setTimeout(() => inputRef.current?.focus(), 50) }}
-            className="px-2.5 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded border border-gray-200 dark:border-white/10 transition-colors"
+            className="px-2.5 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded-sm border border-gray-200 dark:border-white/10 transition-colors"
             title="Agregar portador">+</button>
         </div>
       ) : (
@@ -249,9 +249,9 @@ export const PortadorSelector: React.FC<{
             }}
             placeholder="Nombre del portador" className={`${inputClass} flex-1`} />
           <button type="button" onClick={handleAdd} disabled={saving || !newNombre.trim()}
-            className="px-2 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded disabled:opacity-50 transition-colors">✓</button>
+            className="px-2 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-sm disabled:opacity-50 transition-colors">✓</button>
           <button type="button" onClick={() => { setAdding(false); setNewNombre('') }}
-            className="px-2 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-400 text-sm rounded transition-colors">✕</button>
+            className="px-2 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-400 text-sm rounded-sm transition-colors">✕</button>
         </div>
       )}
     </div>
@@ -293,7 +293,7 @@ export const ClienteSelector: React.FC<{
           </select>
           <button type="button"
             onClick={() => { setAdding(true); setTimeout(() => inputRef.current?.focus(), 50) }}
-            className="px-2.5 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded border border-gray-200 dark:border-white/10 transition-colors"
+            className="px-2.5 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded-sm border border-gray-200 dark:border-white/10 transition-colors"
             title="Agregar cliente">+</button>
         </div>
       ) : (
@@ -305,9 +305,9 @@ export const ClienteSelector: React.FC<{
             }}
             placeholder="Nombre del cliente" className={`${inputClass} flex-1`} />
           <button type="button" onClick={handleAdd} disabled={saving || !newNombre.trim()}
-            className="px-2 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded disabled:opacity-50 transition-colors">✓</button>
+            className="px-2 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-sm disabled:opacity-50 transition-colors">✓</button>
           <button type="button" onClick={() => { setAdding(false); setNewNombre('') }}
-            className="px-2 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-400 text-sm rounded transition-colors">✕</button>
+            className="px-2 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-400 text-sm rounded-sm transition-colors">✕</button>
         </div>
       )}
     </div>

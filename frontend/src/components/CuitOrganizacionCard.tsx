@@ -74,9 +74,9 @@ export const CuitOrganizacionCard: React.FC<CuitOrganizacionCardProps> = ({ orgI
             <label htmlFor="cuit-organizacion" className="sr-only">CUIT de la organización</label>
             <input id="cuit-organizacion" inputMode="numeric" placeholder="30-12345678-9" value={valor}
               onChange={e => setValor(e.target.value)}
-              className="w-36 px-2 py-1 rounded border border-gray-300 dark:border-white/15 bg-white dark:bg-black/30 text-gray-900 dark:text-gray-100" />
+              className="w-36 px-2 py-1 rounded-sm border border-gray-300 dark:border-white/15 bg-white dark:bg-black/30 text-gray-900 dark:text-gray-100" />
             <button onClick={guardar} disabled={guardando || !valor.trim()}
-              className="px-3 py-1 rounded bg-ml-blue text-white disabled:opacity-50">
+              className="px-3 py-1 rounded-sm bg-ml-blue text-white disabled:opacity-50">
               {guardando ? 'Guardando…' : 'Guardar'}
             </button>
             {editando && <button className="text-gray-500 hover:underline" onClick={() => setEditando(false)}>Cancelar</button>}

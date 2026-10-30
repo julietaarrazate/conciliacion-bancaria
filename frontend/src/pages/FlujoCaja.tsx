@@ -145,7 +145,7 @@ export const FlujoCaja: React.FC = () => {
       <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-4">
         <h2 className="text-sm font-medium text-ml-text dark:text-white mb-3">Neto mensual</h2>
         {loading ? (
-          <div className="h-[180px] animate-pulse bg-gray-100 dark:bg-white/5 rounded" />
+          <div className="h-[180px] animate-pulse bg-gray-100 dark:bg-white/5 rounded-sm" />
         ) : (
           <LineChart
             data={netoLine}
@@ -159,7 +159,7 @@ export const FlujoCaja: React.FC = () => {
       <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-4">
         <h2 className="text-sm font-medium text-ml-text dark:text-white mb-3">Ingresos vs Egresos</h2>
         {loading ? (
-          <div className="h-[200px] animate-pulse bg-gray-100 dark:bg-white/5 rounded" />
+          <div className="h-[200px] animate-pulse bg-gray-100 dark:bg-white/5 rounded-sm" />
         ) : (
           <BarChart labels={barLabels} series={barSeries} formatValue={fmtCompact} />
         )}
@@ -188,7 +188,7 @@ export const FlujoCaja: React.FC = () => {
                   <tr key={i}>
                     {Array.from({ length: 6 }).map((_, j) => (
                       <td key={j} className="px-4 py-2">
-                        <div className="h-3 bg-gray-100 dark:bg-white/10 rounded animate-pulse" />
+                        <div className="h-3 bg-gray-100 dark:bg-white/10 rounded-sm animate-pulse" />
                       </td>
                     ))}
                   </tr>

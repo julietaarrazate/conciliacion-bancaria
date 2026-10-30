@@ -126,6 +126,11 @@ export const LandingStyles: React.FC = () => (
     .btn-ghost { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:10px; background:transparent; color:var(--muted); font-weight:500; font-size:13px; border:1px solid var(--border); cursor:pointer; transition:all .15s; text-decoration:none; white-space:nowrap; }
     .btn-ghost:hover { background:var(--bg-soft); color:var(--text); border-color:var(--accent-line); }
     @media (min-width:640px) { .btn-ghost { font-size:14px; padding:9px 18px; } }
+    /* En modo oscuro el .btn-ghost de la app (styles/index.css) le ganaba a este
+       por especificidad con Tailwind 3; desde Tailwind 4 vive en una capa y ya no
+       gana, así que se replica acá para que el nav se vea igual que siempre. */
+    .dark .btn-ghost { color:#9CA3AF; }
+    .dark .btn-ghost:hover { color:#E5E7EB; background:#1A1A22; }
 
     .theme-toggle { width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; background:transparent; border:1px solid var(--border); cursor:pointer; font-size:15px; transition:background .15s,transform .1s; color:var(--text); flex-shrink:0; }
     .theme-toggle:hover { background:var(--bg-soft); }

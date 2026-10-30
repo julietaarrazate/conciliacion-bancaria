@@ -30,7 +30,7 @@ export const ChequesTabDeposito: React.FC<Props> = ({
       <div>
         <label className="block text-xs text-gray-400 mb-1">Fecha de depósito</label>
         <select value={depositoFecha} onChange={e => { onDepositoFechaChange(e.target.value); onSetSelected(new Set()) }}
-          className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none min-w-[170px]">
+          className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-hidden min-w-[170px]">
           <option value="">Seleccioná una fecha</option>
           {depositoFechas.map(f => <option key={f} value={f}>{fmtDate(f)}</option>)}
         </select>
@@ -49,7 +49,7 @@ export const ChequesTabDeposito: React.FC<Props> = ({
         <div className="flex-1 min-w-[160px]">
           <label className="block text-xs text-gray-400 mb-1">Banco de acreditación</label>
           <select value={acredMasivoBanco} onChange={e => onAcredMasivoBanco(e.target.value ? parseInt(e.target.value) : '')}
-            className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none">
+            className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-hidden">
             <option value="">Seleccioná banco</option>
             {bancoCuentas.map(b => <option key={b.id} value={b.id}>{b.nombre} ({b.codigo})</option>)}
           </select>
@@ -57,7 +57,7 @@ export const ChequesTabDeposito: React.FC<Props> = ({
         <div>
           <label className="block text-xs text-gray-400 mb-1">Fecha de acreditación</label>
           <input type="date" value={acredMasivoFecha} onChange={e => onAcredMasivoFecha(e.target.value)}
-            className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none" />
+            className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-hidden" />
         </div>
         <button
           onClick={onAcreditarMasivo}

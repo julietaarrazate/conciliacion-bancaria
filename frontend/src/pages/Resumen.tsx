@@ -226,7 +226,7 @@ export const Resumen: React.FC = () => {
             <div className="flex items-center gap-2 bg-white dark:bg-ml-dark-surface rounded-lg border border-gray-200 dark:border-ml-dark-border p-1 w-fit">
               <button
                 onClick={() => navegarMes(-1)}
-                className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded transition-colors text-ml-text dark:text-zinc-300"
+                className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded-sm transition-colors text-ml-text dark:text-zinc-300"
                 aria-label="Mes anterior"
               >
                 ←
@@ -236,7 +236,7 @@ export const Resumen: React.FC = () => {
               </span>
               <button
                 onClick={() => navegarMes(1)}
-                className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded transition-colors text-ml-text dark:text-zinc-300"
+                className="px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5 rounded-sm transition-colors text-ml-text dark:text-zinc-300"
                 aria-label="Mes siguiente"
               >
                 →
@@ -384,7 +384,7 @@ export const Resumen: React.FC = () => {
                 {data.cheques.proximos_a_vencer.map((c) => {
                   const urgente = (c.dias_para_vencer ?? 99) <= 7
                   return (
-                    <div key={c.id} className="flex items-center justify-between gap-2 text-xs py-1.5 px-2 rounded bg-gray-50 dark:bg-white/5">
+                    <div key={c.id} className="flex items-center justify-between gap-2 text-xs py-1.5 px-2 rounded-sm bg-gray-50 dark:bg-white/5">
                       <div className="min-w-0 flex-1">
                         <div className="font-medium text-ml-text dark:text-white truncate">
                           {c.cliente_nombre || c.titular || 'Sin titular'}
@@ -419,7 +419,7 @@ export const Resumen: React.FC = () => {
           </Link>
         </div>
         {loading ? (
-          <div className="h-[160px] animate-pulse bg-gray-100 dark:bg-white/5 rounded" />
+          <div className="h-[160px] animate-pulse bg-gray-100 dark:bg-white/5 rounded-sm" />
         ) : (
           <LineChart
             data={evolucionLine}
@@ -501,7 +501,7 @@ const MiniKpi: React.FC<{ label: string; monto: number; count: string | number; 
 const ChequeStatBox: React.FC<{ label: string; data?: Cantidad; color: 'emerald' | 'amber' | 'red' }> = ({ label, data, color }) => {
   const colorTxt = color === 'emerald' ? 'text-emerald-700 dark:text-emerald-400' : color === 'amber' ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'
   return (
-    <div className="text-center p-2 rounded bg-gray-50 dark:bg-white/5">
+    <div className="text-center p-2 rounded-sm bg-gray-50 dark:bg-white/5">
       <p className="text-[10px] uppercase tracking-wide text-ml-text-soft dark:text-zinc-500 font-semibold">{label}</p>
       <p className={`text-sm font-bold mt-1 ${colorTxt}`}>{fmtMoney(data?.total || 0)}</p>
       <p className="text-[10px] text-ml-text-soft dark:text-zinc-600">{data?.cantidad || 0} chq</p>

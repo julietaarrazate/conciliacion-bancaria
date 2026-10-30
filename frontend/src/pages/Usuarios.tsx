@@ -130,7 +130,7 @@ export const Usuarios: React.FC = () => {
       {showForm && (
         <div className="card mb-6 border-l-4 border-ml-blue">
           <h2 className="text-base font-semibold dark:text-white mb-4">Crear nuevo usuario</h2>
-          {formError && <div className="mb-3 p-2.5 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded text-sm">{formError}</div>}
+          {formError && <div className="mb-3 p-2.5 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-sm text-sm">{formError}</div>}
           <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="label">Nombre completo</label>
@@ -186,7 +186,7 @@ export const Usuarios: React.FC = () => {
                     <label key={o.id} className="flex items-center gap-1.5 cursor-pointer text-sm">
                       <input
                         type="checkbox"
-                        className="w-4 h-4 rounded accent-ml-blue"
+                        className="w-4 h-4 rounded-sm accent-ml-blue"
                         checked={newUser.allowedOrgIds.includes(o.id)}
                         onChange={e => setNewUser(p => ({
                           ...p,
@@ -251,7 +251,7 @@ export const Usuarios: React.FC = () => {
                       {u.is_superadmin ? (
                         <span className="text-xs text-gray-400 dark:text-gray-500 italic">—</span>
                       ) : (
-                        <select className="input-field !py-1 !text-xs max-w-[120px]" value={u.role}
+                        <select className="input-field py-1! text-xs! max-w-[120px]" value={u.role}
                           disabled={savingId === u.id}
                           onChange={e => handleRoleChange(u, e.target.value as UserRole)}>
                           <option value={UserRole.ADMIN}>Admin</option>
@@ -264,7 +264,7 @@ export const Usuarios: React.FC = () => {
                     </td>
                     <td className="px-4 py-2.5">
                       <button onClick={() => handleActiveToggle(u)} disabled={savingId === u.id || u.is_superadmin}
-                        className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors disabled:opacity-50 ${u.is_active ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-300'}`}>
+                        className={`px-2.5 py-1 rounded-sm text-xs font-semibold transition-colors disabled:opacity-50 ${u.is_active ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-300'}`}>
                         {u.is_active ? 'Activo' : 'Inactivo'}
                       </button>
                     </td>

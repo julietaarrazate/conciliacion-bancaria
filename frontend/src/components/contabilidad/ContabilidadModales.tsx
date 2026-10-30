@@ -24,12 +24,12 @@ export const RecuperarClientesModal: React.FC<{ c: ContabilidadCtx }> = ({ c }) 
             >Limpiar</button>
           </div>
           {c.recCandidatos.map(nombre => (
-            <label key={nombre} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer">
+            <label key={nombre} className="flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer">
               <input
                 type="checkbox"
                 checked={c.recSeleccion.has(nombre)}
                 onChange={() => c.toggleRecSel(nombre)}
-                className="rounded"
+                className="rounded-sm"
               />
               <span className="text-sm text-ml-text dark:text-zinc-200">{nombre}</span>
             </label>
@@ -68,8 +68,8 @@ export const AjusteManualModal: React.FC<{ c: ContabilidadCtx }> = ({ c }) => {
           <div>
             <label className="block text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">Cuenta Debe *</label>
             <input type="text" placeholder="Buscar cuenta…" value={c.ajusteDebeBusq} onChange={e => c.setAjusteDebeBusq(e.target.value)}
-              className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full mb-1" />
-            <div className="max-h-36 overflow-y-auto border border-gray-100 dark:border-slate-700 rounded">
+              className="border border-gray-200 dark:border-slate-600 rounded-sm px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full mb-1" />
+            <div className="max-h-36 overflow-y-auto border border-gray-100 dark:border-slate-700 rounded-sm">
               {c.cuentasHoja.filter(cu => !c.ajusteDebeBusq || `${cu.codigo} ${cu.nombre}`.toLowerCase().includes(c.ajusteDebeBusq.toLowerCase())).map(cu => (
                 <button key={cu.id} onClick={() => { c.setAjusteDebeId(cu.id); c.setAjusteDebeBusq(`${cu.codigo} ${cu.nombre}`) }}
                   className={`w-full text-left px-2 py-1 text-xs hover:bg-gray-50 dark:hover:bg-slate-700 ${c.ajusteDebeId === cu.id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
@@ -81,8 +81,8 @@ export const AjusteManualModal: React.FC<{ c: ContabilidadCtx }> = ({ c }) => {
           <div>
             <label className="block text-xs font-medium text-orange-600 dark:text-orange-400 mb-1">Cuenta Haber *</label>
             <input type="text" placeholder="Buscar cuenta…" value={c.ajusteHaberBusq} onChange={e => c.setAjusteHaberBusq(e.target.value)}
-              className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full mb-1" />
-            <div className="max-h-36 overflow-y-auto border border-gray-100 dark:border-slate-700 rounded">
+              className="border border-gray-200 dark:border-slate-600 rounded-sm px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full mb-1" />
+            <div className="max-h-36 overflow-y-auto border border-gray-100 dark:border-slate-700 rounded-sm">
               {c.cuentasHoja.filter(cu => !c.ajusteHaberBusq || `${cu.codigo} ${cu.nombre}`.toLowerCase().includes(c.ajusteHaberBusq.toLowerCase())).map(cu => (
                 <button key={cu.id} onClick={() => { c.setAjusteHaberId(cu.id); c.setAjusteHaberBusq(`${cu.codigo} ${cu.nombre}`) }}
                   className={`w-full text-left px-2 py-1 text-xs hover:bg-gray-50 dark:hover:bg-slate-700 ${c.ajusteHaberId === cu.id ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300' : 'text-gray-700 dark:text-gray-300'}`}>
@@ -95,18 +95,18 @@ export const AjusteManualModal: React.FC<{ c: ContabilidadCtx }> = ({ c }) => {
             <div className="flex-1">
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Monto *</label>
               <input type="number" min="0.01" step="0.01" placeholder="0.00" value={c.ajusteMonto} onChange={e => c.setAjusteMonto(e.target.value)}
-                className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+                className="border border-gray-200 dark:border-slate-600 rounded-sm px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
             </div>
             <div className="flex-1">
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Fecha *</label>
               <input type="date" value={c.ajusteFecha} onChange={e => c.setAjusteFecha(e.target.value)}
-                className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+                className="border border-gray-200 dark:border-slate-600 rounded-sm px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
             </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Descripción</label>
             <input type="text" placeholder="Descripción del ajuste…" value={c.ajusteDesc} onChange={e => c.setAjusteDesc(e.target.value)}
-              className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+              className="border border-gray-200 dark:border-slate-600 rounded-sm px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
           </div>
           {c.ajusteError && <p className="text-xs text-red-500">{c.ajusteError}</p>}
         </div>
@@ -159,7 +159,7 @@ export const FixFechasModal: React.FC<{ c: ContabilidadCtx }> = ({ c }) => {
             </select>
           </div>
           <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-zinc-400 cursor-pointer">
-            <input type="checkbox" checked={c.fixSoloEgresos} onChange={e => { c.setFixSoloEgresos(e.target.checked); c.setFixPreview(null) }} className="rounded" />
+            <input type="checkbox" checked={c.fixSoloEgresos} onChange={e => { c.setFixSoloEgresos(e.target.checked); c.setFixPreview(null) }} className="rounded-sm" />
             Solo egresos (no tocar asientos de cheques, UM, etc.)
           </label>
 

@@ -11,7 +11,7 @@ const fmt = (n: number) =>
 const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleString('es-AR') : '—')
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ml-blue/40 text-sm'
+  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-ml-blue/40 text-sm'
 
 const ESTADO_BADGE: Record<string, string> = {
   borrador: 'bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-gray-300',
@@ -435,7 +435,7 @@ export const Arca: React.FC = () => {
                   <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400">Sin comprobantes.</td></tr>
                 )}
                 {!loadingList && comprobantes.map((c, i) => (
-                  <tr key={c.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                  <tr key={c.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                     <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{TIPOS_COMPROBANTE[c.tipo_comprobante] || c.tipo_comprobante}</td>
                     <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{c.cliente_nombre || '—'}</td>
                     <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{c.numero ?? '—'}</td>

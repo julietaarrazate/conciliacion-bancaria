@@ -58,7 +58,7 @@ export const RestablecerPassword: React.FC = () => {
     return (
       <div className="min-h-screen bg-ml-gray-bg dark:bg-ml-dark-bg flex items-center justify-center p-4">
         <div className="w-full max-w-sm text-center">
-          <div className="bg-white dark:bg-ml-dark-surface rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-ml-dark-border">
+          <div className="bg-white dark:bg-ml-dark-surface rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-ml-dark-border">
             <p className="text-red-700 dark:text-red-400 text-sm mb-4">
               Link inválido. Faltan datos en la URL.
             </p>
@@ -88,7 +88,7 @@ export const RestablecerPassword: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-white dark:bg-ml-dark-surface rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-ml-dark-border dark:shadow-none">
+        <div className="bg-white dark:bg-ml-dark-surface rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-ml-dark-border dark:shadow-none">
 
           {ok ? (
             <div className="space-y-4">

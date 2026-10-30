@@ -25,7 +25,7 @@ export const DiagnosticoPanel: React.FC<DiagnosticoPanelProps> = ({ diagnostico 
   return (
     <div className="pt-2 border-t border-gray-100 dark:border-slate-700 space-y-2" data-testid="diagnostico-panel">
       {banco_trae_identidad === false && (
-        <div className="badge badge-info items-start !inline-flex w-full whitespace-normal text-left leading-snug py-1.5">
+        <div className="badge badge-info items-start inline-flex! w-full whitespace-normal text-left leading-snug py-1.5">
           <span>ℹ Este banco no incluye el nombre ni el CUIT en el extracto → la conciliación es solo por monto.</span>
         </div>
       )}
@@ -42,7 +42,7 @@ export const DiagnosticoPanel: React.FC<DiagnosticoPanelProps> = ({ diagnostico 
       )}
 
       {!solapan_fechas && (
-        <div className="badge badge-warn items-start !inline-flex w-full whitespace-normal text-left leading-snug py-1.5">
+        <div className="badge badge-warn items-start inline-flex! w-full whitespace-normal text-left leading-snug py-1.5">
           <span>
             ⚠ Las fechas de la planilla ({fmtFechaCorta(periodo_planilla.desde)} – {fmtFechaCorta(periodo_planilla.hasta)}) no coinciden
             con el período del extracto ({fmtFechaCorta(periodo_extracto.desde)} – {fmtFechaCorta(periodo_extracto.hasta)}).

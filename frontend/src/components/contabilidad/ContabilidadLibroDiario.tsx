@@ -62,10 +62,10 @@ export const ContabilidadLibroDiario: React.FC<{ c: ContabilidadCtx }> = ({ c })
                     <div className="flex flex-col gap-2">
                       <label className="text-xs text-gray-500">Desde</label>
                       <input type="date" value={c.diarioDesde} onChange={e => c.setDiarioDesde(e.target.value)}
-                        className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+                        className="border border-gray-200 dark:border-slate-600 rounded-sm px-2 py-1 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
                       <label className="text-xs text-gray-500">Hasta</label>
                       <input type="date" value={c.diarioHasta} onChange={e => c.setDiarioHasta(e.target.value)}
-                        className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+                        className="border border-gray-200 dark:border-slate-600 rounded-sm px-2 py-1 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
                       {(c.diarioDesde || c.diarioHasta) && (
                         <button onClick={() => { c.setDiarioDesde(''); c.setDiarioHasta('') }} className="text-xs text-red-400 hover:text-red-600 text-left">✕ Limpiar</button>
                       )}
@@ -77,7 +77,7 @@ export const ContabilidadLibroDiario: React.FC<{ c: ContabilidadCtx }> = ({ c })
                     <div className="flex flex-col gap-1">
                       {['', 'um_lote', 'um_reclass', 'cc_inicial', 'cheque_registro', 'cheque_acred_banco', 'cheque_acred_cliente', 'cheque_rechazo_banco', 'cheque_rechazo_cliente', 'cheque_rechazo_gasto', 'egreso', 'caja_op', 'caja_efectivo', 'ajuste_manual', 'ajuste_manual_reverso'].map(m => (
                         <button key={m} onClick={() => c.setDiarioModulo(m)}
-                          className={`text-left px-2 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-slate-700 ${c.diarioModulo === m ? 'bg-ml-blue text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                          className={`text-left px-2 py-1 rounded-sm text-xs hover:bg-gray-100 dark:hover:bg-slate-700 ${c.diarioModulo === m ? 'bg-ml-blue text-white' : 'text-gray-700 dark:text-gray-300'}`}>
                           {m === '' ? '(Todos)' : (MODULO_LABEL[m] || m)}
                         </button>
                       ))}
@@ -88,15 +88,15 @@ export const ContabilidadLibroDiario: React.FC<{ c: ContabilidadCtx }> = ({ c })
                   <ExcelFilterCtb label="Cuenta" active={!!c.diarioCuentaId} align="right">
                     <div className="flex flex-col gap-2">
                       <input placeholder="Buscar cuenta..." value={c.diarioCuentaBusq} onChange={e => c.setDiarioCuentaBusq(e.target.value)}
-                        className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
+                        className="border border-gray-200 dark:border-slate-600 rounded-sm px-2 py-1 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 w-full" />
                       <div className="max-h-48 overflow-y-auto flex flex-col gap-0.5">
                         <button onClick={() => { c.setDiarioCuentaId(''); c.setDiarioCuentaBusq('') }}
-                          className={`text-left px-2 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-slate-700 ${!c.diarioCuentaId ? 'bg-ml-blue text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                          className={`text-left px-2 py-1 rounded-sm text-xs hover:bg-gray-100 dark:hover:bg-slate-700 ${!c.diarioCuentaId ? 'bg-ml-blue text-white' : 'text-gray-700 dark:text-gray-300'}`}>
                           (Todas)
                         </button>
                         {c.cuentas.filter(cu => !c.diarioCuentaBusq || `${cu.codigo} ${cu.nombre}`.toLowerCase().includes(c.diarioCuentaBusq.toLowerCase())).map(cu => (
                           <button key={cu.id} onClick={() => c.setDiarioCuentaId(cu.id)}
-                            className={`text-left px-2 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-slate-700 ${c.diarioCuentaId === cu.id ? 'bg-ml-blue text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                            className={`text-left px-2 py-1 rounded-sm text-xs hover:bg-gray-100 dark:hover:bg-slate-700 ${c.diarioCuentaId === cu.id ? 'bg-ml-blue text-white' : 'text-gray-700 dark:text-gray-300'}`}>
                             <span className="font-mono">{cu.codigo}</span> {cu.nombre}
                           </button>
                         ))}
@@ -126,12 +126,12 @@ export const ContabilidadLibroDiario: React.FC<{ c: ContabilidadCtx }> = ({ c })
                           <div className="flex flex-col gap-1 min-w-[130px]">
                             <input type="date" value={c.editFechaVal}
                               onChange={e => c.setEditFechaVal(e.target.value)}
-                              className="text-xs border border-orange-300 dark:border-orange-600 rounded px-2 py-1 bg-white dark:bg-slate-800 text-gray-900 dark:text-white w-full"
+                              className="text-xs border border-orange-300 dark:border-orange-600 rounded-sm px-2 py-1 bg-white dark:bg-slate-800 text-gray-900 dark:text-white w-full"
                               onKeyDown={e => { if (e.key === 'Enter') c.saveFechaAsiento(a.id); if (e.key === 'Escape') c.setEditFechaId(null) }}
                               autoFocus
                             />
                             <button onClick={() => c.saveFechaAsiento(a.id)}
-                              className="w-full text-xs px-2 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white font-semibold">
+                              className="w-full text-xs px-2 py-1 rounded-sm bg-orange-500 hover:bg-orange-600 text-white font-semibold">
                               Guardar
                             </button>
                           </div>
@@ -144,7 +144,7 @@ export const ContabilidadLibroDiario: React.FC<{ c: ContabilidadCtx }> = ({ c })
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-slate-700 text-gray-500">
                           {(a.modulo && MODULO_LABEL[a.modulo]) || a.modulo || '—'}
                         </span>
                       </td>
@@ -159,7 +159,7 @@ export const ContabilidadLibroDiario: React.FC<{ c: ContabilidadCtx }> = ({ c })
                           {a.modulo === 'ajuste_manual' && (
                             <button
                               onClick={() => { if (confirm('¿Revertir este ajuste manual?')) c.deleteAjusteManual(a.id) }}
-                              className="text-red-400 hover:text-red-600 dark:hover:text-red-300 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                              className="text-red-400 hover:text-red-600 dark:hover:text-red-300 p-1 rounded-sm hover:bg-red-50 dark:hover:bg-red-900/20"
                               title="Revertir ajuste"
                             >🗑️</button>
                           )}

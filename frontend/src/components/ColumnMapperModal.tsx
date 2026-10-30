@@ -81,8 +81,8 @@ export const ColumnMapperModal: React.FC<ColumnMapperModalProps> = ({ resultado,
   }
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
+    <div className="fixed inset-0 z-150 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={onCancel} />
       <div className="relative bg-white dark:bg-ml-dark-surface rounded-2xl shadow-xl border border-gray-200 dark:border-ml-dark-border p-5 md:p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between gap-3 mb-1">
           <h3 className="text-base font-semibold text-ml-text dark:text-white">
@@ -121,7 +121,7 @@ export const ColumnMapperModal: React.FC<ColumnMapperModalProps> = ({ resultado,
                 {resultado.columnas_disponibles.map(col => (
                   <th key={col.idx} className="px-2 py-2 bg-gray-50 dark:bg-white/5 border-b border-gray-100 dark:border-white/10 align-top">
                     <select
-                      className="input-field !py-1 !text-xs mb-1 w-full min-w-[110px]"
+                      className="input-field py-1! text-xs! mb-1 w-full min-w-[110px]"
                       value={asignacion[col.idx] ?? IGNORAR}
                       onChange={(e) => handleChange(col.idx, e.target.value)}
                       aria-label={`Usar como (columna ${col.header})`}

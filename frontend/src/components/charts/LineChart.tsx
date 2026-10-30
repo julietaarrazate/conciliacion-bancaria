@@ -89,7 +89,7 @@ export const LineChart: React.FC<LineChartProps> = ({
       </svg>
       {hover !== null && (
         <div
-          className="absolute pointer-events-none bg-ml-text dark:bg-white text-white dark:text-ml-text px-2 py-1 rounded text-xs font-medium shadow-md whitespace-nowrap"
+          className="absolute pointer-events-none bg-ml-text dark:bg-white text-white dark:text-ml-text px-2 py-1 rounded-sm text-xs font-medium shadow-md whitespace-nowrap"
           style={{
             left: `${(points[hover].x / width) * 100}%`,
             top: `${((points[hover].y - 30) / height) * 100}%`,

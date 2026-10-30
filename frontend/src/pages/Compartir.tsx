@@ -106,13 +106,13 @@ export const Compartir: React.FC = () => {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 dark:bg-red-500/15 dark:border-red-500/30 dark:text-red-300 rounded p-3 text-sm mb-4">
+        <div className="bg-red-50 border border-red-200 text-red-700 dark:bg-red-500/15 dark:border-red-500/30 dark:text-red-300 rounded-sm p-3 text-sm mb-4">
           {error}
         </div>
       )}
 
       {(titulo || texto) && (
-        <div className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded p-3 mb-4 text-sm">
+        <div className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-sm p-3 mb-4 text-sm">
           {titulo && <div className="text-gray-800 dark:text-gray-200 font-medium">{titulo}</div>}
           {texto  && <div className="text-gray-500 dark:text-gray-400 whitespace-pre-wrap mt-1">{texto}</div>}
         </div>
@@ -121,7 +121,7 @@ export const Compartir: React.FC = () => {
       {files.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
           {files.map((f, idx) => (
-            <div key={idx} className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded overflow-hidden">
+            <div key={idx} className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-sm overflow-hidden">
               {f.type.startsWith('image/') ? (
                 <img src={f.dataUrl} alt={f.name} className="w-full h-32 object-cover" />
               ) : (
@@ -144,7 +144,7 @@ export const Compartir: React.FC = () => {
         <button
           onClick={() => irA('cheque', '/cheques?compartido=1')}
           disabled={files.length === 0}
-          className="w-full flex items-center justify-between bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 dark:border-white/10 rounded px-4 py-3 text-left transition"
+          className="w-full flex items-center justify-between bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 dark:border-white/10 rounded-sm px-4 py-3 text-left transition"
         >
           <span className="flex items-center gap-3">
             <span className="text-2xl">🧾</span>
@@ -159,7 +159,7 @@ export const Compartir: React.FC = () => {
         <button
           onClick={() => irA('acreditar', '/clientes?compartido=acreditar')}
           disabled={files.length === 0}
-          className="w-full flex items-center justify-between bg-indigo-600/20 hover:bg-indigo-600/30 disabled:opacity-40 disabled:cursor-not-allowed border border-indigo-500/40 rounded px-4 py-3 text-left transition"
+          className="w-full flex items-center justify-between bg-indigo-600/20 hover:bg-indigo-600/30 disabled:opacity-40 disabled:cursor-not-allowed border border-indigo-500/40 rounded-sm px-4 py-3 text-left transition"
         >
           <span className="flex items-center gap-3">
             <span className="text-2xl">💸</span>
@@ -174,7 +174,7 @@ export const Compartir: React.FC = () => {
         <button
           onClick={() => irA('op', '/pagos?compartido=1')}
           disabled={files.length === 0}
-          className="w-full flex items-center justify-between bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 dark:border-white/10 rounded px-4 py-3 text-left transition"
+          className="w-full flex items-center justify-between bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 dark:border-white/10 rounded-sm px-4 py-3 text-left transition"
         >
           <span className="flex items-center gap-3">
             <span className="text-2xl">💸</span>

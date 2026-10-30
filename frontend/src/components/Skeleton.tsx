@@ -5,7 +5,7 @@ interface SkeletonProps {
 }
 
 export const Skeleton: React.FC<SkeletonProps> = ({ className = '' }) => (
-  <div className={`skeleton bg-gray-100 dark:bg-white/[0.04] rounded-md ${className}`} />
+  <div className={`skeleton bg-gray-100 dark:bg-white/4 rounded-md ${className}`} />
 )
 
 export const SkeletonText: React.FC<{ lines?: number; className?: string }> = ({ lines = 1, className = '' }) => (

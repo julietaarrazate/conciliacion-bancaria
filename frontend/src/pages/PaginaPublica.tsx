@@ -42,13 +42,13 @@ export const PaginaPublica: React.FC = () => {
   }, [token])
 
   if (loading) return (
-    <div className="min-h-screen bg-[#0B0B0F] flex items-center justify-center">
+    <div className="min-h-screen bg-ml-dark-bg flex items-center justify-center">
       <div className="text-gray-400 text-sm">Cargando...</div>
     </div>
   )
 
   if (error) return (
-    <div className="min-h-screen bg-[#0B0B0F] flex items-center justify-center p-6 text-center">
+    <div className="min-h-screen bg-ml-dark-bg flex items-center justify-center p-6 text-center">
       <div>
         <p className="text-white font-semibold mb-2">Link inválido o expirado</p>
         <p className="text-gray-500 text-sm">{error}</p>
@@ -64,7 +64,7 @@ export const PaginaPublica: React.FC = () => {
     s + p.rows.filter(r => !['ok', 'OK', 'duplicado'].includes(r.status)).reduce((a, r) => a + r.monto, 0), 0)
 
   return (
-    <div className="min-h-screen bg-[#0B0B0F] text-white">
+    <div className="min-h-screen bg-ml-dark-bg text-white">
       <div className="max-w-2xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-6">

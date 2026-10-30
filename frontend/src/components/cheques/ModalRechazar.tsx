@@ -32,7 +32,7 @@ export const ModalRechazar: React.FC<Props> = ({ rechazarData, actioning, onChan
       <div className="flex items-center gap-3">
         <input type="checkbox" id="fisico-check" checked={rechazarData.fisico}
           onChange={e => onChange(p => ({ ...p, fisico: e.target.checked }))}
-          className="w-4 h-4 rounded accent-indigo-500" />
+          className="w-4 h-4 rounded-sm accent-indigo-500" />
         <label htmlFor="fisico-check" className="text-sm text-gray-700 dark:text-gray-300">El cheque físico fue devuelto</label>
       </div>
       {rechazarData.fisico && (

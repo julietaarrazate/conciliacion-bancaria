@@ -43,7 +43,7 @@ const ExcelFilter: React.FC<ExcelFilterProps> = ({ label, active, children, alig
   return (
     <div ref={ref} className="relative inline-flex items-center gap-1 cursor-pointer select-none w-full" onClick={() => setOpen(o => !o)}>
       <span className="truncate">{label}</span>
-      <span className={`text-[10px] ml-auto flex-shrink-0 ${active ? 'text-ml-yellow' : 'text-blue-200'}`}>
+      <span className={`text-[10px] ml-auto shrink-0 ${active ? 'text-ml-yellow' : 'text-blue-200'}`}>
         {active ? '▼●' : '▼'}
       </span>
       {open && (
@@ -413,7 +413,7 @@ export const Movimientos: React.FC = () => {
           <select
             value={modoAsiento}
             onChange={e => setModoAsiento(e.target.value as 'agrupado' | 'individual')}
-            className="text-xs px-2 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
+            className="text-xs px-2 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-hidden"
             title="Modo de asiento contable"
             disabled={umLoading}
           >
@@ -472,7 +472,7 @@ export const Movimientos: React.FC = () => {
       {/* Leyenda UM */}
       {umCount > 0 && (
         <div className="mb-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-          <span className="inline-block w-3 h-3 rounded bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300"></span>
+          <span className="inline-block w-3 h-3 rounded-sm bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300"></span>
           Filas en verde = agregadas desde Últimos Movimientos
         </div>
       )}
@@ -495,7 +495,7 @@ export const Movimientos: React.FC = () => {
       )}
 
       {/* Tabla */}
-      <div className={`bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 overflow-hidden shadow-sm ${umCount > 0 ? 'rounded-b-lg' : 'rounded-lg'}`}>
+      <div className={`bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 overflow-hidden shadow-xs ${umCount > 0 ? 'rounded-b-lg' : 'rounded-lg'}`}>
         <div className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border-b dark:border-slate-700 flex items-center justify-between gap-2 flex-wrap">
           <span className="text-xs text-gray-500 dark:text-gray-400">
             <b>{filteredMovs.length}</b> de {total} movimientos
@@ -508,7 +508,7 @@ export const Movimientos: React.FC = () => {
           {filteredMovs.length > PAGE_SIZE && (
             <div className="flex items-center gap-1">
               <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                className="px-2 py-0.5 text-xs rounded border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
+                className="px-2 py-0.5 text-xs rounded-sm border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
                 ← Ant.
               </button>
               <span className="text-xs text-gray-500 dark:text-gray-400 px-1">
@@ -516,7 +516,7 @@ export const Movimientos: React.FC = () => {
               </span>
               <button onClick={() => setPage(p => Math.min(Math.ceil(filteredMovs.length / PAGE_SIZE) - 1, p + 1))}
                 disabled={page >= Math.ceil(filteredMovs.length / PAGE_SIZE) - 1}
-                className="px-2 py-0.5 text-xs rounded border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
+                className="px-2 py-0.5 text-xs rounded-sm border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
                 Sig. →
               </button>
             </div>
@@ -635,11 +635,11 @@ export const Movimientos: React.FC = () => {
           </div>
           {modalError && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{modalError}</p>}
           <div className="flex gap-2 mt-5 justify-end">
-            <button onClick={() => setEditModal(null)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded hover:bg-gray-50 dark:hover:bg-slate-700">
+            <button onClick={() => setEditModal(null)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded-sm hover:bg-gray-50 dark:hover:bg-slate-700">
               Cancelar
             </button>
             <button onClick={saveModal} disabled={modalSaving}
-              className="px-4 py-1.5 text-xs bg-ml-blue text-white rounded hover:bg-ml-blue/90 disabled:opacity-50">
+              className="px-4 py-1.5 text-xs bg-ml-blue text-white rounded-sm hover:bg-ml-blue/90 disabled:opacity-50">
               {modalSaving ? 'Guardando...' : 'Guardar'}
             </button>
           </div>
@@ -694,17 +694,17 @@ export const Movimientos: React.FC = () => {
           <div className="flex gap-2 mt-5">
             {acredModal.mov.cliente_acreditado && (
               <button onClick={clearAcred} disabled={acredSaving}
-                className="px-3 py-1.5 text-xs text-red-600 border border-red-300 dark:border-red-700 rounded hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50">
+                className="px-3 py-1.5 text-xs text-red-600 border border-red-300 dark:border-red-700 rounded-sm hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50">
                 Quitar
               </button>
             )}
             <div className="flex-1" />
             <button onClick={() => setAcredModal(null)}
-              className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded hover:bg-gray-50 dark:hover:bg-slate-700">
+              className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded-sm hover:bg-gray-50 dark:hover:bg-slate-700">
               Cancelar
             </button>
             <button onClick={saveAcred} disabled={acredSaving || !acredModal.cliente}
-              className="px-4 py-1.5 text-xs bg-ml-blue text-white rounded hover:bg-ml-blue/90 disabled:opacity-50">
+              className="px-4 py-1.5 text-xs bg-ml-blue text-white rounded-sm hover:bg-ml-blue/90 disabled:opacity-50">
               {acredSaving ? 'Guardando...' : 'Guardar'}
             </button>
           </div>

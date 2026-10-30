@@ -689,7 +689,7 @@ export const Dashboard: React.FC = () => {
       {tab === 'individual' && (<>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Paso 1: Extracto */}
-        <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-5 shadow-sm">
+        <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-5 shadow-xs">
           <div className="flex items-center gap-3 mb-4">
             <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/15 text-violet-500 dark:text-violet-400 text-xs font-bold shrink-0">1</span>
             <h3 className="text-sm font-semibold text-gray-800 dark:text-white tracking-tight">
@@ -848,7 +848,7 @@ export const Dashboard: React.FC = () => {
                         setLoading(false)
                       }
                     }}
-                    className="text-xs px-2 py-1.5 text-red-500 border border-red-300 dark:border-red-800 rounded hover:bg-red-50 dark:hover:bg-red-900/20 whitespace-nowrap"
+                    className="text-xs px-2 py-1.5 text-red-500 border border-red-300 dark:border-red-800 rounded-sm hover:bg-red-50 dark:hover:bg-red-900/20 whitespace-nowrap"
                     title="Borra los Últimos Movimientos agregados, para re-subirlos desde cero"
                   >
                     🗑 Limpiar UM
@@ -866,11 +866,11 @@ export const Dashboard: React.FC = () => {
                       value={umCorteManual}
                       onChange={(e) => setUmCorteManual(e.target.value)}
                       placeholder="Saldo del corte manual ej: 1250000.00"
-                      className="flex-1 text-xs px-2 py-1.5 rounded border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-ml-text dark:text-gray-200 focus:outline-none focus:border-ml-blue"
+                      className="flex-1 text-xs px-2 py-1.5 rounded-sm border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-ml-text dark:text-gray-200 focus:outline-hidden focus:border-ml-blue"
                     />
                     <button
                       onClick={handleReintentarUMConCorteManual}
-                      className="text-xs px-3 py-1.5 bg-ml-blue text-white rounded hover:bg-ml-blue/90 whitespace-nowrap"
+                      className="text-xs px-3 py-1.5 bg-ml-blue text-white rounded-sm hover:bg-ml-blue/90 whitespace-nowrap"
                     >
                       Reintentar
                     </button>
@@ -882,7 +882,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Paso 2: Cliente + Planilla */}
-        <div id="upload-planilla-section" className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-5 shadow-sm">
+        <div id="upload-planilla-section" className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-5 shadow-xs">
           <div className="flex items-center gap-3 mb-4">
             <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/15 text-violet-500 dark:text-violet-400 text-xs font-bold shrink-0">2</span>
             <h3 className="text-sm font-semibold text-gray-800 dark:text-white tracking-tight">
@@ -945,7 +945,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Paso 3: Resultado */}
-        <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-5 shadow-sm">
+        <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-5 shadow-xs">
           <div className="flex items-center gap-3 mb-4">
             <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/15 text-violet-500 dark:text-violet-400 text-xs font-bold shrink-0">3</span>
             <h3 className="text-sm font-semibold text-gray-800 dark:text-white tracking-tight">
@@ -1173,7 +1173,7 @@ export const Dashboard: React.FC = () => {
                         <td className="px-4 py-2.5 dark:text-gray-300 max-w-[200px] truncate">{item.file.name}</td>
                         <td className="px-4 py-2.5">
                           <input
-                            className="input-field !py-1 text-sm"
+                            className="input-field py-1! text-sm"
                             value={item.clienteNombre}
                             onChange={e => updateBulkItem(item.id, { clienteNombre: e.target.value })}
                             disabled={bulkRunning || item.status === 'ok'}

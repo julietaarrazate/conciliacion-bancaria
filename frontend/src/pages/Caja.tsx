@@ -224,7 +224,7 @@ export const Caja: React.FC = () => {
         <div className="flex items-center gap-2 flex-wrap">
           <input type="date" value={selectedDate} max={today()}
             onChange={e => e.target.value && setSelectedDate(e.target.value)}
-            className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 text-xs text-gray-600 dark:text-gray-300 focus:outline-none" />
+            className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 text-xs text-gray-600 dark:text-gray-300 focus:outline-hidden" />
           <button onClick={() => { setShowHistorial(v => !v); if (!showHistorial) loadHistorial() }}
             className="px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 text-xs rounded-lg transition-colors">
             {showHistorial ? 'Ocultar' : 'Historial'}
@@ -285,7 +285,7 @@ export const Caja: React.FC = () => {
                   {editando === field ? (
                     <div className="flex items-center gap-2">
                       <input type="number"
-                        className="input-field !w-36 text-right font-mono"
+                        className="input-field w-36! text-right font-mono"
                         value={tempVal}
                         onChange={e => setTempVal(e.target.value)}
                         autoFocus
@@ -330,7 +330,7 @@ export const Caja: React.FC = () => {
                     </span>
                     <span className="text-gray-400 dark:text-zinc-600 text-sm">×</span>
                     <input type="number" min="0"
-                      className="input-field !w-24 text-center font-mono"
+                      className="input-field w-24! text-center font-mono"
                       value={dens[String(d)] || ''}
                       placeholder="0"
                       onChange={e => setDens(prev => ({ ...prev, [String(d)]: e.target.value }))}
@@ -410,9 +410,9 @@ export const Caja: React.FC = () => {
             <p className="font-semibold text-sm dark:text-white">Exportar historial EFT</p>
             <div className="flex flex-wrap gap-2">
               <input type="date" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)}
-                className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-xs text-gray-700 dark:text-gray-300 focus:outline-none" />
+                className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-sm px-2 py-1 text-xs text-gray-700 dark:text-gray-300 focus:outline-hidden" />
               <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)}
-                className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-xs text-gray-700 dark:text-gray-300 focus:outline-none" />
+                className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-sm px-2 py-1 text-xs text-gray-700 dark:text-gray-300 focus:outline-hidden" />
               <button onClick={exportarEFT} disabled={exportando}
                 className="btn-ghost text-sm">
                 {exportando ? 'Exportando...' : '↓ Exportar EFT'}

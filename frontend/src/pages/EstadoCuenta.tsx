@@ -394,5 +394,5 @@ const EstadoBadge: React.FC<{ estado: string }> = ({ estado }) => {
       : e === 'rechazado'
         ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
         : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-zinc-400'
-  return <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${cls}`}>{estado}</span>
+  return <span className={`inline-block px-2 py-0.5 rounded-sm text-[10px] font-semibold uppercase tracking-wide ${cls}`}>{estado}</span>
 }

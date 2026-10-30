@@ -9,7 +9,7 @@ export const GRILLA_FILA =
 
 const inputBase =
   'w-full min-w-0 px-2 py-1.5 rounded-md border bg-white dark:bg-white/5 text-gray-900 dark:text-gray-100 ' +
-  'placeholder-gray-400 text-base md:text-xs focus:outline-none focus:ring-2 focus:ring-ml-blue/40 dark:focus:ring-ml-green/30 ' +
+  'placeholder-gray-400 text-base md:text-xs focus:outline-hidden focus:ring-2 focus:ring-ml-blue/40 dark:focus:ring-ml-green/30 ' +
   'disabled:opacity-60'
 const borde = (error: boolean) =>
   error ? 'border-red-400 dark:border-red-500/70' : 'border-gray-300 dark:border-white/10'
@@ -51,7 +51,7 @@ const FilaMovimientoBase: React.FC<Props> = ({
       data-testid="fila-movimiento"
       data-estado={tieneError ? 'error' : avisos ? 'dudosa' : 'ok'}
     >
-      <span className="order-1 md:order-none col-span-1 text-2xs md:text-right text-gray-400 dark:text-gray-500 tabular-nums">
+      <span className="order-1 md:order-0 col-span-1 text-2xs md:text-right text-gray-400 dark:text-gray-500 tabular-nums">
         <span className="md:hidden">Fila </span>{numero}
       </span>
 
@@ -60,7 +60,7 @@ const FilaMovimientoBase: React.FC<Props> = ({
         aria-label={lbl('Fecha')}
         value={fila.fecha}
         onChange={e => onCambio(fila.key, 'fecha', e.target.value)}
-        className={`order-2 md:order-none col-span-4 md:col-span-1 ${inputBase} ${borde(errFecha)}`}
+        className={`order-2 md:order-0 col-span-4 md:col-span-1 ${inputBase} ${borde(errFecha)}`}
       />
 
       <input
@@ -69,10 +69,10 @@ const FilaMovimientoBase: React.FC<Props> = ({
         placeholder="Descripción"
         value={fila.descripcion}
         onChange={e => onCambio(fila.key, 'descripcion', e.target.value)}
-        className={`order-4 md:order-none col-span-6 md:col-span-1 ${inputBase} ${borde(false)}`}
+        className={`order-4 md:order-0 col-span-6 md:col-span-1 ${inputBase} ${borde(false)}`}
       />
 
-      <label className="order-5 md:order-none col-span-2 md:col-span-1 flex flex-col gap-0.5 min-w-0">
+      <label className="order-5 md:order-0 col-span-2 md:col-span-1 flex flex-col gap-0.5 min-w-0">
         <span className={etiquetaMovil} aria-hidden="true">Débito</span>
         <input
           type="text"
@@ -86,7 +86,7 @@ const FilaMovimientoBase: React.FC<Props> = ({
         />
       </label>
 
-      <label className="order-6 md:order-none col-span-2 md:col-span-1 flex flex-col gap-0.5 min-w-0">
+      <label className="order-6 md:order-0 col-span-2 md:col-span-1 flex flex-col gap-0.5 min-w-0">
         <span className={etiquetaMovil} aria-hidden="true">Crédito</span>
         <input
           type="text"
@@ -100,7 +100,7 @@ const FilaMovimientoBase: React.FC<Props> = ({
         />
       </label>
 
-      <label className="order-7 md:order-none col-span-2 md:col-span-1 flex flex-col gap-0.5 min-w-0">
+      <label className="order-7 md:order-0 col-span-2 md:col-span-1 flex flex-col gap-0.5 min-w-0">
         <span className={etiquetaMovil} aria-hidden="true">Saldo</span>
         <input
           type="text"
@@ -114,7 +114,7 @@ const FilaMovimientoBase: React.FC<Props> = ({
         />
       </label>
 
-      <div className="order-3 md:order-none col-span-1 flex items-center justify-end gap-0.5">
+      <div className="order-3 md:order-0 col-span-1 flex items-center justify-end gap-0.5">
         <button
           type="button"
           onClick={() => onInsertarDebajo(fila.key)}
@@ -140,7 +140,7 @@ const FilaMovimientoBase: React.FC<Props> = ({
       </div>
 
       {(tieneError || avisos) && (
-        <p className="order-8 md:order-none col-span-6 md:col-span-full text-xs flex flex-wrap items-center gap-x-2 gap-y-1">
+        <p className="order-8 md:order-0 col-span-6 md:col-span-full text-xs flex flex-wrap items-center gap-x-2 gap-y-1">
           {tieneError && (
             <span className="text-red-700 dark:text-red-300 font-medium">{errores}</span>
           )}

@@ -144,7 +144,7 @@ export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = (
                   </div>
                   <button type="button" onClick={() => vincular(c.id)} disabled={saving}
                     aria-label={`Vincular pago #${c.id}`}
-                    className="px-2.5 py-1 text-[11px] bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50">
+                    className="px-2.5 py-1 text-[11px] bg-amber-600 text-white rounded-sm hover:bg-amber-700 disabled:opacity-50">
                     Vincular
                   </button>
                 </li>
@@ -216,11 +216,11 @@ export const ResolverMovimientoModal: React.FC<ResolverMovimientoModalProps> = (
         {error && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose}
-            className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded hover:bg-gray-50 dark:hover:bg-slate-700">
+            className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded-sm hover:bg-gray-50 dark:hover:bg-slate-700">
             Cancelar
           </button>
           <button onClick={guardar} disabled={saving}
-            className="px-4 py-1.5 text-xs bg-ml-blue text-white rounded hover:bg-ml-blue/90 disabled:opacity-50">
+            className="px-4 py-1.5 text-xs bg-ml-blue text-white rounded-sm hover:bg-ml-blue/90 disabled:opacity-50">
             {saving ? 'Guardando...' : 'Registrar pago'}
           </button>
         </div>

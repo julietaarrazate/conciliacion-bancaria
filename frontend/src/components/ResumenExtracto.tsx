@@ -35,7 +35,7 @@ export const ResumenExtracto: React.FC<ResumenExtractoProps> = ({ resumen }) => 
   const pctDeb = hayDebitos ? debitos!.porcentaje : null
 
   return (
-    <div className="mb-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-lg shadow-sm" data-testid="resumen-extracto">
+    <div className="mb-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-lg shadow-xs" data-testid="resumen-extracto">
       <button
         type="button"
         onClick={() => setAbierto(a => !a)}

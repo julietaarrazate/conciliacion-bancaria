@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 
 export const Terminos: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#0B0B0F] py-12 px-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-ml-dark-bg py-12 px-4">
       <div className="max-w-3xl mx-auto">
         <div className="mb-8 flex items-center gap-4">
           <Link
@@ -320,7 +320,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section className="space-y-3">
       <h2 className="text-base font-semibold text-gray-800 dark:text-zinc-200">{title}</h2>
-      <div className="text-sm text-gray-600 dark:text-zinc-400 space-y-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_strong]:text-gray-800 [&_strong]:dark:text-zinc-200">
+      <div className="text-sm text-gray-600 dark:text-zinc-400 space-y-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_strong]:text-gray-800 dark:[&_strong]:text-zinc-200">
         {children}
       </div>
     </section>

@@ -28,7 +28,7 @@ interface Props {
   bulkProcessing: boolean
   bulkSaving: boolean
   bulkMsg: string
-  bulkInputRef: React.RefObject<HTMLInputElement>
+  bulkInputRef: React.RefObject<HTMLInputElement | null>
   onFileChange: (files: FileList | null) => void
   onRemoveFile: (idx: number) => void
   onProcess: () => void
@@ -150,7 +150,7 @@ export const ChequesTabMasiva: React.FC<Props> = ({
                     <tr key={i} className={`border-t border-gray-100 dark:border-white/5 ${rowError ? 'bg-red-50/50 dark:bg-red-500/5' : sinCliente ? 'bg-yellow-50/40 dark:bg-yellow-500/5' : 'hover:bg-gray-50 dark:hover:bg-white/2'}`}>
                       <td className="px-2 py-1.5">
                         {row.previewUrl && (
-                          <img src={row.previewUrl} alt="" className="h-9 w-9 object-cover rounded border border-gray-200 dark:border-white/10" />
+                          <img src={row.previewUrl} alt="" className="h-9 w-9 object-cover rounded-sm border border-gray-200 dark:border-white/10" />
                         )}
                       </td>
                       <td className="px-2 py-1.5">
@@ -170,7 +170,7 @@ export const ChequesTabMasiva: React.FC<Props> = ({
                         <select
                           value={row.cliente_id ?? ''}
                           onChange={e => onUpdateRow(i, 'cliente_id', e.target.value ? parseInt(e.target.value) : null)}
-                          className={`w-full bg-white dark:bg-[#ffffff08] border rounded px-2 py-1 text-xs focus:outline-none ${cliSinCuenta ? 'border-red-400' : 'border-gray-200 dark:border-white/15'} text-gray-800 dark:text-gray-100`}>
+                          className={`w-full bg-white dark:bg-[#ffffff08] border rounded-sm px-2 py-1 text-xs focus:outline-hidden ${cliSinCuenta ? 'border-red-400' : 'border-gray-200 dark:border-white/15'} text-gray-800 dark:text-gray-100`}>
                           <option value="">Sin cliente</option>
                           {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                         </select>
@@ -178,37 +178,37 @@ export const ChequesTabMasiva: React.FC<Props> = ({
                       <td className="px-2 py-1.5">
                         <input type="text" value={row.numero}
                           onChange={e => onUpdateRow(i, 'numero', e.target.value)}
-                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-none" />
+                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded-sm px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-hidden" />
                       </td>
                       <td className="px-2 py-1.5">
                         <input type="text" value={row.banco_origen}
                           onChange={e => onUpdateRow(i, 'banco_origen', e.target.value)}
-                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-none" />
+                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded-sm px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-hidden" />
                       </td>
                       <td className="px-2 py-1.5">
                         <input type="text" value={row.librador}
                           onChange={e => onUpdateRow(i, 'librador', e.target.value)}
-                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-none" />
+                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded-sm px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-hidden" />
                       </td>
                       <td className="px-2 py-1.5">
                         <input type="number" value={row.monto}
                           onChange={e => onUpdateRow(i, 'monto', e.target.value)}
-                          className={`w-full bg-white dark:bg-[#ffffff08] border rounded px-2 py-1 text-xs focus:outline-none ${montoInvalido ? 'border-red-400' : 'border-gray-200 dark:border-white/15'} text-gray-800 dark:text-gray-100`} />
+                          className={`w-full bg-white dark:bg-[#ffffff08] border rounded-sm px-2 py-1 text-xs focus:outline-hidden ${montoInvalido ? 'border-red-400' : 'border-gray-200 dark:border-white/15'} text-gray-800 dark:text-gray-100`} />
                       </td>
                       <td className="px-2 py-1.5">
                         <input type="date" value={row.fecha_emision}
                           onChange={e => onUpdateRow(i, 'fecha_emision', e.target.value)}
-                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-none" />
+                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded-sm px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-hidden" />
                       </td>
                       <td className="px-2 py-1.5">
                         <input type="date" value={row.fecha_deposito}
                           onChange={e => onUpdateRow(i, 'fecha_deposito', e.target.value)}
-                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-none" />
+                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded-sm px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-hidden" />
                       </td>
                       <td className="px-2 py-1.5">
                         <input type="text" value={row.codigo_postal} placeholder="ej: 1425"
                           onChange={e => onUpdateRow(i, 'codigo_postal', e.target.value)}
-                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-none" />
+                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded-sm px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-hidden" />
                       </td>
                       <td className="px-2 py-1.5">
                         <LiBadge value={row.local_interior || null} />
@@ -216,7 +216,7 @@ export const ChequesTabMasiva: React.FC<Props> = ({
                       <td className="px-2 py-1.5">
                         <input type="number" step="0.1" min="0" max="100" value={row.porcentaje_comision} placeholder="0"
                           onChange={e => onUpdateRow(i, 'porcentaje_comision', e.target.value)}
-                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-none" />
+                          className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-white/15 rounded-sm px-2 py-1 text-xs text-gray-800 dark:text-gray-100 focus:outline-hidden" />
                       </td>
                       <td className="px-2 py-1.5">
                         <button onClick={() => onRemoveRow(i)}

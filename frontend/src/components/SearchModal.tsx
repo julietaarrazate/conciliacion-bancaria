@@ -59,8 +59,8 @@ export const SearchModal: React.FC<Props> = ({ open, onClose }) => {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 z-[200]" onClick={onClose} />
-      <div className="fixed top-20 left-1/2 -translate-x-1/2 w-full max-w-lg z-[201] px-4">
+      <div className="fixed inset-0 bg-black/50 z-200" onClick={onClose} />
+      <div className="fixed top-20 left-1/2 -translate-x-1/2 w-full max-w-lg z-201 px-4">
         <div className="bg-white dark:bg-[#1C1C24] rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
           {/* Input */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-white/10">
@@ -73,11 +73,11 @@ export const SearchModal: React.FC<Props> = ({ open, onClose }) => {
               value={q}
               onChange={e => setQ(e.target.value)}
               placeholder="Buscar clientes, planillas, movimientos..."
-              className="flex-1 text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
+              className="flex-1 text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden"
               onKeyDown={e => e.key === 'Escape' && onClose()}
             />
             {loading && <span className="text-xs text-gray-400 animate-pulse">...</span>}
-            <kbd className="text-[10px] text-gray-400 bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono">ESC</kbd>
+            <kbd className="text-[10px] text-gray-400 bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">ESC</kbd>
           </div>
 
           {/* Results */}

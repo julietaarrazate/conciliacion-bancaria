@@ -109,7 +109,7 @@ export const Organizaciones: React.FC = () => {
       </div>
 
       {msg && (
-        <div className={`mb-4 px-3 py-2 rounded text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
+        <div className={`mb-4 px-3 py-2 rounded-sm text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
           {msg}
         </div>
       )}
@@ -134,7 +134,7 @@ export const Organizaciones: React.FC = () => {
             <div className="flex items-center gap-3 pt-1">
               <label className="label mb-0">Activa</label>
               <button onClick={() => setForm(p => ({ ...p, activo: !p.activo }))}
-                className={`px-3 py-1 rounded text-xs font-semibold ${form.activo ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'}`}>
+                className={`px-3 py-1 rounded-sm text-xs font-semibold ${form.activo ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'}`}>
                 {form.activo ? 'Activa' : 'Inactiva'}
               </button>
             </div>
@@ -224,11 +224,11 @@ export const Organizaciones: React.FC = () => {
                   <div className="border-t border-ml-gray dark:border-ml-dark-border px-4 py-3 bg-gray-50 dark:bg-ml-dark-card">
                     <p className="text-xs font-semibold dark:text-white mb-2">Crear usuario para {org.nombre}</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      <input className="input-field !text-xs" placeholder="Nombre completo"
+                      <input className="input-field text-xs!" placeholder="Nombre completo"
                         value={userForm.full_name} onChange={e => setUserForm(p => ({ ...p, full_name: e.target.value }))} />
-                      <input className="input-field !text-xs" placeholder="Email" type="email"
+                      <input className="input-field text-xs!" placeholder="Email" type="email"
                         value={userForm.email} onChange={e => setUserForm(p => ({ ...p, email: e.target.value }))} />
-                      <input className="input-field !text-xs" placeholder="Contraseña (mín 6)" type="password"
+                      <input className="input-field text-xs!" placeholder="Contraseña (mín 6)" type="password"
                         value={userForm.password} onChange={e => setUserForm(p => ({ ...p, password: e.target.value }))} />
                     </div>
                     <div className="flex gap-2 mt-2">
