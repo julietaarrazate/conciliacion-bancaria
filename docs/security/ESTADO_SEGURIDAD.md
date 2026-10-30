@@ -51,9 +51,6 @@ en producción para verificar que no hubo aprovechamiento.
 - El auditor tiene `manage_finance` en el backend (cheques, caja) pero las rutas `/cheques`,
   `/caja` y `/pagos` del frontend piden `reconcile`, así que no las ve. Decidir si se le abren o
   si se le saca el permiso en el backend.
-- Frontend: saltos mayores (Vite 8, React 19, Tailwind 4, Vitest 5) **aprobados por la operadora
-  (30/oct)**, van en el PR siguiente. Tailwind 4 exige iOS 16.4+ / Chrome 111+: dejan de verse bien
-  iPhone 7 y anteriores (aceptado).
 
 ### Tareas de la operadora
 - **GitGuardian**: marcar el incidente 38908774 (PR #261, `Perfil.tsx`) como falso positivo.

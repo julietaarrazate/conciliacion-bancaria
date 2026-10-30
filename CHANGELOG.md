@@ -5,6 +5,18 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Frontend (oct 2026) — Vite 8, React 19, Tailwind 4, Vitest 5
+
+- Saltos mayores aprobados por la operadora. Diff visual de 28 capturas (landing, login, dashboard,
+  movimientos, cheques, cuentas corrientes; desktop/mobile, claro/oscuro): 24 idénticas al píxel;
+  las otras son la animación de la landing y Cheques en modo oscuro, que ahora se ve como estaba
+  diseñado (clases `dark:bg-white/3` que v3 no generaba).
+- Tailwind 4 con capa de compatibilidad (paleta, interlineado y `space-y-*` de v3) para que la app
+  se vea igual. Exige iOS 16.4+ / Chrome 111+.
+- `npm audit --omit=dev`: 0 vulnerabilidades.
+
+---
+
 ### Seguridad + contabilidad (oct 2026) — lote 4, React Router 7 y control del banco
 
 - **Contraseña del superadmin**: `SUPERADMIN_PASSWORD` se usa solo al crear el usuario (un cambio
