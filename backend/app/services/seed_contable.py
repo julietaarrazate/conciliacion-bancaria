@@ -38,9 +38,9 @@ PLAN = [
     ("1-1-1-3", "Banco",                "activo",   "1-1-1-0",  4),
     ("1-1-1-3-1", "Banco Macro",        "activo",   "1-1-1-3",  5),
     ("2-1-1-1", "No identificado",      "pasivo",   "2-1-1-0",  4),
-    ("2-1-2-1", "Green",                "pasivo",   "2-1-2-0",  4),
-    ("2-1-2-2", "Tucu",                 "pasivo",   "2-1-2-0",  4),
-    ("2-1-2-3", "Alojando",             "pasivo",   "2-1-2-0",  4),
+    # Las cuentas de cada cliente (2-1-2-N) NO van en el plan base: se crean al vincular
+    # cada cliente de la organización (_get_o_crear_cuenta_cliente). Antes acá había tres
+    # clientes de la organización de origen y se copiaban a toda organización nueva.
 ]
 
 # Cuentas adicionales — se agregan en cada boot a planes ya existentes (idempotente)

@@ -191,9 +191,9 @@ IA Nivel 2: tabla `PatronAprendido` — aprende de correcciones manuales (2+ con
 
 ## Multi-tenant
 
-- **Organización ≠ cliente.** Organización = empresa que usa Cuadra (ej. Caneland): sus impuestos
+- **Organización ≠ cliente.** Organización = empresa que usa Cuadra (ej. un estudio o una distribuidora): sus impuestos
   (IVA, IIBB, Monotributo, Sueldos) y vencimientos son de la organización. Clientes = los clientes
-  de esa organización (Tucu, Green, Griselda…), que le pagan y mandan planillas para conciliar;
+  de esa organización (las empresas y personas que le pagan), que le pagan y mandan planillas para conciliar;
   Cuadra no les calcula impuestos. Quien maneja varias organizaciones: el superadmin y contadores
   con `allowed_org_ids` (`utils/orgs.manejaVariasOrgs` en el frontend).
 - Organización A = `organizacion_id=1` (NUNCA modificar — solo cambios aditivos)

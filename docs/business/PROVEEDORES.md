@@ -8,8 +8,8 @@ pagó en el mes.
 
 | Caso | ¿Va a la ficha? | Cómo se carga el pago |
 |---|---|---|
-| Caneland le compra papel a una papelera | **Sí** | Pagos → "Pago a proveedor" (`tipo=proveedor`) |
-| Caneland paga, **por cuenta de Green**, una OP a un proveedor de Green | **No** | Pagos → "OP por cuenta de cliente" (`tipo=pago_cliente`): va a la cuenta corriente de Green |
+| La organización le compra papel a una papelera | **Sí** | Pagos → "Pago a proveedor" (`tipo=proveedor`) |
+| La organización paga, **por cuenta de un cliente**, una OP a un proveedor de ese cliente | **No** | Pagos → "OP por cuenta de cliente" (`tipo=pago_cliente`): va a la cuenta corriente del cliente |
 | Gasto sin proveedor identificado (comisión bancaria, etc.) | No | Gasto (`tipo=gasto`) |
 
 Organización ≠ cliente (ver CLAUDE.md → Multi-tenant). Los proveedores de los clientes no son
