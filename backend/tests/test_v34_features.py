@@ -414,7 +414,8 @@ class TestCSSDesign:
         with open(css_path) as f:
             content = f.read()
 
-        match = re.search(r'\.btn-yellow\s*\{([^}]+)\}', content, re.DOTALL)
+        # Tailwind 3: `.btn-yellow { ... }` · Tailwind 4: `@utility btn-yellow { ... }`
+        match = re.search(r'(?:\.|@utility\s+)btn-yellow\s*\{([^}]+)\}', content, re.DOTALL)
         assert match, "No se encontró .btn-yellow en el CSS"
         block = match.group(1)
 

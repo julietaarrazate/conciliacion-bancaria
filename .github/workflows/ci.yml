@@ -42,6 +42,9 @@ jobs:
             backend:
               - 'backend/**'
               - '.github/workflows/ci.yml'
+              # tests/test_v34_features.py lee estos archivos del frontend (smoke de CSS/logo)
+              - 'frontend/src/styles/index.css'
+              - 'frontend/src/components/Layout.tsx'
             frontend:
               - 'frontend/**'
               - '.github/workflows/ci.yml'

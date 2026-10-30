@@ -48,4 +48,24 @@ describe('ControlBancoCard', () => {
     expect(screen.getByText(/1\.234,50/)).toBeInTheDocument()
     expect(screen.getByText(/3 movimientos del extracto/)).toBeInTheDocument()
   })
+
+  it('si la diferencia son huecos entre extractos, avisa que faltan movimientos (no un error)', async () => {
+    getControlBanco.mockResolvedValue({
+      ...base,
+      diferencia_libro_vs_extracto: '-180133367.02',
+      huecos: [
+        { desde: '2026-08-20', hasta: '2026-08-20', saldo_antes: '241181442.25', saldo_despues: '245768692.42', monto_faltante: '4587250.17' },
+        { desde: '2026-08-24', hasta: '2026-10-13', saldo_antes: '273638333.25', saldo_despues: '88917716.06', monto_faltante: '-184720617.19' },
+      ],
+      saldo_real_banco: '62897724.68',
+      fecha_saldo_real_banco: '2026-10-19',
+    })
+    render(<ControlBancoCard />)
+    expect(await screen.findByText(/faltan movimientos del banco sin subir/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no coincide con el extracto/i)).not.toBeInTheDocument()
+    const huecos = screen.getByTestId('control-banco-huecos')
+    expect(huecos.textContent).toMatch(/24\/08\/2026 y el 13\/10\/2026/)
+    expect(huecos.textContent).toMatch(/184\.720\.617,19/)
+    expect(huecos.textContent).toMatch(/62\.897\.724,68/)
+  })
 })

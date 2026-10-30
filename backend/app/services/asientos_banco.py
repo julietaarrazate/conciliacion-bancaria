@@ -624,6 +624,74 @@ def corregir_asientos_banco(db: Session, oid: int, usuario_id: Optional[int], dr
 
 # ─── Control: banco en libros vs. extracto ───────────────────────────────────
 
+def _tramos_de_saldo(db: Session, ids_ext: list) -> list:
+    """Cada bloque continuo de movimientos con saldo: el extracto principal y los UM de
+    cada extracto, por separado. El orden dentro del archivo varía según el banco (más
+    nuevo arriba o abajo), así que se ordena por fecha y, dentro del día, por `orden` en
+    el sentido que encadena los saldos (saldo anterior + monto = saldo). Devuelve por
+    tramo: fechas, saldo inicial/final, neto y si cuadra por dentro."""
+    filas = (
+        db.query(
+            MovimientoBanco.extracto_id, MovimientoBanco.source, MovimientoBanco.fecha,
+            MovimientoBanco.orden, MovimientoBanco.id, MovimientoBanco.monto, MovimientoBanco.saldo,
+        )
+        .filter(
+            MovimientoBanco.extracto_id.in_(ids_ext),
+            MovimientoBanco.saldo.isnot(None), MovimientoBanco.fecha.isnot(None),
+        )
+        .all()
+    )
+    bloques: dict = {}
+    for f in filas:
+        clave = (f.extracto_id, "um" if f.source == "um" else "principal")
+        bloques.setdefault(clave, []).append(f)
+
+    def _saltos(movs):
+        return sum(
+            1 for a, b in zip(movs, movs[1:])
+            if abs(Decimal(str(a.saldo)) + Decimal(str(b.monto)) - Decimal(str(b.saldo))) > Decimal("0.01")
+        )
+
+    tramos = []
+    for (extracto_id, origen), movs in bloques.items():
+        asc = sorted(movs, key=lambda m: (_a_fecha(m.fecha), m.orden or 0, m.id))
+        desc = sorted(movs, key=lambda m: (_a_fecha(m.fecha), -(m.orden or 0), -m.id))
+        orden = min((asc, desc), key=_saltos)
+        primero, ultimo = orden[0], orden[-1]
+        ini = Decimal(str(primero.saldo)) - Decimal(str(primero.monto))
+        fin = Decimal(str(ultimo.saldo))
+        neto = sum((Decimal(str(m.monto)) for m in orden), _CERO)
+        tramos.append({
+            "extracto_id": extracto_id, "origen": origen,
+            "desde": str(_a_fecha(primero.fecha)), "hasta": str(_a_fecha(ultimo.fecha)),
+            "saldo_inicial": str(ini.quantize(Decimal("0.01"))),
+            "saldo_final": str(fin.quantize(Decimal("0.01"))),
+            "neto": str(neto.quantize(Decimal("0.01"))),
+            "cuadra": abs(fin - ini - neto) <= Decimal("0.01"),
+        })
+    tramos.sort(key=lambda t: (t["desde"], t["hasta"], t["origen"] != "principal"))
+    return tramos
+
+
+def _a_fecha(f):
+    return f.date() if isinstance(f, datetime) else f
+
+
+def _huecos(tramos: list) -> list:
+    """Entre tramos consecutivos, el saldo de arranque del siguiente debería ser el
+    saldo final del anterior. Si no, faltan movimientos sin cargar en el medio."""
+    huecos = []
+    for a, b in zip(tramos, tramos[1:]):
+        dif = Decimal(b["saldo_inicial"]) - Decimal(a["saldo_final"])
+        if abs(dif) > Decimal("0.01"):
+            huecos.append({
+                "desde": a["hasta"], "hasta": b["desde"],
+                "saldo_antes": a["saldo_final"], "saldo_despues": b["saldo_inicial"],
+                "monto_faltante": str(dif.quantize(Decimal("0.01"))),
+            })
+    return huecos
+
+
 def control_banco(db: Session, oid: int) -> dict:
     """Saldo de Banco Macro en el Libro vs. el saldo del último extracto, más
     los saldos de las transitorias. Si todo el banco está registrado, el saldo
@@ -635,6 +703,7 @@ def control_banco(db: Session, oid: int) -> dict:
     sin_asiento = 0
     saldo_final = None
     saldo_inicial = None
+    tramos: list = []
     if ids_ext:
         suma_movs = Decimal(str(
             db.query(func.coalesce(func.sum(MovimientoBanco.monto), 0))
@@ -648,22 +717,11 @@ def control_banco(db: Session, oid: int) -> dict:
                 MovimientoBanco.asiento_id.is_(None),
             ).count()
         )
-        # Sin fecha no se puede ordenar (y en Postgres los NULL van primero en DESC).
-        con_saldo = (MovimientoBanco.saldo.isnot(None)) & (MovimientoBanco.fecha.isnot(None))
-        ultimo = (
-            db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id.in_(ids_ext), con_saldo)
-            .order_by(MovimientoBanco.fecha.desc(), MovimientoBanco.orden.desc().nullslast(), MovimientoBanco.id.desc())
-            .first()
-        )
-        primero = (
-            db.query(MovimientoBanco).filter(MovimientoBanco.extracto_id.in_(ids_ext), con_saldo)
-            .order_by(MovimientoBanco.fecha.asc(), MovimientoBanco.orden.asc().nullslast(), MovimientoBanco.id.asc())
-            .first()
-        )
-        if ultimo is not None:
-            saldo_final = Decimal(str(ultimo.saldo))
-        if primero is not None:
-            saldo_inicial = Decimal(str(primero.saldo)) - Decimal(str(primero.monto))
+        # Saldos del banco: del primer y último tramo continuo (ver _tramos_de_saldo).
+        tramos = _tramos_de_saldo(db, ids_ext)
+        if tramos:
+            saldo_inicial = Decimal(tramos[0]["saldo_inicial"])
+            saldo_final = Decimal(tramos[-1]["saldo_final"])
 
     saldos = saldos_cuentas_banco(db, oid)
     libro = Decimal(saldos["banco"]["saldo"])
@@ -671,9 +729,15 @@ def control_banco(db: Session, oid: int) -> dict:
     dif_extracto = None
     if saldo_final is not None and saldo_inicial is not None:
         dif_extracto = (saldo_final - saldo_inicial - libro).quantize(Decimal("0.01"))
+    huecos = _huecos(tramos)
     return {
         "org_id": oid,
         "saldo_libro_banco": str(libro),
+        "tramos": tramos,
+        "huecos": huecos,
+        "tramos_que_no_cuadran": sum(1 for t in tramos if not t["cuadra"]),
+        "saldo_real_banco": tramos[-1]["saldo_final"] if tramos else None,
+        "fecha_saldo_real_banco": tramos[-1]["hasta"] if tramos else None,
         "suma_movimientos_extractos": str(suma_movs.quantize(Decimal("0.01"))),
         "diferencia_libro_vs_movimientos": str(dif_movs),
         "saldo_ultimo_extracto": str(saldo_final) if saldo_final is not None else None,
@@ -685,6 +749,8 @@ def control_banco(db: Session, oid: int) -> dict:
         "nota": (
             "Banco Macro debe igualar la suma de los movimientos de los extractos (no hay asiento "
             "de apertura: la diferencia contra el saldo del banco es el saldo inicial del primero). "
+            "Si entre dos extractos el saldo no encadena, faltan movimientos sin cargar (`huecos`): "
+            "la diferencia contra el extracto es la suma de esos huecos, no un error contable. "
             "2-1-1-1 acreedora = cobros del banco sin imputar a un cliente; 2-1-1-2 deudora = débitos "
             "del banco sin un pago cargado, acreedora = pagos cargados que el banco todavía no debitó."
         ),
