@@ -477,6 +477,73 @@ def explicar_match(row, mov) -> Optional[str]:
     return "monto"
 
 
+# CUIT escrito en el texto del banco: "20123456794", "20-12345679-4", "20 12345679 4".
+_RE_CUIT_TEXTO = re.compile(r'(?<!\d)(\d{2})[-. ]?(\d{8})[-. ]?(\d)(?!\d)')
+
+
+def cuits_en_texto(texto: Optional[str]) -> set:
+    """CUITs (11 dígitos) que aparecen en un texto, normalizados sin separadores."""
+    if not texto:
+        return set()
+    return {''.join(m) for m in _RE_CUIT_TEXTO.findall(str(texto))}
+
+
+def _cuit_de_fila(row) -> str:
+    """CUIT de 11 dígitos de la fila (columna CUIT o, si no, el que traiga el titular)."""
+    cuit = norm_cuit(getattr(row, "cuit", None) or '')
+    if len(cuit) == 11:
+        return cuit
+    cuits = cuits_en_texto(getattr(row, "titular", None))
+    return sorted(cuits)[0] if cuits else ''
+
+
+# Prioridad para elegir la mejor coincidencia de una fila contra varios movimientos.
+_ORDEN_COINCIDENCIA = {"cuit": 0, "titular": 1, "otro_dato": 2, "solo_monto": 3}
+
+
+def coincidencia_match(row, movs) -> Optional[str]:
+    """Calidad del match de una fila conciliada (read-only, no decide nada).
+
+    A diferencia de `explicar_match` (qué dato coincide), esta marca también el
+    caso peligroso: la fila y el movimiento traen CUIT y son distintos (un match
+    que solo cerró por monto único). Valores:
+      - "cuit": el CUIT de la fila está en el texto del movimiento.
+      - "cuit_distinto": los dos traen CUIT y no coinciden. Gana sobre todo lo demás.
+      - "titular": coincide el nombre.
+      - "otro_dato": coincide DNI, CBU/CVU, n° de cuenta/operación o referencia.
+      - "solo_monto": no coincide ningún dato, solo el importe.
+    `movs` es un movimiento o una lista (grupos: la fila contra todos sus
+    movimientos; si alguno trae otro CUIT, gana "cuit_distinto").
+    """
+    if row is None or movs is None:
+        return None
+    lista = movs if isinstance(movs, (list, tuple)) else [movs]
+    lista = [m for m in lista if m is not None]
+    if not lista:
+        return None
+
+    cuit_fila = _cuit_de_fila(row)
+    mejores = []
+    for mov in lista:
+        texto = getattr(mov, "titular", None) or ''
+        if cuit_fila:
+            if cuit_fila in re.sub(r'\D', '', texto):
+                mejores.append("cuit")
+                continue
+            if cuits_en_texto(texto) or len(extraer_cuit(texto)) == 11:
+                return "cuit_distinto"
+        motivo = explicar_match(row, mov)
+        if motivo == "cuit":
+            mejores.append("cuit")
+        elif motivo == "titular":
+            mejores.append("titular")
+        elif motivo == "monto":
+            mejores.append("solo_monto")
+        else:
+            mejores.append("otro_dato")
+    return min(mejores, key=lambda c: _ORDEN_COINCIDENCIA[c])
+
+
 # Config por defecto (org principal — comportamiento original)
 CONFIG_DEFAULT_ORG = {
     "match_rules": ["monto_cuit"],
@@ -485,6 +552,22 @@ CONFIG_DEFAULT_ORG = {
     "estados_habilitados": ["pendiente", "ok", "no está", "duplicado", "faltan datos"],
     "requiere_cierre_periodo": False,
 }
+
+
+def fecha_acred_desde(fecha_acred_str: str) -> date:
+    """'hoy' | 'ayer' | fecha ISO → fecha de acreditación (zona Argentina)."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    _ARG = ZoneInfo("America/Argentina/Buenos_Aires")
+    s = (fecha_acred_str or "hoy").lower()
+    if s == 'hoy':
+        return datetime.now(_ARG).date()
+    if s == 'ayer':
+        return (datetime.now(_ARG) - timedelta(days=1)).date()
+    try:
+        return datetime.fromisoformat(fecha_acred_str).date()
+    except Exception:
+        return datetime.now(_ARG).date()
 
 
 def conciliar_planilla(
@@ -499,9 +582,7 @@ def conciliar_planilla(
     cliente_id: Optional[int] = None,
     comision_pct: Decimal = Decimal("0"),
 ) -> dict:
-    from datetime import datetime, timedelta
-    from zoneinfo import ZoneInfo
-    _ARG = ZoneInfo("America/Argentina/Buenos_Aires")
+    from app.services import conciliacion_grupos as grupos
 
     config = org_config or CONFIG_DEFAULT_ORG
     estados_habilitados = config.get("estados_habilitados", [])
@@ -512,8 +593,24 @@ def conciliar_planilla(
         "no_encontradas": 0,
         "duplicadas": 0,
         "sin_datos": 0,
-        "filas_procesadas": 0
+        "filas_procesadas": 0,
+        "grupos_sugeridos": 0,
+        "grupos_confirmados": 0,
     }
+
+    # Grupos (N filas ↔ M movimientos): las sugerencias pendientes se recalculan
+    # en cada corrida; los grupos confirmados se respetan como una decisión manual
+    # (sus filas no se re-matchean y sus movimientos no se reusan).
+    planilla_id = planilla_rows[0].planilla_id if planilla_rows else None
+    filas_en_grupo: set = set()
+    if planilla_id:
+        grupos.borrar_sugeridos(db, planilla_id)
+        for g in grupos.grupos_activos_de_planilla(db, planilla_id):
+            for it in g.items:
+                if it.planilla_row_id:
+                    filas_en_grupo.add(it.planilla_row_id)
+                if it.movimiento_id:
+                    procesados.add(it.movimiento_id)
 
     # Pre-cargar en procesados todos los movimientos ya asignados a filas "ok"
     # antes de iterar, sin importar el orden de las filas en la planilla.
@@ -522,8 +619,13 @@ def conciliar_planilla(
             if row.status == "ok" and row.orden_movimiento_acreditado:
                 procesados.add(row.orden_movimiento_acreditado)
 
+    fecha_acred = fecha_acred_desde(fecha_acred_str)
+
     for row in planilla_rows:
         res["filas_procesadas"] += 1
+        if getattr(row, "id", None) in filas_en_grupo:
+            res["acreditadas"] += 1
+            continue
         # Modo re-conciliar: proteger filas ya ok y seguir con las demás
         if solo_pendientes and row.status == "ok":
             res["acreditadas"] += 1
@@ -586,15 +688,7 @@ def conciliar_planilla(
 
         if mov:
             mov.cliente_acreditado = cliente_nombre
-            if fecha_acred_str.lower() == 'hoy':
-                mov.fecha_acred = datetime.now(_ARG).date()
-            elif fecha_acred_str.lower() == 'ayer':
-                mov.fecha_acred = (datetime.now(_ARG) - timedelta(days=1)).date()
-            else:
-                try:
-                    mov.fecha_acred = datetime.fromisoformat(fecha_acred_str).date()
-                except Exception:
-                    mov.fecha_acred = datetime.now(_ARG).date()
+            mov.fecha_acred = fecha_acred
 
             row.fecha_acred = mov.fecha_acred or mov.fecha
             row.orden_movimiento_acreditado = mov.id
@@ -608,66 +702,120 @@ def conciliar_planilla(
             else:
                 res["sin_datos"] += 1
 
-    # Asiento agrupado por planilla, separado por ORIGEN del movimiento (extracto
-    # principal / Últimos Movimientos). Con el modelo de cuentas transitorias
-    # (oct 2026) los dos orígenes dejan la plata en No identificado 2-1-1-1
-    # (Banco D / 2-1-1-1 H) y la reclasificación siempre la debita; el origen
-    # solo elige el módulo (reclass_planilla_principal / um_reclass_planilla),
-    # para trazabilidad y para que los dos buckets no se pisen. El % de
-    # comisión se aplica en cada bucket por igual, así el cliente queda
-    # acreditado por el NETO total sin importar de qué origen vino cada pago
-    # (ver BUSINESS_RULES.md §4.1). Se recomputa el total sobre TODAS las filas
-    # ya conciliadas (no solo las de esta pasada). Así el upsert refleja el
-    # total real en re-conciliaciones y es idempotente — mismo criterio que usa
-    # "Empezar limpio" (reset-y-rebuild).
-    if cliente_id and planilla_rows:
+    # ── Grupos: después de la pasada 1:1, solo sobre lo que quedó libre ──────
+    if planilla_id:
         try:
-            from app.services.motor_contable import registrar_reclasificacion_planilla
-            from app.services.tz import hoy_art as _hoy_art
-
-            planilla_id = planilla_rows[0].planilla_id
-            nombre_archivo = ""
-            try:
-                if getattr(planilla_rows[0], "planilla", None):
-                    nombre_archivo = planilla_rows[0].planilla.nombre_archivo or ""
-            except Exception:
-                pass
-
-            origen_por_mov = {
-                m.id: ("um" if getattr(m, "source", None) == "um" else "extracto")
-                for m in movimientos
-            }
-            totales = {"um": Decimal("0"), "extracto": Decimal("0")}
-            fechas_ref = {"um": None, "extracto": None}
+            antes = {id(r): (r.status or "") for r in planilla_rows}
+            r_grupos = grupos.sugerir_grupos(
+                db, planilla_id, org_id, planilla_rows, movimientos, procesados,
+                config, cliente_nombre, fecha_acred,
+            )
+            res["grupos_sugeridos"] = r_grupos["grupos_sugeridos"]
+            res["grupos_confirmados"] = r_grupos["grupos_confirmados"]
+            # Filas que un grupo auto-confirmado concilió: pasan de su contador al de acreditadas
             for r in planilla_rows:
-                if (r.status or "") != "ok":
-                    continue
-                origen = origen_por_mov.get(getattr(r, "orden_movimiento_acreditado", None))
-                if origen is None:
-                    continue
-                totales[origen] += abs(Decimal(str(r.monto or 0)))
-                rf = getattr(r, "fecha_acred", None)
-                if rf and (fechas_ref[origen] is None or rf > fechas_ref[origen]):
-                    fechas_ref[origen] = rf
-
-            for bucket, total in totales.items():
-                if total > 0:
-                    registrar_reclasificacion_planilla(
-                        db=db,
-                        planilla_id=planilla_id,
-                        org_id=org_id,
-                        usuario_id=None,
-                        cliente_id=cliente_id,
-                        cliente_nombre=cliente_nombre,
-                        total_monto=total,
-                        fecha=fechas_ref[bucket] or _hoy_art(),
-                        nombre_archivo=nombre_archivo,
-                        origen=bucket,
-                        comision_pct=comision_pct,
-                    )
+                previo = antes.get(id(r), "")
+                if r.status in ("ok", "CONCILIADO_CON_DIFERENCIA") and previo != r.status:
+                    res["no_encontradas" if previo == "no está" else "sin_datos"] -= 1
+                    res["acreditadas"] += 1
         except Exception as _ex:
             import logging
-            logging.getLogger(__name__).warning("Error asiento agrupado planilla: %s", _ex)
+            logging.getLogger(__name__).warning("Error buscando grupos planilla %s: %s", planilla_id, _ex)
+
+    if cliente_id and planilla_rows:
+        recalcular_reclasificacion_planilla(
+            db, planilla_rows, movimientos, cliente_nombre, cliente_id, org_id, comision_pct,
+        )
 
     db.commit()
     return res
+
+
+def recalcular_reclasificacion_planilla(
+    db: Session,
+    planilla_rows: List[PlanillaRow],
+    movimientos: List[MovimientoBanco],
+    cliente_nombre: str,
+    cliente_id: int,
+    org_id: int,
+    comision_pct: Decimal = Decimal("0"),
+    anular_vacios: bool = False,
+) -> Dict[str, Decimal]:
+    """Asiento agrupado por planilla, separado por ORIGEN del movimiento (extracto
+    principal / Últimos Movimientos). Devuelve el total conciliado por bucket.
+
+    Con el modelo de cuentas transitorias (oct 2026) los dos orígenes dejan la
+    plata en No identificado 2-1-1-1 (Banco D / 2-1-1-1 H) y la reclasificación
+    siempre la debita; el origen solo elige el módulo (reclass_planilla_principal
+    / um_reclass_planilla), para trazabilidad y para que los dos buckets no se
+    pisen. El % de comisión se aplica en cada bucket por igual, así el cliente
+    queda acreditado por el NETO total sin importar de qué origen vino cada pago
+    (ver BUSINESS_RULES.md §4.1). Se recomputa el total sobre TODAS las filas ya
+    conciliadas (no solo las de esta pasada). Así el upsert refleja el total real
+    en re-conciliaciones y es idempotente — mismo criterio que usa "Empezar
+    limpio" (reset-y-rebuild).
+
+    Total de cada bucket = filas "ok" 1:1 (por el monto de la fila, como siempre)
+    + grupos confirmados (por el monto de SUS MOVIMIENTOS, cada uno en el bucket
+    de su origen — un grupo puede mezclar extracto y UM). Las filas de un grupo no
+    tienen `orden_movimiento_acreditado`, así que no se cuentan dos veces.
+
+    `anular_vacios=True` (deshacer/armar grupos): si un bucket quedó en 0, borra
+    su asiento vigente (ver motor_contable.anular_reclasificacion_planilla)."""
+    totales = {"um": Decimal("0"), "extracto": Decimal("0")}
+    try:
+        from app.services import motor_contable as mc
+        from app.services.conciliacion_grupos import totales_grupos_por_origen
+        from app.services.tz import hoy_art as _hoy_art
+
+        planilla_id = planilla_rows[0].planilla_id
+        nombre_archivo = ""
+        try:
+            if getattr(planilla_rows[0], "planilla", None):
+                nombre_archivo = planilla_rows[0].planilla.nombre_archivo or ""
+        except Exception:
+            pass
+
+        origen_por_mov = {
+            m.id: ("um" if getattr(m, "source", None) == "um" else "extracto")
+            for m in movimientos
+        }
+        fechas_ref = {"um": None, "extracto": None}
+        for r in planilla_rows:
+            if (r.status or "") != "ok":
+                continue
+            origen = origen_por_mov.get(getattr(r, "orden_movimiento_acreditado", None))
+            if origen is None:
+                continue
+            totales[origen] += abs(Decimal(str(r.monto or 0)))
+            rf = getattr(r, "fecha_acred", None)
+            if rf and (fechas_ref[origen] is None or rf > fechas_ref[origen]):
+                fechas_ref[origen] = rf
+
+        for origen, (total_g, fecha_g) in totales_grupos_por_origen(db, planilla_id).items():
+            totales[origen] += total_g
+            if fecha_g and (fechas_ref[origen] is None or fecha_g > fechas_ref[origen]):
+                fechas_ref[origen] = fecha_g
+
+        for bucket, total in totales.items():
+            if total > 0:
+                mc.registrar_reclasificacion_planilla(
+                    db=db,
+                    planilla_id=planilla_id,
+                    org_id=org_id,
+                    usuario_id=None,
+                    cliente_id=cliente_id,
+                    cliente_nombre=cliente_nombre,
+                    total_monto=total,
+                    fecha=fechas_ref[bucket] or _hoy_art(),
+                    nombre_archivo=nombre_archivo,
+                    origen=bucket,
+                    comision_pct=comision_pct,
+                )
+            elif anular_vacios:
+                mc.anular_reclasificacion_planilla(db, planilla_id, org_id, bucket)
+                db.commit()
+    except Exception as _ex:
+        import logging
+        logging.getLogger(__name__).warning("Error asiento agrupado planilla: %s", _ex)
+    return totales

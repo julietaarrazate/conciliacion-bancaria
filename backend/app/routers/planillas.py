@@ -23,7 +23,11 @@ from app.models.organizacion import Organizacion
 from fastapi.responses import StreamingResponse
 from app.schemas.planilla import PlanillaResponse, PlanillaDetalleResponse, ConciliacionResultado
 from app.services.planilla_mapper import estandarizar_planilla
-from app.services.conciliacion import conciliar_planilla, diagnostico_conciliacion, explicar_match, montos_iguales
+from app.services.conciliacion import (
+    coincidencia_match, conciliar_planilla, diagnostico_conciliacion, explicar_match, montos_iguales,
+    recalcular_reclasificacion_planilla,
+)
+from app.services import conciliacion_grupos as grupos_svc
 from app.services.auditoria import registrar_log
 from app.services.excel_export import export_planilla_conciliada
 from app.services.tz import hoy_art
@@ -88,6 +92,17 @@ def _planilla_for_user(db: Session, planilla_id: int, current_user: User,
     if not p:
         raise HTTPException(404, "Planilla no encontrada")
     return p
+
+
+def _bloquear_si_en_grupo(db: Session, row: PlanillaRow) -> None:
+    """Una fila que está en un grupo (sugerido o confirmado) se maneja desde el
+    grupo: cambiarle el estado, asignarle otro movimiento o borrarla suelta
+    dejaría el grupo inconsistente (y su asiento)."""
+    if grupos_svc.grupo_por_fila(db, [row.id]):
+        raise HTTPException(
+            409,
+            "Esta fila es parte de un grupo de conciliación: confirmalo o deshacelo primero.",
+        )
 
 
 def _cliente_para_org(db: Session, cliente_id: int, org_id: int,
@@ -507,6 +522,7 @@ def asignar_movimiento(
         raise HTTPException(404, "Fila no encontrada")
     planilla = _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
     org_id = planilla.organizacion_id or 1
+    _bloquear_si_en_grupo(db, row)
 
     fecha_check = row.fecha_acred or (planilla.fecha_carga.date() if planilla.fecha_carga else None)
     if periodo_esta_cerrado(db, org_id, fecha_check):
@@ -528,6 +544,8 @@ def asignar_movimiento(
     es_este_cliente = (mov.cliente_acreditado or "").strip().lower() == cliente_nombre.strip().lower()
     if not ya_libre and not es_este_cliente:
         raise HTTPException(409, f"Este movimiento ya está acreditado a {mov.cliente_acreditado}")
+    if grupos_svc.movimientos_en_grupos_activos(db, org_id, [mov.id]):
+        raise HTTPException(409, "Este movimiento es parte de un grupo de conciliación: deshacelo primero")
 
     # Si la fila tenía otro movimiento asignado antes, liberarlo (solo si
     # seguía acreditado a este mismo cliente — no pisar datos de terceros).
@@ -576,6 +594,201 @@ def asignar_movimiento(
         logger.warning("asignar_movimiento: error al recalcular contabilidad (%s): %s", row_id, ex)
 
     return {"ok": True, "row_id": row_id, "movimiento_id": mov.id, "status": row.status}
+
+
+# ── Grupos de conciliación (N filas ↔ M movimientos) ─────────────────────────
+# Un movimiento contra varias filas (el cliente pagó varias filas con una
+# transferencia) o varias transferencias contra una fila. El motor los sugiere
+# después de la pasada 1:1 (estado SUGERIDO_GRUPO); acá se confirman, se arman a
+# mano y se deshacen. Ver services/conciliacion_grupos.py y BUSINESS_RULES §1.10.
+
+def _grupo_para_user(db: Session, grupo_id: int, current_user: User):
+    """Resuelve un grupo con aislamiento multi-tenant (vía su planilla). 404 si es de otra org."""
+    from app.models.conciliacion_grupo import ConciliacionGrupo
+    g = db.query(ConciliacionGrupo).filter(ConciliacionGrupo.id == grupo_id).first()
+    if not g:
+        raise HTTPException(404, "Grupo no encontrado")
+    planilla = _planilla_for_user(db, g.planilla_id, current_user, include_deleted=True)
+    if (g.organizacion_id or 1) != (planilla.organizacion_id or 1):
+        raise HTTPException(404, "Grupo no encontrado")
+    return g, planilla
+
+
+def _chequear_periodo_grupo(db: Session, planilla: Planilla, movs) -> None:
+    from app.services.cierre_periodo import periodo_esta_cerrado
+    org_id = planilla.organizacion_id or 1
+    fechas = {m.fecha for m in movs if m.fecha}
+    if planilla.fecha_carga:
+        fechas.add(planilla.fecha_carga.date())
+    if any(periodo_esta_cerrado(db, org_id, f) for f in fechas):
+        raise HTTPException(409, "El periodo ya está cerrado — este grupo no se puede modificar")
+
+
+def _recalcular_contabilidad_planilla(db: Session, planilla: Planilla) -> None:
+    """Misma reclasificación que "Re-conciliar", sin re-matchear ninguna fila. Si
+    un bucket (extracto/UM) quedó sin plata conciliada, su asiento se anula."""
+    try:
+        extracto = _resolver_extracto_planilla(db, planilla)
+        recalcular_reclasificacion_planilla(
+            db, planilla.rows, extracto.movimientos, planilla.cliente.nombre, planilla.cliente_id,
+            planilla.organizacion_id or 1, planilla.porcentaje_comision or Decimal("0"),
+            anular_vacios=True,
+        )
+    except HTTPException:
+        raise
+    except Exception as ex:
+        logger.warning("grupos: error al recalcular contabilidad planilla %s: %s", planilla.id, ex)
+
+
+def _grupo_dict(db: Session, grupo) -> dict:
+    filas, movs = grupos_svc.filas_y_movimientos(db, grupo)
+    d = grupos_svc.serializar_grupo(grupo, movs, len(filas))
+    d["filas"] = [{"id": r.id, "monto": r.monto, "status": r.status} for r in filas]
+    return d
+
+
+@router.get("/{planilla_id}/movimientos-libres")
+def movimientos_libres(
+    planilla_id: int,
+    q: Optional[str] = Query(None, description="Texto a buscar en el titular del movimiento"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Créditos del extracto de la planilla que todavía no están conciliados con
+    nada (sin cliente, sin fila 1:1 y fuera de grupos): los que se pueden elegir
+    para armar un grupo a mano."""
+    from app.services.conciliacion import es_libre
+
+    planilla = _planilla_for_user(db, planilla_id, current_user, include_deleted=True)
+    extracto = _resolver_extracto_planilla(db, planilla)
+    org_id = planilla.organizacion_id or 1
+    movs = [m for m in extracto.movimientos if (m.monto or 0) > 0 and es_libre(m.cliente_acreditado)]
+    ids = [m.id for m in movs]
+    en_grupo = grupos_svc.movimientos_en_grupos_activos(db, org_id, ids)
+    vinculados = {
+        mid for (mid,) in db.query(PlanillaRow.orden_movimiento_acreditado)
+        .filter(PlanillaRow.orden_movimiento_acreditado.in_(ids)).all()
+    } if ids else set()
+    texto = (q or "").strip().lower()
+    libres = [
+        m for m in movs
+        if m.id not in en_grupo and m.id not in vinculados
+        and (not texto or texto in (m.titular or "").lower())
+    ]
+    libres.sort(key=lambda m: (m.fecha or _dt_now.min.date(), m.id))
+    return {
+        "planilla_id": planilla_id,
+        "tolerancia": _get_org_config(db, org_id).get("tolerancia_monto", 0.01),
+        "movimientos": [
+            {"id": m.id, "orden": m.orden, "fecha": m.fecha.isoformat() if m.fecha else None,
+             "titular": m.titular, "monto": m.monto, "source": m.source or "extracto"}
+            for m in libres[:500]
+        ],
+    }
+
+
+@router.post("/{planilla_id}/grupos")
+def crear_grupo(
+    planilla_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_permission("reconcile")),
+):
+    """Arma y confirma un grupo a mano: varias filas contra UN movimiento, o UNA
+    fila contra varios movimientos.
+    Body: {"row_ids": [..], "movimiento_ids": [..], "con_diferencia": bool}.
+    Si las sumas no cuadran, solo se acepta con `con_diferencia=true` y las filas
+    quedan "CONCILIADO_CON_DIFERENCIA"."""
+    planilla = _planilla_for_user(db, planilla_id, current_user)
+    org_id = planilla.organizacion_id or 1
+    extracto = _resolver_extracto_planilla(db, planilla)
+    mov_ids = payload.get("movimiento_ids") or []
+    _chequear_periodo_grupo(db, planilla, [m for m in extracto.movimientos if m.id in set(mov_ids)])
+    try:
+        grupo = grupos_svc.crear_grupo_manual(
+            db, planilla, extracto.movimientos,
+            row_ids=payload.get("row_ids") or [], mov_ids=mov_ids,
+            config=_get_org_config(db, org_id), usuario_id=current_user.id,
+            con_diferencia=bool(payload.get("con_diferencia")),
+        )
+    except (TypeError, ValueError) as e:
+        db.rollback()
+        code = getattr(e, "status_code", 400)
+        raise HTTPException(code, str(e) if isinstance(e, grupos_svc.GrupoError) else "Datos inválidos")
+    db.commit()
+    _recalcular_contabilidad_planilla(db, planilla)
+    data = _grupo_dict(db, grupo)
+    registrar_log(
+        db=db, usuario_id=current_user.id, tabla="conciliacion_grupos", registro_id=grupo.id,
+        accion="CREAR_GRUPO_MANUAL",
+        cambios={"planilla_id": planilla_id, "filas": [f["id"] for f in data["filas"]],
+                 "movimientos": [m["id"] for m in data["movimientos"]],
+                 "diferencia": str(data["diferencia"])},
+        organizacion_id=org_id,
+    )
+    return data
+
+
+@router.post("/grupos/{grupo_id}/confirmar")
+def confirmar_grupo(
+    grupo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_permission("reconcile")),
+):
+    """Confirma un grupo SUGERIDO por el motor: filas en "ok" y movimientos acreditados al cliente."""
+    from app.models.conciliacion_grupo import GRUPO_SUGERIDO
+    from app.models.planilla import SUGERIDO_GRUPO
+    from app.services.conciliacion import es_libre
+
+    grupo, planilla = _grupo_para_user(db, grupo_id, current_user)
+    if grupo.estado != GRUPO_SUGERIDO:
+        raise HTTPException(409, "Este grupo no está pendiente de confirmar")
+    filas, movs = grupos_svc.filas_y_movimientos(db, grupo)
+    _chequear_periodo_grupo(db, planilla, movs)
+    if any(r.status != SUGERIDO_GRUPO for r in filas):
+        raise HTTPException(409, "Alguna fila del grupo cambió de estado: volvé a conciliar la planilla")
+    if any(not es_libre(m.cliente_acreditado) for m in movs):
+        raise HTTPException(409, "Algún movimiento del grupo ya fue acreditado: volvé a conciliar la planilla")
+    org_id = planilla.organizacion_id or 1
+    grupos_svc.confirmar(db, grupo, planilla.cliente.nombre, grupos_svc.tolerancia_de(_get_org_config(db, org_id)))
+    db.commit()
+    _recalcular_contabilidad_planilla(db, planilla)
+    registrar_log(
+        db=db, usuario_id=current_user.id, tabla="conciliacion_grupos", registro_id=grupo.id,
+        accion="CONFIRMAR_GRUPO", cambios={"planilla_id": planilla.id}, organizacion_id=org_id,
+    )
+    return _grupo_dict(db, grupo)
+
+
+@router.post("/grupos/{grupo_id}/deshacer")
+def deshacer_grupo(
+    grupo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_permission("reconcile")),
+):
+    """Deshace un grupo confirmado o descarta uno sugerido. Las filas vuelven a
+    "pendiente", los movimientos se liberan y la combinación no se vuelve a sugerir."""
+    grupo, planilla = _grupo_para_user(db, grupo_id, current_user)
+    _, movs = grupos_svc.filas_y_movimientos(db, grupo)
+    _chequear_periodo_grupo(db, planilla, movs)
+    estado_anterior = grupo.estado
+    try:
+        grupos_svc.deshacer(db, grupo, planilla.cliente.nombre)
+    except grupos_svc.GrupoError as e:
+        db.rollback()
+        raise HTTPException(e.status_code, str(e))
+    db.commit()
+    if estado_anterior == "confirmado":
+        _recalcular_contabilidad_planilla(db, planilla)
+    registrar_log(
+        db=db, usuario_id=current_user.id, tabla="conciliacion_grupos", registro_id=grupo.id,
+        accion="DESHACER_GRUPO", cambios={"planilla_id": planilla.id, "estado_anterior": estado_anterior},
+        organizacion_id=planilla.organizacion_id or 1,
+    )
+    return {"ok": True, "grupo_id": grupo.id, "estado": grupo.estado}
 
 
 # ── Cola de revisión manual ───────────────────────────────────────────────────
@@ -705,6 +918,7 @@ def patch_row_status(
         raise HTTPException(status_code=404, detail="Fila no encontrada")
     # Validacion multi-tenant: la planilla padre debe ser de la org del usuario
     planilla = _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
+    _bloquear_si_en_grupo(db, row)
 
     # Inmutabilidad: no permitir cambios en filas de periodos cerrados
     from app.services.cierre_periodo import periodo_esta_cerrado
@@ -801,6 +1015,7 @@ def delete_row(
         raise HTTPException(status_code=404, detail="Fila no encontrada")
     # Validacion multi-tenant
     planilla = _planilla_for_user(db, row.planilla_id, current_user, include_deleted=True)
+    _bloquear_si_en_grupo(db, row)
     # Inmutabilidad de periodo cerrado
     from app.services.cierre_periodo import periodo_esta_cerrado
     fecha_check = row.fecha_acred or (planilla.fecha_carga.date() if planilla.fecha_carga else None)
@@ -822,6 +1037,10 @@ def delete_row(
 
 
 # ── Endpoints existentes ──────────────────────────────────────────────────────
+
+# Estados de fila con un movimiento (o grupo) detrás: los únicos con "coincidencia".
+_ESTADOS_COINCIDENCIA = ("ok", "CONCILIADO_CON_DIFERENCIA", "SUGERIDO_GRUPO")
+
 
 def _build_planilla_export_data(db: Session, p: Planilla) -> tuple[dict, list, object]:
     """Arma la data de export (Excel y PDF comparten exactamente el mismo contenido).
@@ -862,19 +1081,14 @@ def _build_planilla_export_data(db: Session, p: Planilla) -> tuple[dict, list, o
     movimientos_acreditados = []
     ids_acred_vistos = set()
 
-    for r in p.rows:
-        mov = movs_map.get(r.orden_movimiento_acreditado) if r.orden_movimiento_acreditado else None
-        if mov is None and r.status == "ok":
-            monto_key = float(r.monto) if r.monto is not None else None
-            mov = fallback_map.get(monto_key) if monto_key is not None else None
-        fecha_acred_fallback = r.fecha_acred
-        rows_data.append({
-            "monto": r.monto, "cuit": r.cuit, "titular": r.titular, "status": r.status,
-            "orden_movimiento_acreditado": mov.orden if mov else None,
-            "mov_titular": mov.titular if mov else None,
-            "mov_fecha": mov.fecha if mov else None,
-            "mov_fecha_acred": (mov.fecha_acred if mov else None) or fecha_acred_fallback,
-        })
+    # Grupos (N filas ↔ M movimientos): sus filas no tienen orden_movimiento_acreditado;
+    # se muestran con el primer movimiento del grupo y nunca pasan por el fallback por monto.
+    grupo_de_fila = grupos_svc.grupo_por_fila(db, [r.id for r in p.rows])
+    movs_de_grupo: dict = {}
+    for g in {g.id: g for g in grupo_de_fila.values()}.values():
+        movs_de_grupo[g.id] = grupos_svc.filas_y_movimientos(db, g)[1]
+
+    def _agregar_acreditado(mov):
         if mov and mov.id not in ids_acred_vistos:
             ids_acred_vistos.add(mov.id)
             movimientos_acreditados.append({
@@ -882,6 +1096,32 @@ def _build_planilla_export_data(db: Session, p: Planilla) -> tuple[dict, list, o
                 "titular": mov.titular, "monto": mov.monto, "saldo": mov.saldo,
                 "cliente_acreditado": mov.cliente_acreditado, "fecha_acred": mov.fecha_acred,
             })
+
+    for r in p.rows:
+        grupo = grupo_de_fila.get(r.id)
+        movs_g = movs_de_grupo.get(grupo.id, []) if grupo else []
+        if grupo:
+            mov = movs_g[0] if movs_g else None
+        else:
+            mov = movs_map.get(r.orden_movimiento_acreditado) if r.orden_movimiento_acreditado else None
+            if mov is None and r.status == "ok":
+                monto_key = float(r.monto) if r.monto is not None else None
+                mov = fallback_map.get(monto_key) if monto_key is not None else None
+        fecha_acred_fallback = r.fecha_acred
+        conciliada = r.status in _ESTADOS_COINCIDENCIA
+        rows_data.append({
+            "monto": r.monto, "cuit": r.cuit, "titular": r.titular, "status": r.status,
+            "orden_movimiento_acreditado": mov.orden if mov else None,
+            "mov_titular": mov.titular if mov else None,
+            "mov_fecha": mov.fecha if mov else None,
+            "mov_fecha_acred": (mov.fecha_acred if mov else None) or fecha_acred_fallback,
+            # Calidad del match (cuit | titular | otro_dato | solo_monto | cuit_distinto).
+            "coincidencia": coincidencia_match(r, movs_g or mov) if (conciliada and (movs_g or mov)) else None,
+            "grupo_id": grupo.id if grupo else None,
+        })
+        if grupo is None or grupo.estado == "confirmado":
+            for m in (movs_g or [mov]):
+                _agregar_acreditado(m)
 
     planilla_data = {
         "cliente_nombre": p.cliente.nombre,
@@ -1030,6 +1270,8 @@ def get_planilla_detalle(
     no_encontradas = stats.get("no está", 0)
     sin_datos = stats.get("faltan datos", 0)
     duplicadas = sum(c for s, c in stats.items() if s == "duplicado" or (isinstance(s, str) and s.startswith("acreditado")))
+    sugeridas_grupo = stats.get("SUGERIDO_GRUPO", 0)
+    con_diferencia = stats.get("CONCILIADO_CON_DIFERENCIA", 0)
 
     # Filtered query
     rows_q = db.query(PlanillaRow).filter(PlanillaRow.planilla_id == p.id)
@@ -1072,9 +1314,21 @@ def get_planilla_detalle(
         movs = db.query(MovimientoBanco).filter(MovimientoBanco.id.in_(mov_ids)).all()
         movs_map = {m.id: m for m in movs}
 
+    # Grupos de las filas de esta página (una query + una por grupo distinto)
+    grupo_de_fila = grupos_svc.grupo_por_fila(db, [r.id for r in fetched_rows])
+    grupos_info: dict = {}
+    for g in {g.id: g for g in grupo_de_fila.values()}.values():
+        filas_g, movs_g = grupos_svc.filas_y_movimientos(db, g)
+        grupos_info[g.id] = (grupos_svc.serializar_grupo(g, movs_g, len(filas_g)), movs_g)
+
     rows_enriched = []
     for r in fetched_rows:
-        mov = movs_map.get(r.orden_movimiento_acreditado) if r.orden_movimiento_acreditado else None
+        grupo = grupo_de_fila.get(r.id)
+        grupo_dict, movs_g = grupos_info.get(grupo.id, (None, [])) if grupo else (None, [])
+        mov = (movs_g[0] if movs_g else None) if grupo else (
+            movs_map.get(r.orden_movimiento_acreditado) if r.orden_movimiento_acreditado else None
+        )
+        conciliada = r.status in _ESTADOS_COINCIDENCIA
         rows_enriched.append({
             "id": r.id,
             "monto": r.monto,
@@ -1085,7 +1339,9 @@ def get_planilla_detalle(
             "mov_titular": mov.titular if mov else None,
             "mov_fecha": mov.fecha if mov else None,
             "mov_fecha_acred": (mov.fecha_acred if mov else None) or r.fecha_acred,
-            "motivo_match": explicar_match(r, mov) if (mov and r.status == "ok") else None,
+            "motivo_match": explicar_match(r, mov) if (mov and r.status == "ok" and not grupo) else None,
+            "coincidencia": coincidencia_match(r, movs_g or mov) if (conciliada and (movs_g or mov)) else None,
+            "grupo": grupo_dict,
         })
 
     return {
@@ -1102,6 +1358,8 @@ def get_planilla_detalle(
         "no_encontradas": no_encontradas,
         "duplicadas": duplicadas,
         "sin_datos": sin_datos,
+        "sugeridas_grupo": sugeridas_grupo,
+        "con_diferencia": con_diferencia,
     }
 
 

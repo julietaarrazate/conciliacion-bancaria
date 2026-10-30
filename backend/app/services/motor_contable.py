@@ -1282,6 +1282,36 @@ def registrar_reclasificacion_planilla(
         logger.warning("Error asiento reclasif. planilla %s: %s", planilla_id, ex)
 
 
+def anular_reclasificacion_planilla(db: Session, planilla_id: int, org_id: int, origen: str) -> int:
+    """Borra el asiento de reclasificación (+ su comisión) de UN bucket de una
+    planilla cuando ese bucket quedó sin plata conciliada (p. ej. se deshizo el
+    único grupo de ese origen). Mismo criterio que el upsert de
+    `registrar_reclasificacion_planilla` cuando la comisión pasa a 0: el asiento
+    de upsert refleja el total vigente de la planilla; si el total es 0, no debe
+    quedar acreditando al cliente por algo que ya no está conciliado.
+
+    Solo módulos vigentes (`MODULO_RECLASS`); los viejos `reclass_planilla_extracto`
+    no se tocan (los corrige §7bis). Ni los que ya tienen reverso. Sin commit.
+    Devuelve cuántos asientos borró."""
+    if origen not in MODULO_RECLASS:
+        raise ValueError(f"origen inválido: {origen!r}")
+    modulo = MODULO_RECLASS[origen]
+    candidatos = (
+        db.query(Asiento)
+        .filter(
+            Asiento.modulo.in_([modulo, modulo + "_comision"]),
+            Asiento.referencia_id == planilla_id,
+            Asiento.organizacion_id == org_id,
+        )
+        .all()
+    )
+    ids = [a.id for a in candidatos if not esta_reversado(db, a)]
+    if ids:
+        db.query(AsientoDetalle).filter(AsientoDetalle.asiento_id.in_(ids)).delete(synchronize_session=False)
+        db.query(Asiento).filter(Asiento.id.in_(ids)).delete(synchronize_session=False)
+    return len(ids)
+
+
 def registrar_liquidacion_aprobacion(
     db: Session,
     liquidacion_id: int,

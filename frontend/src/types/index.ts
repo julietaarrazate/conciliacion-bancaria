@@ -70,6 +70,8 @@ export interface ExtractoBancario {
   fecha_creacion: string
   fecha_extracto?: string
   movimientos: MovimientoBanco[]
+  // Aviso no bloqueante de la importación (p. ej. saldos que no cuadran)
+  aviso_saldos?: string | null
 }
 
 export interface PlanillaRow {
@@ -190,6 +192,57 @@ export interface ResultadoMapeoPlanilla {
   filas_resumen?: number
 }
 
+// ── Extracto Excel/CSV: mapeo de columnas (POST /extractos/preview) ──────────
+export type RolExtracto =
+  | 'fecha' | 'titular' | 'monto' | 'debito' | 'credito' | 'indicador' | 'saldo'
+  | 'orden' | 'cuit' | 'mes' | 'cliente_acreditado' | 'fecha_acred'
+
+export type SignoExtracto = 'columna_unica' | 'debito_credito' | 'indicador'
+
+export interface MapeoExtracto {
+  hoja?: string | null
+  fila_encabezado: number            // 0 = primera fila; -1 = sin fila de títulos
+  columnas: Partial<Record<RolExtracto, number>>
+  signo: SignoExtracto
+  formato_fecha: 'auto' | 'dmy' | 'mdy' | 'ymd'
+  decimal: 'auto' | 'coma' | 'punto'
+}
+
+export interface CuadreExtracto {
+  tiene_saldo: boolean
+  cuadra: boolean | null
+  orden: 'asc' | 'desc'
+  mensaje: string
+  saldo_inicial?: string | null
+  saldo_final?: string | null
+  saldo_final_calculado?: string | null
+  diferencia?: string | null
+  filas_con_error?: number
+  primera_fila_con_error?: number | null
+}
+
+export interface PreviewExtracto {
+  hoja: string | null
+  hojas: string[]
+  banco_clave: string | null
+  banco: string | null
+  origen: 'plantilla' | 'heuristica' | 'sugerencia' | 'manual' | 'ninguno'
+  plantilla_id: number | null
+  mapeo: MapeoExtracto | null
+  firma: string | null
+  confianza: number
+  necesita_mapeo: boolean
+  motivos: string[]
+  aviso_saldos: string | null
+  grilla: { desde: number; columnas: number; filas: string[][] }
+  encabezados: string[]
+  total_movimientos: number
+  filas_descartadas: number
+  filas_resumen: number
+  muestra: { fila: number; fecha: string | null; titular: string | null; monto: string; saldo: string | null; orden: number | null }[]
+  cuadre: CuadreExtracto
+}
+
 export interface DeteccionInfo {
   origen: string
   confianza: number
@@ -252,6 +305,7 @@ export interface ExtractoListItem {
   total_movimientos: number
   banco?: string
   archivado?: boolean
+  aviso_saldos?: string | null
 }
 
 export interface MovimientoFiltrado {
@@ -1033,3 +1087,29 @@ export interface Proveedor {
 }
 
 export type ProveedorInput = Partial<Pick<Proveedor, 'cuit' | 'razon_social' | 'condicion_iva' | 'email' | 'cbu' | 'notas'>>
+
+// ── Grupos de conciliación (varias filas ↔ un movimiento, o al revés) ────────
+export interface GrupoMovimiento {
+  id: number
+  orden: number | null
+  fecha: string | null
+  titular: string | null
+  monto: number
+}
+
+export interface GrupoConciliacion {
+  id: number
+  estado: 'sugerido' | 'confirmado' | 'descartado'
+  origen: 'auto' | 'manual'
+  ambiguo: boolean
+  n_filas: number
+  total_filas: number
+  total_movimientos: number
+  /** movimientos − filas; 0 si cuadra */
+  diferencia: number
+  movimientos: GrupoMovimiento[]
+  filas?: { id: number; monto: number; status: string }[]
+}
+
+/** Calidad del match de una fila conciliada (ver conciliacion.coincidencia_match). */
+export type Coincidencia = 'cuit' | 'titular' | 'otro_dato' | 'solo_monto' | 'cuit_distinto'

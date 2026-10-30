@@ -19,6 +19,8 @@ class ExtractoBancario(Base):
     # sigue viendo/filtrando/exportando por id, solo sale del listado por defecto y
     # rechaza nuevos UM. Permite cerrar el mes y arrancar un extracto nuevo del banco.
     archivado_at = Column(DateTime, nullable=True)
+    # Aviso no bloqueante al importar (p. ej. "Los saldos no cuadran desde la fila N…").
+    aviso_saldos = Column(String(300), nullable=True)
 
     # Relationships
     creado_por_user = relationship("User", back_populates="extractos")

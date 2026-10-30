@@ -64,7 +64,10 @@ def fingerprint(movimientos: list) -> str:
         return "empty"
     primer_orden = movimientos[0].get("orden") or 0
     ultimo_orden = movimientos[-1].get("orden") or 0
-    suma = round(sum(m.get("monto", 0) for m in movimientos), 2)
+    # Suma en float a propósito: la huella tiene que dar igual que cuando el parser
+    # devolvía float (hoy devuelve Decimal), si no re-subir un extracto ya cargado
+    # no lo reconocería. Es solo un hash de deduplicación, no un cálculo de dinero.
+    suma = round(sum(float(m.get("monto") or 0) for m in movimientos), 2)
     raw = f"{total}|{primer_orden}|{ultimo_orden}|{suma}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 

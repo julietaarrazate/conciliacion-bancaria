@@ -12,6 +12,7 @@ const EXACTOS: Record<string, string> = {
   'CONCILIADO_CON_DIFERENCIA': 'Conciliado con diferencia',
   'VENCIDO': 'Vencido',
   'EN_REVISION': 'En revisión',
+  'SUGERIDO_GRUPO': 'Sugerido en grupo',
 }
 
 export function statusLabel(status: string | null | undefined): string {
@@ -45,4 +46,24 @@ const MOTIVOS: Record<string, string> = {
 export function motivoMatchLabel(motivo: string | null | undefined): string | null {
   if (!motivo) return null
   return MOTIVOS[motivo] ?? null
+}
+
+// Calidad del match (`coincidencia` de /planillas/{id}/detalle). Solo los casos
+// que merecen revisión llevan aviso: el resto (cuit, titular, otro_dato) no.
+const AVISOS_COINCIDENCIA: Record<string, { label: string; title: string; grave: boolean }> = {
+  cuit_distinto: {
+    label: 'CUIT distinto',
+    title: 'La fila y el movimiento del banco traen CUIT y no coinciden: el match cerró solo por el monto. Revisalo.',
+    grave: true,
+  },
+  solo_monto: {
+    label: 'Solo monto',
+    title: 'No coincide ningún dato además del importe (ni CUIT ni titular). Conviene revisarlo.',
+    grave: false,
+  },
+}
+
+export function avisoCoincidencia(c: string | null | undefined): { label: string; title: string; grave: boolean } | null {
+  if (!c) return null
+  return AVISOS_COINCIDENCIA[c] ?? null
 }

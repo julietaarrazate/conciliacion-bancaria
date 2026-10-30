@@ -260,6 +260,19 @@ crédito del banco en **No identificado** (2-1-1-1); al conciliar una planilla,
 ganadas (comisión). El origen del movimiento ya no cambia la cuenta, solo el módulo (un bucket
 por origen, para trazabilidad y para que no se pisen en la misma planilla).
 
+**Grupos de conciliación** (N filas ↔ M movimientos, `BUSINESS_RULES.md` §1.10): el total de cada
+bucket lo arma `conciliacion.recalcular_reclasificacion_planilla` = filas `ok` 1:1 (monto de la
+fila, como siempre) + grupos **confirmados** por el monto de sus movimientos
+(`conciliacion_grupos.totales_grupos_por_origen`), cada movimiento en el bucket de su
+`source` (un grupo puede repartir entre `reclass_planilla_principal` y `um_reclass_planilla`). Las
+filas de un grupo no tienen `orden_movimiento_acreditado`, así que no se cuentan dos veces. Confirmar,
+armar o deshacer un grupo recalcula sin re-matchear; con `anular_vacios=True`, un bucket que quedó
+en 0 borra su asiento vigente + comisión (`motor_contable.anular_reclasificacion_planilla`: solo
+módulos vigentes, nunca el legacy `reclass_planilla_extracto` ni uno ya reversado — mismo criterio
+que el upsert cuando la comisión pasa a 0). "Empezar limpio" (`asientos_banco._buckets_reclass`)
+suma los grupos confirmados con el mismo criterio. La partida doble no cambia: cada asiento sigue
+siendo 2-1-1-1 D / Cliente H por el neto (+ comisión aparte).
+
 **Asientos viejos `reclass_planilla_extracto`** (2-1-0-0 D, hasta oct 2026): no se tocan. Si una
 planilla todavía tiene uno **sin reversar**, re-conciliarla lo sigue actualizando con su cuenta
 vieja (crear uno nuevo en `reclass_planilla_principal` acreditaría dos veces al cliente);

@@ -18,6 +18,11 @@ class PlanillaRowResponse(PlanillaRowBase):
     # Qué dato coincide entre la fila y el movimiento (solo filas "ok"):
     # cuit | dni | cbu | numero | titular | referencia | monto. Ver explicar_match().
     motivo_match: Optional[str] = None
+    # Calidad del match (filas conciliadas o sugeridas): cuit | titular | otro_dato |
+    # solo_monto | cuit_distinto. Ver conciliacion.coincidencia_match().
+    coincidencia: Optional[str] = None
+    # Grupo de conciliación (N filas ↔ M movimientos) al que pertenece la fila, o None.
+    grupo: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True
@@ -51,6 +56,8 @@ class PlanillaDetalleResponse(BaseModel):
     no_encontradas: int
     duplicadas: int
     sin_datos: int
+    sugeridas_grupo: int = 0
+    con_diferencia: int = 0
 
     class Config:
         from_attributes = True
@@ -62,6 +69,9 @@ class ConciliacionResultado(BaseModel):
     no_encontradas: int
     duplicadas: int
     sin_datos: int
+    # Grupos (N filas ↔ M movimientos) encontrados después de la pasada 1:1.
+    grupos_sugeridos: int = 0
+    grupos_confirmados: int = 0
     # Diagnóstico read-only calculado DESPUÉS de conciliar (aditivo). Explica en
     # la UI por qué pueden quedar filas sin conciliar (banco sin identidad, monto
     # ausente del extracto, fechas que no solapan). None en el resto de endpoints.
