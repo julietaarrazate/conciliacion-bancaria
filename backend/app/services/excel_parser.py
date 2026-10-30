@@ -446,7 +446,7 @@ def parsear_generico(ws, cols):
     return movimientos
 
 def parsear_extracto_bancario(filepath: str, *, plantillas: "dict | None" = None,
-                              mapeo: "dict | None" = None) -> dict:
+                              mapeo: "dict | None" = None, nombre_archivo: "str | None" = None) -> dict:
     """
     Parsea un extracto bancario (.xlsx, .xls, .csv, .tsv, .txt) de cualquier banco.
 
@@ -459,7 +459,7 @@ def parsear_extracto_bancario(filepath: str, *, plantillas: "dict | None" = None
     """
     from app.services.extracto_mapper import analizar_extracto
 
-    res = analizar_extracto(filepath, plantillas=plantillas, mapeo=mapeo)
+    res = analizar_extracto(filepath, plantillas=plantillas, mapeo=mapeo, nombre_archivo=nombre_archivo)
     movs = res["movimientos"]
     # Una sugerencia por contenido nunca se importa sin confirmación.
     if res["origen"] in ("sugerencia", "ninguno"):

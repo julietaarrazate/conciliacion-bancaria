@@ -40,13 +40,14 @@ import hashlib
 import io
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
 
 import openpyxl
 
+from app.services.banco_identificacion import banco_por_estructura, identificar_banco
 from app.services.decimal_utils import parse_importe_ar
 from app.services.excel_parser import (
     _convertir_xls_a_xlsx,
@@ -93,6 +94,8 @@ class MapeoInvalido(ValueError):
 class Hoja:
     nombre: str
     filas: list[list[Any]]
+    # Propiedades del libro (título, asunto, descripción…): ahí a veces está el CBU.
+    metadatos: list[str] = field(default_factory=list)
 
 
 # ── Lectura del archivo a una grilla ─────────────────────────────────────────
@@ -145,16 +148,29 @@ def leer_hojas(filepath: str) -> list[Hoja]:
     try:
         wb = openpyxl.load_workbook(ruta, data_only=True)
         try:
+            meta = _metadatos_libro(wb)
             hojas = []
             for ws in wb.worksheets:
                 filas = [list(r) for r in ws.iter_rows(values_only=True)]
-                hojas.append(Hoja(nombre=ws.title, filas=_recortar_filas(filas)))
+                hojas.append(Hoja(nombre=ws.title, filas=_recortar_filas(filas), metadatos=meta))
             return hojas
         finally:
             wb.close()
     finally:
         if limpiar and os.path.exists(ruta):
             os.remove(ruta)
+
+
+def _metadatos_libro(wb) -> list[str]:
+    props = getattr(wb, "properties", None)
+    if props is None:
+        return []
+    out = []
+    for attr in ("title", "subject", "description", "keywords", "category"):
+        v = getattr(props, attr, None)
+        if isinstance(v, str) and v.strip():
+            out.append(v.strip()[:500])
+    return out
 
 
 # ── Interpretación de celdas ─────────────────────────────────────────────────
@@ -833,10 +849,17 @@ def _leer_hoja(hoja: Hoja, mapeo: dict) -> tuple[dict, dict]:
 
 
 def analizar_hojas(hojas: list[Hoja], *, plantillas: Optional[dict] = None,
-                   mapeo: Optional[dict] = None) -> dict:
+                   mapeo: Optional[dict] = None, nombre_archivo: Optional[str] = None) -> dict:
     """Elige hoja + mapeo (manual → plantilla → detección → sugerencia), lee los
-    movimientos y controla los saldos. `plantillas`: {firma: {"id", "mapeo"}}."""
+    movimientos y controla los saldos. `plantillas`: {firma: {"id", "mapeo",
+    "banco_clave", "banco_confirmado"}}. `nombre_archivo`: el que subió la persona
+    (para reconocer el banco por el CBU o el nombre escrito ahí)."""
     hojas = [h for h in hojas if h.filas]
+    ctx = {"plantillas": plantillas or {}, "nombre_archivo": nombre_archivo}
+
+    def _resultado(*args):
+        return _armar_resultado(*args, ctx=ctx)
+
     if not hojas:
         return _resultado(None, None, "ninguno", None, None, None, None, None)
 
@@ -890,16 +913,56 @@ def analizar_hojas(hojas: list[Hoja], *, plantillas: Optional[dict] = None,
     return _resultado(hojas[0], hojas, "ninguno", None, None, None, None, None)
 
 
-def _resultado(hoja, hojas, origen, mapeo, leido, cuadre, plantilla_id, descartados) -> dict:
+def _zona_encabezado(filas: list[list], fila_enc: int) -> list[list]:
+    """Filas de arriba de la tabla (membrete, datos de la cuenta): lo de antes del
+    renglón de títulos o, sin títulos, lo de antes de la primera fila con números o
+    fechas. Las descripciones de los movimientos NO entran (nombran otros bancos)."""
+    if fila_enc > 0:
+        return filas[:fila_enc]
+    out = []
+    for fila in filas[:10]:
+        if any(_es_dato(v) for v in fila if not _vacia(v)):
+            break
+        out.append(fila)
+    return out
+
+
+def _deteccion_banco(hoja: Optional[Hoja], filas: list[list], mapeo: Optional[dict], encabezado: list,
+                     movs: list[dict], firma: Optional[str], ctx: dict) -> dict:
+    fila_enc = mapeo["fila_encabezado"] if mapeo else -1
+    zona = _zona_encabezado(filas, fila_enc)
+    textos = [str(v) for fila in zona for v in fila if isinstance(v, str) and v.strip()]
+    # Nombre: el detector de siempre, pero solo sobre el membrete + títulos.
+    por_nombre = detectar_banco_filas(zona + ([encabezado] if encabezado else [])) if (zona or encabezado) else None
+    estructura = banco_por_estructura(
+        encabezados=[v for v in encabezado if isinstance(v, str)],
+        conceptos=[m.get("titular") or "" for m in movs[:200]],
+        filas_cabecera=(zona + [encabezado])[-5:] if encabezado else None,
+    )
+    plantilla = (ctx.get("plantillas") or {}).get(firma) if firma else None
+    return identificar_banco(
+        textos_encabezado=textos,
+        nombre_archivo=ctx.get("nombre_archivo"),
+        metadatos=hoja.metadatos if hoja else [],
+        por_nombre=por_nombre,
+        por_estructura=estructura,
+        aprendido=(plantilla or {}).get("banco_clave"),
+        aprendido_confirmado=bool((plantilla or {}).get("banco_confirmado")),
+    )
+
+
+def _armar_resultado(hoja, hojas, origen, mapeo, leido, cuadre, plantilla_id, descartados, *, ctx) -> dict:
     filas = hoja.filas if hoja else []
-    banco_clave = detectar_banco_filas(filas[:10]) if filas else "generico"
+    # Banco "de la firma": el detector por nombre de siempre. La huella de las
+    # plantillas ya guardadas se calculó con él, así que no se cambia.
+    banco_firma = detectar_banco_filas(filas[:10]) if filas else "generico"
     leido = leido or {"movimientos": [], "filas_descartadas": 0, "filas_sin_fecha": 0,
                       "filas_resumen": 0, "saldo_inicial": None, "saldo_final": None}
     cuadre = cuadre or {"tiene_saldo": False, "cuadra": None, "orden": "asc", "mensaje": ""}
     movs = leido["movimientos"]
     fila_enc = mapeo["fila_encabezado"] if mapeo else -1
     encabezado = filas[fila_enc] if mapeo and 0 <= fila_enc < len(filas) else []
-    firma = firma_encabezado(encabezado, banco_clave) if encabezado else None
+    firma = firma_encabezado(encabezado, banco_firma) if encabezado else None
     confianza = _confianza(origen, mapeo, leido, cuadre) if mapeo else 0.0
 
     motivos: list[str] = []
@@ -935,12 +998,15 @@ def _resultado(hoja, hojas, origen, mapeo, leido, cuadre, plantilla_id, descarta
             if desde is not None else
             "Los saldos no cuadran: puede que falten movimientos en este archivo"
         )
+    deteccion = _deteccion_banco(hoja, filas, mapeo, encabezado, movs, firma, ctx)
+    banco_clave = deteccion["banco_clave"]
     return {
         "hoja": hoja.nombre if hoja else None,
         "hojas": [h.nombre for h in hojas] if hojas else [],
         "filas": filas,
         "banco_clave": banco_clave,
         "banco": nombre_banco(banco_clave),
+        "banco_deteccion": deteccion,
         "origen": origen,
         "plantilla_id": plantilla_id,
         "mapeo": mapeo,
@@ -958,9 +1024,10 @@ def _resultado(hoja, hojas, origen, mapeo, leido, cuadre, plantilla_id, descarta
 
 
 def analizar_extracto(filepath: str, *, plantillas: Optional[dict] = None,
-                      mapeo: Optional[dict] = None) -> dict:
+                      mapeo: Optional[dict] = None, nombre_archivo: Optional[str] = None) -> dict:
     """Lee el archivo y lo analiza (ver `analizar_hojas`)."""
-    return analizar_hojas(leer_hojas(filepath), plantillas=plantillas, mapeo=mapeo)
+    return analizar_hojas(leer_hojas(filepath), plantillas=plantillas, mapeo=mapeo,
+                          nombre_archivo=nombre_archivo)
 
 
 # ── Salida JSON para la pantalla de mapeo ────────────────────────────────────
@@ -989,6 +1056,7 @@ def serializar_analisis(res: dict, *, muestra: int = 10) -> dict:
         "hojas": res["hojas"],
         "banco_clave": res["banco_clave"],
         "banco": res["banco"],
+        "banco_deteccion": res["banco_deteccion"],
         "origen": res["origen"],
         "plantilla_id": res["plantilla_id"],
         "mapeo": res["mapeo"],

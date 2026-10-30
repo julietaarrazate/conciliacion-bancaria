@@ -41,7 +41,8 @@ def nombre_banco(banco_clave: Optional[str]) -> Optional[str]:
     """Nombre visible de una clave de banco del parser (None si es genérico/desconocido)."""
     if not banco_clave or banco_clave == "generico":
         return None
-    return _BANCO_NOMBRE.get(banco_clave, banco_clave.capitalize())
+    from app.services.banco_identificacion import NOMBRES
+    return _BANCO_NOMBRE.get(banco_clave) or NOMBRES.get(banco_clave) or banco_clave.capitalize()
 
 
 def resolver_banco(banco_param: str, banco_detectado: str) -> str:
@@ -50,7 +51,7 @@ def resolver_banco(banco_param: str, banco_detectado: str) -> str:
     Si el usuario pasó un banco explícito distinto del default, se respeta siempre.
     """
     if banco_detectado != "generico":
-        nombre_detectado = _BANCO_NOMBRE.get(banco_detectado, banco_detectado.capitalize())
+        nombre_detectado = nombre_banco(banco_detectado)
         # Usar detectado si el parámetro es el default ("Banco Macro") o coincide
         if banco_param == "Banco Macro" or banco_param == nombre_detectado:
             return nombre_detectado

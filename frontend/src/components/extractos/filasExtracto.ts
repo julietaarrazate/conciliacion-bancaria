@@ -166,6 +166,8 @@ export interface DatosConfirmacion {
   saldoInicial: string
   saldoFinal: string
   banco: string
+  /** Banco elegido en el desplegable (clave interna) o null si no hubo desplegable. */
+  bancoClave?: string | null
   nombre: string | null
   destino: 'nuevo' | 'existente'
   extractoDestinoId: number | null
@@ -191,6 +193,7 @@ export function armarPayload(d: DatosConfirmacion): ConfirmarExtractoPdfPayload 
     saldo_inicial: aServidor(d.saldoInicial),
     saldo_final: aServidor(d.saldoFinal),
     banco: d.banco.trim() || null,
+    banco_clave: d.bancoClave || null,
     nombre: d.nombre && d.nombre.trim() ? d.nombre.trim() : null,
     destino: d.destino,
     extracto_id: d.destino === 'existente' ? d.extractoDestinoId : null,

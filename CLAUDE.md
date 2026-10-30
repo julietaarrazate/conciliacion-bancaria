@@ -168,6 +168,9 @@ Tolerancia fecha: 5 días · UM deduplicación: (orden, monto) o (fecha, monto, 
 Bancos soportados (16, `detectar_banco` en `excel_parser.py`): Macro, BBVA, Santander, Galicia,
 ICBC, Nación, Provincia, Ciudad, HSBC, Mercado Pago (por headers, no por texto), Credicoop,
 Supervielle, Patagonia, Bancor, Rioja, La Pampa — más genérico como fallback.
+**Qué banco es cada archivo** (Excel/CSV y PDF, oct 2026): `services/banco_identificacion.py` —
+CBU/CVU de la cuenta (tabla de códigos de entidad del BCRA, ~60 bancos) → CUIT del banco → formato
+→ banco confirmado antes por la org → nombre. Ver BUSINESS_RULES §2ter.
 
 **Extractos en PDF** (v3.31): además del Excel, el extracto se puede subir en PDF. Lo lee un lector
 propio sin IA (`services/extracto_pdf/`) con formatos aprendidos por organización; Gemini solo como

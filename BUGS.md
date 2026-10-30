@@ -185,6 +185,16 @@ Rioja, La Pampa contienen "rio"/similar a substrings ya usados).
 nuevo colisione con los existentes — usar coincidencia de palabra completa o lista explícita de
 alias, no `in` sobre substrings cortos.
 
+**Desde oct 2026** el nombre es la señal más débil: el banco sale primero del CBU/CVU, del CUIT
+del banco y del formato (`services/banco_identificacion.py`). Dos trampas más:
+- "Banco Industrial" (BIND, 322) caía en ICBC por la palabra "industrial"; lo corrige
+  `identificar_banco`.
+- **No agregar palabras a `INDICADORES_BANCO`** para bancos nuevos: ese diccionario entra en la
+  firma de plantillas Excel y moldes PDF, y cambiarlo hace que formatos ya guardados dejen de
+  reconocerse. Los nombres nuevos van en `banco_identificacion.NOMBRES_EXTRA`.
+- Las CBU/CUIT de los conceptos de los movimientos son de terceros: solo se miran las zonas de
+  encabezado.
+
 ---
 
 Última actualización: junio 2026 (reconstrucción inicial desde CHANGELOG.md, v3.6-v3.24).

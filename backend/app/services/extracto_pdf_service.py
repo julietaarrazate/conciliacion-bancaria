@@ -49,6 +49,7 @@ from app.models.extracto_pdf import (
     BorradorExtractoPdf, MoldeExtractoPdf,
 )
 from app.services.auditoria import registrar_log
+from app.services.banco_identificacion import GENERICO as BANCO_GENERICO, clave_valida, eleccion_confirmada
 from app.services.cierre_periodo import periodo_esta_cerrado
 from app.services.extracto_import import (
     crear_extracto_con_movimientos, fingerprint, nombre_banco, registrar_asiento_um, resolver_banco,
@@ -362,6 +363,7 @@ def valores_de_lectura(db: Session, org_id: int, res: dict, *, banco_usuario: Op
             "ia_disponible": bool(ia_configurada()),
             "aprendizaje": _json_safe(aprendizaje) if isinstance(aprendizaje, dict) else None,
             "banco_usuario": (banco_usuario or "").strip()[:120] or None,
+            "banco_deteccion": _json_safe(res["banco_deteccion"]) if isinstance(res.get("banco_deteccion"), dict) else None,
         },
         "alertas": alertas,
         "error": None,
@@ -687,6 +689,7 @@ def borrador_out(db: Session, b: BorradorExtractoPdf) -> dict:
         "metodo": b.metodo,
         "banco": b.banco,
         "banco_clave": b.banco_clave,
+        "banco_deteccion": datos.get("banco_deteccion"),
         "periodo_desde": b.periodo_desde,
         "periodo_hasta": b.periodo_hasta,
         "saldo_inicial": dinero_str(b.saldo_inicial),
@@ -749,16 +752,21 @@ def _moldes_para_lector(db: Session, org_id: int) -> list[dict]:
               .filter(MoldeExtractoPdf.organizacion_id == org_id)
               .order_by(MoldeExtractoPdf.confirmaciones.desc(), MoldeExtractoPdf.id.desc())
               .limit(MAX_MOLDES_LECTOR).all())
-    return [{"id": m.id, "banco_clave": m.banco_clave, "firma": m.firma, "layout": m.layout or {}} for m in moldes]
+    # `banco_confirmado` va en el JSON del layout (sin columna nueva): el banco lo
+    # eligió la persona en la revisión y le gana a lo que diga el PDF.
+    return [{"id": m.id, "banco_clave": m.banco_clave, "firma": m.firma, "layout": m.layout or {},
+             "banco_confirmado": bool((m.layout or {}).get("banco_confirmado"))} for m in moldes]
 
 
-def _leer(db: Session, org_id: int, contenido: bytes, *, usar_ia: bool, forzar_ia: bool, hoy: date) -> dict:
+def _leer(db: Session, org_id: int, contenido: bytes, *, usar_ia: bool, forzar_ia: bool, hoy: date,
+          nombre_archivo: Optional[str] = None) -> dict:
     moldes = _moldes_para_lector(db, org_id)
     # Cerrar la transacción antes de leer: pdfminer o la IA pueden tardar y no hay que
     # retener una conexión del pool (ni un snapshot abierto) mientras tanto.
     db.commit()
     try:
-        return _lector()(contenido, moldes=moldes, usar_ia=usar_ia, forzar_ia=forzar_ia, hoy=hoy)
+        return _lector()(contenido, moldes=moldes, usar_ia=usar_ia, forzar_ia=forzar_ia, hoy=hoy,
+                         nombre_archivo=nombre_archivo)
     except ExtractoPdfServicioError:
         raise
     except Exception as ex:
@@ -821,7 +829,7 @@ def importar_pdf(db: Session, *, org_id: int, usuario_id: int, nombre_archivo: s
         b.actualizado_at = _utcnow()
         reutilizado = True
     else:
-        res = _leer(db, org_id, contenido, usar_ia=False, forzar_ia=False, hoy=hoy)
+        res = _leer(db, org_id, contenido, usar_ia=False, forzar_ia=False, hoy=hoy, nombre_archivo=nombre_archivo)
         valores = valores_de_lectura(db, org_id, res, banco_usuario=banco_usuario)
         reutilizado = b is not None
         if b is None:
@@ -860,7 +868,8 @@ def procesar_en_fondo(session_factory: Callable[[], Session], *, borrador_id: in
             return
         org_id = b.organizacion_id
         try:
-            res = _leer(db, org_id, contenido, usar_ia=True, forzar_ia=forzar_ia, hoy=hoy or hoy_art())
+            res = _leer(db, org_id, contenido, usar_ia=True, forzar_ia=forzar_ia, hoy=hoy or hoy_art(),
+                        nombre_archivo=b.nombre_archivo)
             valores = valores_de_lectura(db, org_id, res, banco_usuario=banco_usuario)
             valores.update({"estado": "listo", "actualizado_at": _utcnow()})
         except ExtractoPdfServicioError as ex:
@@ -973,8 +982,17 @@ def _cambios(originales: list[dict], confirmadas: list[dict]) -> int:
     return max(len(originales), len(confirmadas)) - iguales
 
 
-def _aprender(db: Session, b: BorradorExtractoPdf, filas: list[dict], cierra: bool, usuario_id: int) -> bool:
-    """Guarda/refuerza el formato aprendido si la lectura fue buena. Devuelve si aprendió."""
+def _con_banco_confirmado(layout: Any, confirmado: bool) -> Any:
+    if not confirmado or not isinstance(layout, dict):
+        return layout
+    return {**layout, "banco_confirmado": True}
+
+
+def _aprender(db: Session, b: BorradorExtractoPdf, filas: list[dict], cierra: bool, usuario_id: int,
+              banco_confirmado: bool = False) -> bool:
+    """Guarda/refuerza el formato aprendido si la lectura fue buena. Devuelve si aprendió.
+    `banco_confirmado`: la persona eligió el banco en la revisión → se recuerda en el
+    molde (gana la próxima vez aunque el PDF diga otra cosa)."""
     datos = b.datos or {}
     originales = datos.get("movimientos") or []
     if not cierra or not originales:
@@ -990,6 +1008,9 @@ def _aprender(db: Session, b: BorradorExtractoPdf, filas: list[dict], cierra: bo
             return False
         molde.confirmaciones = (molde.confirmaciones or 0) + 1
         molde.ultimo_uso_at = ahora
+        if banco_confirmado and b.banco_clave:
+            molde.banco_clave = b.banco_clave[:40]
+            molde.layout = _con_banco_confirmado(dict(molde.layout or {}), True)
         return True
     apr = datos.get("aprendizaje")
     if not isinstance(apr, dict) or not apr.get("firma") or not isinstance(apr.get("layout"), dict):
@@ -999,21 +1020,28 @@ def _aprender(db: Session, b: BorradorExtractoPdf, filas: list[dict], cierra: bo
         logger.warning("Firma de formato demasiado larga (%s caracteres): no se aprende", len(firma))
         return False
     origen = b.metodo if b.metodo in ORIGENES_MOLDE else None
-    clave = str(apr.get("banco_clave") or b.banco_clave or "")[:40] or None
+    # El banco del molde es el reconocido (o el que eligió la persona), no solo el
+    # del nombre del membrete; la firma sí sigue con el del nombre.
+    clave = str(b.banco_clave or apr.get("banco_clave") or "")[:40] or None
+    if clave == BANCO_GENERICO:
+        clave = str(apr.get("banco_clave") or "")[:40] or None
     molde = db.query(MoldeExtractoPdf).filter(
         MoldeExtractoPdf.organizacion_id == b.organizacion_id, MoldeExtractoPdf.firma == firma,
     ).first()
     if molde:
         # El formato guardado no alcanzó para este PDF y este sí: se reemplaza.
-        molde.layout = _json_safe(apr["layout"])
-        molde.banco_clave = clave
+        # Un banco ya confirmado por la persona no se pisa con uno adivinado.
+        ya_confirmado = bool((molde.layout or {}).get("banco_confirmado"))
+        molde.layout = _con_banco_confirmado(_json_safe(apr["layout"]), banco_confirmado or ya_confirmado)
+        if banco_confirmado or not ya_confirmado:
+            molde.banco_clave = clave
         molde.origen = origen or molde.origen
         molde.confirmaciones = (molde.confirmaciones or 0) + 1
         molde.ultimo_uso_at = ahora
     else:
         db.add(MoldeExtractoPdf(
             organizacion_id=b.organizacion_id, banco_clave=clave, firma=firma,
-            layout=_json_safe(apr["layout"]), origen=origen, confirmaciones=1,
+            layout=_con_banco_confirmado(_json_safe(apr["layout"]), banco_confirmado), origen=origen, confirmaciones=1,
             ultimo_uso_at=ahora, creado_por=usuario_id,
         ))
     return True
@@ -1097,7 +1125,20 @@ def confirmar_borrador(db: Session, b: BorradorExtractoPdf, body: Any, usuario_i
                 "El extracto está archivado (período cerrado): desarchivalo o guardá el PDF como extracto nuevo.", 409)
 
     banco_body = (_valor(body, "banco") or "").strip()[:120]
-    banco_final = resolver_banco(banco_body or b.banco or BANCO_DEFAULT, b.banco_clave or "generico")[:120]
+    clave_body = (_valor(body, "banco_clave") or "").strip().lower()[:40] or None
+    if clave_body and not clave_valida(clave_body):
+        raise ExtractoPdfServicioError("El banco elegido no es válido.", 422)
+    deteccion = (b.datos or {}).get("banco_deteccion")
+    banco_confirmado = eleccion_confirmada(deteccion, b.banco_clave, clave_body)
+    if clave_body and clave_body != BANCO_GENERICO:
+        # Lo eligió la persona en la revisión: manda (y se guarda en el borrador).
+        banco_final = (nombre_banco(clave_body) or banco_body or BANCO_DEFAULT)[:120]
+        b.banco_clave = clave_body
+    elif clave_body == BANCO_GENERICO:
+        banco_final = (banco_body if banco_body and banco_body != BANCO_DEFAULT else "Otro banco")[:120]
+        b.banco_clave = BANCO_GENERICO
+    else:
+        banco_final = resolver_banco(banco_body or b.banco or BANCO_DEFAULT, b.banco_clave or "generico")[:120]
     nombre = ((_valor(body, "nombre") or "").strip() or b.nombre_archivo)[:255]
     filas_parser = a_filas_parser(filas, orden)
 
@@ -1138,7 +1179,7 @@ def confirmar_borrador(db: Session, b: BorradorExtractoPdf, body: Any, usuario_i
 
     # Aprendizaje (aparte: si falla, el extracto ya quedó guardado).
     try:
-        if _aprender(db, b, filas, cierra, usuario_id):
+        if _aprender(db, b, filas, cierra, usuario_id, banco_confirmado=banco_confirmado):
             resultado["molde_aprendido"] = True
             _guardar_confirmacion(db, b, resultado)
             db.commit()

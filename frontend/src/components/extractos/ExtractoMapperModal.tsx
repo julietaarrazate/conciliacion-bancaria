@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { MapeoExtracto, PreviewExtracto, RolExtracto, SignoExtracto } from '@/types'
+import { BancoDetectado, bancoInicial } from './BancoDetectado'
 
 // Pantalla para confirmar o corregir qué es cada columna de un extracto en
 // Excel/CSV (misma idea que ColumnMapperModal de las planillas). Cada cambio se
@@ -9,7 +10,8 @@ import type { MapeoExtracto, PreviewExtracto, RolExtracto, SignoExtracto } from 
 interface Props {
   preview: PreviewExtracto
   onRevisar: (mapeo: MapeoExtracto) => Promise<PreviewExtracto>
-  onConfirm: (mapeo: MapeoExtracto) => void
+  /** `bancoClave`: el banco que quedó elegido en el desplegable (null si no hay detección). */
+  onConfirm: (mapeo: MapeoExtracto, bancoClave: string | null) => void
   onCancel: () => void
 }
 
@@ -102,7 +104,15 @@ export const ExtractoMapperModal: React.FC<Props> = ({ preview, onRevisar, onCon
   const [actual, setActual] = useState<PreviewExtracto>(preview)
   const [revisando, setRevisando] = useState(false)
   const [errorRevision, setErrorRevision] = useState('')
+  const [bancoClave, setBancoClave] = useState(() => bancoInicial(preview.banco_deteccion))
+  const [bancoTocado, setBancoTocado] = useState(false)
   const primera = useRef(true)
+
+  // Si al cambiar las columnas el banco se reconoce distinto (otra fila de títulos),
+  // se sigue lo detectado mientras la persona no lo haya elegido a mano.
+  useEffect(() => {
+    if (!bancoTocado) setBancoClave(bancoInicial(actual.banco_deteccion))
+  }, [actual.banco_deteccion, bancoTocado])
 
   // Cada cambio del mapeo se relee en el servidor (con una pequeña espera para
   // no mandar el archivo en cada clic seguido).
@@ -146,6 +156,8 @@ export const ExtractoMapperModal: React.FC<Props> = ({ preview, onRevisar, onCon
   }
 
   const { grilla } = preview
+  const hayDeteccion = !!actual.banco_deteccion
+  const faltaBanco = hayDeteccion && bancoClave === ''
   const valido = mapeoCompleto(mapeo)
   const origen = ORIGEN[actual.origen] ?? ORIGEN.manual
   const encabezado = (c: number) => {
@@ -168,8 +180,17 @@ export const ExtractoMapperModal: React.FC<Props> = ({ preview, onRevisar, onCon
           </h3>
           <span className={origen.badge}>{origen.label}</span>
         </div>
+        {hayDeteccion && (
+          <div className="mb-2">
+            <BancoDetectado
+              deteccion={actual.banco_deteccion}
+              value={bancoClave}
+              onChange={clave => { setBancoClave(clave); setBancoTocado(true) }}
+            />
+          </div>
+        )}
         <p className="text-xs text-ml-text-soft dark:text-zinc-400 mb-3">
-          {actual.banco ? <>Banco: <span className="font-semibold">{actual.banco}</span> · </> : null}
+          {!hayDeteccion && actual.banco ? <>Banco: <span className="font-semibold">{actual.banco}</span> · </> : null}
           Confianza: <span className="font-semibold">{Math.round(actual.confianza * 100)}%</span>
           {preview.hojas.length > 1 && preview.hoja ? <> · Hoja: <span className="font-semibold">{preview.hoja}</span></> : null}
         </p>
@@ -322,13 +343,15 @@ export const ExtractoMapperModal: React.FC<Props> = ({ preview, onRevisar, onCon
           <p className="text-xs text-ml-text-soft dark:text-zinc-400 max-w-md">
             {!valido
               ? '⚠ Indicá al menos la columna del importe (o las de débito y crédito).'
-              : 'Al importar, este formato queda guardado y la próxima vez se lee solo.'}
+              : faltaBanco
+                ? '⚠ Elegí de qué banco es el extracto (o "Otro banco").'
+                : 'Al importar, este formato queda guardado y la próxima vez se lee solo.'}
           </p>
           <div className="flex gap-3 shrink-0">
             <button onClick={onCancel} className="btn-secondary">Cancelar</button>
             <button
-              onClick={() => valido && onConfirm(mapeo)}
-              disabled={!valido || revisando}
+              onClick={() => valido && !faltaBanco && onConfirm(mapeo, hayDeteccion ? bancoClave : null)}
+              disabled={!valido || faltaBanco || revisando}
               className="btn-primary"
             >
               Importar extracto

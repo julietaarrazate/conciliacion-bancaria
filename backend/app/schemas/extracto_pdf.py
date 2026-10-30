@@ -69,6 +69,9 @@ class BorradorExtractoOut(BaseModel):
     metodo: Optional[str] = None           # molde | automatico | ia
     banco: Optional[str] = None
     banco_clave: Optional[str] = None
+    # Cómo se reconoció el banco: {banco_clave, nombre, confianza, motivo, origen,
+    # conflicto, pedir_confirmacion} (ver services/banco_identificacion.py).
+    banco_deteccion: Optional[dict] = None
     periodo_desde: Optional[date] = None
     periodo_hasta: Optional[date] = None
     saldo_inicial: Dinero = None
@@ -139,6 +142,8 @@ class ConfirmarExtractoPdfIn(BaseModel):
     saldo_inicial: DineroIn = None
     saldo_final: DineroIn = None
     banco: Optional[str] = None
+    # Banco elegido en la pantalla de revisión (clave interna, p. ej. "galicia").
+    banco_clave: Optional[str] = None
     nombre: Optional[str] = None
     destino: str = "nuevo"                 # nuevo | existente
     extracto_id: Optional[int] = None

@@ -221,11 +221,31 @@ export interface CuadreExtracto {
   primera_fila_con_error?: number | null
 }
 
+/** Cómo se reconoció el banco de un extracto (backend: services/banco_identificacion.py). */
+export interface DeteccionBanco {
+  banco_clave: string
+  nombre: string | null
+  confianza: number
+  /** En castellano: "por el CBU de la cuenta", "confirmado antes", … */
+  motivo: string
+  origen: 'confirmado' | 'cbu' | 'cuit' | 'aprendido' | 'estructura' | 'nombre' | 'ninguno'
+  /** Otra señal del archivo indica otro banco (texto para mostrar) o null. */
+  conflicto: string | null
+  /** No estamos seguros: la pantalla le pide a la persona que lo elija. */
+  pedir_confirmacion: boolean
+}
+
+export interface BancoOpcion {
+  clave: string
+  nombre: string
+}
+
 export interface PreviewExtracto {
   hoja: string | null
   hojas: string[]
   banco_clave: string | null
   banco: string | null
+  banco_deteccion?: DeteccionBanco | null
   origen: 'plantilla' | 'heuristica' | 'sugerencia' | 'manual' | 'ninguno'
   plantilla_id: number | null
   mapeo: MapeoExtracto | null
@@ -917,6 +937,7 @@ export interface BorradorExtractoPdf {
   metodo: MetodoLecturaExtractoPdf | null
   banco: string | null
   banco_clave: string | null
+  banco_deteccion?: DeteccionBanco | null
   periodo_desde: string | null
   periodo_hasta: string | null
   saldo_inicial: string | null
@@ -962,6 +983,8 @@ export interface ConfirmarExtractoPdfPayload {
   saldo_inicial: string | null
   saldo_final: string | null
   banco: string | null
+  /** Banco elegido en la revisión (clave interna); se recuerda para ese formato. */
+  banco_clave?: string | null
   nombre: string | null
   destino: 'nuevo' | 'existente'
   extracto_id: number | null

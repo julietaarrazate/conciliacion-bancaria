@@ -405,7 +405,7 @@ export const Movimientos: React.FC = () => {
         <div className="flex-1 min-w-[220px]">
           <select className="input-field" value={extractoId ?? ''} onChange={e => setExtractoId(Number(e.target.value))}>
             {extractos.map(e => (
-              <option key={e.id} value={e.id}>#{e.id} · {e.nombre_archivo} ({e.total_movimientos})</option>
+              <option key={e.id} value={e.id}>#{e.id} · {e.banco ? `${e.banco} · ` : ''}{e.nombre_archivo} ({e.total_movimientos})</option>
             ))}
           </select>
         </div>

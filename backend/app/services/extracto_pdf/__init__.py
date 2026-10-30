@@ -13,7 +13,9 @@ documentación del módulo (`docs/business/` del feature). Resumen de la salida:
 `saldo_inicial/final` (Decimal), `movimientos` (fecha, descripcion, monto con
 signo, saldo, pagina, dudosa, motivos — en el orden del PDF), `cuadre` (salida de
 `validar_saldos`), `alertas`, `aprendizaje` (candidato a molde), `ia_usada`,
-`ia_disponible`.
+`ia_disponible`, `banco_deteccion` (cómo se reconoció el banco: CBU, CUIT,
+formato, confirmado antes o nombre — ver `services/banco_identificacion.py`).
+`nombre_archivo` (opcional) se usa para buscar el CBU o el banco en el nombre.
 """
 
 from .errores import ExtractoPdfError
