@@ -12,7 +12,7 @@ interface Props {
   msg: string
   clientes: ClienteOpt[]
   portadores: PortadorOpt[]
-  fotoInputRef: React.RefObject<HTMLInputElement>
+  fotoInputRef: React.RefObject<HTMLInputElement | null>
   onClose: () => void
   onChange: (fn: (p: FormState) => FormState) => void
   onSave: () => void

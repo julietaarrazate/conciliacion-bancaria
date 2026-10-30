@@ -28,7 +28,7 @@ interface Props {
   bulkProcessing: boolean
   bulkSaving: boolean
   bulkMsg: string
-  bulkInputRef: React.RefObject<HTMLInputElement>
+  bulkInputRef: React.RefObject<HTMLInputElement | null>
   onFileChange: (files: FileList | null) => void
   onRemoveFile: (idx: number) => void
   onProcess: () => void
