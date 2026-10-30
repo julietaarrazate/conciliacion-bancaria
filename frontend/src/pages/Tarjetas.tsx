@@ -55,7 +55,7 @@ const ESTADO_BADGE: Record<string, string> = {
 }
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ml-blue/40 text-sm'
+  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-ml-blue/40 text-sm'
 
 // SVG icons (Heroicons)
 const IconUpload = () => (
@@ -440,7 +440,7 @@ export const Tarjetas: React.FC = () => {
                 <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Sin liquidaciones.</td></tr>
               )}
               {!loading && items.map((l, i) => (
-                <tr key={l.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                <tr key={l.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmtDate(l.fecha_acreditacion)}</td>
                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{l.periodo}</td>
                   <td className="px-3 py-2">

@@ -38,7 +38,7 @@ function mesesRecientes(): string[] {
 }
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ml-blue/40 text-sm'
+  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-ml-blue/40 text-sm'
 
 const ESTADO_BADGE: Record<string, string> = {
   proyectado: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
@@ -499,7 +499,7 @@ export const IngresosBrutos: React.FC = () => {
                           </td></tr>
                         )}
                         {detalle.map((d, i) => (
-                          <tr key={d.jurisdiccion_id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                          <tr key={d.jurisdiccion_id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                             <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{d.nombre}</td>
                             {preview.modo === 'convenio_multilateral' && (
                               <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmtPct(d.coeficiente)}</td>
@@ -540,7 +540,7 @@ export const IngresosBrutos: React.FC = () => {
                   <tr><td colSpan={4} className="px-3 py-6 text-center text-gray-400">Sin proyecciones calculadas.</td></tr>
                 )}
                 {!historialLoading && historial.map((p, i) => (
-                  <tr key={p.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                  <tr key={p.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                     <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.periodo}</td>
                     <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(p.ingreso_total)}</td>
                     <td className="px-3 py-2 text-right font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">{fmt(p.impuesto_total)}</td>
@@ -586,7 +586,7 @@ export const IngresosBrutos: React.FC = () => {
                 type="checkbox"
                 checked={configActivo}
                 onChange={e => setConfigActivo(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 dark:border-white/20"
+                className="w-4 h-4 rounded-sm border-gray-300 dark:border-white/20"
               />
               <label htmlFor="iibb-activo" className="text-sm font-medium text-gray-800 dark:text-gray-200">
                 Activar módulo de Ingresos Brutos para esta organización
@@ -658,7 +658,7 @@ export const IngresosBrutos: React.FC = () => {
                     <tr><td colSpan={esConvenio ? 5 : 4} className="px-3 py-4 text-center text-gray-400">Sin jurisdicciones. Agregá una abajo.</td></tr>
                   )}
                   {!jurLoading && jurisdiccionesOrdenadas.map((j, i) => (
-                    <tr key={j.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                    <tr key={j.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{j.nombre}</td>
                       <td className="px-3 py-2">
                         <input

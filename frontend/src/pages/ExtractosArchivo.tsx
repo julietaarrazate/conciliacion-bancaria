@@ -406,12 +406,12 @@ export const ExtractosArchivo: React.FC = () => {
                                                         if (ev.key === 'Enter') saveRename(e.id)
                                                         if (ev.key === 'Escape') cancelRename()
                                                       }}
-                                                      className="flex-1 text-xs px-2 py-1 rounded border border-ml-blue/40 bg-white dark:bg-slate-800 text-ml-text dark:text-gray-200 outline-none focus:border-ml-blue min-w-0"
+                                                      className="flex-1 text-xs px-2 py-1 rounded-sm border border-ml-blue/40 bg-white dark:bg-slate-800 text-ml-text dark:text-gray-200 outline-hidden focus:border-ml-blue min-w-0"
                                                     />
                                                     <button onClick={() => saveRename(e.id)} disabled={renameSaving || !renameVal.trim()}
-                                                      className="px-1.5 py-1 text-xs bg-ml-blue text-white rounded disabled:opacity-50">✓</button>
+                                                      className="px-1.5 py-1 text-xs bg-ml-blue text-white rounded-sm disabled:opacity-50">✓</button>
                                                     <button onClick={cancelRename}
-                                                      className="px-1.5 py-1 text-xs text-gray-400 hover:text-gray-600 rounded">✕</button>
+                                                      className="px-1.5 py-1 text-xs text-gray-400 hover:text-gray-600 rounded-sm">✕</button>
                                                   </div>
                                                 ) : (
                                                   <div className="flex items-center gap-1 group">
@@ -428,7 +428,7 @@ export const ExtractosArchivo: React.FC = () => {
                                                 <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
                                                   Subido {fmtDatetime(e.fecha_creacion)} · {e.usuario_nombre}
                                                   {e.archivado && (
-                                                    <span className="ml-1.5 px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-ml-dark-card dark:text-gray-400 font-medium">
+                                                    <span className="ml-1.5 px-1.5 py-0.5 rounded-sm bg-gray-100 text-gray-500 dark:bg-ml-dark-card dark:text-gray-400 font-medium">
                                                       📦 Archivado
                                                     </span>
                                                   )}

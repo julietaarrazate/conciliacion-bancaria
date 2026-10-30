@@ -404,7 +404,7 @@ export const Clientes: React.FC = () => {
       )}
 
       {msg && (
-        <div className={`mb-3 px-3 py-2 rounded text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'}`}>
+        <div className={`mb-3 px-3 py-2 rounded-sm text-sm ${msg.startsWith('✓') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'}`}>
           {msg}
         </div>
       )}
@@ -436,7 +436,7 @@ export const Clientes: React.FC = () => {
                 {/* Nivel 1: Organización */}
                 <button
                   onClick={() => setOpenOrg(o => ({ ...o, [org.id]: !orgOpen }))}
-                  className="w-full flex items-center gap-3 px-3 md:px-4 py-3 bg-gradient-to-r from-ml-yellow/20 to-transparent dark:from-amber-900/20 hover:bg-ml-gray-bg dark:hover:bg-ml-dark-hover transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 md:px-4 py-3 bg-linear-to-r from-ml-yellow/20 to-transparent dark:from-amber-900/20 hover:bg-ml-gray-bg dark:hover:bg-ml-dark-hover transition-colors text-left"
                 >
                   <span className="text-lg">🏢</span>
                   <div className="flex-1 min-w-0">
@@ -461,7 +461,7 @@ export const Clientes: React.FC = () => {
                             value={nuevoCuit} onChange={e => setNuevoCuit(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && handleCrearCliente(org.id)} />
                           <button onClick={() => handleCrearCliente(org.id)} disabled={creandoLoading || !nuevoNombre.trim()}
-                            className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-30">
+                            className="px-2 py-1 text-xs bg-green-600 text-white rounded-sm hover:bg-green-700 disabled:opacity-30">
                             {creandoLoading ? '⏳' : 'Crear'}
                           </button>
                           <button onClick={() => { setCreando(null); setNuevoNombre(''); setNuevoCuit('') }}
@@ -496,7 +496,7 @@ export const Clientes: React.FC = () => {
                                 placeholder="Nuevo nombre"
                               />
                               <button onClick={() => handleRenombrar(cliente.id)} disabled={savingRenombre || !renombreVal.trim()}
-                                className="px-2 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-30">
+                                className="px-2 py-1 text-xs bg-amber-500 text-white rounded-sm hover:bg-amber-600 disabled:opacity-30">
                                 {savingRenombre ? '⏳' : 'Guardar'}
                               </button>
                               <button onClick={() => setRenombrando(null)} className="px-1.5 py-1 text-xs text-gray-400 hover:text-gray-600">✕</button>
@@ -518,7 +518,7 @@ export const Clientes: React.FC = () => {
                               </select>
                               <button onClick={() => handleFusionar(cliente.id, cliente.nombre)}
                                 disabled={savingFusion || !fusionTargetId}
-                                className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-30">
+                                className="px-2 py-1 text-xs bg-purple-600 text-white rounded-sm hover:bg-purple-700 disabled:opacity-30">
                                 {savingFusion ? '⏳' : 'Fusionar'}
                               </button>
                               <button onClick={() => { setFusionandoId(null); setFusionTargetId('') }}
@@ -539,11 +539,11 @@ export const Clientes: React.FC = () => {
                               </div>
                             </button>
                             {/* Chip comisión (% general / Local / Interior) */}
-                            <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                            <div className="relative shrink-0" onClick={e => e.stopPropagation()}>
                               <button
                                 disabled={!canReconcile}
                                 onClick={() => editComisionId === cliente.id ? setEditComisionId(null) : abrirEditorComision(cliente)}
-                                className={`px-2 py-1 text-[11px] rounded font-medium transition-colors ${cliente.porcentaje_comision != null || cliente.porcentaje_comision_local != null || cliente.porcentaje_comision_interior != null ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60' : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-600'}`}
+                                className={`px-2 py-1 text-[11px] rounded-sm font-medium transition-colors ${cliente.porcentaje_comision != null || cliente.porcentaje_comision_local != null || cliente.porcentaje_comision_interior != null ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60' : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-600'}`}
                                 title={canReconcile ? '% comisiones (general / local / interior) — click para editar' : '% comisiones (general / local / interior)'}
                               >
                                 {cliente.porcentaje_comision != null ? `${cliente.porcentaje_comision}%` : '%'}&nbsp;
@@ -595,13 +595,13 @@ export const Clientes: React.FC = () => {
                                     <button
                                       onClick={() => handleGuardarComision(cliente.id)}
                                       disabled={savingComision}
-                                      className="flex-1 py-1 text-[11px] bg-ml-blue text-white rounded hover:opacity-90 disabled:opacity-30 font-medium"
+                                      className="flex-1 py-1 text-[11px] bg-ml-blue text-white rounded-sm hover:opacity-90 disabled:opacity-30 font-medium"
                                     >
                                       {savingComision ? 'Guardando...' : 'Guardar'}
                                     </button>
                                     <button
                                       onClick={() => setEditComisionId(null)}
-                                      className="px-2 py-1 text-[11px] bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-slate-600"
+                                      className="px-2 py-1 text-[11px] bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 rounded-sm hover:bg-gray-200 dark:hover:bg-slate-600"
                                     >
                                       Cancelar
                                     </button>
@@ -612,7 +612,7 @@ export const Clientes: React.FC = () => {
                             <a
                               href={`/clientes/${cliente.id}/estado-cuenta`}
                               onClick={(e) => e.stopPropagation()}
-                              className="px-2 py-1 text-[11px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded hover:bg-indigo-200 dark:hover:bg-indigo-900/60 font-medium flex-shrink-0"
+                              className="px-2 py-1 text-[11px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-sm hover:bg-indigo-200 dark:hover:bg-indigo-900/60 font-medium shrink-0"
                               title="Ver estado de cuenta del cliente"
                             >
                               📊<span className="hidden md:inline"> Estado</span>
@@ -620,7 +620,7 @@ export const Clientes: React.FC = () => {
                             {puedeVerCtaCte && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); navigate(`/cuentas-corrientes?cc=${cliente.id}`) }}
-                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 rounded hover:bg-sky-200 dark:hover:bg-sky-900/60 font-medium flex-shrink-0"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 rounded-sm hover:bg-sky-200 dark:hover:bg-sky-900/60 font-medium shrink-0"
                                 title="Ver cuenta corriente del cliente"
                               >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M4.5 21V10.5m4 10.5V10.5m7 10.5V10.5m4 10.5V10.5M3 10.5h18M12 3l9 4.5H3L12 3z"/></svg>
@@ -629,14 +629,14 @@ export const Clientes: React.FC = () => {
                             )}
                             {canReconcile && <button
                               onClick={(e) => { e.stopPropagation(); abrirAcreditar({ id: cliente.id, nombre: cliente.nombre }) }}
-                              className="px-2 py-1 text-[11px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded hover:bg-emerald-200 dark:hover:bg-emerald-900/60 font-medium flex-shrink-0"
+                              className="px-2 py-1 text-[11px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-sm hover:bg-emerald-200 dark:hover:bg-emerald-900/60 font-medium shrink-0"
                               title="Acreditar transferencia desde comprobante"
                             >
                               💸<span className="hidden md:inline"> Acreditar</span>
                             </button>}
                             {canReconcile && <button
                               onClick={(e) => { e.stopPropagation(); setRenombrando(cliente.id); setRenombreVal(cliente.nombre) }}
-                              className="hidden md:inline-flex p-1 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded flex-shrink-0"
+                              className="hidden md:inline-flex p-1 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-sm shrink-0"
                               title="Renombrar cliente"
                             >
                               ✏️
@@ -644,7 +644,7 @@ export const Clientes: React.FC = () => {
                             {canFusionar && otrosClientes.length > 0 && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); setFusionandoId(cliente.id); setFusionTargetId('') }}
-                                className="hidden md:inline-flex p-1 text-purple-500 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded flex-shrink-0"
+                                className="hidden md:inline-flex p-1 text-purple-500 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-sm shrink-0"
                                 title="Fusionar con otro cliente"
                               >
                                 🔀
@@ -653,7 +653,7 @@ export const Clientes: React.FC = () => {
                             {canDelete && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleBorrarCliente(cliente.id, cliente.nombre, cliente.total_archivos) }}
-                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex-shrink-0"
+                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-sm shrink-0"
                                 title="Borrar cliente"
                               >
                                 🗑
@@ -698,7 +698,7 @@ export const Clientes: React.FC = () => {
                                               {fmtFecha(a.fecha_carga)} · {a.acreditadas}/{a.total} ({pct}%)
                                             </p>
                                           </div>
-                                          <div className="flex items-center gap-0.5 flex-shrink-0">
+                                          <div className="flex items-center gap-0.5 shrink-0">
                                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${pct === 100 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : pct >= 80 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
                                               {pct}%
                                             </span>
@@ -801,7 +801,7 @@ export const Clientes: React.FC = () => {
                     const isMejor = c === acrCandidatos[0] && c.score >= 12
                     return (
                       <button key={c.id} onClick={() => confirmarAcreditacion(c.id)} disabled={acrConfirming === c.id}
-                        className={`w-full text-left p-2 rounded border ${isMejor ? 'border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-700' : 'border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/30'} disabled:opacity-50`}>
+                        className={`w-full text-left p-2 rounded-sm border ${isMejor ? 'border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-700' : 'border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/30'} disabled:opacity-50`}>
                         <div className="flex justify-between items-start gap-2">
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-mono truncate dark:text-gray-200">{c.titular || '—'}</p>
@@ -816,7 +816,7 @@ export const Clientes: React.FC = () => {
                               <p className="text-[10px] text-red-600 dark:text-red-400">⚠ ya acreditado a "{c.cliente_acreditado}" — confirmar pisa esa marca</p>
                             )}
                           </div>
-                          <div className="text-right flex-shrink-0">
+                          <div className="text-right shrink-0">
                             <p className="text-sm font-bold dark:text-white">${c.monto.toLocaleString('es-AR')}</p>
                             {isMejor && <span className="text-[9px] text-green-600 dark:text-green-400">👍 mejor</span>}
                           </div>

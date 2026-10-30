@@ -168,7 +168,7 @@ export const Bulk: React.FC = () => {
                     </td>
                     <td className="px-4 py-2.5">
                       <input
-                        className="input-field !py-1 text-sm"
+                        className="input-field py-1! text-sm"
                         value={item.clienteNombre}
                         onChange={e => updateItem(item.id, { clienteNombre: e.target.value })}
                         disabled={running || item.status === 'ok'}

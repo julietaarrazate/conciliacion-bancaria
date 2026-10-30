@@ -83,7 +83,7 @@ export const Auditoria: React.FC = () => {
           {(['insights', 'log'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${tab === t
-                ? 'bg-white dark:bg-ml-dark-surface text-ml-text dark:text-white shadow-sm'
+                ? 'bg-white dark:bg-ml-dark-surface text-ml-text dark:text-white shadow-xs'
                 : 'text-ml-text-soft dark:text-gray-500 hover:text-ml-text dark:hover:text-gray-300'}`}>
               {t === 'insights' ? '📊 Inteligencia' : '📋 Log'}
             </button>

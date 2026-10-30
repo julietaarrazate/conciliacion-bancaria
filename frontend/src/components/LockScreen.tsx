@@ -70,7 +70,7 @@ export const LockScreen: React.FC = () => {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] bg-ml-gray-bg dark:bg-ml-dark-bg flex flex-col items-center justify-center px-6 select-none">
+    <div className="fixed inset-0 z-200 bg-ml-gray-bg dark:bg-ml-dark-bg flex flex-col items-center justify-center px-6 select-none">
       <div className="w-full max-w-xs space-y-8">
         <div className="text-center space-y-3">
           <div className="flex justify-center">

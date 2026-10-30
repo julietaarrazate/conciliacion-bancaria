@@ -182,12 +182,12 @@ export const CompararArcaModal: React.FC<CompararArcaModalProps> = ({
 
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose}
-            className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded hover:bg-gray-50 dark:hover:bg-slate-700">
+            className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-slate-600 rounded-sm hover:bg-gray-50 dark:hover:bg-slate-700">
             {res && res.faltantes.length > 0 ? 'Cancelar' : 'Cerrar'}
           </button>
           {res && res.faltantes.length > 0 && (
             <button onClick={importar} disabled={importando || elegidas.size === 0}
-              className="px-4 py-1.5 text-xs bg-ml-blue text-white rounded hover:bg-ml-blue/90 disabled:opacity-50">
+              className="px-4 py-1.5 text-xs bg-ml-blue text-white rounded-sm hover:bg-ml-blue/90 disabled:opacity-50">
               {importando ? 'Importando…' : `Importar ${elegidas.size} ${elegidas.size === 1 ? 'factura' : 'facturas'}`}
             </button>
           )}

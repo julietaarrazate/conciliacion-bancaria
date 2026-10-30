@@ -79,7 +79,7 @@ export const BarChart: React.FC<BarChartProps> = ({
         <div className="flex flex-wrap gap-3 mt-2 justify-center">
           {series.map((s, i) => (
             <div key={i} className="flex items-center gap-1.5 text-xs">
-              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: s.color }} />
+              <span className="w-2.5 h-2.5 rounded-xs" style={{ background: s.color }} />
               <span className="text-ml-text-soft dark:text-zinc-400">{s.label}</span>
             </div>
           ))}

@@ -27,7 +27,7 @@ export const Toaster: React.FC = () => {
   const dismiss = useToastStore(s => s.dismiss)
 
   return (
-    <div className="fixed top-3 inset-x-3 md:top-4 md:right-4 md:left-auto md:inset-x-auto z-[100] flex flex-col gap-2 pointer-events-none md:w-96">
+    <div className="fixed top-3 inset-x-3 md:top-4 md:right-4 md:left-auto md:inset-x-auto z-100 flex flex-col gap-2 pointer-events-none md:w-96">
       {toasts.map(t => (
         <div
           key={t.id}

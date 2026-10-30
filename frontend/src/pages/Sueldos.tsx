@@ -37,7 +37,7 @@ function mesesRecientes(): string[] {
 }
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ml-blue/40 text-sm'
+  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-ml-blue/40 text-sm'
 
 const ESTADO_BADGE: Record<string, string> = {
   borrador: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300',
@@ -629,7 +629,7 @@ export const Sueldos: React.FC = () => {
                 {empLoading && <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Cargando…</td></tr>}
                 {!empLoading && empleados.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Sin empleados.</td></tr>}
                 {!empLoading && empleados.map((e, i) => (
-                  <tr key={e.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                  <tr key={e.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                     <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{e.nombre}</td>
                     <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{e.cuil || '—'}</td>
                     <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{e.sueldo_basico != null ? fmt(e.sueldo_basico) : '—'}</td>
@@ -756,7 +756,7 @@ export const Sueldos: React.FC = () => {
                   <tbody>
                     {detalle.length === 0 && <tr><td colSpan={config?.ganancias_activo ? 8 : 7} className="px-3 py-6 text-center text-gray-400">Sin empleados activos para liquidar.</td></tr>}
                     {detalle.map((d, i) => (
-                      <tr key={d.empleado_id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                      <tr key={d.empleado_id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                         <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{d.nombre}</td>
                         <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(d.sac_proporcional)}</td>
                         <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(d.sueldo_bruto)}</td>
@@ -805,7 +805,7 @@ export const Sueldos: React.FC = () => {
                 {historialLoading && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">Cargando…</td></tr>}
                 {!historialLoading && historial.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">Sin liquidaciones calculadas.</td></tr>}
                 {!historialLoading && historial.map((p, i) => (
-                  <tr key={p.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                  <tr key={p.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                     <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.periodo}</td>
                     <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(p.total_bruto)}</td>
                     <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(p.total_aportes)}</td>
@@ -840,7 +840,7 @@ export const Sueldos: React.FC = () => {
               <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 p-4 space-y-4">
                 <div className="flex items-center gap-3">
                   <input id="sueldos-activo" type="checkbox" checked={cfgActivo} onChange={e => setCfgActivo(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 dark:border-white/20" />
+                    className="w-4 h-4 rounded-sm border-gray-300 dark:border-white/20" />
                   <label htmlFor="sueldos-activo" className="text-sm font-medium text-gray-800 dark:text-gray-200">
                     Activar módulo de Sueldos para esta organización
                   </label>
@@ -889,7 +889,7 @@ export const Sueldos: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <input id="ganancias-activo" type="checkbox" checked={gananciasActivo}
                     onChange={e => setGananciasActivo(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 dark:border-white/20" />
+                    className="w-4 h-4 rounded-sm border-gray-300 dark:border-white/20" />
                   <label htmlFor="ganancias-activo" className="text-sm font-medium text-gray-800 dark:text-gray-200">
                     Activar retención de Ganancias 4ta categoría
                   </label>

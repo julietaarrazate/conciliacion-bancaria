@@ -50,7 +50,7 @@ const ESTADO_BADGE: Record<EstadoBorradorComprobante, string> = {
 }
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ml-blue/40 text-sm'
+  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-ml-blue/40 text-sm'
 const labelClass = 'block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1'
 const btnPrimary = 'inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-ml-blue text-white text-sm font-medium hover:opacity-90 disabled:opacity-50'
 const btnSecondary = 'inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50'
@@ -264,7 +264,7 @@ const Revision: React.FC<{
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-stretch md:items-center justify-center md:p-4" role="dialog" aria-modal="true">
-      <div className="bg-white dark:bg-[#111116] w-full md:max-w-6xl md:rounded-xl overflow-hidden flex flex-col max-h-full md:max-h-[92vh] border border-gray-200 dark:border-white/10">
+      <div className="bg-white dark:bg-ml-dark-surface w-full md:max-w-6xl md:rounded-xl overflow-hidden flex flex-col max-h-full md:max-h-[92vh] border border-gray-200 dark:border-white/10">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-white/10">
           <div className="min-w-0">
             <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{b.archivo_nombre || b.asunto || 'Comprobante'}</div>

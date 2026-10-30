@@ -49,7 +49,7 @@ export const ChequesTabRechazados: React.FC<Props> = ({ rechazadosList, rechazad
                   <td className="px-3 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{fmt(c.monto)}</td>
                   <td className="px-3 py-2">
                     {c.fisico
-                      ? <span className="px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">Sí</span>
+                      ? <span className="px-1.5 py-0.5 rounded-sm text-xs bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">Sí</span>
                       : <span className="text-gray-600">No</span>
                     }
                   </td>

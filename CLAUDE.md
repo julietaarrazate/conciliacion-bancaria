@@ -55,7 +55,7 @@ se editan `backend/requirements.in` / `requirements-dev.in` y se **regeneran** `
 ## Stack
 
 Backend: FastAPI + SQLAlchemy + PostgreSQL (Neon) + Python 3.11
-Frontend: React 18 + TypeScript + Vite + TailwindCSS + PWA instalable
+Frontend: React 19 + TypeScript + Vite 8 + Tailwind 4 + PWA instalable
 Auth: JWT 8h · pbkdf2_sha256 · Rate limiting (slowapi) · Headers de seguridad
 Diseño (app autenticada): minimalista · Inter font · dark mode (#0B0B0F)
 Diseño (landing pública `/`): estilo marketing con efectos — gradiente en el título, glow-orb,

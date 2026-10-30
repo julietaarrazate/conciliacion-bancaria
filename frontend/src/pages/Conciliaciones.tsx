@@ -119,7 +119,7 @@ export const Conciliaciones: React.FC = () => {
       </div>
 
       {/* Filtros */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-lg p-3 shadow-sm">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-lg p-3 shadow-xs">
         <div className="col-span-2 md:col-span-1">
           <label className="label text-xs">Cliente</label>
           <input list="conc-clientes" className="input-field" placeholder="Nombre del cliente..." value={cliente} onChange={e => setCliente(e.target.value)} />
@@ -150,7 +150,7 @@ export const Conciliaciones: React.FC = () => {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 overflow-hidden shadow-sm rounded-lg">
+      <div className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 overflow-hidden shadow-xs rounded-lg">
         {loading ? (
           <div className="p-8 text-center text-gray-400">Cargando...</div>
         ) : items.length === 0 ? (
@@ -166,7 +166,7 @@ export const Conciliaciones: React.FC = () => {
               </span>
               <div className="flex items-center gap-1">
                 <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                  className="px-2 py-0.5 text-xs rounded border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
+                  className="px-2 py-0.5 text-xs rounded-sm border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
                   ← Ant.
                 </button>
                 <span className="text-xs text-gray-500 dark:text-gray-400 px-1">
@@ -174,7 +174,7 @@ export const Conciliaciones: React.FC = () => {
                 </span>
                 <button onClick={() => setPage(p => Math.min(Math.ceil(items.length / PAGE_SIZE) - 1, p + 1))}
                   disabled={page >= Math.ceil(items.length / PAGE_SIZE) - 1}
-                  className="px-2 py-0.5 text-xs rounded border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
+                  className="px-2 py-0.5 text-xs rounded-sm border border-gray-300 dark:border-slate-600 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-slate-700">
                   Sig. →
                 </button>
               </div>

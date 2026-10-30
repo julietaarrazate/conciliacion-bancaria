@@ -311,7 +311,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
 
   const FilterInput = ({ field, placeholder }: { field: keyof Filters; placeholder: string }) => (
     <input
-      className="w-full px-1.5 py-0.5 text-xs border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-gray-200 focus:outline-none focus:border-ml-blue"
+      className="w-full px-1.5 py-0.5 text-xs border border-gray-300 dark:border-slate-600 rounded-sm bg-white dark:bg-slate-700 dark:text-gray-200 focus:outline-hidden focus:border-ml-blue"
       placeholder={placeholder}
       value={filtersDraft[field]}
       onChange={e => setFilter(field, e.target.value)}
@@ -334,24 +334,24 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
           <div className="flex items-center gap-1 ml-2 shrink-0">
             <button
               onClick={() => setShowFilters(s => !s)}
-              className={`px-2 py-1 text-xs rounded font-medium ${showFilters || hasFilters ? 'bg-ml-blue text-white' : 'bg-white/70 text-ml-text hover:bg-white'}`}
+              className={`px-2 py-1 text-xs rounded-sm font-medium ${showFilters || hasFilters ? 'bg-ml-blue text-white' : 'bg-white/70 text-ml-text hover:bg-white'}`}
               title="Filtros por columna"
             >
               {hasFilters ? `Filtros (${Object.values(filtersDraft).filter(Boolean).length})` : 'Filtrar'}
             </button>
             {hasFilters && (
-              <button onClick={clearFilters} className="px-2 py-1 text-xs bg-white/70 text-red-600 rounded hover:bg-white">
+              <button onClick={clearFilters} className="px-2 py-1 text-xs bg-white/70 text-red-600 rounded-sm hover:bg-white">
                 Limpiar
               </button>
             )}
             {meta && onDelete && (
               <button
                 onClick={() => { onDelete(meta.id); onClose() }}
-                className="px-2 py-1 text-red-700 hover:bg-red-100 rounded text-sm"
+                className="px-2 py-1 text-red-700 hover:bg-red-100 rounded-sm text-sm"
                 title="Eliminar planilla"
               >Borrar</button>
             )}
-            <button onClick={onClose} className="px-2 py-1 text-ml-text dark:text-gray-300 hover:bg-ml-yellow-dark dark:hover:bg-ml-dark-border rounded text-lg leading-none">X</button>
+            <button onClick={onClose} className="px-2 py-1 text-ml-text dark:text-gray-300 hover:bg-ml-yellow-dark dark:hover:bg-ml-dark-border rounded-sm text-lg leading-none">X</button>
           </div>
         </div>
 
@@ -393,7 +393,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
               <div className="flex items-center gap-1 ml-auto">
                 <span className="text-ml-blue font-semibold">{selectedRows.size} sel.</span>
                 {canReconcile && <select
-                  className="text-[10px] border border-gray-300 dark:border-slate-600 rounded px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white"
+                  className="text-[10px] border border-gray-300 dark:border-slate-600 rounded-sm px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white"
                   value={bulkStatus}
                   onChange={e => setBulkStatus(e.target.value)}
                 >
@@ -404,13 +404,13 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                   <button
                     onClick={applyBulkStatus}
                     disabled={savingRow}
-                    className="bg-ml-blue text-white text-[10px] rounded px-2 py-0.5 disabled:opacity-50"
+                    className="bg-ml-blue text-white text-[10px] rounded-sm px-2 py-0.5 disabled:opacity-50"
                   >Aplicar</button>
                 )}
                 {canDelete && <button
                   onClick={bulkDelete}
                   disabled={savingRow}
-                  className="bg-red-500 text-white text-[10px] rounded px-2 py-0.5 disabled:opacity-50"
+                  className="bg-red-500 text-white text-[10px] rounded-sm px-2 py-0.5 disabled:opacity-50"
                 >Borrar</button>}
               </div>
             )}
@@ -461,7 +461,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                     <td className="px-1 py-1"></td>
                     <td className="px-1 py-1"><FilterInput field="mov_fecha_acred" placeholder="acred." /></td>
                     <td className="px-1 py-1">
-                      <select className="w-full px-1.5 py-0.5 text-xs border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-gray-200"
+                      <select className="w-full px-1.5 py-0.5 text-xs border border-gray-300 dark:border-slate-600 rounded-sm bg-white dark:bg-slate-700 dark:text-gray-200"
                         value={filtersDraft.status}
                         onChange={e => {
                           const v = e.target.value
@@ -512,7 +512,7 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                         {editingRowId === row.id ? (
                           <div className="flex flex-col gap-1 min-w-[160px]">
                             <select
-                              className="text-[10px] border border-ml-blue rounded px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white w-full"
+                              className="text-[10px] border border-ml-blue rounded-sm px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white w-full"
                               value={editStatus}
                               onChange={e => setEditStatus(e.target.value)}
                               autoFocus
@@ -523,16 +523,16 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                             </select>
                             <input
                               type="date"
-                              className="text-[10px] border border-gray-300 dark:border-slate-600 rounded px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white w-full font-mono"
+                              className="text-[10px] border border-gray-300 dark:border-slate-600 rounded-sm px-1 py-0.5 bg-white dark:bg-slate-700 dark:text-white w-full font-mono"
                               value={editFecha}
                               onChange={e => setEditFecha(e.target.value)}
                               title="Fecha de acreditacion"
                             />
                             <div className="flex gap-1">
                               <button onClick={() => saveEdit(row.id)} disabled={savingRow}
-                                className="flex-1 bg-green-500 text-white text-[10px] rounded py-0.5 disabled:opacity-50">Guardar</button>
+                                className="flex-1 bg-green-500 text-white text-[10px] rounded-sm py-0.5 disabled:opacity-50">Guardar</button>
                               <button onClick={() => setEditingRowId(null)}
-                                className="flex-1 bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-white text-[10px] rounded py-0.5">X</button>
+                                className="flex-1 bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-white text-[10px] rounded-sm py-0.5">X</button>
                             </div>
                           </div>
                         ) : (
@@ -580,13 +580,13 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
                 <button
                   onClick={() => setPage(p => Math.max(0, p - 1))}
                   disabled={page === 0}
-                  className="px-2.5 py-1 rounded border border-gray-200 dark:border-slate-600 disabled:opacity-40 hover:bg-ml-gray-bg dark:hover:bg-slate-700"
+                  className="px-2.5 py-1 rounded-sm border border-gray-200 dark:border-slate-600 disabled:opacity-40 hover:bg-ml-gray-bg dark:hover:bg-slate-700"
                 >← Anterior</button>
                 <span>Página {page + 1} / {totalPages} · {meta?.total_filtered ?? 0} filas{hasFilters ? ' (filtrado)' : ''}</span>
                 <button
                   onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                   disabled={page === totalPages - 1}
-                  className="px-2.5 py-1 rounded border border-gray-200 dark:border-slate-600 disabled:opacity-40 hover:bg-ml-gray-bg dark:hover:bg-slate-700"
+                  className="px-2.5 py-1 rounded-sm border border-gray-200 dark:border-slate-600 disabled:opacity-40 hover:bg-ml-gray-bg dark:hover:bg-slate-700"
                 >Siguiente →</button>
               </div>
             )}
@@ -595,8 +595,8 @@ export const PlanillaPanel: React.FC<Props> = ({ planillaId, onClose, onDelete }
       </div>
 
       {asignarRowId !== null && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeAsignar} />
+        <div className="fixed inset-0 z-150 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={closeAsignar} />
           <div className="relative bg-white dark:bg-ml-dark-surface rounded-2xl shadow-xl border border-gray-200 dark:border-ml-dark-border p-6 w-full max-w-md">
             <h3 className="text-base font-semibold text-ml-text dark:text-white mb-1">Asignar movimiento</h3>
             <p className="text-xs text-ml-text-soft dark:text-zinc-400 mb-4">

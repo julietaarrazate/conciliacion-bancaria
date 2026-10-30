@@ -52,7 +52,7 @@ const Marco: React.FC<{
         role="dialog"
         aria-modal="true"
         aria-labelledby="importar-pdf-titulo"
-        className={`bg-white dark:bg-[#111116] w-full md:max-w-7xl md:rounded-xl overflow-hidden flex flex-col max-h-full md:max-h-[94vh] border border-gray-200 dark:border-white/10 outline-none ${
+        className={`bg-white dark:bg-ml-dark-surface w-full md:max-w-7xl md:rounded-xl overflow-hidden flex flex-col max-h-full md:max-h-[94vh] border border-gray-200 dark:border-white/10 outline-hidden ${
           alto ? 'h-full md:h-[94vh]' : ''
         }`}
       >

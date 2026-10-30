@@ -109,7 +109,7 @@ export const ModalCheque: React.FC<Props> = ({
         </div>
         <div>
           <label className="block text-xs text-gray-400 mb-1">Local / Interior</label>
-          <div className="flex items-center gap-2 h-[34px] px-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded">
+          <div className="flex items-center gap-2 h-[34px] px-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-sm">
             {formData.local_interior
               ? <LiBadge value={formData.local_interior} />
               : <span className="text-xs text-gray-600">Auto por CP</span>
@@ -128,20 +128,20 @@ export const ModalCheque: React.FC<Props> = ({
           <label className="block text-xs text-gray-400 mb-1">Notas</label>
           <textarea rows={2} value={formData.notas}
             onChange={e => onChange(p => ({ ...p, notas: e.target.value }))}
-            className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-[#ffffff1a] rounded px-3 py-1.5 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-indigo-500 resize-none" />
+            className="w-full bg-white dark:bg-[#ffffff08] border border-gray-200 dark:border-[#ffffff1a] rounded-sm px-3 py-1.5 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:border-indigo-500 resize-none" />
         </div>
         {!editId && <div className="col-span-2">
           <label className="block text-xs text-gray-400 mb-1">Foto del cheque (opcional)</label>
           <div className="flex items-center gap-3">
             <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFotoChange} />
             <button type="button" onClick={() => { suppressLockForCamera(); fotoInputRef.current?.click() }}
-              className="px-3 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded border border-gray-200 dark:border-white/10 transition-colors flex items-center gap-1.5">
+              className="px-3 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded-sm border border-gray-200 dark:border-white/10 transition-colors flex items-center gap-1.5">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg>
               Sacar foto / subir imagen
             </button>
             {formFoto && (
               <div className="flex items-center gap-2">
-                <img src={formFoto} alt="preview" className="h-10 w-10 object-cover rounded border border-gray-200 dark:border-white/10" />
+                <img src={formFoto} alt="preview" className="h-10 w-10 object-cover rounded-sm border border-gray-200 dark:border-white/10" />
                 <button onClick={onRemoveFoto} className="text-xs text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300">✕ quitar</button>
               </div>
             )}

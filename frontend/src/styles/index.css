@@ -1,77 +1,185 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@import './paleta-tailwind3.css';
 
+@custom-variant dark (&:is(.dark *));
 
-/* ─── Base ──────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+/* hover: como en Tailwind 3 (v4 lo limita a @media (hover: hover), o sea que
+   en celulares/tablets dejaría de aplicarse al tocar). Se mantiene igual. */
+@custom-variant hover (&:hover);
 
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background-color: #F4F4F5;
-  color: #18181B;
-  overflow-x: hidden;
-  min-height: 100dvh;
-  -webkit-font-smoothing: antialiased;
-  /* Mobile: no seleccionar texto al tocar/long-press UI elementos */
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-  user-select: none;
-  /* Sin highlight gris azulado al tocar elementos */
-  -webkit-tap-highlight-color: transparent;
+@theme {
+  --color-ml-yellow: #ffe600;
+  --color-ml-yellow-dark: #f5dc00;
+  --color-ml-blue: #5e6ad2;
+  --color-ml-blue-dark: #4a55be;
+  --color-ml-blue-darker: #3a43a0;
+  --color-ml-gray: #e4e4e7;
+  --color-ml-gray-dark: #a1a1aa;
+  --color-ml-gray-bg: #f4f4f5;
+  --color-ml-text: #18181b;
+  --color-ml-text-soft: #71717a;
+  --color-ml-dark-bg: #0b0b0f;
+  --color-ml-dark-surface: #111116;
+  --color-ml-dark-card: #16161c;
+  --color-ml-dark-border: #1e1e26;
+  --color-ml-dark-hover: #1a1a22;
+  --color-ml-green: rgb(var(--ml-green));
+  --color-ml-green-bright: #4ade80;
+  --color-ml-green-dim: #16a34a;
+  --color-ml-green-muted: #14532d;
+
+  --color-status-ok: rgb(var(--ml-green));
+  --color-status-error: #ef4444;
+  --color-status-warn: #f59e0b;
+  --color-status-info: #5e6ad2;
+  --color-status-neutral: #71717a;
+
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+  --font-mono: JetBrains Mono, Fira Code, Consolas, monospace;
+
+  --text-2xs: 10px;
+  --text-2xs--line-height: 14px;
+
+  /* Interlineado fijo como en Tailwind 3 (en v4 es proporcional al tamaño
+     de letra: si algo pisa el font-size —ej. los botones del nav de la
+     landing o .kpi-value en mobile— la altura de línea cambiaba). */
+  --text-xs--line-height: 1rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+
+  --radius-xl: 10px;
+  --radius-2xl: 14px;
+
+  --shadow-card:
+    0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 4px 12px 0 rgba(0, 0, 0, 0.1);
+  --shadow-green-glow: 0 0 20px 0 rgba(34, 197, 94, 0.15);
+  --shadow-green-sm: 0 0 8px 0 rgba(34, 197, 94, 0.2);
+
+  --animate-slide-in: slideIn 0.2s ease-out;
+  --animate-fade-in: fadeIn 0.15s ease-out;
+
+  @keyframes slideIn {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(0);
+    }
+  }
+  @keyframes fadeIn {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
 }
 
-/* Excepciones: SI se debe poder seleccionar texto en estos elementos */
-input, textarea, [contenteditable="true"],
-.selectable, td, .monto, code, pre {
-  -webkit-user-select: text;
-  user-select: text;
-  -webkit-touch-callout: default;
+/* ─── Compatibilidad space-y-* con Tailwind 3 ──────────────
+   Tailwind 4 cambió space-y-*: ahora pone margin-bottom a todos los hijos
+   menos el último, con especificidad cero, así que un mt-2 propio del hijo
+   se SUMA al espacio (en v3 el space-y lo pisaba). Esto devuelve la regla de
+   v3 (margin-top a cada hijo después del primero) para los valores que usa la
+   app, así no se mueve ningún layout. Si se agrega un valor nuevo de
+   space-y-*, agregarlo acá también (o usar flex + gap). */
+@layer utilities {
+  :where(.space-y-0\.5 > *),
+  :where(.space-y-1 > *),
+  :where(.space-y-1\.5 > *),
+  :where(.space-y-2 > *),
+  :where(.space-y-3 > *),
+  :where(.space-y-4 > *),
+  :where(.space-y-5 > *),
+  :where(.space-y-6 > *),
+  :where(.space-y-8 > *) {
+    margin-block-start: 0;
+    margin-block-end: 0;
+  }
+  .space-y-0\.5 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(var(--spacing) * 0.5); margin-bottom: 0; }
+  .space-y-1 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(var(--spacing) * 1); margin-bottom: 0; }
+  .space-y-1\.5 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(var(--spacing) * 1.5); margin-bottom: 0; }
+  .space-y-2 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(var(--spacing) * 2); margin-bottom: 0; }
+  .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(var(--spacing) * 3); margin-bottom: 0; }
+  .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(var(--spacing) * 4); margin-bottom: 0; }
+  .space-y-5 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(var(--spacing) * 5); margin-bottom: 0; }
+  .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(var(--spacing) * 6); margin-bottom: 0; }
+  .space-y-8 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(var(--spacing) * 8); margin-bottom: 0; }
 }
 
-.dark body {
-  background-color: #0B0B0F;
-  color: #E4E4E7;
+/* ─── Compatibilidad del preflight con Tailwind 3 ──────────
+   El color de borde por defecto pasó a `currentcolor` en Tailwind 4; se
+   mantiene el gris de v3 para los `border` sin color explícito (agregado por
+   la herramienta oficial de migración). */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  /* El preflight de Tailwind 4 pone padding: 0 a todo; el de v3 dejaba el
+     padding del navegador (1px) en las celdas de tabla. Se restaura para que
+     las tablas sin padding explícito no cambien el ancho de las columnas. */
+  td,
+  th {
+    padding: 1px;
+  }
+
+  /* Placeholder y cursor de botones como en el preflight de Tailwind 3
+     (v4 usa currentColor al 50% y cursor: default). */
+  input::placeholder,
+  textarea::placeholder {
+    opacity: 1;
+    color: #9ca3af;
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* El preflight de v4 también achica los inputs de fecha/hora (padding 0 y
+     text-align: inherit en sus partes internas); v3 no los tocaba. Se vuelve
+     al estilo del navegador para que midan y se alineen como antes. */
+  ::-webkit-date-and-time-value,
+  ::-webkit-datetime-edit,
+  ::-webkit-datetime-edit-fields-wrapper,
+  ::-webkit-datetime-edit-year-field,
+  ::-webkit-datetime-edit-month-field,
+  ::-webkit-datetime-edit-day-field,
+  ::-webkit-datetime-edit-hour-field,
+  ::-webkit-datetime-edit-minute-field,
+  ::-webkit-datetime-edit-second-field,
+  ::-webkit-datetime-edit-millisecond-field,
+  ::-webkit-datetime-edit-meridiem-field {
+    padding: revert;
+    min-height: revert;
+    text-align: revert;
+  }
 }
 
-.dark { color-scheme: dark; }
-
-/* ─── Verde de marca (mode-aware) ────────────────────────
-   Un solo token de verde que se adapta al fondo: legible en claro
-   (#16A34A) y brillante en oscuro (#4ADE80). Lo consume Tailwind
-   como `ml-green` y `status-ok` (ver tailwind.config.js). Formato canales
-   "R G B" para soportar opacidad (bg-ml-green/20). */
-:root { --ml-green: 22 163 74; }   /* #16A34A — claro */
-.dark { --ml-green: 74 222 128; }  /* #4ADE80 — oscuro */
-
-/* ─── Titulo app ─────────────────────────────────────── */
-.app-title { color: #18181B; }
-.dark .app-title { color: rgb(var(--ml-green)) !important; }
-
-/* ─── Scrollbar ─────────────────────────────────────── */
-.dark ::-webkit-scrollbar { width: 4px; height: 4px; }
-.dark ::-webkit-scrollbar-track { background: transparent; }
-.dark ::-webkit-scrollbar-thumb { background: #1E1E26; border-radius: 2px; }
-.dark ::-webkit-scrollbar-thumb:hover { background: rgb(var(--ml-green) / 0.2); }
-
-/* ─── Componentes ────────────────────────────────────── */
-@layer components {
-
+@utility btn-primary {
   /* Botón primario */
-  .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
+  @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
            bg-ml-blue text-white
            hover:bg-ml-blue-dark active:scale-[0.98]
            disabled:opacity-40 disabled:cursor-not-allowed
            transition-all duration-150
            dark:bg-ml-green dark:text-black dark:hover:bg-ml-green-bright
            dark:shadow-green-sm;
-  }
+}
 
+@utility btn-yellow {
   /* Botón verde fluorescente — igual en light y dark */
-  .btn-yellow {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
+  @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
            bg-ml-green text-black
            hover:bg-ml-green-bright active:scale-[0.98]
            disabled:opacity-40 disabled:cursor-not-allowed
@@ -79,92 +187,118 @@ input, textarea, [contenteditable="true"],
            shadow-green-sm
            dark:bg-ml-green dark:text-black dark:hover:bg-ml-green-bright
            dark:shadow-green-sm;
-  }
+}
 
+@utility btn-secondary {
   /* Botón secundario */
-  .btn-secondary {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+  @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
            bg-white text-ml-text border border-ml-gray
            hover:bg-ml-gray-bg active:scale-[0.98]
            disabled:opacity-40
            transition-all duration-150
            dark:bg-ml-dark-card dark:text-gray-200 dark:border-ml-dark-border
            dark:hover:bg-ml-dark-hover;
-  }
+}
 
+@utility btn-ghost {
   /* Botón ghost */
-  .btn-ghost {
-    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium
+  @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium
            text-ml-text-soft hover:text-ml-text hover:bg-ml-gray
            dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-ml-dark-hover
            transition-all duration-150;
-  }
+}
 
+@utility card {
   /* Card */
-  .card {
-    @apply bg-white rounded-xl border border-ml-gray/70 shadow-card p-4 md:p-5
+  @apply bg-white rounded-xl border border-ml-gray/70 shadow-card p-4 md:p-5
            dark:bg-ml-dark-surface dark:border-ml-dark-border dark:shadow-none;
-  }
+}
 
+@utility input-field {
   /* Input */
-  .input-field {
-    @apply w-full px-3 py-2 rounded-lg text-sm border border-ml-gray
+  @apply w-full px-3 py-2 rounded-lg text-sm border border-ml-gray
            bg-white text-ml-text placeholder-ml-text-soft
-           focus:outline-none focus:ring-2 focus:ring-ml-blue/30 focus:border-ml-blue
+           focus:outline-hidden focus:ring-2 focus:ring-ml-blue/30 focus:border-ml-blue
            transition-all duration-150
            dark:bg-ml-dark-card dark:border-ml-dark-border dark:text-gray-100
            dark:placeholder-gray-600
            dark:focus:border-ml-green dark:focus:ring-ml-green/20;
-  }
+}
 
-  .label {
-    @apply block text-xs font-semibold text-ml-text-soft dark:text-gray-400 mb-1.5 uppercase tracking-wide;
-  }
+@utility label {
+  @apply block text-xs font-semibold text-ml-text-soft dark:text-gray-400 mb-1.5 uppercase tracking-wide;
+}
 
+@utility badge {
   /* Badges */
-  .badge { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-2xs font-semibold; }
-  .badge-ok    { @apply badge bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900; }
-  .badge-warn  { @apply badge bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900; }
-  .badge-error { @apply badge bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900; }
-  .badge-info  { @apply badge bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-900; }
-  .badge-neutral { @apply badge bg-gray-100 text-gray-600 border border-gray-200 dark:bg-ml-dark-card dark:text-gray-400 dark:border-ml-dark-border; }
+  @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-2xs font-semibold;
+}
 
+@utility badge-ok {
+  @apply badge bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900;
+}
+
+@utility badge-warn {
+  @apply badge bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900;
+}
+
+@utility badge-error {
+  @apply badge bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900;
+}
+
+@utility badge-info {
+  @apply badge bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-900;
+}
+
+@utility badge-neutral {
+  @apply badge bg-gray-100 text-gray-600 border border-gray-200 dark:bg-ml-dark-card dark:text-gray-400 dark:border-ml-dark-border;
+}
+
+@utility kpi {
   /* KPI cards */
-  .kpi {
-    @apply bg-white rounded-xl border border-ml-gray/70 p-4 shadow-card
+  @apply bg-white rounded-xl border border-ml-gray/70 p-4 shadow-card
            dark:bg-ml-dark-surface dark:border-ml-dark-border;
-  }
-  .kpi-value {
-    @apply text-2xl md:text-3xl font-bold tracking-tight text-ml-text
-           dark:text-white dark:font-mono;
-  }
-  .kpi-label {
-    @apply text-2xs uppercase tracking-widest font-semibold text-ml-text-soft
-           dark:text-gray-600 mt-0.5;
-  }
+}
 
+@utility kpi-value {
+  @apply text-2xl md:text-3xl font-bold tracking-tight text-ml-text
+           dark:text-white dark:font-mono;
+}
+
+@utility kpi-label {
+  @apply text-2xs uppercase tracking-widest font-semibold text-ml-text-soft
+           dark:text-gray-600 mt-0.5;
+}
+
+@utility th-macro {
   /* Header de tabla */
-  .th-macro {
-    @apply px-2 py-1 text-left text-2xs font-bold uppercase tracking-wider
+  @apply px-2 py-1 text-left text-2xs font-bold uppercase tracking-wider
            text-white bg-ml-blue border-r border-ml-blue-dark last:border-r-0
            dark:bg-ml-dark-card dark:text-ml-green dark:border-ml-dark-border dark:font-mono;
-  }
+}
 
+@utility row-um {
   /* Fila UM */
-  .row-um { @apply bg-emerald-50/50 dark:bg-green-900/10; }
-  .row-um:hover { @apply bg-emerald-50 dark:bg-green-900/20; }
+  @apply bg-emerald-50/50 dark:bg-green-900/10;
+  &:hover {
+    @apply bg-emerald-50 dark:bg-green-900/20;
+  }
+}
 
+@utility row-15 {
   /* Fila compacta 15px tipo Excel Macro — CSS plano (mas seguro que @apply con arbitrary values) */
-  .row-15 { height: 15px !important; }
-  .row-15 > td {
+  height: 15px !important;
+  & > td {
     padding-top: 0 !important;
     padding-bottom: 0 !important;
     line-height: 13px !important;
     font-size: 11px !important;
     height: 15px !important;
   }
-  .row-15 > td * { line-height: 13px !important; }
-  .row-15 > td .pill {
+  & > td * {
+    line-height: 13px !important;
+  }
+  & > td .pill {
     padding-top: 0 !important;
     padding-bottom: 0 !important;
     padding-left: 4px !important;
@@ -173,81 +307,177 @@ input, textarea, [contenteditable="true"],
     display: inline-block;
     vertical-align: middle;
   }
+}
 
+@utility monto {
   /* Números y montos */
-  .monto { @apply font-mono tabular-nums dark:text-ml-green-bright; }
+  @apply font-mono tabular-nums dark:text-ml-green-bright;
 }
 
-/* ─── Dark overrides ─────────────────────────────────── */
-.dark h1, .dark h2, .dark h3 { color: #F4F4F5; }
+/* Estilos propios sin clase de Tailwind. En v3 iban sueltos después de
+   @tailwind utilities; acá van al final de la capa utilities para que la
+   cascada (especificidad + orden) sea la misma que antes. */
+@layer utilities {
+  /* ─── Base ──────────────────────────────────────────── */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
 
-.dark .text-ml-text,
-.dark .text-gray-700,
-.dark .text-gray-800,
-.dark .text-gray-900 { color: #E4E4E7 !important; }
+  body {
+    font-family:
+      'Inter',
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      sans-serif;
+    background-color: #f4f4f5;
+    color: #18181b;
+    overflow-x: hidden;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+    /* Mobile: no seleccionar texto al tocar/long-press UI elementos */
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
+    /* Sin highlight gris azulado al tocar elementos */
+    -webkit-tap-highlight-color: transparent;
+  }
 
-.dark .text-ml-text-soft,
-.dark .text-gray-500 { color: #71717A !important; }
+  /* Excepciones: SI se debe poder seleccionar texto en estos elementos */
+  input,
+  textarea,
+  [contenteditable='true'],
+  .selectable,
+  td,
+  .monto,
+  code,
+  pre {
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+  }
 
-.dark .text-gray-400 { color: #52525B !important; }
+  .dark body {
+    background-color: #0b0b0f;
+    color: #e4e4e7;
+  }
 
-.dark select option { background-color: #16161C; color: #E4E4E7; }
+  .dark {
+    color-scheme: dark;
+  }
 
-/* ─── Animacion drawer ───────────────────────────────── */
-.drawer-enter { animation: slideIn 0.22s cubic-bezier(0.32, 0.72, 0, 1); }
+  /* ─── Verde de marca (mode-aware) ────────────────────────
+   Un solo token de verde que se adapta al fondo: legible en claro
+   (#16A34A) y brillante en oscuro (#4ADE80). Lo consume Tailwind
+   como `ml-green` y `status-ok` (ver @theme arriba). Formato canales
+   "R G B" para soportar opacidad (bg-ml-green/20). */
+  :root {
+    --ml-green: 22 163 74;
+  } /* #16A34A — claro */
+  .dark {
+    --ml-green: 74 222 128;
+  } /* #4ADE80 — oscuro */
 
-@keyframes slideIn {
-  from { transform: translateX(-100%); }
-  to   { transform: translateX(0); }
-}
+  /* ─── Titulo app ─────────────────────────────────────── */
+  .app-title {
+    color: #18181b;
+  }
+  .dark .app-title {
+    color: rgb(var(--ml-green)) !important;
+  }
 
-/* ─── Page transition ────────────────────────────────── */
-@keyframes page-fade-up {
-  from { opacity: 0; transform: translateY(5px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.page-enter {
-  animation: page-fade-up 180ms cubic-bezier(0.4, 0, 0.2, 1);
-}
+  /* ─── Scrollbar ─────────────────────────────────────── */
+  .dark ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .dark ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: #1e1e26;
+    border-radius: 2px;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--ml-green) / 0.2);
+  }
 
-/* ─── Skeleton shimmer ───────────────────────────────── */
-@keyframes skeleton-pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.5; }
-}
-.skeleton {
-  animation: skeleton-pulse 1.4s ease-in-out infinite;
-}
+  /* ─── Dark overrides ─────────────────────────────────── */
+  .dark h1, .dark h2, .dark h3 { color: #F4F4F5; }
 
-/* ─── Lock screen shake (PIN incorrecto) ────────────── */
-@keyframes shake {
-  10%, 90% { transform: translateX(-2px); }
-  20%, 80% { transform: translateX(3px); }
-  30%, 50%, 70% { transform: translateX(-6px); }
-  40%, 60% { transform: translateX(6px); }
-}
-.animate-shake { animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+  .dark .text-ml-text,
+  .dark .text-gray-700,
+  .dark .text-gray-800,
+  .dark .text-gray-900 { color: #E4E4E7 !important; }
 
-/* ─── Toast entrance ─────────────────────────────────── */
-@keyframes toast-slide-in {
-  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-.toast-enter {
-  animation: toast-slide-in 200ms cubic-bezier(0.4, 0, 0.2, 1);
-}
+  .dark .text-ml-text-soft,
+  .dark .text-gray-500 { color: #71717A !important; }
 
-/* ─── Bottom nav safe area (iOS home bar) ────────────── */
-.bottom-nav-bar {
-  padding-bottom: env(safe-area-inset-bottom);
-}
-.pb-safe-nav {
-  padding-bottom: calc(56px + env(safe-area-inset-bottom));
-}
+  .dark .text-gray-400 { color: #52525B !important; }
 
-/* ─── Mobile ─────────────────────────────────────────── */
-@media (max-width: 768px) {
-  .card { padding: 0.875rem; }
-  .kpi  { padding: 0.875rem; }
-  .kpi-value { font-size: 1.4rem; }
+  .dark select option { background-color: #16161C; color: #E4E4E7; }
+
+  /* ─── Animacion drawer ───────────────────────────────── */
+  .drawer-enter { animation: slideIn 0.22s cubic-bezier(0.32, 0.72, 0, 1); }
+
+  @keyframes slideIn {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(0); }
+  }
+
+  /* ─── Page transition ────────────────────────────────── */
+  @keyframes page-fade-up {
+    from { opacity: 0; transform: translateY(5px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .page-enter {
+    animation: page-fade-up 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ─── Skeleton shimmer ───────────────────────────────── */
+  @keyframes skeleton-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.5; }
+  }
+  .skeleton {
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+
+  /* ─── Lock screen shake (PIN incorrecto) ────────────── */
+  @keyframes shake {
+    10%, 90% { transform: translateX(-2px); }
+    20%, 80% { transform: translateX(3px); }
+    30%, 50%, 70% { transform: translateX(-6px); }
+    40%, 60% { transform: translateX(6px); }
+  }
+  .animate-shake { animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+
+  /* ─── Toast entrance ─────────────────────────────────── */
+  @keyframes toast-slide-in {
+    from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .toast-enter {
+    animation: toast-slide-in 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ─── Bottom nav safe area (iOS home bar) ────────────── */
+  .bottom-nav-bar {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pb-safe-nav {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
+  }
+
+  /* ─── Mobile ─────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    .card { padding: 0.875rem; }
+    .kpi  { padding: 0.875rem; }
+    .kpi-value { font-size: 1.4rem; }
+  }
 }

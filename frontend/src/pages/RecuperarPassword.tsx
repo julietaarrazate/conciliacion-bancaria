@@ -46,7 +46,7 @@ export const RecuperarPassword: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-white dark:bg-ml-dark-surface rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-ml-dark-border dark:shadow-none">
+        <div className="bg-white dark:bg-ml-dark-surface rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-ml-dark-border dark:shadow-none">
 
           {enviado ? (
             <div className="space-y-4">

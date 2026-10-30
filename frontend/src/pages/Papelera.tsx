@@ -157,7 +157,7 @@ export const Papelera: React.FC = () => {
                 {backup.activo ? (
                   <div>Cron diario {backup.hora_art} ART · llega a {backup.destinatario}</div>
                 ) : !backup.configurado ? (
-                  <div>Falta setear <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded">RESEND_API_KEY</code> en Render para activarlo.</div>
+                  <div>Falta setear <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded-sm">RESEND_API_KEY</code> en Render para activarlo.</div>
                 ) : (
                   <div>Deshabilitado por configuracion (backup_enabled=false).</div>
                 )}

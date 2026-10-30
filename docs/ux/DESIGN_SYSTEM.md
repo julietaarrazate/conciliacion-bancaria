@@ -5,7 +5,7 @@ tipografía Inter, bordes redondeados sutiles y micro-animaciones. Todo lo
 documentado acá proviene de los tokens reales del proyecto.
 
 Fuentes de verdad (no duplicar valores, citar):
-- Tokens Tailwind: `frontend/tailwind.config.js`
+- Tokens Tailwind (Tailwind 4, sin `tailwind.config.js`): bloque `@theme` de `frontend/src/styles/index.css`; paleta por defecto fijada a los hex de Tailwind 3 en `frontend/src/styles/paleta-tailwind3.css`
 - Estilos base + clases de componente: `frontend/src/styles/index.css`
 - Paleta de marca de la landing (variables CSS): `frontend/src/components/landing/LandingStyles.tsx`
 
@@ -27,7 +27,7 @@ en [UX_RULES.md](./UX_RULES.md).
 
 ## 2. Paleta de color
 
-### Tokens de la app (`frontend/tailwind.config.js`, prefijo `ml-`)
+### Tokens de la app (`@theme` en `frontend/src/styles/index.css`, prefijo `ml-`)
 
 **Light mode**
 | Token | Hex | Uso |
@@ -99,7 +99,7 @@ La landing pública (`/landing`) usa su propio set de variables CSS bajo
 
 ## 3. Tipografía
 
-Definida en `frontend/tailwind.config.js` e importada en
+Definida en el `@theme` de
 `frontend/src/styles/index.css`.
 
 - **Sans (UI)**: `Inter` (fallback `-apple-system, BlinkMacSystemFont, Segoe UI`).
@@ -117,7 +117,7 @@ Regla: **valores numéricos/financieros van en mono con `tabular-nums`** (clase
 
 ## 4. Espaciado, radios, sombras, animaciones
 
-(`frontend/tailwind.config.js`)
+(`@theme` en `frontend/src/styles/index.css`)
 
 - **Border radius**: `xl = 10px`, `2xl = 14px` (cards, inputs, modales).
 - **Sombras**:
@@ -200,7 +200,22 @@ SVG propios, sin librería externa, con formato `es-AR`:
 - **Colisión de `.btn-ghost`**: definida con dos estilos distintos (global en
   `index.css` con `@apply`, y scoped a `.landing-root` en `LandingStyles.tsx`).
   Dentro de la landing gana la scoped por especificidad, pero conviene
-  confirmar que no haya cruce inesperado fuera de `.landing-root`.
+  confirmar que no haya cruce inesperado fuera de `.landing-root`. Con
+  Tailwind 3, en modo oscuro las variantes `dark:` de la global le ganaban a la
+  de la landing; desde Tailwind 4 la global vive en una capa CSS y pierde, así
+  que `LandingStyles.tsx` replica a mano esos colores (`.dark .btn-ghost`).
+- **Capa de compatibilidad Tailwind 3 → 4** (oct 2026, `index.css` +
+  `paleta-tailwind3.css`): paleta hex de v3, interlineado fijo de `text-*`,
+  `space-y-*` con la semántica de v3, `hover:` sin `@media (hover: hover)`,
+  padding 1px en `td/th`, placeholder gris, `cursor: pointer` en botones e
+  inputs de fecha sin el reset de v4. Mantiene la app idéntica a v3 (verificado
+  con capturas pixel a pixel). Si se agrega un valor nuevo de `space-y-*`, hay
+  que sumarlo al bloque de compatibilidad (o usar `flex` + `gap`).
+- **Opacidades fuera de la escala de v3** (`white/1`, `/2`, `/3`, `/4`, `/8`,
+  `/12` en Cheques, Caja y AgenteChat): con Tailwind 3 esas clases no se
+  generaban y en modo oscuro quedaba el fondo claro (cards blancas, botón
+  "Importar Excel" ilegible). Tailwind 4 sí las genera, así que ahora se ven
+  oscuras como se escribieron.
 - **`ml-yellow` / `ml-yellow-dark`** y la clase `.btn-yellow` (en realidad
   verde): nombres legacy del esquema amarillo previo; siguen en los tokens pero
   el acento actual es verde. Evaluar renombrar para evitar confusión.

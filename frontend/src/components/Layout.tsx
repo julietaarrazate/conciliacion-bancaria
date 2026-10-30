@@ -225,7 +225,7 @@ export const Layout: React.FC = () => {
           <div className="px-1 pb-1">
             <p className="text-2xs uppercase tracking-widest font-semibold text-ml-text-soft dark:text-gray-600 px-1.5 mb-1">Organización</p>
             <select
-              className="input-field !py-1 !text-xs w-full"
+              className="input-field py-1! text-xs! w-full"
               value={activeOrgId ?? ''}
               onChange={e => {
                 const id = Number(e.target.value)

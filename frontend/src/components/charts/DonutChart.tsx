@@ -85,7 +85,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({
         <div className="flex-1 space-y-1.5 min-w-0">
           {segments.map((s, i) => (
             <div key={i} className="flex items-center gap-2 text-xs min-w-0">
-              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: s.color }} />
+              <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ background: s.color }} />
               <span className="text-ml-text dark:text-zinc-300 truncate flex-1">{s.label}</span>
               <span className="font-mono text-ml-text-soft dark:text-zinc-500 whitespace-nowrap">{formatValue(s.value)}</span>
               <span className="font-mono text-ml-text-soft dark:text-zinc-500 w-10 text-right">{(s.pct * 100).toFixed(0)}%</span>

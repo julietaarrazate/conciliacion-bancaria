@@ -301,7 +301,7 @@ export function AgenteChat() {
 
             {mensajes.map((m, i) => (
               <div key={i} className={`flex ${m.rol === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm break-words ${
+                <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm wrap-break-word ${
                   m.rol === 'user'
                     ? 'bg-[#5E6AD2] text-white rounded-br-sm'
                     : 'bg-white/8 text-gray-200 rounded-bl-sm'
@@ -345,7 +345,7 @@ export function AgenteChat() {
             <button
               onClick={toggleMic}
               disabled={transcribiendo}
-              className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
+              className={`p-2 rounded-lg transition-colors shrink-0 ${
                 transcribiendo
                   ? 'bg-[#5E6AD2]/20 text-[#5E6AD2] opacity-60 cursor-not-allowed'
                   : escuchando
@@ -361,12 +361,12 @@ export function AgenteChat() {
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && enviar(input)}
               placeholder={placeholder}
-              className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-[#5E6AD2]/50 min-w-0"
+              className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-hidden focus:border-[#5E6AD2]/50 min-w-0"
             />
             <button
               onClick={() => enviar(input)}
               disabled={!input.trim() || cargando}
-              className="p-2 rounded-lg bg-[#5E6AD2] hover:bg-[#4f5bbf] disabled:opacity-40 text-white flex-shrink-0 transition-colors">
+              className="p-2 rounded-lg bg-[#5E6AD2] hover:bg-[#4f5bbf] disabled:opacity-40 text-white shrink-0 transition-colors">
               <SendIcon />
             </button>
           </div>

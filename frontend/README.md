@@ -59,7 +59,7 @@ frontend/
 │   └── main.tsx            # Entry point
 ├── index.html              # HTML template
 ├── vite.config.ts          # Configuración Vite
-├── tailwind.config.js      # Configuración TailwindCSS
+├── postcss.config.js       # Tailwind 4 vía @tailwindcss/postcss (tokens en src/styles/index.css)
 ├── tsconfig.json           # Configuración TypeScript
 └── package.json            # Dependencias
 ```

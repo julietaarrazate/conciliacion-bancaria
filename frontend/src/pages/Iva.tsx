@@ -33,7 +33,7 @@ function periodoActual(): string {
 }
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ml-blue/40 text-sm'
+  'w-full px-3 py-2 rounded-lg border bg-white dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-ml-blue/40 text-sm'
 
 const ESTADO_BADGE: Record<string, string> = {
   proyectado: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
@@ -575,7 +575,7 @@ export const Iva: React.FC = () => {
                       </td></tr>
                     )}
                     {detalle.map((d, i) => (
-                      <tr key={d.cuenta_id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                      <tr key={d.cuenta_id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                         <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{d.codigo} {d.nombre}</td>
                         <td className="px-3 py-2">
                           <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${
@@ -680,7 +680,7 @@ export const Iva: React.FC = () => {
                     </td></tr>
                   )}
                   {comprobantesFiltrados.map((c, i) => (
-                    <tr key={c.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''} ${!c.incluido ? 'opacity-50' : ''}`}>
+                    <tr key={c.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''} ${!c.incluido ? 'opacity-50' : ''}`}>
                       <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmtFecha(c.fecha)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className="text-gray-700 dark:text-gray-300">{c.tipo_desc}</span>
@@ -692,7 +692,7 @@ export const Iva: React.FC = () => {
                         {String(c.punto_venta).padStart(4, '0')}-{c.numero}
                       </td>
                       <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap font-mono">{c.cuit_contraparte || '—'}</td>
-                      <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[14rem] truncate">{c.denominacion || '—'}</td>
+                      <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-56 truncate">{c.denominacion || '—'}</td>
                       <td className={`px-3 py-2 text-right whitespace-nowrap ${c.es_nota_credito ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>
                         {fmt(c.neto_gravado_total)}
                       </td>
@@ -915,7 +915,7 @@ export const Iva: React.FC = () => {
                     <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Sin liquidaciones calculadas.</td></tr>
                   )}
                   {!historialLiqLoading && historialLiq.map((l, i) => (
-                    <tr key={l.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                    <tr key={l.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{l.periodo}</td>
                       <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(l.debito_fiscal)}</td>
                       <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(l.credito_fiscal)}</td>
@@ -959,7 +959,7 @@ export const Iva: React.FC = () => {
                   <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">Sin proyecciones calculadas.</td></tr>
                 )}
                 {!historialLoading && historial.map((p, i) => (
-                  <tr key={p.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+                  <tr key={p.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
                     <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.periodo}</td>
                     <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(p.debito_fiscal)}</td>
                     <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(p.credito_fiscal)}</td>
@@ -1069,7 +1069,7 @@ const ConfigSeccion: React.FC<ConfigSeccionProps> = ({ titulo, cuentas, editValu
             <tr><td colSpan={3} className="px-3 py-4 text-center text-gray-400">Sin cuentas.</td></tr>
           )}
           {cuentas.map((c, i) => (
-            <tr key={c.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/[0.02]' : ''}`}>
+            <tr key={c.id} className={`border-b border-gray-100 dark:border-white/5 ${i % 2 ? 'bg-gray-50/50 dark:bg-white/2' : ''}`}>
               <td className="px-3 py-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">{c.codigo} {c.nombre}</td>
               <td className="px-3 py-2">
                 <input
@@ -1106,7 +1106,7 @@ interface CascadaRowProps {
 }
 
 const CascadaRow: React.FC<CascadaRowProps> = ({ label, valor, signo, destacado }) => (
-  <div className={`flex items-center justify-between px-4 py-2.5 ${destacado ? 'bg-gray-50 dark:bg-white/[0.03]' : ''}`}>
+  <div className={`flex items-center justify-between px-4 py-2.5 ${destacado ? 'bg-gray-50 dark:bg-white/3' : ''}`}>
     <span className={`text-sm ${destacado ? 'font-semibold text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400'}`}>
       <span className="inline-block w-4 text-gray-400 dark:text-gray-500">{signo}</span> {label}
     </span>
