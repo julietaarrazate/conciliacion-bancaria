@@ -116,7 +116,7 @@ export const Organizaciones: React.FC = () => {
 
       {/* Formulario crear/editar */}
       {showForm && (
-        <div className="card mb-6 border-l-4 border-ml-blue dark:border-ml-green">
+        <div className="card mb-6 border-l-4 border-ml-blue dark:border-ml-accent">
           <h2 className="font-semibold dark:text-white mb-4">{editingOrg ? `Editar: ${editingOrg.nombre}` : 'Nueva organización'}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -169,7 +169,7 @@ export const Organizaciones: React.FC = () => {
             const isActive = activeOrgId === org.id
             return (
               <div key={org.id}
-                className={`card p-0 overflow-hidden transition-all ${isActive ? 'ring-2 ring-ml-green dark:ring-ml-green' : ''}`}>
+                className={`card p-0 overflow-hidden transition-all ${isActive ? 'ring-2 ring-ml-accent' : ''}`}>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3">
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Indicador plan */}
@@ -194,8 +194,8 @@ export const Organizaciones: React.FC = () => {
                     <button
                       onClick={() => isActive ? clearActiveOrg() : setActiveOrg(org.id, org.nombre)}
                       className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${isActive
-                        ? 'bg-ml-green text-black'
-                        : 'bg-gray-100 dark:bg-ml-dark-card text-gray-600 dark:text-gray-300 hover:bg-ml-green/10'}`}
+                        ? 'bg-ml-accent text-ml-accent-fg'
+                        : 'bg-gray-100 dark:bg-ml-dark-card text-gray-600 dark:text-gray-300 hover:bg-ml-accent/10'}`}
                     >
                       {isActive ? 'Viendo' : 'Ver'}
                     </button>

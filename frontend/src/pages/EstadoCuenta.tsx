@@ -127,7 +127,7 @@ export const EstadoCuenta: React.FC = () => {
     return (
       <div className="p-6">
         <p className="text-red-600 dark:text-red-400 mb-3">{error}</p>
-        <Link to="/clientes" className="text-sm text-indigo-600 dark:text-ml-green hover:underline">← Volver a clientes</Link>
+        <Link to="/clientes" className="text-sm text-ml-accent hover:underline">← Volver a clientes</Link>
       </div>
     )
   }
@@ -139,7 +139,7 @@ export const EstadoCuenta: React.FC = () => {
     <div className="p-4 sm:p-6 space-y-5 max-w-7xl">
       {/* Header */}
       <div>
-        <Link to="/clientes" className="text-xs text-ml-text-soft hover:text-ml-text dark:text-zinc-500 dark:hover:text-ml-green mb-2 inline-block">
+        <Link to="/clientes" className="text-xs text-ml-text-soft hover:text-ml-text dark:text-zinc-500 dark:hover:text-ml-accent mb-2 inline-block">
           ← Volver a clientes
         </Link>
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mt-2">
@@ -157,7 +157,7 @@ export const EstadoCuenta: React.FC = () => {
                   onClick={() => setPeriodoDias(p.dias)}
                   className={`px-3 py-1.5 text-xs rounded transition-colors ${
                     periodoDias === p.dias
-                      ? 'bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg font-semibold'
+                      ? 'bg-ml-accent text-ml-accent-fg font-semibold'
                       : 'text-ml-text-soft dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-white/5'
                   }`}
                 >
@@ -173,7 +173,7 @@ export const EstadoCuenta: React.FC = () => {
                 finally { setDownloadingPdf(false) }
               }}
               disabled={downloadingPdf || !data}
-              className="px-3 py-1.5 text-xs rounded-lg bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="px-3 py-1.5 text-xs rounded-lg bg-ml-accent text-ml-accent-fg font-semibold hover:bg-ml-accent-hover transition-colors disabled:opacity-50"
               title="Descargar estado de cuenta en PDF"
             >
               {downloadingPdf ? 'Generando…' : '📄 PDF'}
@@ -322,7 +322,7 @@ const TabBtn: React.FC<{ label: string; activo: boolean; onClick: () => void }> 
     onClick={onClick}
     className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide transition-colors border-b-2 ${
       activo
-        ? 'text-ml-text dark:text-ml-green border-ml-text dark:border-ml-green'
+        ? 'text-ml-accent border-ml-accent'
         : 'text-ml-text-soft dark:text-zinc-500 border-transparent hover:text-ml-text dark:hover:text-zinc-300'
     }`}
   >

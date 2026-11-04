@@ -186,7 +186,7 @@ export const Resumen: React.FC = () => {
                   onClick={() => setPeriodo(p)}
                   className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
                     periodo === p
-                      ? 'bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg'
+                      ? 'bg-ml-accent text-ml-accent-fg'
                       : 'text-ml-text-soft dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-white/5'
                   }`}
                 >
@@ -250,7 +250,7 @@ export const Resumen: React.FC = () => {
                 finally { setDownloadingPdf(false) }
               }}
               disabled={downloadingPdf || !data}
-              className="px-3 py-1.5 text-sm rounded-lg bg-ml-text dark:bg-ml-green text-white dark:text-ml-dark-bg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="px-3 py-1.5 text-sm rounded-lg bg-ml-accent text-ml-accent-fg font-semibold hover:bg-ml-accent-hover transition-colors disabled:opacity-50"
               title="Descargar cierre mensual en PDF"
             >
               {downloadingPdf ? 'Generando…' : '📄 PDF cierre'}
@@ -263,7 +263,7 @@ export const Resumen: React.FC = () => {
                 finally { setDownloadingXlsx(false) }
               }}
               disabled={downloadingXlsx || !data}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-ml-gray bg-white text-ml-text hover:bg-ml-gray-bg dark:bg-ml-dark-card dark:border-ml-dark-border dark:text-gray-200 dark:hover:bg-ml-dark-hover transition-colors disabled:opacity-50"
               title="Excel de cierre mensual para el contador"
             >{downloadingXlsx ? 'Generando…' : '📊 Excel mes'}</button>
           </div>
@@ -299,7 +299,7 @@ export const Resumen: React.FC = () => {
           monto={k.movimientos_banco.total}
           cantidad={`${k.movimientos_banco.cantidad} movs`}
           variacion={v.movimientos_pct}
-          color="cyan"
+          color="neutral"
         />
       </div>
 
@@ -319,12 +319,12 @@ export const Resumen: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Top 5 clientes */}
-        <div className="bg-white dark:bg-ml-dark-surface rounded-xl border border-gray-100 dark:border-ml-dark-border p-5">
+        <div className="bg-white dark:bg-ml-dark-surface border border-ml-gray/70 dark:border-ml-dark-border rounded-xl shadow-card dark:shadow-none p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-ml-text dark:text-white uppercase tracking-wide">
               Top clientes del mes
             </h2>
-            <Link to="/clientes" className="text-xs text-ml-text-soft hover:text-ml-text dark:text-zinc-500 dark:hover:text-ml-green">
+            <Link to="/clientes" className="text-xs text-ml-text-soft hover:text-ml-text dark:text-zinc-500 dark:hover:text-ml-accent">
               Ver todos →
             </Link>
           </div>
@@ -340,14 +340,14 @@ export const Resumen: React.FC = () => {
                     <div className="flex items-center justify-between text-sm mb-1">
                       <Link
                         to={`/clientes/${c.cliente_id}/estado-cuenta`}
-                        className="font-medium text-ml-text dark:text-white hover:text-indigo-600 dark:hover:text-ml-green transition-colors"
+                        className="font-medium text-ml-text dark:text-white hover:text-ml-accent transition-colors"
                       >
                         {i + 1}. {c.nombre}
                       </Link>
                       <span className="font-mono text-xs text-ml-text dark:text-white">{fmtMoney(c.total)}</span>
                     </div>
                     <div className="h-1.5 bg-gray-100 dark:bg-white/5 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500 dark:bg-ml-green rounded-full" style={{ width: `${pct}%` }} />
+                      <div className="h-full bg-emerald-500 dark:bg-emerald-400 rounded-full" style={{ width: `${pct}%` }} />
                     </div>
                     <p className="text-[10px] text-ml-text-soft dark:text-zinc-600 mt-0.5">{c.cantidad} movimientos</p>
                   </div>
@@ -358,12 +358,12 @@ export const Resumen: React.FC = () => {
         </div>
 
         {/* Cheques en cartera */}
-        <div className="bg-white dark:bg-ml-dark-surface rounded-xl border border-gray-100 dark:border-ml-dark-border p-5">
+        <div className="bg-white dark:bg-ml-dark-surface border border-ml-gray/70 dark:border-ml-dark-border rounded-xl shadow-card dark:shadow-none p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-ml-text dark:text-white uppercase tracking-wide">
               Cheques en cartera
             </h2>
-            <Link to="/cheques" className="text-xs text-ml-text-soft hover:text-ml-text dark:text-zinc-500 dark:hover:text-ml-green">
+            <Link to="/cheques" className="text-xs text-ml-text-soft hover:text-ml-text dark:text-zinc-500 dark:hover:text-ml-accent">
               Ver todos →
             </Link>
           </div>
@@ -409,12 +409,12 @@ export const Resumen: React.FC = () => {
       </div>
 
       {/* Evolución 6 meses */}
-      <div className="bg-white dark:bg-ml-dark-surface rounded-xl border border-gray-100 dark:border-ml-dark-border p-5">
+      <div className="bg-white dark:bg-ml-dark-surface border border-ml-gray/70 dark:border-ml-dark-border rounded-xl shadow-card dark:shadow-none p-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-ml-text dark:text-white uppercase tracking-wide">
             Evolución conciliado · 6 meses
           </h2>
-          <Link to="/flujo-de-caja" className="text-xs text-ml-text-soft hover:text-ml-text dark:text-zinc-500 dark:hover:text-ml-green">
+          <Link to="/flujo-de-caja" className="text-xs text-ml-text-soft hover:text-ml-text dark:text-zinc-500 dark:hover:text-ml-accent">
             Ver flujo de caja →
           </Link>
         </div>
@@ -424,7 +424,6 @@ export const Resumen: React.FC = () => {
           <LineChart
             data={evolucionLine}
             height={160}
-            color="#10b981"
             formatValue={(n) => new Intl.NumberFormat('es-AR', { notation: 'compact', maximumFractionDigits: 1 }).format(n)}
           />
         )}
@@ -446,7 +445,7 @@ const COLOR_CLASSES: Record<string, string> = {
   emerald: 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40',
   amber:   'text-amber-800  dark:text-amber-400  bg-amber-50  dark:bg-amber-950/30  border-amber-200  dark:border-amber-900/40',
   indigo:  'text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-900/40',
-  cyan:    'text-cyan-700   dark:text-cyan-400   bg-cyan-50   dark:bg-cyan-950/30   border-cyan-200   dark:border-cyan-900/40',
+  neutral: 'text-ml-text   dark:text-gray-100   bg-white     dark:bg-ml-dark-surface border-ml-gray/70 dark:border-ml-dark-border',
   red:     'text-red-700    dark:text-red-400    bg-red-50    dark:bg-red-950/30    border-red-200    dark:border-red-900/40',
 }
 
@@ -455,7 +454,7 @@ const KpiCard: React.FC<{
   monto: number
   cantidad?: string
   variacion?: number | null
-  color: 'emerald' | 'amber' | 'indigo' | 'cyan' | 'red'
+  color: 'emerald' | 'amber' | 'indigo' | 'neutral' | 'red'
   esPorcentaje?: boolean
   invertirVariacion?: boolean
 }> = ({ label, monto, cantidad, variacion, color, esPorcentaje, invertirVariacion }) => {
@@ -483,7 +482,7 @@ const MiniKpi: React.FC<{ label: string; monto: number; count: string | number; 
   const positiva = (variacion ?? 0) > 0
   const buena = invertirVariacion ? !positiva : positiva
   return (
-    <div className="bg-white dark:bg-ml-dark-surface border border-gray-100 dark:border-ml-dark-border rounded-lg p-3">
+    <div className="bg-white dark:bg-ml-dark-surface border border-ml-gray/70 dark:border-ml-dark-border rounded-xl shadow-card dark:shadow-none p-3">
       <p className="text-[10px] uppercase tracking-wide text-ml-text-soft dark:text-zinc-500 font-semibold">{label}</p>
       <p className="text-base font-bold text-ml-text dark:text-white mt-1">{fmtMoney(monto)}</p>
       <div className="flex items-center justify-between mt-1 gap-2">

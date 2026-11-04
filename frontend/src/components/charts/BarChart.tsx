@@ -1,4 +1,5 @@
 import React from 'react'
+import { ChartEmpty, sinDatos } from './ChartEmpty'
 
 export interface BarSeries {
   label: string
@@ -11,6 +12,8 @@ interface BarChartProps {
   series: BarSeries[]
   height?: number
   formatValue?: (n: number) => string
+  /** Texto del estado vacío (sin series o todo en 0). */
+  emptyMessage?: string
 }
 
 const fmtDefault = (n: number) =>
@@ -21,6 +24,7 @@ export const BarChart: React.FC<BarChartProps> = ({
   series,
   height = 200,
   formatValue = fmtDefault,
+  emptyMessage,
 }) => {
   const width = 600
   const padding = { top: 10, right: 12, bottom: 28, left: 8 }
@@ -30,8 +34,8 @@ export const BarChart: React.FC<BarChartProps> = ({
   const allVals = series.flatMap(s => s.data)
   const maxV = Math.max(1, ...allVals)
 
-  if (!labels.length || !series.length) {
-    return <div className="text-sm text-gray-400 dark:text-zinc-500 text-center py-8">Sin datos</div>
+  if (!labels.length || sinDatos(allVals)) {
+    return <ChartEmpty height={height} message={emptyMessage} />
   }
 
   const groupWidth = innerW / labels.length

@@ -58,16 +58,26 @@ Backend: FastAPI + SQLAlchemy + PostgreSQL (Neon) + Python 3.11
 Frontend: React 19 + TypeScript + Vite 8 + Tailwind 4 + PWA instalable
 Auth: JWT 8h · pbkdf2_sha256 · Rate limiting (slowapi) · Headers de seguridad
 Diseño (app autenticada): minimalista · Inter font · dark mode (#0B0B0F)
-Diseño (landing pública `/`): estilo marketing con efectos — gradiente en el título, glow-orb,
-mockup animado en loop, badge parpadeante, StatCounter, Calculadora, Comparativa, Testimoniales,
-Pricing, FAQ (~14 secciones) — más titulares en **Fraunces** (serif display) + acento itálico en
-Cormorant Garamond; Inter sigue siendo el body font en toda la plataforma. Es un estilo DISTINTO
-a propósito del resto de la app: la operadora revirtió (jul 2026) un rediseño sobrio de la landing
-porque "antes era mejor" y porque el copy técnico no lo entiende el cliente — **el copy visible de
-la landing no debe usar jerga interna** ("Decimal punta a punta", "asientos inmutables", "Ley
-25.326"); esos términos son correctos como documentación INTERNA para desarrolladores, no como
-copy de cara al cliente. No volver a tocar la landing hacia un estilo "sobrio/profesional" sin
-pedido explícito de la operadora.
+Diseño (landing pública `/`): **premium de producto** (estilo Linear/Stripe/Ramp), pedido
+explícito de la operadora en oct 2026 ("se ve genérica, típico diseño vibe-codeado"). 7 secciones:
+hero con la conciliación animada del producto real (extracto → filas acreditadas → planillas por
+cliente → "Ambiguo — elegir a mano" → Control del banco en verde) · cómo funciona (3 pasos) ·
+funciones (bento) · para quién + seguridad (casos de uso, no testimonios) · precio · preguntas (6) ·
+pedido de demo (formulario que abre WhatsApp con los datos). Tipografía: **solo Inter** con tracking
+cerrado + JetBrains Mono en importes (sin Fraunces ni Cormorant). Color (nov 2026): acento violeta,
+los mismos valores que la app (claro `#5E6AD2` / oscuro `#818CF8`) en botones, links, marca, favicon
+e imágenes para compartir; el verde queda solo para éxito (filas "Acreditado", Control del banco ✓,
+planillas completas). Movimiento solo con
+`opacity`/`transform` y estado final fijo con `prefers-reduced-motion`. Fuera: glow-orb, badge
+parpadeante, texto con gradiente, emojis, StatCounter/Calculadora/Comparativa con números inventados.
+Historia: en jul 2026 una versión "sobria" (copy técnico, sin efectos) fue rechazada porque "antes era
+mejor" y el cliente no entendía el copy — la landing tiene que tener energía e impacto visual, no ser
+sobria. **El copy visible no debe usar jerga interna** ("Decimal punta a punta", "asientos
+inmutables", "Ley 25.326", "multi-tenant"); esos términos son documentación INTERNA, no copy de cara
+al cliente. Copy: un titular y una bajada por sección (la bajada suma información) y solo
+afirmaciones verdaderas del producto (sin cifras de ahorro inventadas). Estilos scopeados en
+`components/landing/LandingStyles.tsx`; el test `pages/__tests__/Landing.test.tsx` vigila secciones,
+jerga y formulario. Vista previa al compartir: `og-image.png` estático en `index.html`.
 
 ---
 
@@ -249,9 +259,9 @@ masivos: un cálculo para todas las organizaciones y Mis Comprobantes de varias 
 (no los de los clientes), base de retenciones (`docs/business/PROVEEDORES.md`).
 
 Después de v3.29 (sin bump de versión, solo landing): se probó una landing sobria (copy técnico,
-sin efectos) y la operadora la rechazó — se revirtió a la landing anterior completa (gradiente,
-glow-orb, mockup animado, Calculadora, Comparativa, Testimoniales, Pricing, FAQ) más un refresco
-tipográfico (Fraunces en titulares) pedido aparte. Ver "Diseño" arriba antes de tocar `/landing`.
+sin efectos) y la operadora la rechazó — se revirtió. En oct 2026 la operadora pidió explícitamente
+llevarla a un nivel premium (menos genérica, con motion del producto real y foco en leads): ver
+"Diseño" arriba antes de tocar `/landing`.
 
 Resumen muy breve de dónde está el sistema hoy: motor de conciliación + multi-banco (16 bancos) +
 multi-tenant funcionando en producción; módulos operativos completos (Cheques, Pagos, Caja,
@@ -264,8 +274,9 @@ próximas sesiones" abajo). **~1370 tests backend + ~174 tests frontend** pasand
 Profesionalización de ingeniería (jun 2026): base de documentación en `/docs` (arquitectura,
 negocio, API, BD, seguridad, UX, playbooks, ADR — cada doc con su "Pendiente de revisar"),
 `.claude/` (comandos + checklists + templates + memoria de deuda técnica), CI (ruff + pytest +
-eslint + tsc + vitest + build), y `ENGINEERING_AUDIT.md`. Verde de marca unificado en un token
-mode-aware (`--ml-green`: claro `#16A34A` / oscuro `#4ADE80`). Tests de frontend con Testing
+eslint + tsc + vitest + build), y `ENGINEERING_AUDIT.md`. Acento de marca violeta (`--ml-accent`:
+claro `#5E6AD2` / oscuro `#818CF8`); el verde (`--ml-green`) queda solo como color de estado
+(conciliado/OK). Tests de frontend con Testing
 Library (jsdom) y guard de idempotencia del safety-net DDL (`app/db_safety.py`) en CI.
 
 ---

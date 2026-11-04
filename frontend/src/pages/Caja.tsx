@@ -296,7 +296,7 @@ export const Caja: React.FC = () => {
                     </div>
                   ) : (
                     <button onClick={() => { setEditando(field); setTempVal(String(val)) }}
-                      className="font-mono font-semibold dark:text-white hover:text-ml-blue dark:hover:text-ml-green transition-colors">
+                      className="font-mono font-semibold dark:text-white hover:text-ml-blue dark:hover:text-ml-accent transition-colors">
                       {fmt(val)} ✏
                     </button>
                   )}

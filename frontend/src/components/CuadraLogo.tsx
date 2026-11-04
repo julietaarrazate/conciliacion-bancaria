@@ -18,8 +18,10 @@ export const CuadraLogo: React.FC<CuadraLogoProps> = ({
   animate = true,
   surfaceColor = '#16161C',
   trackColor = '#2A2A35',
-  fillColor = '#4ADE80',  // verde brillante: el logo siempre va sobre placa oscura
-  dotColor = '#5E6AD2',
+  // Acento de la app (índigo) en su versión clara: el logo siempre va sobre
+  // placa oscura. El verde quedó solo para significado (ingresos, OK).
+  fillColor = '#818CF8',
+  dotColor = '#E4E4E7',
   className = '',
 }) => {
   const [offset, setOffset] = useState(animate ? ARC_LENGTH : ARC_REST)

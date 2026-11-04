@@ -23,6 +23,13 @@
   --color-ml-dark-card: #16161c;
   --color-ml-dark-border: #1e1e26;
   --color-ml-dark-hover: #1a1a22;
+  /* Acento único de la app (selección, botón primario, foco, links, logo).
+     Mode-aware: ver --ml-accent* más abajo. */
+  --color-ml-accent: rgb(var(--ml-accent));
+  --color-ml-accent-hover: rgb(var(--ml-accent-hover));
+  --color-ml-accent-fg: rgb(var(--ml-accent-fg));
+
+  /* Verde: solo semántico (ingresos, OK/conciliado, éxito). */
   --color-ml-green: rgb(var(--ml-green));
   --color-ml-green-bright: #4ade80;
   --color-ml-green-dim: #16a34a;
@@ -167,26 +174,23 @@
 }
 
 @utility btn-primary {
-  /* Botón primario */
+  /* Botón primario — color de acento (mode-aware) */
   @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
-           bg-ml-blue text-white
-           hover:bg-ml-blue-dark active:scale-[0.98]
+           bg-ml-accent text-ml-accent-fg
+           hover:bg-ml-accent-hover active:scale-[0.98]
            disabled:opacity-40 disabled:cursor-not-allowed
-           transition-all duration-150
-           dark:bg-ml-green dark:text-black dark:hover:bg-ml-green-bright
-           dark:shadow-green-sm;
+           transition-all duration-150;
 }
 
 @utility btn-yellow {
-  /* Botón verde fluorescente — igual en light y dark */
+  /* Nombre histórico (era amarillo, después verde). Hoy es el mismo botón
+     primario de acento que btn-primary; se mantiene el nombre para no
+     renombrar en todo el repo. */
   @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
-           bg-ml-green text-black
-           hover:bg-ml-green-bright active:scale-[0.98]
+           bg-ml-accent text-ml-accent-fg
+           hover:bg-ml-accent-hover active:scale-[0.98]
            disabled:opacity-40 disabled:cursor-not-allowed
-           transition-all duration-150
-           shadow-green-sm
-           dark:bg-ml-green dark:text-black dark:hover:bg-ml-green-bright
-           dark:shadow-green-sm;
+           transition-all duration-150;
 }
 
 @utility btn-secondary {
@@ -218,11 +222,10 @@
   /* Input */
   @apply w-full px-3 py-2 rounded-lg text-sm border border-ml-gray
            bg-white text-ml-text placeholder-ml-text-soft
-           focus:outline-hidden focus:ring-2 focus:ring-ml-blue/30 focus:border-ml-blue
+           focus:outline-hidden focus:ring-2 focus:ring-ml-accent/30 focus:border-ml-accent
            transition-all duration-150
            dark:bg-ml-dark-card dark:border-ml-dark-border dark:text-gray-100
-           dark:placeholder-gray-600
-           dark:focus:border-ml-green dark:focus:ring-ml-green/20;
+           dark:placeholder-gray-600;
 }
 
 @utility label {
@@ -261,20 +264,20 @@
 }
 
 @utility kpi-value {
-  @apply text-2xl md:text-3xl font-bold tracking-tight text-ml-text
-           dark:text-white dark:font-mono;
+  @apply text-2xl md:text-3xl font-bold tracking-tight tabular-nums text-ml-text
+           dark:text-white;
 }
 
 @utility kpi-label {
   @apply text-2xs uppercase tracking-widest font-semibold text-ml-text-soft
-           dark:text-gray-600 mt-0.5;
+           dark:text-gray-500 mt-0.5;
 }
 
 @utility th-macro {
   /* Header de tabla */
   @apply px-2 py-1 text-left text-2xs font-bold uppercase tracking-wider
            text-white bg-ml-blue border-r border-ml-blue-dark last:border-r-0
-           dark:bg-ml-dark-card dark:text-ml-green dark:border-ml-dark-border dark:font-mono;
+           dark:bg-ml-dark-card dark:text-ml-accent dark:border-ml-dark-border;
 }
 
 @utility row-um {
@@ -311,7 +314,7 @@
 
 @utility monto {
   /* Números y montos */
-  @apply font-mono tabular-nums dark:text-ml-green-bright;
+  @apply font-mono tabular-nums;
 }
 
 /* Estilos propios sin clase de Tailwind. En v3 iban sueltos después de
@@ -383,12 +386,21 @@
     --ml-green: 74 222 128;
   } /* #4ADE80 — oscuro */
 
-  /* ─── Titulo app ─────────────────────────────────────── */
-  .app-title {
-    color: #18181b;
+  /* ─── Acento (mode-aware) ────────────────────────────────
+   El único color de acento de la app: navegación activa, segmented
+   controls, botón primario (btn-primary / btn-yellow), foco, links y el
+   logo. Índigo tipo Linear: #5E6AD2 en claro (texto blanco encima) y
+   #818CF8 en oscuro (más claro para que se lea sobre #0B0B0F; texto
+   oscuro encima). El verde y el rojo quedan solo para significado. */
+  :root {
+    --ml-accent: 94 106 210;       /* #5E6AD2 */
+    --ml-accent-hover: 74 85 190;  /* #4A55BE */
+    --ml-accent-fg: 255 255 255;
   }
-  .dark .app-title {
-    color: rgb(var(--ml-green)) !important;
+  .dark {
+    --ml-accent: 129 140 248;      /* #818CF8 */
+    --ml-accent-hover: 165 180 252;/* #A5B4FC */
+    --ml-accent-fg: 11 11 15;      /* #0B0B0F */
   }
 
   /* ─── Scrollbar ─────────────────────────────────────── */
@@ -404,7 +416,7 @@
     border-radius: 2px;
   }
   .dark ::-webkit-scrollbar-thumb:hover {
-    background: rgb(var(--ml-green) / 0.2);
+    background: rgb(var(--ml-accent) / 0.3);
   }
 
   /* ─── Dark overrides ─────────────────────────────────── */
@@ -418,9 +430,14 @@
   .dark .text-ml-text-soft,
   .dark .text-gray-500 { color: #71717A !important; }
 
-  .dark .text-gray-400 { color: #52525B !important; }
+  .dark .text-gray-400 { color: #6B6B74 !important; }
 
   .dark select option { background-color: #16161C; color: #E4E4E7; }
+
+  /* text-ml-blue (= acento en claro) se ve apagado sobre fondo oscuro:
+     en dark pasa al acento claro. Así los links/íconos que no tienen su
+     propio dark: siguen el mismo acento en los dos temas. */
+  .dark .text-ml-blue { color: rgb(var(--ml-accent)); }
 
   /* ─── Animacion drawer ───────────────────────────────── */
   .drawer-enter { animation: slideIn 0.22s cubic-bezier(0.32, 0.72, 0, 1); }

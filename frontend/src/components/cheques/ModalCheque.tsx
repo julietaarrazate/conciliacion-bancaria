@@ -151,7 +151,7 @@ export const ModalCheque: React.FC<Props> = ({
       <div className="flex justify-end gap-2 pt-2">
         <button onClick={onClose} className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-800 dark:text-gray-200">Cancelar</button>
         <button onClick={onSave} disabled={saving}
-          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors">
+          className="px-4 py-1.5 bg-ml-accent hover:bg-ml-accent-hover text-ml-accent-fg text-sm rounded-lg disabled:opacity-50 transition-colors">
           {saving ? 'Guardando…' : editId ? 'Guardar cambios' : 'Guardar'}
         </button>
       </div>

@@ -1,46 +1,37 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { useThemeStore } from '@/store/theme'
 import { LandingStyles } from '@/components/landing/LandingStyles'
 import { Nav } from '@/components/landing/Nav'
 import { Hero } from '@/components/landing/Hero'
-import { StatsSection } from '@/components/landing/StatsSection'
-import { ElProblema } from '@/components/landing/ElProblema'
-import { SpotlightConciliacion } from '@/components/landing/SpotlightConciliacion'
-import { SpotlightCheques } from '@/components/landing/SpotlightCheques'
-import { SpotlightIA } from '@/components/landing/SpotlightIA'
-import { CalculadoraSection } from '@/components/landing/CalculadoraSection'
-import { Comparativa } from '@/components/landing/Comparativa'
-import { Testimoniales } from '@/components/landing/Testimoniales'
-import { Seguridad } from '@/components/landing/Seguridad'
-import { ClosingCTA } from '@/components/landing/ClosingCTA'
-import { Faq } from '@/components/landing/Faq'
+import { ComoFunciona } from '@/components/landing/ComoFunciona'
+import { Funciones } from '@/components/landing/Funciones'
+import { Confianza } from '@/components/landing/Confianza'
 import { Pricing } from '@/components/landing/Pricing'
-import { Contacto } from '@/components/landing/Contacto'
+import { Faq } from '@/components/landing/Faq'
+import { PedirDemo } from '@/components/landing/PedirDemo'
 import { Footer } from '@/components/landing/Footer'
 
+/**
+ * Landing pública (`/` sin sesión y `/landing`). Siete secciones:
+ * hero con la conciliación animada → cómo funciona → funciones → para quién
+ * y seguridad → precio → preguntas → pedido de demo. Dirección de diseño
+ * (oct 2026) en CLAUDE.md, sección "Diseño".
+ */
 export const Landing: React.FC = () => {
   const { theme, toggle } = useThemeStore()
-  const [faqOpen, setFaqOpen] = useState<number | null>(0)
-  const [menuOpen, setMenuOpen] = useState(false)
-
   return (
     <div className="landing-root">
       <LandingStyles />
-      <Nav theme={theme} toggle={toggle} menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
-      <Hero />
-      <StatsSection />
-      <ElProblema />
-      <SpotlightConciliacion />
-      <SpotlightCheques />
-      <SpotlightIA />
-      <CalculadoraSection />
-      <Comparativa />
-      <Testimoniales />
-      <Seguridad />
-      <ClosingCTA />
-      <Faq faqOpen={faqOpen} setFaqOpen={setFaqOpen} />
-      <Pricing />
-      <Contacto />
+      <Nav theme={theme} toggle={toggle} />
+      <main>
+        <Hero />
+        <ComoFunciona />
+        <Funciones />
+        <Confianza />
+        <Pricing />
+        <Faq />
+        <PedirDemo />
+      </main>
       <Footer />
     </div>
   )

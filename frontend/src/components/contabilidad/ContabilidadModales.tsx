@@ -16,7 +16,7 @@ export const RecuperarClientesModal: React.FC<{ c: ContabilidadCtx }> = ({ c }) 
           <div className="flex items-center justify-between px-2 py-1 mb-1">
             <button
               onClick={() => c.setRecSeleccion(new Set(c.recCandidatos))}
-              className="text-xs text-ml-blue dark:text-ml-green hover:underline"
+              className="text-xs text-ml-blue dark:text-ml-accent hover:underline"
             >Marcar todos</button>
             <button
               onClick={() => c.setRecSeleccion(new Set())}
@@ -46,7 +46,7 @@ export const RecuperarClientesModal: React.FC<{ c: ContabilidadCtx }> = ({ c }) 
             <button
               onClick={c.confirmarRecuperarClientes}
               disabled={c.recGuardando || c.recSeleccion.size === 0}
-              className="text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+              className="text-xs px-3 py-2 rounded-lg bg-ml-accent text-ml-accent-fg font-medium hover:bg-ml-accent-hover disabled:opacity-50"
             >{c.recGuardando ? 'Recuperando…' : `Recuperar ${c.recSeleccion.size || ''}`}</button>
           </div>
         </div>

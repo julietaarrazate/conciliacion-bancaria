@@ -1,6 +1,6 @@
 # Sistema de diseño — Cuadra
 
-Estética **minimalista**: superficie oscura profunda, acento verde de marca,
+Estética **minimalista** (tipo Linear): superficie oscura profunda, un solo acento índigo,
 tipografía Inter, bordes redondeados sutiles y micro-animaciones. Todo lo
 documentado acá proviene de los tokens reales del proyecto.
 
@@ -18,9 +18,9 @@ en [UX_RULES.md](./UX_RULES.md).
 
 - **Contraste suave**: jerarquía por contraste suave, no por bordes pesados;
   cards con sombra mínima en light y sin sombra en dark.
-- **Dark mode = identidad de marca**: fondo `#0B0B0F`, acento verde
-  fluorescente, números en fuente monoespaciada (estética "hacker/terminal").
-  Light mode usa un azul-violeta de marca (`#5E6AD2`) como primario.
+- **Un solo acento en los dos temas**: índigo `--ml-accent` (`#5E6AD2` claro /
+  `#818CF8` oscuro, fondo oscuro `#0B0B0F`). Verde y rojo solo con significado
+  (ingresos/egresos, OK/error). Misma tipografía en los dos temas.
 - **Mobile-first**: ver [UX_RULES.md](./UX_RULES.md) sección 3.
 
 ---
@@ -51,10 +51,37 @@ en [UX_RULES.md](./UX_RULES.md).
 | `ml-dark-border` | `#1E1E26` | bordes |
 | `ml-dark-hover` | `#1A1A22` | hover |
 
-**Acento verde (marca, mode-aware)**
+**Acento (único, mode-aware)** — oct 2026
 
-`ml-green` y `status-ok` son **mode-aware** vía la variable CSS `--ml-green`
-(definida en `index.css`, formato canales "R G B" para soportar opacidad):
+La app autenticada tiene **un solo color de acento**: el índigo tipo Linear.
+Se define con variables CSS en `index.css` (canales "R G B", soportan opacidad
+como `bg-ml-accent/10`) y Tailwind lo expone como `ml-accent`:
+
+| Token | Claro | Oscuro | Uso |
+|---|---|---|---|
+| `ml-accent` (vía `--ml-accent`) | `#5E6AD2` | `#818CF8` | fondo de botón primario, nav activa, segmented control activo, foco de inputs, links, línea de gráficos, logo |
+| `ml-accent-hover` (vía `--ml-accent-hover`) | `#4A55BE` | `#A5B4FC` | hover del botón primario |
+| `ml-accent-fg` (vía `--ml-accent-fg`) | `#FFFFFF` | `#0B0B0F` | texto sobre el acento |
+
+En oscuro el acento es más claro para leerse sobre `#0B0B0F` (≈6.6:1) y lleva
+texto oscuro encima. Patrón de uso: selección = `bg-ml-accent/10 text-ml-accent`;
+control activo / botón = `bg-ml-accent text-ml-accent-fg hover:bg-ml-accent-hover`.
+`ml-blue` (`#5E6AD2`) es el valor claro del acento y sigue en muchos `bg-ml-blue`;
+en oscuro `text-ml-blue` se remapea al acento claro (override en `index.css`).
+Las clases `btn-primary` y `btn-yellow` son el mismo botón de acento
+(`btn-yellow` conserva el nombre histórico; no renombrar en masa).
+
+**Verde y rojo: solo semánticos**
+
+El verde ya no es acento ni "color de marca" en la UI. Verde y rojo se usan
+**únicamente con significado**: plata que entra / sale (ingresos/egresos),
+éxito / error, badges OK/conciliado vs error, progreso completado. Nada de
+verde para navegación, botones primarios, foco, títulos o montos neutros
+(`.monto` ya no se pinta de verde en oscuro). En gráficos: líneas en el acento
+(o neutras) y verde/rojo solo cuando la serie significa ingresos/egresos
+(ej. barras de Flujo de Caja). Un dato en 0 no lleva color semántico.
+
+`ml-green` y `status-ok` son **mode-aware** vía la variable CSS `--ml-green`:
 legible en claro y brillante en oscuro. Los demás tokens verde son fijos.
 
 | Token | Claro | Oscuro |
@@ -64,9 +91,12 @@ legible en claro y brillante en oscuro. Los demás tokens verde son fijos.
 | `ml-green-dim` | `#16A34A` | `#16A34A` |
 | `ml-green-muted` | `#14532D` | `#14532D` |
 
-El logo de marca (`CuadraLogo`) y los íconos PWA (`icon-192/512.svg`) van siempre
-sobre placa oscura → usan el verde brillante fijo `#4ADE80`. El favicon mantiene
-`#22C55E` (tile verde + check blanco, mejor contraste a 16px).
+El logo de marca (`CuadraLogo`) y los íconos PWA (`icon-192/512.svg` y sus PNG en
+`public/icons/`, más `apple-touch-icon.png`) van siempre sobre placa oscura: arco
+violeta `#818CF8` con punto `#E4E4E7` (nov 2026, antes verde). El favicon es la placa
+violeta `#5E6AD2` con ✓ blanco (mejor contraste a 16px), la misma marca que usa la landing.
+El wordmark "Cuadra" va en el color de texto (Inter semibold, `tracking-tight`) y el header
+del sidebar es la misma superficie que el sidebar (sin banda negra).
 
 **Estados semánticos** (`colors.status`)
 | Token | Hex |
@@ -77,23 +107,36 @@ sobre placa oscura → usan el verde brillante fijo `#4ADE80`. El favicon mantie
 | `status-info` | `#5E6AD2` |
 | `status-neutral` | `#71717A` |
 
-Regla práctica: **primario** = `ml-blue` en light, `ml-green` en dark (ver
-`.btn-primary`). El verde de marca aparece en el título de la app, badges OK,
-montos y elementos activos en dark.
+Regla práctica: **primario** = `ml-accent` en los dos temas (ver `.btn-primary`).
+Botones secundarios / exportar (Excel, .xlsx) van neutros (borde `ml-gray`), no
+en verde.
 
 ### Paleta de marca de la landing (`LandingStyles.tsx`, variables CSS)
 
-La landing pública (`/landing`) usa su propio set de variables CSS bajo
-`.landing-root`, con valores light/dark independientes. Acentos principales:
-- Light: `--accent: #16A34A`, `--accent-2: #15803D`, fondo `#FFFFFF`.
-- Dark: `--accent: #22C55E`, `--accent-2: #4ADE80`, fondo `#050508`.
-- Texto serif italic de énfasis: `.em-serif` (Cormorant Garamond) en color acento.
-- Componentes propios de landing: `.btn-green`, `.btn-ghost`, `.pill`,
-  `.wa-btn` (WhatsApp `#25D366`), `.faq-item`, `.compare-table`, etc.
+La landing pública (`/` sin sesión y `/landing`) usa su propio set de variables
+CSS bajo `.landing-root`, con valores light/dark independientes. **Nada de la
+landing toca los tokens globales de la app** (ni al revés): las clases de la
+landing llevan prefijo `l-` (`.l-btn`, `.l-h1`, `.l-section`…) y `hd-` (demo del
+hero), así que ya no chocan con `.btn-ghost`/`.btn-primary` de la app.
+- Acento de marca violeta, los mismos valores que la app (nov 2026):
+  light `--accent: #5E6AD2` (hover `#4A55BE`, texto blanco), texto de acento `#4A55BE`;
+  dark `--accent: #818CF8` (hover `#A5B4FC`, texto `#0B0B0F`), texto de acento `#A5B4FC`.
+- Verde solo como estado de éxito: `--ok*` (`#16A34A` / `#4ADE80`) en "Acreditado",
+  filas conciliadas, Control del banco ✓ y barras de planilla completas.
+- Ámbar de "revisar": `--amber` (`#B45309` / `#FBBF24`).
+- Marca: placa `#5E6AD2` con ✓ blanco (igual en los dos temas, igual que `favicon.svg`).
+- El bloque final de pedido de demo es un degradé índigo casi negro
+  (`#1A1B3A → #0B0B0F`) en los dos temas.
 
-> Nota: la clase utilitaria `.btn-ghost` existe **dos veces** con definiciones
-> distintas — una global en `index.css` (Tailwind `@apply`) y otra scoped a
-> `.landing-root` en `LandingStyles.tsx`. Ver "Pendiente de revisar".
+**Tipografía de la landing** (oct 2026): solo Inter (titulares 700 con tracking
+`-0.04em`/`-0.048em`) + JetBrains Mono para importes (`.num`). Las dos ya vienen
+de `index.html`: la landing no baja fuentes extra (antes sumaba Fraunces y
+Cormorant Garamond italic, que se sacaron por "template").
+
+**Movimiento**: solo `opacity`/`transform`. Reveals al hacer scroll con
+`useReveal`/`<Reveal>` (`shared.tsx`), demo del hero (`HeroDemo.tsx`) en loop solo
+mientras está en pantalla. Con `prefers-reduced-motion` todo queda en el estado
+final sin transiciones.
 
 ---
 
@@ -105,8 +148,9 @@ Definida en el `@theme` de
 - **Sans (UI)**: `Inter` (fallback `-apple-system, BlinkMacSystemFont, Segoe UI`).
   Pesos cargados: 400 / 500 / 600 / 700.
 - **Mono**: `JetBrains Mono` (fallback `Fira Code, Consolas`). Pesos 400 / 500.
-  Se usa para números, montos (`.monto`), KPIs en dark, headers de tabla en dark
-  y el título de la app.
+  Se usa para montos en tablas (`.monto`) y códigos. Las fuentes no cambian
+  entre temas: `kpi-value` y `th-macro` ya no pasan a mono en oscuro (KPIs en
+  Inter con `tabular-nums`), y el wordmark va en Inter.
 - Tamaño extra: `text-2xs` = `10px / 14px` (badges, labels, KPI labels).
 - Antialiasing `-webkit-font-smoothing: antialiased` en `body`.
 
@@ -122,7 +166,8 @@ Regla: **valores numéricos/financieros van en mono con `tabular-nums`** (clase
 - **Border radius**: `xl = 10px`, `2xl = 14px` (cards, inputs, modales).
 - **Sombras**:
   - `shadow-card` / `shadow-card-hover` (light).
-  - `shadow-green-glow` / `shadow-green-sm` (glow verde para acentos en dark).
+  - `shadow-green-glow` / `shadow-green-sm`: legacy, la app ya no las usa
+    (los botones de acento no llevan glow).
 - **Animaciones declaradas**: `animate-slide-in` (drawer), `animate-fade-in`.
 - **Animaciones en CSS** (`index.css`): `.drawer-enter` (slide 0.22s),
   `.page-enter` (fade-up 180ms), `.skeleton` (pulse), `.animate-shake` (PIN
@@ -138,12 +183,12 @@ Estas clases encapsulan el estilo de la app y traen sus variantes `dark:`:
 
 | Clase | Propósito |
 |---|---|
-| `.btn-primary` | botón primario (azul en light, verde en dark) |
-| `.btn-yellow` | botón verde fluorescente (igual en light y dark) |
+| `.btn-primary` | botón primario (acento `ml-accent`, mode-aware) |
+| `.btn-yellow` | mismo botón primario de acento (nombre histórico) |
 | `.btn-secondary` | botón secundario (superficie + borde) |
 | `.btn-ghost` | botón sin fondo (acción terciaria) |
 | `.card` | contenedor estándar (fondo + borde + sombra) |
-| `.input-field` | input/select de texto (focus ring azul/verde) |
+| `.input-field` | input/select de texto (focus ring del acento) |
 | `.label` | label de formulario (uppercase, tracking) |
 | `.badge` + `.badge-ok/warn/error/info/neutral` | estados |
 | `.kpi` / `.kpi-value` / `.kpi-label` | tarjetas de métrica del dashboard |
@@ -183,12 +228,27 @@ SVG propios, sin librería externa, con formato `es-AR`:
 
 ---
 
+## 6bis. Estados vacíos
+
+Un gráfico o tarjeta sin datos no muestra una línea plana en 0 ni barras vacías:
+muestra un estado vacío silencioso. `components/charts/ChartEmpty.tsx`:
+- `ChartEmpty` — ícono gris + "Todavía no hay movimientos en este período"
+  (`CHART_EMPTY_MSG`), borde punteado, mismo alto que el gráfico (el layout no
+  salta al llegar los datos).
+- `sinDatos(valores)` — `true` si no hay puntos o todos valen 0.
+- `LineChart` y `BarChart` lo usan solos (prop `emptyMessage` para otro texto).
+
+Mismo criterio en tarjetas: KPIs en 0 sin verde/rojo (Flujo de Caja), la tabla
+de Flujo de Caja con el mismo mensaje, y Control del banco sin extracto ni
+transitorias no muestra dos importes en 0. Al agregar un gráfico o tarjeta de
+resumen nuevo, reutilizar `ChartEmpty`/`sinDatos`.
+
 ## 7. Convenciones de marca menores
 
 - **Nombre visible**: "Cuadra" (el repo y backend conservan el nombre histórico
-  "conciliacion-bancaria"). El título en la UI usa fuente mono; en dark se fuerza
-  el verde de marca con `rgb(var(--ml-green)) !important` vía `.app-title`.
-- **Scrollbar fina** en dark (4px, thumb `#1E1E26`, hover verde translúcido) —
+  "conciliacion-bancaria"). El wordmark va en Inter semibold con el color de
+  texto (se quitó `.app-title`, que lo forzaba a verde mono en dark).
+- **Scrollbar fina** en dark (4px, thumb `#1E1E26`, hover acento translúcido) —
   `index.css`.
 - **Fondo y `color-scheme`**: `.dark` setea `color-scheme: dark` para nativos
   (selects, scrollbars del SO).
@@ -197,13 +257,8 @@ SVG propios, sin librería externa, con formato `es-AR`:
 
 ## Pendiente de revisar
 
-- **Colisión de `.btn-ghost`**: definida con dos estilos distintos (global en
-  `index.css` con `@apply`, y scoped a `.landing-root` en `LandingStyles.tsx`).
-  Dentro de la landing gana la scoped por especificidad, pero conviene
-  confirmar que no haya cruce inesperado fuera de `.landing-root`. Con
-  Tailwind 3, en modo oscuro las variantes `dark:` de la global le ganaban a la
-  de la landing; desde Tailwind 4 la global vive en una capa CSS y pierde, así
-  que `LandingStyles.tsx` replica a mano esos colores (`.dark .btn-ghost`).
+- ~~Colisión de `.btn-ghost`~~ (resuelto oct 2026): la landing ya no define
+  `.btn-ghost`; sus clases llevan prefijo `l-`.
 - **Capa de compatibilidad Tailwind 3 → 4** (oct 2026, `index.css` +
   `paleta-tailwind3.css`): paleta hex de v3, interlineado fijo de `text-*`,
   `space-y-*` con la semántica de v3, `hover:` sin `@media (hover: hover)`,
@@ -216,11 +271,18 @@ SVG propios, sin librería externa, con formato `es-AR`:
   generaban y en modo oscuro quedaba el fondo claro (cards blancas, botón
   "Importar Excel" ilegible). Tailwind 4 sí las genera, así que ahora se ven
   oscuras como se escribieron.
-- **`ml-yellow` / `ml-yellow-dark`** y la clase `.btn-yellow` (en realidad
-  verde): nombres legacy del esquema amarillo previo; siguen en los tokens pero
-  el acento actual es verde. Evaluar renombrar para evitar confusión.
-- **Dos paletas de acento verde** ligeramente distintas conviven: la de la app
+- **`ml-yellow` / `ml-yellow-dark`** y la clase `.btn-yellow` (hoy el botón de
+  acento): nombres legacy del esquema amarillo y después verde; `ml-yellow` ya no
+  se usa en la app. Evaluar renombrar `btn-yellow` → `btn-primary` en un PR
+  mecánico aparte.
+- **`bg-ml-blue text-white`** sigue en muchos lugares: en oscuro queda el índigo
+  `#5E6AD2` (un tono más oscuro que `ml-accent` dark `#818CF8`). Mismo color
+  de familia, legible; migrar a `bg-ml-accent text-ml-accent-fg` cuando se toque
+  cada pantalla.
+- **Panel del asistente IA** (`AgenteChat`): siempre oscuro (`#13131A`) con
+  `#5E6AD2` fijo, también en modo claro. Es intencional; anotado.
+- **Dos paletas de verde** ligeramente distintas conviven: la de la app
   (`ml-green = #22C55E`, `ml-green-dim = #16A34A`) y la de la landing
-  (`--accent` = `#16A34A` light / `#22C55E` dark). Es intencional (la landing
+  (`--ok` = `#16A34A` light / `#4ADE80` dark). Es intencional (la landing
   usa un verde un poco más oscuro en light), pero queda anotado por si se quiere
   unificar.

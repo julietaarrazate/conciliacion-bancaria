@@ -72,7 +72,7 @@ export const ChequesTabMasiva: React.FC<Props> = ({
           <button
             onClick={onProcess}
             disabled={bulkProcessing}
-            className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors flex items-center gap-2">
+            className="px-4 py-1.5 bg-ml-accent hover:bg-ml-accent-hover text-ml-accent-fg text-sm rounded-lg disabled:opacity-50 transition-colors flex items-center gap-2">
             {bulkProcessing ? (
               <><span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" />Procesando OCR…</>
             ) : '🔍 Procesar con OCR'}
@@ -112,7 +112,7 @@ export const ChequesTabMasiva: React.FC<Props> = ({
             <button
               onClick={onSave}
               disabled={bulkSaving || bulkRows.filter(r => !r.error && parseFloat(r.monto) > 0).length === 0}
-              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors">
+              className="px-4 py-1.5 bg-ml-accent hover:bg-ml-accent-hover text-ml-accent-fg text-sm rounded-lg disabled:opacity-50 transition-colors">
               {bulkSaving ? 'Guardando…' : `💾 Guardar todos (${bulkRows.filter(r => !r.error && parseFloat(r.monto) > 0).length})`}
             </button>
           </div>

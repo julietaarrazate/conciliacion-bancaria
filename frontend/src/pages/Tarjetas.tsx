@@ -486,7 +486,7 @@ export const Tarjetas: React.FC = () => {
       {/* ── Modal conciliar ── */}
       {conciliarLiq && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setConciliarLiq(null)}>
-          <div className="w-full max-w-lg rounded-xl bg-white dark:bg-[#15151b] border border-gray-200 dark:border-white/10 p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-lg rounded-xl bg-white dark:bg-ml-dark-surface border border-gray-200 dark:border-ml-dark-border p-5 shadow-xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">Conciliar liquidación</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
               {MARCAS.find(m => m.value === conciliarLiq.marca)?.label} · {conciliarLiq.periodo} · neto {fmt(Number(conciliarLiq.neto))}

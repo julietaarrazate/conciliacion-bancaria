@@ -65,7 +65,7 @@ export const SearchModal: React.FC<Props> = ({ open, onClose }) => {
           {/* Input */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-white/10">
             <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803a7.5 7.5 0 0010.607 10.607z"/>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
             </svg>
             <input
               ref={inputRef}

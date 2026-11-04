@@ -27,11 +27,11 @@ export const Cheques: React.FC = () => {
             {c.importando ? 'Importando…' : '↑ Importar Excel'}
           </button>
           <button onClick={c.handleExportarTodos} disabled={c.exportandoTodos}
-            className="px-3 py-1.5 bg-green-100 hover:bg-green-200 dark:bg-green-700/30 dark:hover:bg-green-700/50 text-green-700 dark:text-green-400 text-sm rounded-lg transition-colors disabled:opacity-50">
+            className="px-3 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-700 dark:text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-50">
             {c.exportandoTodos ? 'Exportando…' : '↓ Excel'}
           </button>
           <button onClick={() => { c.setEditId(null); c.setShowForm(true); c.setFormData(emptyForm()); c.setFormFoto(null); c.setMsg('') }}
-            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
+            className="px-3 py-1.5 bg-ml-accent hover:bg-ml-accent-hover text-ml-accent-fg text-sm rounded-lg transition-colors">
             + Nuevo cheque
           </button>
         </div>
@@ -50,10 +50,10 @@ export const Cheques: React.FC = () => {
           { label: 'Acreditados', value: fmt(c.totalAcred), sub: 'en el listado',                color: 'text-green-600 dark:text-green-400'  },
           { label: 'Rechazados',  value: fmt(c.totalRech),  sub: 'en el listado',                color: 'text-red-600 dark:text-red-400'    },
         ].map(s => (
-          <div key={s.label} className="bg-white dark:bg-white/3 border border-gray-200 dark:border-white/8 rounded-xl p-3 overflow-hidden">
+          <div key={s.label} className="bg-white dark:bg-ml-dark-surface border border-ml-gray/70 dark:border-ml-dark-border rounded-xl shadow-card dark:shadow-none p-3 overflow-hidden">
             <p className="text-xs text-gray-500">{s.label}</p>
-            <p className={`text-sm font-semibold mt-1 truncate ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-gray-600 mt-0.5">{s.sub}</p>
+            <p className={`text-xs sm:text-sm font-semibold tabular-nums mt-1 truncate ${s.color}`}>{s.value}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{s.sub}</p>
           </div>
         ))}
       </div>

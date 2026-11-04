@@ -49,6 +49,18 @@ describe('ControlBancoCard', () => {
     expect(screen.getByText(/3 movimientos del extracto/)).toBeInTheDocument()
   })
 
+  it('sin extracto y con las transitorias en 0 no muestra importes en cero', async () => {
+    getControlBanco.mockResolvedValue({
+      ...base,
+      diferencia_libro_vs_extracto: null,
+      saldos: { ...base.saldos, cobros_a_imputar: { codigo: '2-1-1-1', saldo: '0.00' }, pagos_a_imputar: { codigo: '2-1-1-2', saldo: '0.00' } },
+    })
+    render(<ControlBancoCard />)
+    expect(await screen.findByText(/todavía no hay un extracto/i)).toBeInTheDocument()
+    expect(screen.queryByText('Cobros a imputar')).not.toBeInTheDocument()
+    expect(screen.queryByText('$ 0,00')).not.toBeInTheDocument()
+  })
+
   it('si la diferencia son huecos entre extractos, avisa que faltan movimientos (no un error)', async () => {
     getControlBanco.mockResolvedValue({
       ...base,

@@ -694,7 +694,7 @@ export const Pagos: React.FC = () => {
                     onClick={() => setForm(p => ({ ...p, tipo: t }))}
                     className={`py-2 px-2 rounded-lg text-xs font-medium transition-colors ${
                       form.tipo === t
-                        ? 'bg-ml-blue dark:bg-ml-green text-white dark:text-black'
+                        ? 'bg-ml-accent text-ml-accent-fg'
                         : 'bg-ml-gray dark:bg-ml-dark-card text-gray-500 dark:text-zinc-400'}`}>
                     {TIPO_LABEL[t]}
                   </button>
@@ -711,7 +711,7 @@ export const Pagos: React.FC = () => {
                     onClick={() => setForm(p => ({ ...p, forma_pago: f }))}
                     className={`py-2 rounded-lg text-sm font-medium transition-colors ${
                       form.forma_pago === f
-                        ? 'bg-ml-blue dark:bg-ml-green text-white dark:text-black'
+                        ? 'bg-ml-accent text-ml-accent-fg'
                         : 'bg-ml-gray dark:bg-ml-dark-card text-gray-500 dark:text-zinc-400'}`}>
                     {f === 'banco' ? (
                       <span className="flex items-center justify-center gap-1.5">
@@ -886,7 +886,7 @@ export const Pagos: React.FC = () => {
                     onClick={() => setEditForm(p => ({ ...p, forma_pago: f }))}
                     className={`py-2 rounded-lg text-sm font-medium transition-colors ${
                       editForm.forma_pago === f
-                        ? 'bg-ml-blue dark:bg-ml-green text-white dark:text-black'
+                        ? 'bg-ml-accent text-ml-accent-fg'
                         : 'bg-ml-gray dark:bg-ml-dark-card text-gray-500 dark:text-zinc-400'}`}>
                     {f === 'banco' ? 'Banco' : 'Efectivo'}
                   </button>

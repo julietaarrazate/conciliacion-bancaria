@@ -100,7 +100,7 @@ export const Auditoria: React.FC = () => {
             {[7, 30, 90].map(d => (
               <button key={d} onClick={() => setDias(d)}
                 className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${dias === d
-                  ? 'bg-ml-blue dark:bg-ml-green text-white dark:text-black'
+                  ? 'bg-ml-accent text-ml-accent-fg'
                   : 'bg-ml-gray dark:bg-ml-dark-card text-gray-600 dark:text-gray-400'}`}>
                 {d === 7 ? 'Última semana' : d === 30 ? 'Último mes' : 'Últimos 3 meses'}
               </button>
@@ -130,7 +130,7 @@ export const Auditoria: React.FC = () => {
               </div>
 
               {/* Aprendizaje */}
-              <div className="card border-l-4 border-ml-blue dark:border-ml-green">
+              <div className="card border-l-4 border-ml-blue dark:border-ml-accent">
                 <div className="flex items-start gap-3">
                   <div className="text-2xl">🧠</div>
                   <div className="flex-1">

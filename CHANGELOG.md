@@ -5,6 +5,27 @@ actual; este archivo es el changelog completo (no se carga automáticamente en c
 
 ---
 
+### Landing (oct 2026) — rediseño premium, pedido de demo y vista previa al compartir
+
+Pedido de la operadora: la landing se veía genérica. Sin cambios en la app autenticada.
+- De 15 secciones a 7: hero con la conciliación animada del producto (extracto → filas acreditadas →
+  planillas por cliente → "Ambiguo — elegir a mano" → Control del banco en verde), cómo funciona,
+  funciones (bento), para quién + seguridad, precio, 6 preguntas y pedido de demo.
+- Solo Inter + JetBrains Mono (fuera Fraunces y Cormorant: dos familias menos de Google Fonts).
+  Movimiento solo con opacity/transform; con reduced-motion queda el cuadro final.
+- Copy sin jerga interna ni números inventados; los testimonios ficticios pasan a casos de uso.
+- Pedido de demo: formulario (nombre, empresa, volumen, cómo contactarte) que abre WhatsApp con el
+  mensaje armado, al mismo número de antes; alternativa por mail. Sin backend nuevo.
+- `index.html`: Open Graph estático con `og-image.png` 1200×630 (+ cuadrada 800×800) — WhatsApp no
+  muestra SVG — y `apple-touch-icon.png` 180×180.
+- Chunk de la landing: 69,4 KB → 58,3 KB (16,8 → 14,8 KB gzip).
+- Nov 2026: acento de marca violeta como la app (`#5E6AD2` / `#818CF8`); el verde queda solo para
+  éxito (Acreditado, Control del banco ✓). Favicon, íconos PWA, apple-touch-icon y og-image en
+  violeta; el manifest ahora apunta a `/icons/*.png` (antes a rutas que no existían). Los nombres
+  de clientes del demo son ficticios (test que lo vigila).
+
+---
+
 ### Extractos (oct 2026) — reconocer el banco de cada archivo
 
 Antes el banco salía solo del nombre escrito en las primeras filas (o en el membrete del PDF): un

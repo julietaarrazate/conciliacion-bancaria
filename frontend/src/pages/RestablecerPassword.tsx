@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
+import { CuadraLogo } from '@/components/CuadraLogo'
 
 export const RestablecerPassword: React.FC = () => {
   const navigate = useNavigate()
@@ -76,9 +77,8 @@ export const RestablecerPassword: React.FC = () => {
       <div className="w-full max-w-sm">
 
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-ml-yellow dark:bg-ml-dark-surface dark:border dark:border-ml-green/40 mb-4 dark:shadow-green-glow">
-            <span className="text-2xl dark:hidden">🔒</span>
-            <span className="text-2xl hidden dark:inline font-mono text-ml-green">$_</span>
+          <div className="inline-flex items-center justify-center mb-4">
+            <CuadraLogo size={56} animate={false} />
           </div>
           <h1 className="text-2xl font-bold text-ml-text dark:text-white tracking-tight">
             Nueva contraseña
@@ -124,7 +124,7 @@ export const RestablecerPassword: React.FC = () => {
                     <button
                       type="button"
                       onPointerDown={(e) => { e.preventDefault(); setShowPassword((s) => !s) }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-zinc-500 dark:hover:text-ml-green transition-colors p-1"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-zinc-500 dark:hover:text-ml-accent transition-colors p-1"
                       tabIndex={-1}
                       aria-label={showPassword ? 'Ocultar' : 'Mostrar'}
                     >
@@ -164,7 +164,7 @@ export const RestablecerPassword: React.FC = () => {
               <div className="mt-6 text-center">
                 <Link
                   to="/login"
-                  className="text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-green transition-colors"
+                  className="text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-accent transition-colors"
                 >
                   ← Volver al login
                 </Link>
@@ -173,7 +173,7 @@ export const RestablecerPassword: React.FC = () => {
           )}
         </div>
 
-        <p className="text-center text-xs text-gray-400 dark:text-zinc-700 mt-6 font-mono">
+        <p className="text-center text-xs text-gray-400 dark:text-zinc-500 mt-6">
           © 2026 Julieta Arrazate
         </p>
       </div>

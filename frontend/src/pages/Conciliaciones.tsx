@@ -112,7 +112,7 @@ export const Conciliaciones: React.FC = () => {
             </button>
           )}
           <button onClick={handleExport} disabled={exporting || total === 0}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md border border-ml-gray bg-white text-ml-text hover:bg-ml-gray-bg dark:bg-ml-dark-card dark:border-ml-dark-border dark:text-gray-200 dark:hover:bg-ml-dark-hover disabled:opacity-50">
             {exporting ? '⏳' : '⬇️'} Exportar Excel
           </button>
         </div>
