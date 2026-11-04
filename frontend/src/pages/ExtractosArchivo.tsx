@@ -454,7 +454,7 @@ export const ExtractosArchivo: React.FC = () => {
                                                 <button
                                                   onClick={() => handleDownload(e)}
                                                   disabled={dlLoading === e.id}
-                                                  className="px-2.5 py-1 text-[11px] bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                                                  className="px-2.5 py-1 text-[11px] rounded-md border border-ml-gray bg-white text-ml-text hover:bg-ml-gray-bg dark:bg-ml-dark-card dark:border-ml-dark-border dark:text-gray-200 dark:hover:bg-ml-dark-hover disabled:opacity-50 transition-colors whitespace-nowrap"
                                                 >
                                                   {dlLoading === e.id ? '⏳' : '⬇️'} .xlsx
                                                 </button>

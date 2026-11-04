@@ -107,82 +107,60 @@ const OnboardingChecklist: React.FC<{
   const allDone = done === steps.length
   if (allDone) return null
 
+  // Con clases (no estilos inline) para que el modo oscuro aplique: con
+  // style={{ background: '#FFFFFF' }} la tarjeta quedaba blanca en dark.
   return (
-    <div style={{
-      marginBottom: 24,
-      borderRadius: 14,
-      border: '1px solid #E4E4E7',
-      background: '#FFFFFF',
-      overflow: 'hidden',
-    }} className="dark:bg-ml-dark-surface dark:border-ml-dark-border">
+    <div className="mb-6 rounded-2xl border border-ml-gray dark:border-ml-dark-border bg-white dark:bg-ml-dark-surface overflow-hidden">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid #F0F0F0' }} className="dark:border-ml-dark-border">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 16 }}>🚀</span>
+      <div className="flex items-center justify-between px-[18px] py-3.5 border-b border-ml-gray-bg dark:border-ml-dark-border">
+        <div className="flex items-center gap-2.5">
+          <span className="text-base">🚀</span>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }} className="dark:text-white">
-              Primeros pasos
-            </div>
-            <div style={{ fontSize: 11, color: '#71717A', marginTop: 1 }}>
+            <div className="text-sm font-bold text-ml-text dark:text-white">Primeros pasos</div>
+            <div className="text-[11px] text-ml-text-soft mt-px">
               {done} de {steps.length} completados
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* Progress bar */}
-          <div style={{ width: 80, height: 5, borderRadius: 3, background: '#F0F0F0', overflow: 'hidden' }} className="dark:bg-ml-dark-border">
-            <div style={{ width: `${(done / steps.length) * 100}%`, height: '100%', background: '#22C55E', borderRadius: 3, transition: 'width 0.4s ease' }} />
+        <div className="flex items-center gap-3">
+          {/* Progress bar (verde: progreso completado = éxito) */}
+          <div className="w-20 h-[5px] rounded-full bg-ml-gray-bg dark:bg-ml-dark-border overflow-hidden">
+            <div className="h-full rounded-full bg-ml-green transition-[width] duration-400" style={{ width: `${(done / steps.length) * 100}%` }} />
           </div>
           <button
             onClick={onDismiss}
-            style={{ fontSize: 12, color: '#71717A', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 6 }}
+            className="text-xs text-ml-text-soft hover:text-ml-text dark:hover:text-gray-200 px-1.5 py-0.5 rounded-md"
             title="Ocultar"
           >✕</button>
         </div>
       </div>
       {/* Steps */}
-      <div style={{ padding: '8px 0' }}>
+      <div className="py-2">
         {steps.map((s, i) => (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'flex-start', gap: 14,
-            padding: '12px 18px',
-            opacity: s.done ? 0.5 : 1,
-            transition: 'opacity 0.3s',
-          }}>
+          <div key={i} className={`flex items-start gap-3.5 px-[18px] py-3 transition-opacity duration-300 ${s.done ? 'opacity-50' : ''}`}>
             {/* Icon */}
-            <div style={{
-              width: 28, height: 28, borderRadius: '50%', flexShrink: 0, marginTop: 1,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: s.done ? '#22C55E' : '#F4F4F5',
-              border: s.done ? 'none' : '2px solid #E4E4E7',
-              transition: 'all 0.3s',
-            }} className={s.done ? '' : 'dark:bg-ml-dark-card dark:border-ml-dark-border'}>
+            <div className={`w-7 h-7 rounded-full shrink-0 mt-px flex items-center justify-center transition-all duration-300 ${
+              s.done ? 'bg-ml-green' : 'bg-ml-gray-bg border-2 border-ml-gray dark:bg-ml-dark-card dark:border-ml-dark-border'
+            }`}>
               {s.done
                 ? <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5L5.5 10.5L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                : <span style={{ fontSize: 11, fontWeight: 700, color: '#A1A1AA' }}>{i + 1}</span>
+                : <span className="text-[11px] font-bold text-ml-gray-dark">{i + 1}</span>
               }
             </div>
             {/* Text */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: s.done ? '#71717A' : '#111', marginBottom: 2 }} className={s.done ? '' : 'dark:text-white'}>
-                {s.done && <span style={{ marginRight: 6, color: '#22C55E' }}>✓</span>}{s.title}
+            <div className="flex-1 min-w-0">
+              <div className={`text-[13px] font-semibold mb-0.5 ${s.done ? 'text-ml-text-soft' : 'text-ml-text dark:text-white'}`}>
+                {s.done && <span className="mr-1.5 text-ml-green">✓</span>}{s.title}
               </div>
               {!s.done && (
-                <div style={{ fontSize: 12, color: '#71717A', lineHeight: 1.5 }}>{s.desc}</div>
+                <div className="text-xs text-ml-text-soft leading-normal">{s.desc}</div>
               )}
             </div>
             {/* Action */}
             {!s.done && s.action && (
               <button
                 onClick={s.action.onClick}
-                style={{
-                  flexShrink: 0, fontSize: 12, fontWeight: 600,
-                  padding: '6px 14px', borderRadius: 8,
-                  background: '#22C55E', color: '#000', border: 'none', cursor: 'pointer',
-                  transition: 'background 0.15s',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#16A34A')}
-                onMouseLeave={e => (e.currentTarget.style.background = '#22C55E')}
+                className="shrink-0 text-xs font-semibold px-3.5 py-1.5 rounded-lg bg-ml-accent text-ml-accent-fg hover:bg-ml-accent-hover transition-colors"
               >
                 {s.action.label}
               </button>
@@ -675,7 +653,7 @@ export const Dashboard: React.FC = () => {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-ml-text dark:text-white">Conciliar transferencias</h1>
         {activeOrgId ? (
-          <p className="text-sm mt-1 text-ml-green dark:text-ml-green font-mono">
+          <p className="text-sm mt-1 text-ml-accent font-mono">
             ▸ Viendo: <strong>{activeOrgNombre}</strong>
           </p>
         ) : (
@@ -709,7 +687,7 @@ export const Dashboard: React.FC = () => {
             onClick={() => setTab(key)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === key
-                ? 'border-ml-blue text-ml-blue dark:border-ml-green dark:text-ml-green'
+                ? 'border-ml-blue text-ml-blue dark:border-ml-accent dark:text-ml-accent'
                 : 'border-transparent text-ml-text-soft hover:text-ml-text dark:hover:text-gray-300'
             }`}
           >{label}</button>
@@ -720,7 +698,7 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="kpi">
           <p className="kpi-label">Conciliado hoy</p>
-          <p className="kpi-value text-ml-green dark:text-ml-green">
+          <p className="kpi-value text-ml-green">
             {montoConciliadoHoy > 0 ? fmtMonto(montoConciliadoHoy) : '—'}
           </p>
           {planillasHoy.length > 0 && (

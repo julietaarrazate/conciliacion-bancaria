@@ -344,7 +344,7 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
                 <iframe src={url} title="PDF original" className="w-full h-[50vh] lg:h-auto lg:flex-1 min-h-[320px]" />
                 <a
                   href={url} target="_blank" rel="noreferrer"
-                  className="px-3 py-2 text-xs text-ml-blue dark:text-ml-green hover:underline border-t border-gray-200 dark:border-white/10"
+                  className="px-3 py-2 text-xs text-ml-blue dark:text-ml-accent hover:underline border-t border-gray-200 dark:border-white/10"
                 >
                   Abrir el PDF en otra pestaña
                 </a>
@@ -372,7 +372,7 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
                 type="button"
                 onClick={() => setVerPdf(v => !v)}
                 aria-pressed={verPdf}
-                className="ml-auto text-xs text-ml-blue dark:text-ml-green hover:underline"
+                className="ml-auto text-xs text-ml-blue dark:text-ml-accent hover:underline"
               >
                 {verPdf ? 'Ocultar el PDF' : 'Ver el PDF'}
               </button>
@@ -566,7 +566,7 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
               >
                 Solo para revisar ({evaluacion.filasDudosas})
               </button>
-              <button type="button" className="ml-auto text-xs font-medium text-ml-blue dark:text-ml-green hover:underline" onClick={agregarAlFinal}>
+              <button type="button" className="ml-auto text-xs font-medium text-ml-blue dark:text-ml-accent hover:underline" onClick={agregarAlFinal}>
                 + Agregar movimiento
               </button>
             </div>
@@ -574,7 +574,7 @@ export const RevisionExtractoPdf: React.FC<Props> = ({
             {eliminada && (
               <div role="status" className="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-white/10 text-xs text-gray-700 dark:text-gray-200">
                 <span>Se eliminó una fila.</span>
-                <button type="button" className="font-semibold text-ml-blue dark:text-ml-green hover:underline" onClick={deshacerEliminar}>
+                <button type="button" className="font-semibold text-ml-blue dark:text-ml-accent hover:underline" onClick={deshacerEliminar}>
                   Deshacer
                 </button>
               </div>

@@ -16,7 +16,7 @@ Documentos relacionados:
 Store: `frontend/src/store/theme.ts` (Zustand).
 
 - Dos temas: `'light'` | `'dark'`. Dark mode es el modo de marca
-  (fondo `#0B0B0F`, acento verde) — ver [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md).
+  (fondo `#0B0B0F`, acento índigo `--ml-accent`; verde/rojo solo semánticos) — ver [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md).
 - **Persistencia**: el tema elegido se guarda en `localStorage` bajo la clave
   `app-theme`. Si no hay valor guardado, se respeta la preferencia del sistema
   vía `window.matchMedia('(prefers-color-scheme: dark)')`.

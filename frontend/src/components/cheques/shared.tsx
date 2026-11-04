@@ -249,7 +249,7 @@ export const PortadorSelector: React.FC<{
             }}
             placeholder="Nombre del portador" className={`${inputClass} flex-1`} />
           <button type="button" onClick={handleAdd} disabled={saving || !newNombre.trim()}
-            className="px-2 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-sm disabled:opacity-50 transition-colors">✓</button>
+            className="px-2 py-1.5 bg-ml-accent hover:bg-ml-accent-hover text-ml-accent-fg text-sm rounded-sm disabled:opacity-50 transition-colors">✓</button>
           <button type="button" onClick={() => { setAdding(false); setNewNombre('') }}
             className="px-2 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-400 text-sm rounded-sm transition-colors">✕</button>
         </div>
@@ -305,7 +305,7 @@ export const ClienteSelector: React.FC<{
             }}
             placeholder="Nombre del cliente" className={`${inputClass} flex-1`} />
           <button type="button" onClick={handleAdd} disabled={saving || !newNombre.trim()}
-            className="px-2 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-sm disabled:opacity-50 transition-colors">✓</button>
+            className="px-2 py-1.5 bg-ml-accent hover:bg-ml-accent-hover text-ml-accent-fg text-sm rounded-sm disabled:opacity-50 transition-colors">✓</button>
           <button type="button" onClick={() => { setAdding(false); setNewNombre('') }}
             className="px-2 py-1.5 bg-gray-100 dark:bg-white/8 hover:bg-gray-200 dark:hover:bg-white/12 text-gray-400 text-sm rounded-sm transition-colors">✕</button>
         </div>

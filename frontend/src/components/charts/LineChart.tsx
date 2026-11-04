@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react'
+import { ChartEmpty, sinDatos } from './ChartEmpty'
 
 export interface LinePoint {
   label: string
@@ -8,10 +9,14 @@ export interface LinePoint {
 interface LineChartProps {
   data: LinePoint[]
   height?: number
+  /** Color de la línea. Por defecto, el acento de la app (mode-aware). Verde/rojo
+   *  solo si la serie significa ingresos/egresos. */
   color?: string
   fillColor?: string
   showLabels?: boolean
   formatValue?: (n: number) => string
+  /** Texto del estado vacío (sin puntos o todos en 0). */
+  emptyMessage?: string
 }
 
 const fmtDefault = (n: number) =>
@@ -20,10 +25,11 @@ const fmtDefault = (n: number) =>
 export const LineChart: React.FC<LineChartProps> = ({
   data,
   height = 180,
-  color = '#10b981',
+  color = 'currentColor',
   fillColor,
   showLabels = true,
   formatValue = fmtDefault,
+  emptyMessage,
 }) => {
   const [hover, setHover] = useState<number | null>(null)
 
@@ -40,8 +46,8 @@ export const LineChart: React.FC<LineChartProps> = ({
     return { minV: min, maxV: max === min ? min + 1 : max }
   }, [data])
 
-  if (!data.length) {
-    return <div className="text-sm text-gray-400 dark:text-zinc-500 text-center py-8">Sin datos</div>
+  if (sinDatos(data.map(d => d.value))) {
+    return <ChartEmpty height={height} message={emptyMessage} />
   }
 
   const xStep = data.length > 1 ? innerW / (data.length - 1) : 0
@@ -55,7 +61,7 @@ export const LineChart: React.FC<LineChartProps> = ({
   const pathFill = `${pathLine} L ${points[points.length - 1].x} ${padding.top + innerH} L ${points[0].x} ${padding.top + innerH} Z`
 
   return (
-    <div className="w-full relative">
+    <div className="w-full relative text-ml-accent">
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" preserveAspectRatio="none">
         <path d={pathFill} fill={fillColor || color} fillOpacity={0.12} />
         <path d={pathLine} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
@@ -80,7 +86,7 @@ export const LineChart: React.FC<LineChartProps> = ({
               onMouseLeave={() => setHover(null)}
             />
             {showLabels && (
-              <text x={p.x} y={height - 6} textAnchor="middle" fontSize={10} fill="currentColor" className="text-gray-500 dark:text-zinc-500">
+              <text x={p.x} y={height - 6} textAnchor={data.length > 1 && i === 0 ? 'start' : data.length > 1 && i === data.length - 1 ? 'end' : 'middle'} fontSize={10} fill="currentColor" className="text-gray-500 dark:text-zinc-500">
                 {p.label}
               </text>
             )}

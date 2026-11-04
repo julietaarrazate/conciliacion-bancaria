@@ -203,7 +203,7 @@ export const Liquidaciones: React.FC = () => {
 
         {/* Form generar */}
         {showGenerar && (
-          <div className="card mb-4 border-l-4 border-ml-blue dark:border-ml-green">
+          <div className="card mb-4 border-l-4 border-ml-blue dark:border-ml-accent">
             <h2 className="font-semibold dark:text-white mb-3">Nueva liquidación</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -229,8 +229,8 @@ export const Liquidaciones: React.FC = () => {
                       onClick={() => setForm(p => ({ ...p, porcentaje_comision: p.porcentaje_comision === pct ? '' : pct }))}
                       className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
                         form.porcentaje_comision === pct
-                          ? 'bg-ml-blue text-white border-ml-blue dark:bg-ml-green dark:border-ml-green'
-                          : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-ml-blue dark:hover:border-ml-green'
+                          ? 'bg-ml-blue text-white border-ml-blue dark:bg-ml-accent dark:border-ml-accent'
+                          : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-ml-blue dark:hover:border-ml-accent'
                       }`}>
                       {pct}%
                     </button>
@@ -317,7 +317,7 @@ export const Liquidaciones: React.FC = () => {
                   </div>
                   <div className="flex items-start gap-2 shrink-0">
                     <div className="text-right">
-                      <p className="font-bold text-ml-green dark:text-ml-green font-mono">
+                      <p className="font-bold text-ml-green font-mono">
                         {fmt(liq.total_neto)}
                       </p>
                       <p className="text-xs text-gray-400 dark:text-zinc-500">neto</p>

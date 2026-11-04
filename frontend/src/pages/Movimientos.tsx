@@ -382,7 +382,7 @@ export const Movimientos: React.FC = () => {
             </button>
           )}
           <button onClick={handleExport} disabled={exporting || filteredMovs.length === 0}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md border border-ml-gray bg-white text-ml-text hover:bg-ml-gray-bg dark:bg-ml-dark-card dark:border-ml-dark-border dark:text-gray-200 dark:hover:bg-ml-dark-hover disabled:opacity-50">
             {exporting ? '⏳' : '⬇️'} Excel
           </button>
           {extractoId && (
@@ -391,7 +391,7 @@ export const Movimientos: React.FC = () => {
                 try { await apiClient.exportExtractoContador(extractoId!) }
                 catch (err: any) { setUmMsg(`✗ Export: ${err.response?.data?.detail || err.message}`) }
               }}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md bg-ml-accent text-ml-accent-fg hover:bg-ml-accent-hover"
               title="Exportar extracto completo conciliado para el contador"
             >
               📤 Para contador
@@ -420,7 +420,7 @@ export const Movimientos: React.FC = () => {
             <option value="agrupado">Asiento agrupado</option>
             <option value="individual">Asiento individual</option>
           </select>
-          <label className={`flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium cursor-pointer transition-colors ${umLoading ? 'opacity-50' : 'bg-ml-blue text-white border-ml-blue hover:bg-ml-blue-dark'}`}>
+          <label className={`flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium cursor-pointer transition-colors ${umLoading ? 'opacity-50' : 'bg-ml-accent text-ml-accent-fg border-ml-accent hover:bg-ml-accent-hover'}`}>
             {umLoading ? '⏳' : '📎'} {umLoading ? 'Procesando...' : 'Agregar UM'}
             <input ref={umRef} type="file" accept="*/*" hidden onChange={handleAppendUM} disabled={umLoading || !extractoId} />
           </label>

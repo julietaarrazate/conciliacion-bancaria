@@ -405,8 +405,9 @@ class TestSoftDeleteHermetico:
 
 class TestCSSDesign:
 
-    def test_btn_yellow_usa_ml_green(self):
-        """btn-yellow debe usar ml-green (verde fluorescente), no ml-yellow ni ml-blue."""
+    def test_btn_yellow_usa_ml_accent(self):
+        """btn-yellow es el botón primario: usa el token de acento (mode-aware),
+        no el verde (que quedó solo semántico) ni el amarillo viejo."""
         import re, os
         css_path = os.path.normpath(
             os.path.join(os.path.dirname(__file__), "../../frontend/src/styles/index.css")
@@ -419,9 +420,15 @@ class TestCSSDesign:
         assert match, "No se encontró .btn-yellow en el CSS"
         block = match.group(1)
 
-        assert "bg-ml-green" in block, "btn-yellow debe usar bg-ml-green"
+        assert "bg-ml-accent" in block, "btn-yellow debe usar bg-ml-accent"
+        assert "text-ml-accent-fg" in block, "btn-yellow debe usar el texto sobre acento"
+        assert "ml-green" not in block, "btn-yellow no debe usar el verde (solo semántico)"
         assert "bg-ml-yellow" not in block, "btn-yellow no debe usar bg-ml-yellow"
-        assert "bg-ml-blue" not in block, "btn-yellow no debe usar bg-ml-blue"
+
+        # El token de acento existe y es mode-aware (claro y oscuro).
+        assert "--color-ml-accent: rgb(var(--ml-accent))" in content
+        assert re.search(r":root\s*\{[^}]*--ml-accent:", content), "falta --ml-accent en :root"
+        assert re.search(r"\.dark\s*\{[^}]*--ml-accent:", content), "falta --ml-accent en .dark"
 
     def test_layout_logo_no_usa_ml_yellow(self):
         """El header/sidebar del Layout no debe tener bg-ml-yellow."""
@@ -433,4 +440,7 @@ class TestCSSDesign:
         with open(layout_path) as f:
             content = f.read()
         assert "bg-ml-yellow" not in content, \
-            "Layout.tsx no debe tener bg-ml-yellow — fue reemplazado por bg-ml-blue"
+            "Layout.tsx no debe tener bg-ml-yellow"
+        # El header del sidebar ya no es una banda negra con el wordmark en verde.
+        assert "#22C55E" not in content, "Layout.tsx no debe hardcodear el verde viejo"
+        assert "text-ml-green" not in content, "Layout.tsx usa el acento, no el verde"

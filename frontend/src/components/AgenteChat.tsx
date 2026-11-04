@@ -257,7 +257,7 @@ export function AgenteChat() {
       {/* Botón flotante */}
       <button
         onClick={() => { setAbierto(o => !o); setVisible(true) }}
-        className={`fixed bottom-20 right-4 z-40 md:bottom-6 w-10 h-10 rounded-full shadow-lg overflow-hidden flex items-center justify-center transition-all duration-300 hover:scale-105 ${visible || abierto ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
+        className={`fixed z-40 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-[calc(1rem+env(safe-area-inset-right))] md:bottom-[calc(1.5rem+env(safe-area-inset-bottom))] md:right-[calc(1.5rem+env(safe-area-inset-right))] w-10 h-10 shrink-0 rounded-full shadow-lg ring-1 ring-black/10 dark:ring-white/10 overflow-hidden flex items-center justify-center transition-all duration-300 hover:scale-105 ${visible || abierto ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
         title="Asistente IA"
       >
         {abierto
@@ -268,7 +268,7 @@ export function AgenteChat() {
 
       {/* Panel de chat */}
       {abierto && (
-        <div className="fixed bottom-36 right-4 z-40 md:bottom-20 w-[calc(100vw-2rem)] max-w-sm bg-[#13131A] border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        <div className="fixed z-40 bottom-[calc(7.5rem+env(safe-area-inset-bottom))] right-[calc(1rem+env(safe-area-inset-right))] md:bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:right-[calc(1.5rem+env(safe-area-inset-right))] w-[calc(100vw-2rem)] max-w-sm bg-[#13131A] border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
           style={{ height: '420px' }}>
 
           {/* Header */}

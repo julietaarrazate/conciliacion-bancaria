@@ -13,7 +13,7 @@ export const ContabilidadClientes: React.FC<{ c: ContabilidadCtx }> = ({ c }) =>
           <button
             onClick={c.recuperarClientesBorrados}
             disabled={c.recuperandoCli || c.creandoFaltantes}
-            className="text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+            className="text-xs px-3 py-2 rounded-lg bg-ml-accent text-ml-accent-fg font-medium hover:bg-ml-accent-hover disabled:opacity-50"
             title="Recrea clientes que están acreditados en el extracto pero ya no existen, con su cuenta contable"
           >
             {c.recuperandoCli ? 'Recuperando…' : '↺ Recuperar clientes borrados'}

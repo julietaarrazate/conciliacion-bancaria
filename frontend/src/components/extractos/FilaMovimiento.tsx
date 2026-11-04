@@ -9,7 +9,7 @@ export const GRILLA_FILA =
 
 const inputBase =
   'w-full min-w-0 px-2 py-1.5 rounded-md border bg-white dark:bg-white/5 text-gray-900 dark:text-gray-100 ' +
-  'placeholder-gray-400 text-base md:text-xs focus:outline-hidden focus:ring-2 focus:ring-ml-blue/40 dark:focus:ring-ml-green/30 ' +
+  'placeholder-gray-400 text-base md:text-xs focus:outline-hidden focus:ring-2 focus:ring-ml-blue/40 dark:focus:ring-ml-accent/30 ' +
   'disabled:opacity-60'
 const borde = (error: boolean) =>
   error ? 'border-red-400 dark:border-red-500/70' : 'border-gray-300 dark:border-white/10'
@@ -118,7 +118,7 @@ const FilaMovimientoBase: React.FC<Props> = ({
         <button
           type="button"
           onClick={() => onInsertarDebajo(fila.key)}
-          className="p-1.5 rounded-md text-gray-400 hover:text-ml-blue dark:hover:text-ml-green hover:bg-gray-100 dark:hover:bg-white/10"
+          className="p-1.5 rounded-md text-gray-400 hover:text-ml-blue dark:hover:text-ml-accent hover:bg-gray-100 dark:hover:bg-white/10"
           aria-label={`Agregar una fila debajo de la fila ${numero}`}
           title="Agregar una fila debajo"
         >
@@ -151,7 +151,7 @@ const FilaMovimientoBase: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => onRevisada(fila.key)}
-                  className="text-ml-blue dark:text-ml-green hover:underline"
+                  className="text-ml-blue dark:text-ml-accent hover:underline"
                 >
                   Está bien
                 </button>

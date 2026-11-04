@@ -236,7 +236,7 @@ export const Usuarios: React.FC = () => {
                     <td className="px-4 py-2.5 font-medium dark:text-white">
                       <span>{u.full_name}</span>
                       {u.is_superadmin && (
-                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-ml-green/20 text-ml-green dark:bg-ml-green/10 font-mono border border-ml-green/30">
+                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-ml-accent/10 text-ml-accent font-mono border border-ml-accent/30">
                           superadmin
                         </span>
                       )}

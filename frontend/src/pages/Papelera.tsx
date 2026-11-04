@@ -175,7 +175,7 @@ export const Papelera: React.FC = () => {
             <button
               onClick={dispararBackup}
               disabled={backupBusy || !backup.configurado}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-ml-accent text-ml-accent-fg hover:bg-ml-accent-hover disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
             >
               {backupBusy ? 'Enviando…' : 'Backup ahora'}
             </button>
@@ -233,7 +233,7 @@ export const Papelera: React.FC = () => {
                         <tr key={e.id} className="border-b border-ml-gray/40 dark:border-ml-dark-border/40">
                           <td className="py-2 px-2 dark:text-zinc-300">{e.id}</td>
                           <td className="py-2 px-2 dark:text-zinc-200 max-w-xs truncate">{e.nombre}</td>
-                          <td className="py-2 px-2 text-right monto dark:text-ml-green">{e.movimientos}</td>
+                          <td className="py-2 px-2 text-right monto">{e.movimientos}</td>
                           <td className="py-2 px-2 text-xs text-ml-text-soft dark:text-zinc-500">{fmtFecha(e.deleted_at)}</td>
                           <td className="py-2 px-2 text-right whitespace-nowrap">
                             <button
@@ -289,7 +289,7 @@ export const Papelera: React.FC = () => {
                           <td className="py-2 px-2 dark:text-zinc-300">{p.id}</td>
                           <td className="py-2 px-2 dark:text-zinc-200">{p.cliente_nombre || '-'}</td>
                           <td className="py-2 px-2 dark:text-zinc-200 max-w-xs truncate">{p.nombre_archivo}</td>
-                          <td className="py-2 px-2 text-right monto dark:text-ml-green">{p.filas}</td>
+                          <td className="py-2 px-2 text-right monto">{p.filas}</td>
                           <td className="py-2 px-2 text-xs text-ml-text-soft dark:text-zinc-500">{fmtFecha(p.deleted_at)}</td>
                           <td className="py-2 px-2 text-right whitespace-nowrap">
                             <button

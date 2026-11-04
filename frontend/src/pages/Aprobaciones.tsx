@@ -85,7 +85,7 @@ export const Aprobaciones: React.FC = () => {
                 <button
                   onClick={() => decidir(it.id, true)}
                   disabled={deciding === it.id}
-                  className="px-4 py-2 text-sm rounded-lg bg-ml-green text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+                  className="px-4 py-2 text-sm rounded-lg bg-ml-accent text-ml-accent-fg hover:bg-ml-accent-hover transition-opacity disabled:opacity-50"
                 >
                   Aprobar
                 </button>

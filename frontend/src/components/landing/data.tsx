@@ -1,66 +1,112 @@
-import { SecIcon } from './shared'
+/**
+ * Copy de la landing. Reglas (pedido de la operadora, oct 2026):
+ *  - un titular y una bajada por sección; la bajada suma información, no repite;
+ *  - voz de contador/dueño de pyme argentina, sin jerga interna del sistema;
+ *  - solo cosas que el producto hace hoy (ver CLAUDE.md y /docs). Sin números
+ *    de ahorro inventados ni testimonios ficticios.
+ */
 
-export const STATS = [
-  { label: 'para conciliar 100 movimientos', numericEnd: 2,  prefix: '< ', suffix: ' min' },
-  { label: 'bancos argentinos soportados',   numericEnd: 10, prefix: '',   suffix: '+' },
-  { label: 'instalaciones necesarias',       numericEnd: 0,  prefix: '',   suffix: '' },
-  { label: 'para estar operativo',           numericEnd: 24, prefix: '',   suffix: 'hs' },
+export const BANCOS = [
+  'Macro', 'BBVA', 'Santander', 'Galicia', 'ICBC', 'Nación', 'Provincia', 'Ciudad', 'HSBC',
+  'Mercado Pago', 'Credicoop', 'Supervielle', 'Patagonia', 'Bancor', 'Rioja', 'La Pampa',
 ]
 
-export const MOCKUP_ROWS = [
-  { cliente: 'Cliente Norte SRL',  importe: '$124.500', ok: true  },
-  { cliente: 'Constructora Sur',   importe: '$89.200',  ok: true  },
-  { cliente: 'Distribuidora Este', importe: '$212.000', ok: false },
-  { cliente: 'Servicios Centro',   importe: '$56.800',  ok: true  },
-  { cliente: 'Comercial Oeste',    importe: '$98.400',  ok: true  },
+export const HERO_FACTS = ['Extractos en Excel o PDF', `${BANCOS.length} bancos argentinos`, 'En la web y en el celular']
+
+export const PASOS = [
+  {
+    titulo: 'Subí el extracto',
+    texto: 'En Excel o PDF, de Macro, Galicia, Santander, Nación y doce bancos más. Los últimos movimientos del día se suman sin duplicar.',
+  },
+  {
+    titulo: 'Sumá las planillas de tus clientes',
+    texto: 'Cada cliente te la manda como quiere. La primera vez confirmás qué columna es qué y Cuadra lo recuerda para la próxima.',
+  },
+  {
+    titulo: 'Revisá solo lo dudoso',
+    texto: 'Lo que coincide por CUIT, CBU o titular queda acreditado. Si dos pagos tienen el mismo monto, te pregunta antes de decidir.',
+  },
 ]
 
-export const SECURITY = [
-  { icon: <SecIcon d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />, title: 'Acceso protegido siempre', desc: 'Las sesiones se cierran automáticamente por inactividad. Sin tu clave no puede entrar nadie más, aunque tengan el dispositivo.' },
-  { icon: <SecIcon d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />, title: 'Datos separados por empresa', desc: 'Cada empresa ve solo sus propios datos. Imposible que un usuario de una empresa vea información de otra.' },
-  { icon: <SecIcon d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />, title: 'Contraseñas cifradas', desc: 'Las contraseñas se guardan cifradas. Aunque alguien accediera a la base de datos, no podría leerlas.' },
-  { icon: <SecIcon d={['M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125']} />, title: 'Backup diario automático', desc: 'Copia completa de todos los datos cada noche. Si algo falla, recuperamos todo sin perder información.' },
-  { icon: <SecIcon d={['M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', 'M9 12l2 2 4-4']} />, title: 'Registro de actividad completo', desc: 'Cada acción queda registrada: quién hizo qué, cuándo y desde dónde. Ideal para auditorías internas.' },
-  { icon: <SecIcon d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />, title: 'Ley de protección de datos', desc: 'Cumplimos la Ley 25.326 argentina. Tus datos y los de tus clientes son tuyos — no se usan para nada más.' },
+export const FUNCIONES = {
+  control: {
+    titulo: 'Control del banco',
+    texto: 'Compara el saldo del banco en tus libros con el del extracto. Si no coincide, te dice cuánto falta y entre qué fechas.',
+  },
+  alertas: {
+    titulo: 'Avisos antes de que sea tarde',
+    texto: 'En el celular: cheques por vencer, cobros sin identificar hace más de una semana y vencimientos impositivos.',
+  },
+  cheques: {
+    titulo: 'Cheques con una foto',
+    texto: 'Sacás la foto y se completan número, banco, librador, monto y fecha. Varios cheques en la misma foto.',
+  },
+  facturas: {
+    titulo: 'Facturas de compra leídas solas',
+    texto: 'Subís la factura, la revisás y queda cargada para el IVA y para los pagos.',
+  },
+  impuestos: {
+    titulo: 'Impuestos y cierre del mes',
+    texto: 'IVA con tus comprobantes de ARCA, Ingresos Brutos, Monotributo y sueldos. Y el Excel y el PDF de cierre para el contador.',
+  },
+}
+
+export const CASOS = [
+  {
+    tag: 'Estudios contables',
+    texto: 'Llevás varias empresas, cada una con su banco y sus clientes. Pasás de una a otra sin mezclar nada y cada una tiene su cierre.',
+  },
+  {
+    tag: 'Empresas que cobran por transferencia',
+    texto: 'Sabés qué cliente pagó, cuánto y cuándo, y qué plata entró sin identificar. Todos los días, no a fin de mes.',
+  },
+  {
+    tag: 'Administraciones con cheques',
+    texto: 'Cartera, depósitos y rechazos en un solo lugar, con aviso antes de cada vencimiento.',
+  },
+]
+
+export const CONFIANZA = [
+  { titulo: 'Cada empresa ve lo suyo', texto: 'Los datos de una empresa nunca se cruzan con los de otra.' },
+  { titulo: 'Copia de seguridad diaria', texto: 'Todas las noches, de todos los datos.' },
+  { titulo: 'Registro de cada cambio', texto: 'Quién hizo qué y cuándo, para cualquier revisión.' },
+  { titulo: 'Permisos por persona', texto: 'Cada usuario ve y hace solo lo que le corresponde.' },
+]
+
+export const PRECIO_INCLUYE = [
+  'Usuarios sin límite',
+  'Varias empresas',
+  'Puesta en marcha',
+  'Capacitación al equipo',
+  'Soporte directo por WhatsApp',
+  'Actualizaciones incluidas',
 ]
 
 export const FAQ = [
-  { q: '¿Cuánto cuesta usar Cuadra?', a: 'El precio se ajusta según la cantidad de empresas y usuarios. Coordiná un contacto por WhatsApp y te paso la propuesta con condiciones para tu caso.' },
-  { q: '¿Qué bancos soporta el sistema?', a: 'Banco Macro, BBVA, Santander, Galicia, ICBC y un parser genérico para extractos en formato Excel. Si tu banco no está, lo agregamos en el onboarding.' },
-  { q: '¿Mis datos están seguros?', a: 'Sí. Los datos de cada empresa están aislados, las contraseñas se guardan cifradas, hay backup automático cada noche y un registro completo de quién hizo qué y cuándo. Todo por HTTPS.' },
-  { q: '¿Funciona sin conexión?', a: 'Las consultas básicas sí (lectura de cache). Para cargar planillas, registrar pagos o conciliar necesitás conexión.' },
-  { q: '¿Se conecta con ARCA?', a: 'Por ahora no directamente. Exporta Excel en formato Banco Macro y PDF de cierre mensual, todo listo para entregar al contador.' },
-  { q: '¿Cuántos usuarios puedo tener?', a: 'Sin límite. Cada empresa puede tener todos los empleados que necesite, con roles diferenciados (admin, operador, solo lectura).' },
-  { q: '¿Puedo importar mis datos viejos?', a: 'Sí. Las planillas y extractos en Excel se importan directamente. Para datos en otros formatos, lo coordinamos en el onboarding inicial.' },
+  {
+    q: '¿Qué bancos acepta?',
+    a: `${BANCOS.slice(0, -1).join(', ')} y ${BANCOS[BANCOS.length - 1]}, en Excel. También extractos en PDF. Si tu banco no está en la lista, lo sumamos.`,
+  },
+  {
+    q: '¿Mis clientes tienen que cambiar sus planillas?',
+    a: 'No. Cada uno te la manda en su formato. La primera vez confirmás qué columna es el monto, el CUIT o la fecha, y Cuadra lo recuerda para ese cliente.',
+  },
+  {
+    q: '¿Qué pasa con los pagos que no puede identificar?',
+    a: 'Quedan marcados para que los revises. Cuando hay dos pagos con el mismo monto, nunca decide solo: necesita un dato más, como el CUIT, el CBU o el titular. Y aprende de las correcciones que hacés.',
+  },
+  {
+    q: '¿Se conecta con ARCA?',
+    a: 'Importás el Excel de "Mis Comprobantes" y Cuadra lo compara con lo que ya cargaste antes de liquidar el IVA. Por ahora no emite facturas electrónicas.',
+  },
+  {
+    q: '¿Mis datos están seguros?',
+    a: 'Cada empresa ve solo sus datos, las contraseñas se guardan cifradas, se hace una copia de seguridad todas las noches y queda registro de cada cambio.',
+  },
+  {
+    q: '¿Cómo empiezo?',
+    a: 'Pedís la demo, te mostramos el sistema en vivo y armamos tu empresa con tus bancos y tus clientes. La capacitación está incluida.',
+  },
 ]
 
-export const COMPARISON = [
-  { feature: 'Conciliar 100 movimientos', excel: '4–6 horas', cuadra: '2 minutos' },
-  { feature: 'Errores humanos', excel: 'Frecuentes', cuadra: 'Mínimos (auto-detección)' },
-  { feature: 'Acceso desde el celular', excel: 'No', cuadra: 'Sí, desde cualquier teléfono' },
-  { feature: 'Multi-empresa', excel: 'Un archivo por empresa', cuadra: 'Todo en un sistema' },
-  { feature: 'Backup automático', excel: 'Manual o ninguno', cuadra: 'Diario encriptado' },
-  { feature: 'Auditoría de cambios', excel: 'Ninguna', cuadra: 'Log completo' },
-  { feature: 'Trabajo en equipo', excel: 'Conflictos al editar', cuadra: 'En tiempo real' },
-]
-
-export const TESTIMONIALES = [
-  {
-    quote: 'Llevamos 12 clientes con extractos de distintos bancos. Lo que antes nos llevaba dos días ahora sale en una mañana. El export para el contador es impecable.',
-    nombre: 'Lic. Beatriz Pereyra',
-    rol: 'Estudio Ferreyra & Pereyra · Córdoba',
-    inicial: 'B',
-  },
-  {
-    quote: 'El módulo de cheques cambió todo. Antes se nos pasaban vencimientos; ahora el sistema avisa con días de anticipación y los rechazos los registramos en el acto.',
-    nombre: 'Gonzalo Marchetti',
-    rol: 'Administración · distribuidora mayorista, Mendoza',
-    inicial: 'G',
-  },
-  {
-    quote: 'Subí el extracto del banco, subí las planillas de tres clientes y en diez minutos tenía la conciliación lista. No lo podía creer la primera vez.',
-    nombre: 'Lic. Claudia Insúa',
-    rol: 'Contadora independiente · Buenos Aires',
-    inicial: 'C',
-  },
-]
+export const VOLUMENES = ['Menos de 20 clientes', 'Entre 20 y 100 clientes', 'Más de 100 clientes']

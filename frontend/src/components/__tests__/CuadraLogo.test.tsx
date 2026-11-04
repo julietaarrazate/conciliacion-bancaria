@@ -11,12 +11,13 @@ describe('CuadraLogo', () => {
     expect(svg).toHaveAttribute('height', '48')
   })
 
-  it('usa el verde de marca #4ADE80 en el arco de relleno', () => {
+  it('usa el acento de la app (#818CF8) en el arco de relleno, no el verde', () => {
     const { container } = render(<CuadraLogo animate={false} />)
     const strokes = Array.from(container.querySelectorAll('path[stroke]')).map((p) =>
       p.getAttribute('stroke'),
     )
-    expect(strokes).toContain('#4ADE80')
+    expect(strokes).toContain('#818CF8')
+    expect(strokes).not.toContain('#4ADE80')
   })
 
   it('respeta un fillColor custom', () => {

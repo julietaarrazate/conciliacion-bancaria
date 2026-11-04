@@ -232,13 +232,13 @@ export const Login: React.FC = () => {
 
         {/* Logo / título */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center mb-5 dark:drop-shadow-[0_0_20px_rgba(34,197,94,0.25)]">
+          <div className="inline-flex items-center justify-center mb-5 dark:drop-shadow-[0_0_20px_rgba(129,140,248,0.25)]">
             <CuadraLogo size={88} />
           </div>
-          <h1 className="text-3xl font-bold text-ml-text dark:text-white tracking-tight font-mono">
+          <h1 className="text-3xl font-semibold text-ml-text dark:text-white tracking-tight">
             Cuadra
           </h1>
-          <p className="text-[11px] text-ml-text-soft dark:text-zinc-500 mt-2 font-mono tracking-[0.2em] uppercase">
+          <p className="text-[11px] text-ml-text-soft dark:text-zinc-500 mt-2 font-medium tracking-[0.2em] uppercase">
             Gestión financiera con IA
           </p>
         </div>
@@ -294,7 +294,7 @@ export const Login: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => { setTwofa(null); setTwofaCode(''); setError('') }}
-                    className="text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-green transition-colors"
+                    className="text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-accent transition-colors"
                   >
                     Volver al login
                   </button>
@@ -320,7 +320,7 @@ export const Login: React.FC = () => {
               <button
                 type="button"
                 onClick={() => { setPending(null); setError('') }}
-                className="mt-6 text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-green transition-colors"
+                className="mt-6 text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-accent transition-colors"
               >
                 Cancelar
               </button>
@@ -369,7 +369,7 @@ export const Login: React.FC = () => {
                 <button
                   type="button"
                   onPointerDown={(e) => { e.preventDefault(); setShowPassword((s) => !s) }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-zinc-500 dark:hover:text-ml-green transition-colors p-1"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-zinc-500 dark:hover:text-ml-accent transition-colors p-1"
                   tabIndex={-1}
                   aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                 >
@@ -400,7 +400,7 @@ export const Login: React.FC = () => {
             <div className="text-center pt-2">
               <Link
                 to="/recuperar-password"
-                className="text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-green transition-colors"
+                className="text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-accent transition-colors"
               >
                 ¿Olvidaste tu contraseña?
               </Link>
@@ -438,7 +438,7 @@ export const Login: React.FC = () => {
           )}
         </div>
 
-        <p className="text-center text-xs text-gray-400 dark:text-zinc-700 mt-6 font-mono">
+        <p className="text-center text-xs text-gray-400 dark:text-zinc-500 mt-6">
           © 2026 Julieta Arrazate
         </p>
         <div className="flex justify-center gap-4 mt-2">

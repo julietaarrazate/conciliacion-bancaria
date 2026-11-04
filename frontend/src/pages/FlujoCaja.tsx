@@ -31,7 +31,7 @@ const fmtCompact = (n: number) =>
 
 function KpiCard({ label, value, sub, positive }: { label: string; value: string; sub?: string; positive?: boolean }) {
   return (
-    <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-4 flex flex-col gap-1">
+    <div className="bg-white dark:bg-ml-dark-surface border border-ml-gray/70 dark:border-ml-dark-border rounded-xl shadow-card dark:shadow-none p-4 flex flex-col gap-1">
       <span className="text-xs text-ml-text-soft dark:text-zinc-400 uppercase tracking-wide">{label}</span>
       <span className={`text-2xl font-semibold tabular-nums ${
         positive === true ? 'text-emerald-600 dark:text-emerald-400' :
@@ -76,6 +76,8 @@ export const FlujoCaja: React.FC = () => {
     const egresos = flujo.reduce((s, m) => s + m.egresos, 0)
     return { ingresos, egresos, neto: ingresos - egresos }
   }, [flujo])
+  // Sin ingresos ni egresos en todo el período: estado vacío en vez de ceros.
+  const vacio = flujo.every(m => !m.ingresos && !m.egresos)
 
   const netoLine = useMemo(
     () => flujo.map(m => ({ label: m.label, value: m.neto })),
@@ -105,7 +107,7 @@ export const FlujoCaja: React.FC = () => {
               onClick={() => setMeses(n)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 meses === n
-                  ? 'bg-violet-600 text-white'
+                  ? 'bg-ml-accent text-ml-accent-fg'
                   : 'bg-gray-100 dark:bg-white/10 text-ml-text-soft dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-white/15'
               }`}
             >
@@ -129,34 +131,30 @@ export const FlujoCaja: React.FC = () => {
           </>
         ) : (
           <>
-            <KpiCard label="Ingresos" value={fmtMoney(totales.ingresos)} sub={`${meses} meses`} positive={true} />
-            <KpiCard label="Egresos"  value={fmtMoney(totales.egresos)}  sub={`${meses} meses`} positive={false} />
+            <KpiCard label="Ingresos" value={fmtMoney(totales.ingresos)} sub={`${meses} meses`} positive={totales.ingresos ? true : undefined} />
+            <KpiCard label="Egresos"  value={fmtMoney(totales.egresos)}  sub={`${meses} meses`} positive={totales.egresos ? false : undefined} />
             <KpiCard
               label="Neto"
               value={fmtMoney(totales.neto)}
               sub="ingresos − egresos"
-              positive={totales.neto >= 0 ? true : false}
+              positive={totales.neto > 0 ? true : totales.neto < 0 ? false : undefined}
             />
           </>
         )}
       </div>
 
       {/* LineChart — neto mensual */}
-      <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-4">
+      <div className="bg-white dark:bg-ml-dark-surface border border-ml-gray/70 dark:border-ml-dark-border rounded-xl shadow-card dark:shadow-none p-4">
         <h2 className="text-sm font-medium text-ml-text dark:text-white mb-3">Neto mensual</h2>
         {loading ? (
           <div className="h-[180px] animate-pulse bg-gray-100 dark:bg-white/5 rounded-sm" />
         ) : (
-          <LineChart
-            data={netoLine}
-            color={totales.neto >= 0 ? '#10b981' : '#f43f5e'}
-            formatValue={fmtCompact}
-          />
+          <LineChart data={netoLine} formatValue={fmtCompact} />
         )}
       </div>
 
       {/* BarChart — ingresos vs egresos */}
-      <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-4">
+      <div className="bg-white dark:bg-ml-dark-surface border border-ml-gray/70 dark:border-ml-dark-border rounded-xl shadow-card dark:shadow-none p-4">
         <h2 className="text-sm font-medium text-ml-text dark:text-white mb-3">Ingresos vs Egresos</h2>
         {loading ? (
           <div className="h-[200px] animate-pulse bg-gray-100 dark:bg-white/5 rounded-sm" />
@@ -166,14 +164,14 @@ export const FlujoCaja: React.FC = () => {
       </div>
 
       {/* Tabla mensual */}
-      <div className="bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 dark:border-white/10">
+      <div className="bg-white dark:bg-ml-dark-surface border border-ml-gray/70 dark:border-ml-dark-border rounded-xl shadow-card dark:shadow-none overflow-hidden">
+        <div className="px-4 py-3 border-b border-ml-gray/70 dark:border-ml-dark-border">
           <h2 className="text-sm font-medium text-ml-text dark:text-white">Detalle mensual</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs text-ml-text-soft dark:text-zinc-400 uppercase tracking-wide border-b border-gray-100 dark:border-white/10">
+              <tr className="text-left text-xs text-ml-text-soft dark:text-zinc-400 uppercase tracking-wide border-b border-ml-gray/70 dark:border-ml-dark-border">
                 <th className="px-4 py-2 font-medium">Mes</th>
                 <th className="px-4 py-2 font-medium text-right">Ingresos</th>
                 <th className="px-4 py-2 font-medium text-right">Egresos</th>
@@ -193,10 +191,10 @@ export const FlujoCaja: React.FC = () => {
                     ))}
                   </tr>
                 ))
-              ) : flujo.length === 0 ? (
+              ) : vacio ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-ml-text-soft dark:text-zinc-500 text-sm">
-                    Sin datos para el período seleccionado
+                    Todavía no hay movimientos en este período
                   </td>
                 </tr>
               ) : (
@@ -222,11 +220,7 @@ export const FlujoCaja: React.FC = () => {
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums hidden sm:table-cell">
                         {ev ? (
-                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                            ev.tasa_pct >= 80 ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' :
-                            ev.tasa_pct >= 50 ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' :
-                            'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400'
-                          }`}>
+                          <span className={ev.tasa_pct >= 80 ? 'badge-ok' : ev.tasa_pct >= 50 ? 'badge-warn' : 'badge-error'}>
                             {ev.tasa_pct.toFixed(0)}%
                           </span>
                         ) : '—'}

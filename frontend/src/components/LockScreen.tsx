@@ -91,7 +91,7 @@ export const LockScreen: React.FC = () => {
               key={i}
               className={`w-3.5 h-3.5 rounded-full border-2 transition-all ${
                 pin.length > i
-                  ? 'bg-ml-blue border-ml-blue dark:bg-ml-green dark:border-ml-green scale-110'
+                  ? 'bg-ml-blue border-ml-blue dark:bg-ml-accent dark:border-ml-accent scale-110'
                   : 'border-gray-300 dark:border-zinc-700'
               }`}
             />
@@ -108,7 +108,7 @@ export const LockScreen: React.FC = () => {
           <button
             onClick={tryBiometric}
             disabled={bioRunning}
-            className="mx-auto flex flex-col items-center gap-1.5 text-ml-text-soft dark:text-zinc-500 hover:text-ml-blue dark:hover:text-ml-green disabled:opacity-50 transition-colors group"
+            className="mx-auto flex flex-col items-center gap-1.5 text-ml-text-soft dark:text-zinc-500 hover:text-ml-blue dark:hover:text-ml-accent disabled:opacity-50 transition-colors group"
           >
             <span className="w-14 h-14 rounded-full border-2 border-current flex items-center justify-center group-active:scale-95 transition-transform">
               <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
@@ -149,7 +149,7 @@ export const LockScreen: React.FC = () => {
 
         <button
           onClick={olvide}
-          className="block mx-auto text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-green transition-colors"
+          className="block mx-auto text-xs text-ml-text-soft dark:text-zinc-500 hover:text-ml-text dark:hover:text-ml-accent transition-colors"
         >
           ¿Olvidaste tu PIN?
         </button>

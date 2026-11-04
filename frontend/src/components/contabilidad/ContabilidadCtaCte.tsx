@@ -23,7 +23,7 @@ export const ContabilidadCtaCteLista: React.FC<{ c: ContabilidadCtx }> = ({ c })
                 <button
                   onClick={c.resetYRebuild}
                   disabled={c.backfilling}
-                  className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+                  className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-ml-accent text-ml-accent-fg font-medium hover:bg-ml-accent-hover disabled:opacity-50"
                   title="Rehace desde los datos del banco los asientos de extractos, UM y conciliaciones agrupadas; conserva el resto (pagos, cheques, ajustes…) y numera el Libro Diario desde 1. Vincula cuentas de clientes automáticamente."
                 >
                   {c.backfilling ? 'Empezando…' : '🧹 Empezar limpio'}

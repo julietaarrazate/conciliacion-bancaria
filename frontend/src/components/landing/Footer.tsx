@@ -1,17 +1,18 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { Logo } from './shared'
+import { Logo, WA_LINK } from './shared'
 
 export const Footer: React.FC = () => (
-  <footer style={{ padding: '32px 20px', borderTop: '1px solid var(--border-soft)', textAlign: 'center' }}>
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 14 }}>
-      <span style={{ color: 'var(--accent)' }}><Logo size={20} /></span>
-      <span style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 14 }}>Cuadra</span>
+  <footer className="l-foot">
+    <div className="l-wrap l-foot-in">
+      <span className="l-brand" style={{ fontSize: 15 }}><Logo size={20} /> Cuadra</span>
+      <nav className="l-foot-links" aria-label="Legales y contacto">
+        <a href={WA_LINK} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+        <Link to="/login">Ingresar</Link>
+        <Link to="/privacidad">Privacidad</Link>
+        <Link to="/terminos">Términos</Link>
+      </nav>
+      <small>© {new Date().getFullYear()} Julieta Arrazate</small>
     </div>
-    <div style={{ display: 'flex', gap: 24, justifyContent: 'center', marginBottom: 12 }}>
-      <Link to="/privacidad" className="footer-link">Privacidad</Link>
-      <Link to="/terminos" className="footer-link">Términos</Link>
-    </div>
-    <span style={{ fontSize: 11, color: 'var(--muted-2)' }}>© {new Date().getFullYear()} Julieta Arrazate</span>
   </footer>
 )
